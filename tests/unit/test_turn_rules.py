@@ -52,8 +52,8 @@ def test_a_round_line_follows_a_model_turn(tmp_path):
     turn and the continue prompt is not needed."""
     config = pull(n_agents=1, rounds=3)
     sample, rec = run(config, {"a01": [text("first"), text("second"), submit()]}, tmp_path)
-    lines = [rules.round_line(r, 3, 1) for r in (1, 2, 3)]
-    assert lines[2] == "Tool calls left: up to 1."
+    lines = [rules.round_line(4 - r) for r in (1, 2, 3)]
+    assert lines[2] == "Tool calls left: 1."
     assert rec[0]["last"] == lines[0] and [r["last"] for r in rec[1:]] == lines[1:]
     assert all(r["tag"] is None for r in rec)
     # A lone agent's submit hands in its work and ends the run after its round.
@@ -136,10 +136,10 @@ def test_a_late_regulator_enters_at_its_start_round(tmp_path):
     # rounds 1 and 2 hold a01 and a03 only; round 3 opens with a01, then a02 enters
     assert [e["agent"] for e in timeline[:first]] == ["a01", "a03", "a01", "a03", "a01"]
     assert timeline[first]["entered"] is True and timeline[first]["round"] == 3
-    # ORBIT inserts its system prompt at the agent's first activation, and its first round's line gives the run's
-    # round: a late agent has the rounds left of the plan.
+    # ORBIT inserts its system prompt at the agent's first activation, and its first round's line gives its calls
+    # left: a late agent has its whole budget.
     assert by_agent(rec, "a02")[0]["system"].startswith("You are a02,")
-    assert by_agent(rec, "a02")[0]["texts"][-1].startswith(rules.round_line(3, 4, 1) + "\n\n")
+    assert by_agent(rec, "a02")[0]["texts"][-1].startswith(rules.round_line(4) + "\n\n")
     # The workers use up their four rounds by round 4; the run ends with them.
     assert store(sample, "rounds_used") == {"a01": 4, "a02": 2, "a03": 4}
     assert store(sample, "windows")["a02"] == [3, None]
@@ -271,7 +271,7 @@ def test_the_notice(tmp_path):
     first = "Posts on the board: 1 by a02."
     assert notices[("a03", 0)] == [first]
     assert notices[("a03", 1)] == [first, "The board changed: a02 1 new of 2."]
-    assert by_agent(rec, "a03")[0]["texts"][-1] == f"{rules.round_line(1, 2, 1)}\n\na01 and a02 entered.\n\n{first}"
+    assert by_agent(rec, "a03")[0]["texts"][-1] == f"{rules.round_line(2)}\n\na01 and a02 entered.\n\n{first}"
     # An agent's own posts never raise a notice, and no notice reaches the provider alone at a round's start.
     assert all(not n for (agent, _), n in notices.items() if agent == "a02")
     assert not any(r["added"] for r in rec)
@@ -336,18 +336,18 @@ def test_the_default_notice_previews_each_new_post(tmp_path):
 def test_the_rounds_reach_the_plan_the_bounds_and_the_store():
     c = build_config("default", "small", ["regulators=1"])
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
-    assert [s.id for s in rules.schedule(c, c.names, roles).steps] == [f"r{r}" for r in range(1, 31)]
+    assert [s.id for s in rules.schedule(c, c.names, roles).steps] == [f"r{r}" for r in range(1, 301)]
     state = initial_state(c, c.names, roles, time_limit_s=3600)
-    assert (state["round_budget"], state["calls_per_round"], state["rounds"], state["time_limit_s"]) == \
-        (30, 10, 30, 3600)
+    assert (state["round_budget"], state["calls_per_round"], state["call_budget"], state["rounds"],
+            state["time_limit_s"]) == (300, 10, 300, 300, 3600)
     assert (state["reads_per_turn"], state["posts_per_turn"]) == (10, 2)
-    # The bounds follow the plan: 30 rounds of one step per agent, 31 messages a round (three per call and the round's
-    # one message), each agent's system and first message.
-    assert c.max_turns == 30 * 3 and c.sample_message_limit == c.max_turns * 31 + 2 * 3 + 20
-    # A lone agent's plan holds its R rounds; a message_limit given is kept as it is.
+    # The plan holds C = 300 rounds, so no agent runs out of rounds with calls left: one step per agent each, three
+    # messages a call, the round's one message a round, each agent's system and first message.
+    assert c.max_turns == 300 * 3 and c.sample_message_limit == 3 * (3 * 300 + 300 + 2) + 20
+    # A lone agent's plan holds its C rounds; a message_limit given is kept as it is.
     lone = build_config("default", "small", ["n_agents=1", "message_limit=40"])
-    assert [s.id for s in rules.schedule(lone, lone.names).steps] == [f"r{r}-a01" for r in range(1, 31)]
-    assert lone.max_turns == 30 and lone.sample_message_limit == 40
+    assert [s.id for s in rules.schedule(lone, lone.names).steps] == [f"r{r}-a01" for r in range(1, 301)]
+    assert lone.max_turns == 300 and lone.sample_message_limit == 40
 
 
 def test_notice_text():

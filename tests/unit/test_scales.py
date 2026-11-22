@@ -27,10 +27,10 @@ def test_scales_apply_the_table(name):
     assert (c.n_agents, c.max_message_chars, c.read_page) == (n, chars, page)
     assert (c.time_limit_s, c.max_concurrency, c.batch_agents, c.scale) == (time_s, concurrency, batch, name)
     assert (c.reads_per_turn, c.posts_per_turn) == (reads, posts)
-    # The plan holds R rounds on a board, one step per agent each; the message limit gives each agent's round three
-    # messages per call of its N and its one round's message, then each agent's system and first message, plus twenty.
-    assert c.message_limit is None and c.rounds == 30 and c.max_turns == 30 * n
-    assert c.sample_message_limit == c.max_turns * (3 * 10 + 1) + 2 * c.n_agents + 20
+    # The plan holds C = R x N rounds, one step per agent each; the message limit gives each agent three messages per
+    # call of its C and its round's message per round, then its system and first message, plus twenty.
+    assert c.message_limit is None and c.rounds == 30 and c.max_turns == 300 * n
+    assert c.sample_message_limit == n * (3 * 300 + 300 + 2) + 20
     assert len(c.names) == n and c.names[-1] == ordered_ids(n)[-1]
 
 

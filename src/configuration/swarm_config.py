@@ -196,17 +196,17 @@ class SwarmConfig(BaseModel):
     of `names`. random draws a new permutation per round from random.Random(f"{seed}/{round}"). Inside a concurrent
     round the order is ORBIT's."""
     rounds: int = 30
-    """R: the plan's rounds, and the rounds every agent may use up, workers, influencers and a lone agent alike
-    (head_start_rounds adds its rounds before them, for the agents it names). In a
-    round an agent makes up to calls_per_round tool calls (an inner loop of model calls, each seeing the results before
-    it). Every round uses up one of the R, whatever it held: work, board calls alone, refused calls, end_round alone or
-    a reply with no tool call. Every agent present shares the run's round number. An agent that has used up R ends
-    "rounds" (turn_rules.turn_activation). The agent's first message and each round's line give R and N; its system
-    prompt states the rules without numbers."""
+    """R: with calls_per_round, the budget of every agent, workers, influencers and a lone agent alike: C = R x N tool
+    calls (call_budget). Every call counts, wait included, and so does a reply with no tool call. A call past C is
+    refused and the agent's turns end "rounds" (turn_rules.turn_activation). Agents are never told of rounds: the
+    harness keeps them for pacing and records, about N calls per agent per round, all agents side by side, and the plan
+    holds C rounds (plan_rounds) so it never ends an agent with calls left. The first message gives C and each round's
+    message the calls left; the system prompt states the rules without numbers."""
     calls_per_round: int = 10
-    """N: the tool calls an agent may make in one round. Every call counts, board and peer tools included, for every
-    role, so a round always ends; end_round never counts. A reply asking for several calls counts each. A call past N
-    is refused with a ToolError, and the round ends after N calls (turn_rules.turn_activation.ends_round)."""
+    """N: the soft cap of one round's tool calls, which the agent is not told. No call is refused for it: the round
+    ends after the reply in which the agent's calls reach N (turn_rules.turn_activation.ends_round), so a reply that
+    starts below N runs whole. Every call counts toward N and toward C (rounds), board and peer tools included, for
+    every role."""
     round_time_s: int = settings.ROUND_TIME_S
     """T: the seconds one round may last, from its first model call, model time included. After a batch ends past T
     the round ends (turn_rules.turn_activation.ends_round, end reason round_time); a model call under way is never cut,
@@ -504,9 +504,16 @@ class SwarmConfig(BaseModel):
         return sorted(self.seats)
 
     @property
+    def call_budget(self) -> int:
+        """C: the tool calls each agent may make in the run, rounds x calls_per_round. Every call counts, wait
+        included, and so does a reply with no tool call (turn_rules._turn_rounds.charge)."""
+        return self.rounds * self.calls_per_round
+
+    @property
     def plan_rounds(self) -> int:
-        """The plan's rounds: R (rounds) and the head start's H (head_start_rounds) before them."""
-        return self.rounds + self.head_start_rounds
+        """The plan's rounds: C (call_budget), since every round costs an agent at least one call, so no agent runs
+        out of rounds while it has calls left, and the head start's H (head_start_rounds) before them."""
+        return self.call_budget + self.head_start_rounds
 
     @property
     def max_turns(self) -> int:
@@ -515,15 +522,15 @@ class SwarmConfig(BaseModel):
 
     @property
     def sample_message_limit(self) -> int:
-        """Inspect's message limit: message_limit, else per agent and round MESSAGES_PER_CALL messages per call of
-        calls_per_round and the round's message (ROUND_MESSAGES), then each agent's system and first message
+        """Inspect's message limit: message_limit, else per agent MESSAGES_PER_CALL messages per call of its budget
+        C (call_budget), the round's message (ROUND_MESSAGES) per round of the plan, and its system and first message
         (AGENT_MESSAGES), plus MESSAGE_MARGIN. Inspect checks it against each agent's conversation and, once ORBIT
         writes every agent's messages into the sample at the run's end, against all of them, so the limit covers the
         whole team and never cuts a run the plan allows."""
         if self.message_limit is not None:
             return self.message_limit
-        per_round = MESSAGES_PER_CALL * self.calls_per_round + ROUND_MESSAGES
-        return self.max_turns * per_round + AGENT_MESSAGES * self.n_agents + MESSAGE_MARGIN
+        per_agent = MESSAGES_PER_CALL * self.call_budget + ROUND_MESSAGES * self.plan_rounds + AGENT_MESSAGES
+        return self.n_agents * per_agent + MESSAGE_MARGIN
 
     @property
     def knows_team(self) -> bool:

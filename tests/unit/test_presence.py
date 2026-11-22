@@ -57,7 +57,7 @@ def test_every_peer_is_announced_before_the_first_step_after_the_task(tmp_path):
     after a blank line, its peers' entries as one sentence."""
     sample, rec, log = run(sequential(rounds=2), {a: [do(a)] for a in ("a01", "a02", "a03")}, tmp_path,
                            with_log=True)
-    line, two = rules.round_line(1, 2, 1), rules.round_line(2, 2, 1)
+    line, two = rules.round_line(2), rules.round_line(1)
     assert users_before_first_step(rec, "a01") == [TASK, f"{line}\n\na02 and a03 entered."]
     assert users_before_first_step(rec, "a02") == [TASK, f"{line}\n\na01 and a03 entered."]
     assert users_before_first_step(rec, "a03") == [TASK, f"{line}\n\na01 and a02 entered."]
@@ -70,19 +70,19 @@ def test_every_peer_is_announced_before_the_first_step_after_the_task(tmp_path):
     assert saved[0].metadata[rules.PRESENCE_TAG] == {"round": 1, "events": [
         {"id": "entered:a02", "agent": "a02", "kind": "entered", "why": None, "round": 1},
         {"id": "entered:a03", "agent": "a03", "kind": "entered", "why": None, "round": 1}]}
-    assert saved[0].metadata[rules.ROUND_TAG] == {"round": 1, "of": 2, "left": 2, "calls": 1}
+    assert saved[0].metadata[rules.ROUND_TAG] == {"round": 1, "of": 2, "left": 2, "calls": 1, "budget": 2}
     trajectory, _ = build_trajectory(view, "a01")
     steps = json.loads(trajectory.model_dump_json())["steps"]
     tagged = [s for s in steps if (s.get("extra") or {}).get(rules.PRESENCE_TAG)]
     assert len(tagged) == 1 and tagged[0]["source"] == "user"
     parts = rules.message_parts(tagged[0]["message"], tagged[0]["extra"])
-    assert parts["round"] == {"tag": {"round": 1, "of": 2, "left": 2, "calls": 1}, "text": line}
+    assert parts["round"] == {"tag": {"round": 1, "of": 2, "left": 2, "calls": 1, "budget": 2}, "text": line}
     assert parts["presence"]["text"] == "a02 and a03 entered." and parts["notice"] is None
     assert [e["id"] for e in parts["presence"]["events"]] == ["entered:a02", "entered:a03"]
     # the round's line keeps its own tag in the transcript, for grouping a conversation by round
     rounds = [(s["message"], s["extra"][rules.ROUND_TAG]) for s in steps if (s.get("extra") or {}).get(rules.ROUND_TAG)]
-    assert rounds == [(f"{line}\n\na02 and a03 entered.", {"round": 1, "of": 2, "left": 2, "calls": 1}),
-                      (two, {"round": 2, "of": 2, "left": 1, "calls": 1})]
+    assert rounds == [(f"{line}\n\na02 and a03 entered.", {"round": 1, "of": 2, "left": 2, "calls": 1, "budget": 2}),
+                      (two, {"round": 2, "of": 2, "left": 1, "calls": 1, "budget": 2})]
     # one info event per part and per presence event, as before
     delivered = [i for i in tagged_infos(sample, rules.PRESENCE_TAG) if i["event"] == "delivered"
                  and i["kind"] == "entered"]
@@ -145,8 +145,8 @@ def test_the_transcript_holds_the_round_message_once_with_its_board_part(tmp_pat
     steps = json.loads(build_trajectory(view, "a03")[0].model_dump_json())["steps"]
     users = [s for s in steps if s["source"] == "user"]
     assert [s["message"] for s in users] == [
-        TASK, f"{rules.round_line(1, 2, 1)}\n\na01 and a02 entered.\n\nPosts on the board: 1 by a02.",
-        f"{rules.round_line(2, 2, 1)}\n\na01 ran out of tool calls.\na01 exited.\na02 ran out of tool calls.\n"
+        TASK, f"{rules.round_line(2)}\n\na01 and a02 entered.\n\nPosts on the board: 1 by a02.",
+        f"{rules.round_line(1)}\n\na01 ran out of tool calls.\na01 exited.\na02 ran out of tool calls.\n"
         "a02 exited."]
     assert set(users[1]["extra"]) == {rules.ROUND_TAG, rules.PRESENCE_TAG, rules.NOTICE_TAG}
     assert users[1]["extra"][rules.NOTICE_TAG] == {"kind": "notice", "activation": 1, "call": 1, "round": 1, "seen": 1,
@@ -169,7 +169,7 @@ def test_stop_working_is_announced_after_the_stop(tmp_path):
                       tmp_path)
     lines = "a02 stopped working (stop_working).\na02 exited."
     # a02 entered and left before a03's first message: its exit alone tells of it
-    assert users_before_first_step(rec, "a03") == [TASK, f"{rules.round_line(1, 2, 1)}\n\na01 entered.\n{lines}"]
+    assert users_before_first_step(rec, "a03") == [TASK, f"{rules.round_line(2)}\n\na01 entered.\n{lines}"]
     assert by_agent(rec, "a01")[0]["presence"] == ["a02 and a03 entered."]
     assert by_agent(rec, "a01")[1]["presence"] == ["a02 and a03 entered.", lines]
     assert all(r["events"].count("exited:a02") <= 1 for r in rec)

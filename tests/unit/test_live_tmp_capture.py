@@ -162,7 +162,7 @@ def test_machines_of_a_roster():
 def gated(monkeypatch):
     live = Live()
     turn = SimpleNamespace(round_time_s=0, time_limit_s=None, started_at=None, ended={}, calls_per_round=10,
-                           rounds_used={})
+                           rounds_used={}, call_budget=0, calls_used={})
     st = FakeStore()
     monkeypatch.setattr(_turn_rounds, "live_record", lambda: live)
     monkeypatch.setattr(_turn_rounds, "current_round", lambda: 1)

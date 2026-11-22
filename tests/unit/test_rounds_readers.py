@@ -29,11 +29,11 @@ def test_the_export_reads_rounds_and_keeps_reading_steps(tmp_path):
     config = pull(n_agents=2, rounds=2, calls_per_round=3, concurrent_rounds=False, turn_order="round_robin")
     scripts = {"a01": [read(), board_post("hi"), end_round(), do("A"), end_round()], "a02": [do("B"), end_round()]}
     sample, records, run_json = exported(tmp_path, config, scripts)
-    # a01: a round of board calls, then a round of work: each uses one up
-    assert records["a01"]["rules"] == {"activations": 2, "rounds_used": 2, "ended": "rounds",
+    # a01: a round of board calls and wait, a round of work and wait, then a wait uses its sixth call
+    assert records["a01"]["rules"] == {"activations": 3, "rounds_used": 3, "ended": "rounds",
                                        "windows": [1, None]}, records["a01"]["rules"]
     eng = records["a01"]["engagement"]
-    assert eng["rounds_used"] == 2 and "board_rounds" not in eng and "work_steps" not in eng
+    assert eng["rounds_used"] == 3 and "board_rounds" not in eng and "work_steps" not in eng
     assert {records[a]["ended_by"] for a in ("a01", "a02")} == {"rounds"}
     # run.json holds the whole TurnState: each round's calls with their times, and the run reads as out of rounds
     timeline = run_json["rules"]["timeline"]

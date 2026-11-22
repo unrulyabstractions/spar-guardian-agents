@@ -1,5 +1,6 @@
-"""The rounds scenario the openmath and SWE smoke suites share: three workers and a regulator, three rounds each of up
-to three tool calls, in sequential rounds in seat order, and the checks of every round's rule on the exported run.
+"""The rounds scenario the openmath and SWE smoke suites share: three workers and a regulator, each with a budget of
+R x N = 9 tool calls and rounds of about N = 3, in sequential rounds in seat order, and the checks of every round's
+rule on the exported run.
 
     script, plan = rounds_script(workers, regulator, shell="shell")
     log, summary, records = SUITE.run("rounds", task, scripted(script, recorder))
@@ -8,7 +9,7 @@ to three tool calls, in sequential rounds in seat order, and the checks of every
 With w1, w2, w3 the workers in seat order and the regulator last:
 
     w1   round 1: board_post, board_read (its own post), shell          ends "calls" (N reached)
-         round 2: one reply asking for four shell calls: three run, the fourth is refused, ends "calls"
+         round 2: one reply asking for four shell calls: N is a soft cap, all four run, ends "calls"
          round 3: stop_working
     w2   round 1: board_read (w1's post of this round), shell, end_round ends "end_round" after two calls
          round 2: board_status, end_round                                board calls alone: it uses one up
@@ -16,7 +17,8 @@ With w1, w2, w3 the workers in seat order and the regulator last:
     w3   round 1: a reply with no tool call                              ends "no_tool_call", uses up a round
          round 2: shell, end_round
          round 3: stop_working
-    reg  rounds 1 to 3: shell (and a board_read in round 1), end_round   then it has run out of rounds
+    reg  rounds 1 and 2: shell (and a board_read in round 1), wait; round 3: one reply of three shell calls and wait,
+         its ninth call: it has run out of tool calls
 """
 from __future__ import annotations
 
@@ -27,11 +29,12 @@ from inspect_ai.model import ModelOutput
 from src.configuration import settings
 from src.configuration.prompt_texts import joined, split_facts
 from src.swarm.turn_rules._turn_messages import message_parts
-from src.swarm.turn_rules._turn_rounds import round_line, rounds_left
+from src.swarm.turn_rules._turn_rounds import round_line
 from src.swarm.turn_rules._turn_state import END_ROUND, NOTICE_PARAGRAPH_TAG, TURN_RULES_TAG
 from tests.support.mock_model import call, calls, text
 
 ROUNDS, CALLS = 3, 3
+BUDGET = ROUNDS * CALLS                 # C, the calls of every agent, and the plan's rounds
 TEXTS = settings.load_prompts()["round"]
 VALUES = settings.load_prompts()["first_values"]
 PRESENCE = settings.load_prompts()["presence"]
@@ -81,7 +84,9 @@ def rounds_script(workers: list[str], regulator: str, shell: str = "shell") -> t
             {"outputs": [call("board_read", {}, f"{regulator}-read"), sh(regulator, "r1"), end(regulator, "r1")],
              "end": "end_round", "ending": None, "used": 1},
             {"outputs": [sh(regulator, "r2"), end(regulator, "r2")], "end": "end_round", "ending": None, "used": 2},
-            {"outputs": [sh(regulator, "r3"), end(regulator, "r3")], "end": "end_round", "ending": None, "used": 3}],
+            {"outputs": [calls(*[(shell, {"command": f"echo {regulator} r3 {i}"}) for i in range(1, 4)],
+                               (END_ROUND, {}), call_id=f"{regulator}-r3")],
+             "end": "end_round", "ending": None, "used": 3}],
     }
     for rounds in plan.values():
         for r in rounds:
@@ -140,10 +145,10 @@ def check_rounds(suite, name: str, sample, records: list[dict], plan: dict, work
     timeline = sample.store.get("TurnState:timeline")
     assert run["rules"]["timeline"] == json.loads(json.dumps(timeline)), "run.json's timeline is not the store's"
     assert (run["config"]["rounds"], run["config"]["calls_per_round"]) == (ROUNDS, CALLS), run["config"]
-    assert (run["rules"]["round_budget"], run["rules"]["calls_per_round"]) == (ROUNDS, CALLS), run["rules"]
+    assert (run["rules"]["round_budget"], run["rules"]["calls_per_round"]) == (BUDGET, CALLS), run["rules"]
     transcripts = {r["agent"]: load_transcript(r) for r in records}
     assert sorted(transcripts) == sorted(plan), sorted(transcripts)
-    first_line = round_line(1, ROUNDS, CALLS)
+    first_line = round_line(BUDGET)
     out = {}
     for agent, rounds in plan.items():
         t = transcripts[agent]
@@ -165,9 +170,10 @@ def check_rounds(suite, name: str, sample, records: list[dict], plan: dict, work
         assert len(entries) == len(groups) == len(rounds), (agent, len(entries), len(groups), len(rounds))
         for i, (entry, group, expected) in enumerate(zip(entries, groups, rounds), 1):
             where = (agent, i)
-            # the round's line, durable in the conversation: the run's round, the rounds left with it, and N
-            assert group["line"] == round_line(i, ROUNDS, CALLS), (where, group["line"])
-            assert group["tag"] == {"round": i, "of": ROUNDS, "left": rounds_left(i, ROUNDS), "calls": CALLS} \
+            # the round's line, durable in the conversation: the calls the agent has left
+            left = BUDGET - (entries[i - 2]["calls_used"] if i > 1 else 0)
+            assert group["line"] == round_line(left), (where, group["line"])
+            assert group["tag"] == {"round": i, "of": BUDGET, "left": left, "calls": CALLS, "budget": BUDGET} \
                 and entry["round"] == i, (where, group["tag"])
             # the round's calls, in order, as the transcript holds them between its line and the next
             called = [(tc["function_name"], tc["tool_call_id"]) for s in group["steps"]
@@ -187,8 +193,6 @@ def check_rounds(suite, name: str, sample, records: list[dict], plan: dict, work
                 (where, entry["calls"])
             assert starts == sorted(starts), (where, starts)
             assert all(entry["t0"] <= c["t0"] and c["t1"] <= entry["t1"] for c in entry["calls"]), (where, entry)
-            counted = [c for c in entry["calls"] if c["tool"] != END_ROUND and not c["refused"]]
-            assert len(counted) <= CALLS, (where, entry["calls"])
         if len(entries) > 1:
             assert all(a["t1"] <= b["t0"] for a, b in zip(entries, entries[1:])), (agent, "rounds overlap")
         out[agent] = [(e["end"], e["ending"], len(e["calls"])) for e in entries]
@@ -196,13 +200,12 @@ def check_rounds(suite, name: str, sample, records: list[dict], plan: dict, work
     by_id = {a: {cid: content for g in round_groups(t) for s in g["steps"] for cid, content in _results(s).items()}
              for a, t in transcripts.items()}
     entry_of = {(e["agent"], e["round"]): e for e in timeline}
-    # N reached: the fourth call of w1's one reply is refused, and the first three ran
+    # N is a soft cap: all four calls of w1's one reply run, and the round ends after it
     batch = entry_of[(w1, 2)]["calls"]
-    assert [c["refused"] for c in batch] == [False, False, False, True], batch
-    spent = TEXTS["spent"].format(calls=CALLS)
-    assert [by_id[w1][c["id"]] for c in batch] == [f"{w1} batch 1\n", f"{w1} batch 2\n", f"{w1} batch 3\n", spent], \
+    assert [c["refused"] for c in batch] == [False] * 4, batch
+    assert [by_id[w1][c["id"]] for c in batch] == [f"{w1} batch {i}\n" for i in range(1, 5)], \
         [by_id[w1][c["id"]] for c in batch]
-    assert batch[3]["error"] and batch[3]["t0"] == batch[3]["t1"], batch[3]
+    assert entry_of[(w1, 2)]["calls_used"] == 7, entry_of[(w1, 2)]
     # the live board: w1 reads its own post of this round, and w2 reads it later in the same round
     post_line = f"[{w1} #1] {POST}"
     assert post_line in by_id[w1][f"{w1}-read"], by_id[w1][f"{w1}-read"]
@@ -220,7 +223,7 @@ def check_rounds(suite, name: str, sample, records: list[dict], plan: dict, work
         heard = round_groups(t)[0]["heard"]
         assert heard == [PRESENCE["entered"].format(agent=joined([a for a in order if a != agent]))], (agent, heard)
     # every worker stops in round 3: w2 hears w1 before its round 3, and the regulator, last in the order, hears all
-    # three before its round 3, the last, after which it has used up its rounds and nobody is left to hear it
+    # three before its round 3, the last, in which it makes its ninth call and nobody is left to hear it
     left = {w: f"{PRESENCE['stop'].format(agent=w)}\n{PRESENCE['exited'].format(agent=w)}" for w in workers}
     assert round_groups(transcripts[w2])[2]["heard"] == [left[w1]], round_groups(transcripts[w2])[2]["heard"]
     assert round_groups(transcripts[regulator])[2]["heard"] == ["\n".join(left[w] for w in workers)], \
@@ -229,8 +232,9 @@ def check_rounds(suite, name: str, sample, records: list[dict], plan: dict, work
     assert {a: exits[a]["why"] for a in workers} == dict.fromkeys(workers, "stop"), exits
     assert run["rules"]["ended"] == {**dict.fromkeys(workers, "stop_working"), regulator: "rounds"}, run["rules"]
     assert run["rules"]["rounds_used"] == dict.fromkeys(plan, ROUNDS), run["rules"]["rounds_used"]
+    assert run["rules"]["calls_used"][regulator] == BUDGET, run["rules"]["calls_used"]
     assert "board_rounds" not in run["rules"], sorted(run["rules"])
-    # the provider is offered end_round on every model call
+    # the provider is offered wait on every model call
     assert all(END_ROUND in r["tools"] for r in recorder), [r["tools"] for r in recorder]
     ended = {r["agent"]: r["ended_by"] for r in records}
     return {"rounds": out, "ended_by": ended, "exits": exits}

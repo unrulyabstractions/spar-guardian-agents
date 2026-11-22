@@ -6,15 +6,14 @@ after a call that ended its turns, once the time limit has passed, or at a reply
 (_turn_rounds.ends). It also keeps the agent's conversation at each boundary in memory (Live.messages), for the peer
 tools.
 
-after_activation (ScheduleConfig.after_activation) counts the round, writes its timeline entry and marks why an agent
-stopped. Every round uses up one of the agent's rounds, whatever it held: work, board calls alone, refused calls,
-end_round alone or a reply with no tool call. An agent that has used up its rounds (TurnState.round_budget) ends
-"rounds". It then amends the pending plan: the ended agents' steps removed, every step
-after the team's hand-in dropped, and every step after the round under way dropped once no worker is left
-(workers_gone), so no regulator holds a run open. An agent that stops simply exits: its rounds go to
-nobody. Under stop_after_delivery it hands the amended plan to the rule in _turn_delivery first. Last it records the
-exits the plan now shows (_turn_presence): an ending a rule wrote (rounds, context, delivered) and an agent out of
-steps (out_of_steps), so its peers hear of it before their next round.
+after_activation (ScheduleConfig.after_activation) counts the round (a record: rounds_used), writes its timeline entry
+and marks why an agent stopped. An agent that has made all C of its tool calls (TurnState.call_budget, counted by the
+gate in _turn_rounds) ends "rounds"; no count of rounds ends an agent. It then amends the pending plan: the ended
+agents' steps removed, every step after the team's hand-in dropped, and every step after the round under way dropped
+once no worker is left (workers_gone), so no regulator holds a run open. An agent that stops simply exits: its calls go
+to nobody. Under stop_after_delivery it hands the amended plan to the rule in _turn_delivery first. Last it records the
+exits the plan now shows (_turn_presence): an ending a rule wrote (rounds, context, delivered) and an agent out of steps
+(out_of_steps), so its peers hear of it before their next round.
 
     schedule = ScheduleConfig(steps=steps, after_activation=f"{turn_activation.__name__}.after_activation",
                               end_activation=f"{turn_activation.__name__}.ends_round")
@@ -32,7 +31,7 @@ from src.configuration.swarm_config import Window
 from src.swarm.turn_rules._turn_delivery import after_delivery, delivery, end, spent
 from src.swarm.turn_rules._turn_presence import ENDED_WHY, record_exit
 from src.swarm.turn_rules._turn_pushes import TEAM_HEAD, look
-from src.swarm.turn_rules._turn_rounds import ends, name_job_call, take_round
+from src.swarm.turn_rules._turn_rounds import charge, ends, name_job_call, take_round
 from src.swarm.turn_rules._turn_state import (
     ACTOR,
     DELIVERED,
@@ -48,6 +47,7 @@ from src.swarm.turn_rules._turn_state import (
     holdable,
     live_record,
     live_state,
+    out_of_calls,
     running_record,
     running_step,
     submit_holds,
@@ -138,12 +138,13 @@ def _end_reason(agent: str, record: dict | None, messages: list) -> str | None:
     return "no_tool_call" if last is not None and not last.tool_calls else None
 
 
-def _stop_reason(st: TurnState, agent: str, used: int) -> str | None:
-    """Why after_activation stops an agent: its last generation hit the context limit, or it has used up its rounds.
-    submit and stop_working end their caller themselves (submit_and_stop.end_turns)."""
+def _stop_reason(st: TurnState, agent: str) -> str | None:
+    """Why after_activation stops an agent: its last generation hit the context limit, or it has made all C of its
+    tool calls (TurnState.call_budget), the ending "rounds" (its name from when rounds were the budget). No count of
+    rounds ends an agent. submit and stop_working end their caller themselves (submit_and_stop.end_turns)."""
     if _out_of_context(agent):
         return "context"
-    if st.round_budget and used >= st.round_budget:
+    if out_of_calls(st, agent):
         return "rounds"
     return None
 
@@ -246,6 +247,9 @@ def _after_round(runtime, result, global_turn: int) -> Awaitable[None] | None:
     round_number = step_round(step.id) if step is not None else 0
     messages = _activation_messages(agent, result)
     record = take_round(agent)
+    end_reason = _end_reason(agent, record, messages)
+    if end_reason in ("no_tool_call", "context") and not (record or {}).get("end"):
+        charge(agent)                     # a reply with no tool call, with no boundary to count it (ends)
     calls = round_calls(messages, (record or {}).get("times"), (record or {}).get("jobs")) if messages else \
         [{"tool": tool, "k": k} for k, tool in enumerate(tools, 1)]
     st.history_marks = {**st.history_marks,
@@ -258,7 +262,7 @@ def _after_round(runtime, result, global_turn: int) -> Awaitable[None] | None:
     actual = list(runtime.pending_steps)
     pending = restored(step, actual)
     rules = delivery()
-    reason = None if ending is not None else _stop_reason(st, agent, used)   # its own ending comes first
+    reason = None if ending is not None else _stop_reason(st, agent)   # its own ending comes first
     if reason is None and rules is not None and agent not in st.ended and spent(rules, agent, used) \
             and any(agent in s.agents for s in pending):
         end(st, [agent], round_number)
@@ -268,7 +272,7 @@ def _after_round(runtime, result, global_turn: int) -> Awaitable[None] | None:
     left = _window(st, agent).end is not None and not any(agent in s.agents for s in pending)
     entry = {"turn": global_turn, "agent": agent, "activation": activation, "round": round_number,
              "step": step.id if step is not None else None, "ending": ending, "used": used,
-             "tools": tools, "calls": calls, "end": _end_reason(agent, record, messages),
+             "tools": tools, "calls": calls, "end": end_reason, "calls_used": st.calls_used.get(agent, 0),
              "t0": _ms((record or {}).get("t0")), "t1": _ms((record or {}).get("t1")),
              "ended": st.ended.get(agent), "entered": activation == 1, "left": left}
     over = over_time(record, st.round_time_s)

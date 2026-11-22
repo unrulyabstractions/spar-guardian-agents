@@ -478,7 +478,7 @@ def clocked(monkeypatch, *, round_time_s, t0, made=1, calls_per_round=10):
     live.rounds["a01"] = {"round": 1, "n": 1, "t0": t0, "t1": None, "made": made, "closed": False, "end": None,
                           "runs": [], "times": {}, "seen": None}
     st = SimpleNamespace(round_time_s=round_time_s, time_limit_s=None, started_at=None, ended={},
-                         calls_per_round=calls_per_round, rounds_used={})
+                         calls_per_round=calls_per_round, rounds_used={}, call_budget=0, calls_used={})
     monkeypatch.setattr(_turn_rounds, "live_record", lambda: live)
     monkeypatch.setattr(_turn_rounds, "current_round", lambda: 1)
     monkeypatch.setattr(_turn_rounds, "store_as", lambda model: st if model is rules.TurnState
@@ -566,7 +566,8 @@ def test_a_whole_run_keeps_a_call_as_a_job_and_ends_each_round_on_time(monkeypat
     config = pull(n_agents=1, rounds=3, calls_per_round=3, round_time_s=2)
     sample, _ = run(config, {"a01": script}, tmp_path)
     timeline = store(sample, "timeline")
-    assert [e["end"] for e in timeline] == ["round_time", "round_time", "end_round"]
+    # then waits until the nine calls are made: a wait uses one
+    assert [e["end"] for e in timeline] == ["round_time", "round_time", *["end_round"] * 5]
     assert [c.get("job") for c in timeline[0]["calls"]] == ["j1"]
     assert [c.get("job") for c in timeline[1]["calls"]] == [None, "j2"]
     assert all(e["t1"] - e["t0"] < 2 + 3 for e in timeline[:2])                # within T and a model call

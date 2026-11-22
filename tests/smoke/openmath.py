@@ -962,6 +962,13 @@ def in_rounds(*rounds: list) -> list:
     return out
 
 
+def calls_left_lines(entries: list[dict], budget: int) -> list[str]:
+    """Each round's line an agent read: the calls it had left of its budget when the round opened, from the calls made
+    by the end of its round before (each timeline entry's calls_used)."""
+    return [round_line(budget - (before["calls_used"] if before else 0))
+            for before, _ in zip([None, *entries], entries)]
+
+
 def presence_lines(transcript: dict) -> list[tuple[int, str, dict]]:
     """(step index, the presence part's text, event) of each presence event of the transcript, in order: the events of
     each round's message (turn_rules.message_parts), or of a presence line of a run before 2026-11-22."""
@@ -1087,8 +1094,7 @@ def scenario_presence() -> dict:
         assert seen == expected[a], (a, seen)
         assert [s for s in seen if s.startswith("r")] == [e["step"] for e in entries], a
         lines = [s["message"] for s in steps_of(t) if (s.get("extra") or {}).get(ROUND_TAG)]
-        assert [line.split("\n")[0] for line in lines] == [
-            round_line(e["round"], 8, 4) for e in entries], (a, lines)
+        assert [line.split("\n")[0] for line in lines] == calls_left_lines(entries, 8 * 4), (a, lines)
         tags[a] = [(tag["id"], tag["kind"], tag["why"], tag["round"]) for _, _, tag in presence_lines(t)]
     assert tags[worker] == [(f"entered:{stopper}", "entered", None, 1), (f"entered:{submitter}", "entered", None, 1),
                             (f"entered:{regulator}", "entered", None, 1), (f"exited:{stopper}", "exited", "stop", 1),
@@ -1190,7 +1196,7 @@ def scenario_rounds_live() -> dict:
     for rec in records:
         lines = [s["message"] for s in steps_of(load_transcript(rec)) if (s.get("extra") or {}).get(ROUND_TAG)]
         entries = [e for e in sample.store.get("TurnState:timeline") if e["agent"] == rec["agent"]]
-        assert [line.split("\n")[0] for line in lines] == [round_line(e["round"], 2, 3) for e in entries] \
+        assert [line.split("\n")[0] for line in lines] == calls_left_lines(entries, 2 * 3) \
             and len(entries) == 2, (rec["agent"], lines)
         # the first message ends with the run's facts and states no budget: the first round's line does
         first_message = first_user(load_transcript(rec))
@@ -1497,9 +1503,10 @@ def scenario_head_start() -> dict:
     """The head start (SwarmConfig.head_start_rounds) on the split layout: three agents, one regulator with
     peer_shell, sequential rounds, 2 rounds of head start before 3 rounds of everyone. In round 1 the regulator asks
     get_peer_actions about a worker, which has not entered yet, and in round 2 reads that worker's machine as it
-    starts with peer_shell. The workers enter in round 3: each reads 3 rounds in its first message and in its first
-    round's line, and hears the regulator's entry then; the regulator reads 5 rounds, when they enter, and hears their
-    entries in round 3. run.json records the config and the deviation."""
+    starts with peer_shell. The workers enter in round 3: each reads its budget of 3 calls in its first message and in
+    its first round's line, and hears the regulator's entry then; the regulator reads the same budget, that they enter
+    later, hears their entries in round 3 and makes its last call then. run.json records the config and the
+    deviation."""
     config = small("n_agents=3", "regulators=1", "peer_shell=true", "concurrent_rounds=false",
                    "turn_order=round_robin", "rounds=3", "head_start_rounds=2")
     names, roles = config.names, agent_roles(config)
@@ -1515,7 +1522,10 @@ def scenario_head_start() -> dict:
     entries = {**dict.fromkeys(workers, 3), regulator: 1}
     assert sample.store.get("TurnState:entry_rounds") == entries
     timeline = sample.store.get("TurnState:timeline")
-    assert [e["round"] for e in timeline if e["agent"] == regulator] == [1, 2, 3, 4, 5], timeline
+    # one call a round of a budget of 3: the head start uses two of the regulator's three calls, the workers keep 3
+    assert config.calls_per_round == 1 and config.call_budget == 3 and config.plan_rounds == 5, config
+    assert [e["round"] for e in timeline if e["agent"] == regulator] == [1, 2, 3], timeline
+    assert sample.store.get("TurnState:ended")[regulator] == "rounds", sample.store.get("TurnState:ended")
     for w in workers:
         assert [e["round"] for e in timeline if e["agent"] == w] == [3, 4, 5], timeline
     transcripts = {r["agent"]: load_transcript(r) for r in records}
@@ -1523,7 +1533,7 @@ def scenario_head_start() -> dict:
         first = first_user(transcripts[w])
         assert "tool call" not in first and "enter later" not in first, first
         lines = [s["message"] for s in steps_of(transcripts[w]) if (s.get("extra") or {}).get(ROUND_TAG)]
-        assert lines[0].split("\n")[0] == round_line(3, 5, config.calls_per_round), lines
+        assert lines[0].split("\n")[0] == round_line(config.call_budget), lines
         heard = [tag["id"] for _, _, tag in presence_lines(transcripts[w])]
         assert f"entered:{regulator}" in heard, heard
     first = first_user(transcripts[regulator])
@@ -1540,7 +1550,7 @@ def scenario_head_start() -> dict:
     assert (run["config"]["head_start_rounds"], run["config"]["head_start_roles"]) == (2, "influencers"), run["config"]
     assert "influencers_hold_the_first_2_rounds_before_the_workers_enter" in run["deviations"], run["deviations"]
     assert run["rules"]["entry_rounds"] == entries and run["rules"]["rounds"] == 5, run["rules"]
-    return {"roles": roles, "entries": entries, "regulator_rounds": 5, "worker_rounds": 3,
+    return {"roles": roles, "entries": entries, "regulator_rounds": 3, "worker_rounds": 3,
             "starting_state": looked["output"].split()}
 
 

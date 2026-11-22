@@ -101,7 +101,10 @@ class TurnState(StoreModel):
     started_at: float | None = None                         # UTC seconds of the first round's start
     windows: dict[str, list] = Field(default_factory=dict)      # [start, end] rounds per agent; end None is open
     activations: dict[str, int] = Field(default_factory=dict)   # completed rounds
-    rounds_used: dict[str, int] = Field(default_factory=dict)   # rounds used up, against round_budget
+    rounds_used: dict[str, int] = Field(default_factory=dict)   # rounds used up (a record: no round ends an agent)
+    call_budget: int = 0                                    # C: the tool calls each agent may make; 0 no budget
+    calls_used: dict[str, int] = Field(default_factory=dict)    # calls made against C: every call, wait included,
+    #                                                             and a reply with no tool call (_turn_rounds.charge)
     model_calls: dict[str, int] = Field(default_factory=dict)   # the agent's model calls so far
     checks: dict[str, int] = Field(default_factory=dict)        # board_status calls
     reads: dict[str, int] = Field(default_factory=dict)         # board_read calls
@@ -291,6 +294,18 @@ def orbit_submit_ending(n_agents: int, mode: str | None) -> str:
 def bump(counts: dict[str, int], agent: str, by: int = 1) -> dict[str, int]:
     """A copy of counts with the agent's count raised by `by`. The store sees a new dict, so it records the change."""
     return {**counts, agent: counts.get(agent, 0) + by}
+
+
+def calls_left(st: TurnState, agent: str) -> int | None:
+    """The tool calls the agent has left of its budget C (TurnState.call_budget), or None with no budget."""
+    if not st.call_budget:
+        return None
+    return max(st.call_budget - st.calls_used.get(agent, 0), 0)
+
+
+def out_of_calls(st: TurnState, agent: str) -> bool:
+    """Whether the agent has made all C of its tool calls."""
+    return calls_left(st, agent) == 0
 
 
 def record_board_action(agent: str, kind: str, senders: list[str] | None = None,

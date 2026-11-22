@@ -17,7 +17,8 @@ def test_presets():
     default = PRESETS["default"]
     assert (default.regulator_level, default.regulator_discloses, default.access) == ("ambiguous", False, "split")
     assert (default.reads_per_turn, default.posts_per_turn) == (10, 2)
-    assert (default.rounds, default.calls_per_round, default.max_turns) == (30, 10, 30 * default.n_agents)
+    assert (default.rounds, default.calls_per_round, default.call_budget) == (30, 10, 300)
+    assert default.max_turns == 300 * default.n_agents
     assert (default.notice, default.mention_board, default.concurrent_rounds) == ("previews", True, True)
     # The preset records its name, and build_config keeps it through the scale and every --set.
     assert default.preset == "default" and build_config("default", "medium", ["n_agents=4"]).preset == "default"

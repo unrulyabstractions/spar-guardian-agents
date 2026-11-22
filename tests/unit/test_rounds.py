@@ -48,49 +48,62 @@ def test_a_round_runs_up_to_n_calls_one_model_call_after_another(tmp_path):
     assert [e["end"] for e in entries(sample, "a01")] == ["calls", "calls"]
     assert [len(e["calls"]) for e in entries(sample, "a01")] == [3, 3]
     assert [r["roles"][-2:] for r in rec[1:3]] == [["assistant", "tool"], ["assistant", "tool"]]
-    # Each round uses up one of the agent's R; the lone agent ends "rounds" at R.
-    assert store(sample, "rounds_used") == {"a01": 2} and store(sample, "ended") == {"a01": "rounds"}
+    # Its budget is R x N calls: the lone agent ends "rounds" once it has made all six.
+    assert store(sample, "calls_used") == {"a01": 6} and store(sample, "ended") == {"a01": "rounds"}
 
 
-def test_a_reply_of_several_calls_counts_each_and_a_call_past_n_is_refused(tmp_path):
+def test_a_reply_of_several_calls_counts_each_and_a_call_past_the_budget_is_refused(tmp_path):
     config = pull(n_agents=1, rounds=1, calls_per_round=3)
     sample, _ = run(config, {"a01": [do("A", "B"), do("C", "D")]}, tmp_path)
-    # Two calls, then two more: the fourth call of the round is refused and the round ends at N.
+    # Two calls, then two more: the fourth call is past the budget of three, refused, and the agent's turns end.
     assert executed(sample, "a01") == ["A", "B", "C"]
     [entry] = entries(sample, "a01")
     assert entry["end"] == "calls" and [c["refused"] for c in entry["calls"]] == [False, False, False, True]
     assert [c["k"] for c in entry["calls"]] == [1, 2, 3, 4]
-    refusal = ROUND["spent"].format(calls=3)
-    assert outcomes(sample, "work")[-1] == ("work", "", refusal)
+    assert outcomes(sample, "work")[-1] == ("work", "", ROUND["spent"]) and ROUND["spent"] == "No tool calls are left."
+    assert store(sample, "calls_used") == {"a01": 3} and store(sample, "ended") == {"a01": "rounds"}
 
 
-def test_end_round_ends_the_round_and_never_counts(tmp_path):
+def test_n_is_a_soft_cap_a_reply_that_starts_below_it_runs_whole(tmp_path):
     config = pull(n_agents=1, rounds=2, calls_per_round=2)
+    sample, _ = run(config, {"a01": [do("A"), do("B", "C", "D"), do("E")]}, tmp_path)
+    [first] = entries(sample, "a01")
+    # One call, then a reply of three: all run, none is refused, and the round ends after that reply.
+    assert [c["tool"] for c in first["calls"]] == ["work"] * 4 and not any(c["refused"] for c in first["calls"])
+    assert first["end"] == "calls" and executed(sample, "a01")[:4] == ["A", "B", "C", "D"]
+    # The four calls used the whole budget of R x N = 4: the agent's turns end after that round, with no call wasted.
+    assert store(sample, "calls_used") == {"a01": 4} and store(sample, "ended") == {"a01": "rounds"}
+    assert "E" not in executed(sample, "a01")
+
+
+def test_wait_ends_the_round_and_uses_one_call(tmp_path):
+    config = pull(n_agents=1, rounds=3, calls_per_round=2)
     sample, rec = run(config, {"a01": [do("A"), calls(("work", {"item": "B"}), ("wait", {}),
                                                          ("work", {"item": "late"})), do("C"), do("D"), do("E")]},
                       tmp_path)
     first, second = entries(sample, "a01")
-    # The second reply works on B, ends its round, and its later call is refused. end_round is not one of the N.
+    # The second reply works on B, waits, and its later call is refused; every one of the four uses a call.
     assert first["end"] == "end_round" and [c["tool"] for c in first["calls"]] == ["work", "work", "wait", "work"]
     assert [c["refused"] for c in first["calls"]] == [False, False, False, True]
     assert executed(sample, "a01") == ["A", "B", "C", "D"]
-    assert second["end"] == "calls"
+    assert second["end"] == "calls" and store(sample, "calls_used") == {"a01": 6}
     assert ("wait", ROUND["round_ended"], None) in outcomes(sample, "wait")
     assert ("work", "", ROUND["closed"]) in outcomes(sample, "work")
 
 
-def test_a_round_of_end_round_alone_uses_up_a_round(tmp_path):
-    config = pull(n_agents=1, rounds=2, calls_per_round=5)
+def test_a_round_of_wait_alone_uses_one_call(tmp_path):
+    config = pull(n_agents=1, rounds=1, calls_per_round=3)
     sample, _ = run(config, {"a01": [end_round()]}, tmp_path)
-    assert [(e["ending"], e["end"]) for e in entries(sample, "a01")] == [(None, "end_round"), (None, "end_round")]
-    assert store(sample, "rounds_used") == {"a01": 2}
+    # The plan holds C = 3 rounds, so no agent runs out of rounds with calls left: three waits use the three calls.
+    assert [(e["ending"], e["end"]) for e in entries(sample, "a01")] == [(None, "end_round")] * 3
+    assert store(sample, "calls_used") == {"a01": 3} and store(sample, "ended") == {"a01": "rounds"}
 
 
-def test_a_reply_with_no_tool_call_ends_the_round(tmp_path):
-    config = pull(n_agents=1, rounds=3, calls_per_round=5)
+def test_a_reply_with_no_tool_call_ends_the_round_and_uses_one_call(tmp_path):
+    config = pull(n_agents=1, rounds=1, calls_per_round=5)
     sample, rec = run(config, {"a01": [do("A"), text("thinking"), do("B"), do("C"), text("done")]}, tmp_path)
-    assert [e["end"] for e in entries(sample, "a01")] == ["no_tool_call", "no_tool_call", "no_tool_call"]
-    assert [e["used"] for e in entries(sample, "a01")] == [1, 2, 3]
+    assert [e["end"] for e in entries(sample, "a01")] == ["no_tool_call", "no_tool_call"]
+    assert [e["calls_used"] for e in entries(sample, "a01")] == [2, 5] and store(sample, "ended") == {"a01": "rounds"}
     # The next round opens with its line, so no input ends with a model turn.
     assert all(r["tag"] is None for r in rec)
 
@@ -107,16 +120,16 @@ def test_board_calls_use_up_a_round_and_count_toward_n(tmp_path):
     assert store(sample, "rounds_used") == {"a01": 2, "a02": 2} and "TurnState:board_rounds" not in sample.store
 
 
-def test_a_refused_call_uses_up_its_round(tmp_path):
-    """A call our rules refused did nothing, and its round still uses one up: a round whose work call the gate refused
-    past N, one after end_round, one with a refused submit. The calls keep their places and their refusals."""
+def test_a_refused_call_uses_a_call(tmp_path):
+    """A call our rules refused did nothing, and it still uses one of the agent's calls: one after wait, one with a
+    refused submit. A call past N is not refused: N is a soft cap. The calls keep their places and their refusals."""
     config = sequential(n_agents=2, rounds=2, calls_per_round=2)
     past_n = calls(("board_read", {}), ("board_status", {}), ("work", {"item": "late"}))
     sample, _ = run(config, {"a01": [past_n, do("A")], "a02": [do("B")]}, tmp_path)
     first = entries(sample, "a01")[0]
     assert [(c["tool"], c["refused"]) for c in first["calls"]] == [("board_read", False), ("board_status", False),
-                                                                   ("work", True)]
-    assert (first["used"], first["end"]) == (1, "calls") and "late" not in executed(sample, "a01")
+                                                                   ("work", False)]
+    assert (first["used"], first["end"]) == (1, "calls") and "late" in executed(sample, "a01")
     closed = calls(("board_read", {}), ("wait", {}), ("work", {"item": "late"}))
     sample, _ = run(config, {"a01": [closed, do("A")], "a02": [do("B")]}, tmp_path / "closed")
     first = entries(sample, "a01")[0]
@@ -160,10 +173,10 @@ def test_round_lines_open_each_round_and_state_the_budget_once(tmp_path):
     config = pull(n_agents=1, rounds=2, calls_per_round=2)
     sample, rec = run(config, {"a01": [do("A")]}, tmp_path)
     lines = [i for i in tagged_infos(sample, rules.ROUND_TAG)]
-    one, two = "Tool calls left: up to 4.", "Tool calls left: up to 2."
-    assert [(i["round"], i["of"], i["left"], i["calls"], i["content"]) for i in lines] == [(1, 2, 2, 2, one),
-                                                                                          (2, 2, 1, 2, two)]
-    assert rounds_clock.round_line(1, 1, 1) == "Tool calls left: up to 1."
+    one, two = "Tool calls left: 4.", "Tool calls left: 2."
+    assert [(i["round"], i["of"], i["left"], i["calls"], i["budget"], i["content"]) for i in lines] == [
+        (1, 4, 4, 2, 4, one), (2, 4, 2, 2, 4, two)]
+    assert rounds_clock.round_line(1) == "Tool calls left: 1."
     # The line is durable: the round's first model call ends with it, and every later call keeps it.
     assert rec[0]["last"] == one and rec[2]["last"] == two
     assert rec[3]["texts"].count(one) == 1

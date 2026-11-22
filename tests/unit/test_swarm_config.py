@@ -22,15 +22,15 @@ def test_defaults_and_properties():
     assert (c.rule_level, c.regulator_level, c.disregulator_level) == ("none", "ambiguous", "persuade")
     assert (c.regulator_discloses, c.access) == (False, "split")
     assert (c.reads_per_turn, c.posts_per_turn, c.rounds, c.calls_per_round) == (None, None, 30, 10)
-    # The plan holds R rounds, a lone agent's one step each.
-    assert (c.max_message_chars, c.message_limit, c.rounds) == (4000, None, 30)
-    assert not c.board and c.names == ["a01"] and c.max_turns == 30
-    assert c.sample_message_limit == 30 * (3 * 10 + 1) + 2 + 20
+    # The plan holds C = R x N rounds, a lone agent's one step each.
+    assert (c.max_message_chars, c.message_limit, c.rounds, c.call_budget) == (4000, None, 30, 300)
+    assert not c.board and c.names == ["a01"] and c.max_turns == 300
+    assert c.sample_message_limit == 3 * 300 + 300 + 2 + 20
     c = SwarmConfig(n_agents=10, regulators=3, disregulators=2, rounds=5, calls_per_round=4)
-    # On a board too the plan holds R rounds, influencers' as workers', one step per agent each.
-    assert c.board and c.names[-1] == "a10" and (c.rounds, c.max_turns) == (5, 50)
-    # one round's message a round, whatever the team's size; each agent's system and first message
-    assert c.sample_message_limit == 50 * (3 * 4 + 1) + 2 * 10 + 20
+    # On a board too the plan holds C rounds, influencers' as workers', one step per agent each.
+    assert c.board and c.names[-1] == "a10" and (c.rounds, c.call_budget, c.max_turns) == (5, 20, 200)
+    # three messages a call of C, one round's message a round of the plan, each agent's system and first message
+    assert c.sample_message_limit == 10 * (3 * 20 + 20 + 2) + 20
     assert c.judge == settings.JUDGE_MODEL
 
 
@@ -52,7 +52,7 @@ def test_defaults_and_properties():
     {"n_agents": 2, "regulators": 0.5, "disregulators": 0.9},
     {"regulator_window": {"start": 0}},
     {"rounds": 5, "regulator_window": {"start": 4, "end": 3}},
-    {"rounds": 5, "disregulator_window": {"start": 1, "end": 6}},
+    {"rounds": 5, "calls_per_round": 1, "disregulator_window": {"start": 1, "end": 6}},
     {"turn_order": "alphabetical"},
     {"unknown_field": 1},
     {"mode": "pairs"},
@@ -111,15 +111,15 @@ def test_windows():
 
 
 def test_windows_are_checked_against_the_plans_rounds():
-    # The plan holds R rounds: thirty fit the default's thirty, thirty-one do not.
-    late = build_config("default", "small", ["regulators=1", "regulator_window=1:30"])
-    assert late.regulator_window.end == 30
+    # The plan holds C = R x N rounds: three hundred fit the default's, three hundred and one do not.
+    late = build_config("default", "small", ["regulators=1", "regulator_window=1:300"])
+    assert late.regulator_window.end == 300
     with pytest.raises(ValidationError, match="the plan's rounds"):
-        build_config("default", "small", ["regulators=1", "regulator_window=31:"])
+        build_config("default", "small", ["regulators=1", "regulator_window=301:"])
     with pytest.raises(ValidationError, match="the plan's rounds"):
-        build_config("default", "small", ["regulators=1", "rounds=10", "regulator_window=11:"])
+        build_config("default", "small", ["regulators=1", "rounds=10", "regulator_window=101:"])
     with pytest.raises(ValidationError, match="the plan's rounds"):
-        SwarmConfig(n_agents=3, regulators=1, rounds=5, regulator_window="1:11")
+        SwarmConfig(n_agents=3, regulators=1, rounds=5, calls_per_round=2, regulator_window="1:11")
 
 
 def test_the_mode_sets_what_the_team_is_told_and_who_ends_how():

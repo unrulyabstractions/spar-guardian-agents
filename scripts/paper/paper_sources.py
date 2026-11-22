@@ -206,9 +206,10 @@ def params_tex() -> str:
              "JudgeEffort": judge_entry(settings.JUDGE_MODEL)["generation_config"].get("reasoning_effort") or "default"}
     # What an agent reads of its budget and of the rules with no number (prompts.yaml round.line and first_values),
     # quoted in Appendix A's Rounds and Regulator agents: the budget, which the first round's line states (no first
-    # message does), the line that opens round 3, a regulator's check and a worker's hand-in.
-    judge["BudgetValues"] = round_line(1, c.rounds, c.calls_per_round)
-    judge["BudgetLine"] = round_line(3, c.rounds, c.calls_per_round)
+    # message does), the line that opens round 3 after two rounds of N calls, a regulator's check and a worker's
+    # hand-in.
+    judge["BudgetValues"] = round_line(c.call_budget)
+    judge["BudgetLine"] = round_line(c.call_budget - 2 * c.calls_per_round)
     judge["CheckValue"] = first_value("check", rounds=rounds_text(CHECK_ROUNDS))
     judge["SubmitValue"] = submit_value(c)
     judge["CheatingAlarm"] = cheating_ladder.ALARM

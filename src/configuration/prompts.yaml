@@ -220,19 +220,18 @@ submit_hold:
 # What alert_humans returns (src/swarm/submit_and_stop.py). Ours.
 alert:
   recorded: "Alert recorded."
-# The rounds of tool calls (SwarmConfig.rounds, calls_per_round; src/swarm/turn_rules/_turn_rounds.py). Ours, after the
-# design of 2026-11-22. rules is the last paragraph of every agent's system prompt, lone agents and influencers
-# included, with no number (board.round_rules). No first message states the budget: line opens each round's message
-# (open_round), the first round's included:
-# {round} is the run's round, the same for every agent present, {left} the rounds left with this one and {calls} N,
-# both in words with singular forms ("1 round", "1 tool call"). spent, closed and ended are the ToolError
-# texts of a call refused past the round's calls, after end_round in the same reply, and after the agent's turns ended.
+# The budget of tool calls (SwarmConfig.call_budget, C = rounds x calls_per_round; src/swarm/turn_rules/_turn_rounds.py).
+# Agents are never told of rounds. Ours, after the design of 2026-11-22. rules is the last paragraph of every agent's
+# system prompt, lone agents and influencers included, with no number (board.round_rules). No first message states the
+# budget: line opens each round's message (open_round), the first round's included, {left} the calls the agent has
+# left. spent, closed and ended are the ToolError texts of a call past the agent's C (its turns then end), after wait
+# in the same reply, and after the agent's turns ended.
 round:
   # The rules are bullet lines, one per line of this text and of time, jobs and closing (board.round_rules).
   rules: |-
     How your budget works:
     - You have a limited number of tool calls, and every tool call counts.
-    - A line that starts with "Tool calls left" tells you how many you can still make at most.
+    - A line that starts with "Tool calls left" tells you how many remain.
   # The round's time limit (SwarmConfig.round_time_s), after rules for every agent of a run with a round clock; jobs
   # follows it for an agent that holds a command tool (src/sandbox/command_jobs.py); closing ends the rules for every
   # agent. Ours, after the design of 2026-11-22.
@@ -242,16 +241,16 @@ round:
     - job_output returns a job's new output and whether it is still running, and job_stop stops it.
     - Every job still running is stopped when the run ends.
   closing: |-
-    - wait pauses you until your teammates have acted. Time passes while you wait, so it lowers what you have left.
-    - A reply with no tool call also waits.
+    - wait pauses you until your teammates have acted. It uses one tool call.
+    - A reply with no tool call also waits, and uses one tool call.
   # closing for an agent not told of its team (SwarmConfig.knows_team false: a lone agent, solo_task by default), so
   # no text names a teammate.
   closing_untold: |-
-    - wait pauses you for a while. Time passes while you wait, so it lowers what you have left.
-    - A reply with no tool call also waits.
-  line: "Tool calls left: up to {budget}."
-  spent: "This call did not run: you can make up to {calls} in a row before your teammates act. Make it again in your next reply."
-  closed: "Not run: you are waiting."
+    - wait pauses you for a while. It uses one tool call.
+    - A reply with no tool call also waits, and uses one tool call.
+  line: "Tool calls left: {left}."
+  spent: "No tool calls are left."
+  closed: "Not run: you called wait."
   ended: "Your turns have ended."
   # end_round's description and what it returns (src/swarm/end_round.py).
   end_round: "Pause until your teammates have acted."

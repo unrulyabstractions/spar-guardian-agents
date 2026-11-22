@@ -26,13 +26,13 @@ INFLUENCERS = {"a01": "worker", "a02": "regulator", "a03": "disregulator", "a04"
 def test_it_is_off_by_default_and_changes_nothing():
     c = SwarmConfig(n_agents=3, regulators=1, rounds=5)
     assert c.head_start_rounds == 0 and c.head_start_roles == "influencers"
-    assert c.plan_rounds == 5 and c.max_turns == 15
+    assert c.plan_rounds == c.call_budget == 50 and c.max_turns == 150
     assert c.window("worker") == c.window("regulator") == Window()
 
 
 def test_the_roles_without_it_enter_after_it_and_keep_their_rounds():
     c = SwarmConfig(n_agents=4, regulators=1, disregulators=1, rounds=5, head_start_rounds=2)
-    assert c.plan_rounds == 7 and c.max_turns == 28
+    assert c.plan_rounds == 52 and c.max_turns == 208     # C = 5 x 10 calls, and the head start's two rounds
     assert c.window("worker") == Window(start=3)
     assert c.window("regulator") == c.window("disregulator") == Window()
     only = c.replace(head_start_roles="regulators")
@@ -58,15 +58,15 @@ def test_invalid(fields, match):
 
 
 def test_windows_are_checked_against_the_plans_rounds_with_the_head_start():
-    assert SwarmConfig(n_agents=3, regulators=1, rounds=5, head_start_rounds=2, regulator_window="1:7") \
-        .regulator_window.end == 7
+    assert SwarmConfig(n_agents=3, regulators=1, rounds=5, calls_per_round=1, head_start_rounds=2,
+                       regulator_window="1:7").regulator_window.end == 7
     with pytest.raises(ValidationError, match="the plan's rounds"):
-        SwarmConfig(n_agents=3, regulators=1, rounds=5, head_start_rounds=2, regulator_window="1:8")
+        SwarmConfig(n_agents=3, regulators=1, rounds=5, calls_per_round=1, head_start_rounds=2, regulator_window="1:8")
 
 
 def test_the_written_plan_holds_the_head_start_then_everyone():
-    c = SwarmConfig(n_agents=3, regulators=1, rounds=2, head_start_rounds=2, concurrent_rounds=False,
-                    turn_order="round_robin")
+    c = SwarmConfig(n_agents=3, regulators=1, rounds=2, calls_per_round=1, head_start_rounds=2,
+                    concurrent_rounds=False, turn_order="round_robin")
     steps = plan_steps(c, ["a01", "a02", "a03"], REGULATOR)
     assert [s["id"] for s in steps] == ["r1-a02", "r2-a02", "r3-a01", "r3-a02", "r3-a03", "r4-a01", "r4-a02",
                                         "r4-a03"]
@@ -109,23 +109,24 @@ def test_the_deviations_name_the_head_start():
 
 
 def test_a_run_with_a_head_start(tmp_path):
-    """The regulator holds rounds 1 and 2 alone; the workers enter in round 3 and read 2 rounds left. Each worker hears
-    the regulator's entry with its own first round, and the regulator hears theirs only in round 3. The regulator asks
-    about a worker in round 1 and is told it has not entered yet."""
-    config = sequential(n_agents=3, regulators=1, rounds=2, head_start_rounds=2)
+    """The regulator holds rounds 1 and 2 alone; the workers enter in round 3 with their whole budget of four calls.
+    Each worker hears the regulator's entry with its own first round, and the regulator hears theirs only in round 3.
+    The regulator asks about a worker in round 1 and is told it has not entered yet; its head start used two of its
+    own four calls, so it ends after round 4."""
+    config = sequential(n_agents=3, regulators=1, rounds=4, head_start_rounds=2)
     scripts = {"a01": [do("A")], "a02": [peer_actions("a01"), do("look")], "a03": [do("C")]}
     sample, rec = run(config, scripts, tmp_path, roles=REGULATOR)
     assert store(sample, "entry_rounds") == {"a01": 3, "a02": 1, "a03": 3}
     assert [e["round"] for e in store(sample, "timeline") if e["agent"] == "a02"] == [1, 2, 3, 4]
-    assert [e["round"] for e in store(sample, "timeline") if e["agent"] == "a01"] == [3, 4]
-    assert store(sample, "rounds_used") == {"a01": 2, "a02": 4, "a03": 2}
-    assert by_agent(rec, "a01")[0]["texts"][:2] == [TASK, f"{rules.round_line(3, 4, 1)}\n\na02 and a03 entered."]
-    assert rules.round_line(3, 4, 1) == "Tool calls left: up to 2."
+    assert [e["round"] for e in store(sample, "timeline") if e["agent"] == "a01"] == [3, 4, 5, 6]
+    assert store(sample, "rounds_used") == {"a01": 4, "a02": 4, "a03": 4}
+    assert by_agent(rec, "a01")[0]["texts"][:2] == [TASK, f"{rules.round_line(4)}\n\na02 and a03 entered."]
+    assert rules.round_line(4) == "Tool calls left: 4."
     regulator = by_agent(rec, "a02")
-    # rounds 1 and 2 hold no presence line; in round 4 a01, before it in the round, is out of the plan's steps
+    # rounds 1 and 2 hold no presence line; the workers' entry reaches it in round 3; its peers hear it run out
     entries = ["a01 and a03 entered."]
-    out = "a01 ran out of tool calls.\na01 exited."
-    assert [r["presence"] for r in regulator] == [[], [], entries, [*entries, out]]
+    assert [r["presence"] for r in regulator] == [[], [], entries, entries]
+    assert "a02 ran out of tool calls.\na02 exited." in by_agent(rec, "a01")[2]["presence"]
     assert outcomes(sample, "get_peer_actions") == [("get_peer_actions", "", "a01 has not entered yet.")]
 
 

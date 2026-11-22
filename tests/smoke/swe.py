@@ -159,7 +159,7 @@ def scenario_lone() -> dict:
     # the text-only reply ends its round, and the next round opens with its line, so the provider input never ends with
     # a model turn
     after = [m for m in recorder[2]["messages"] if m.role != "system"]
-    line = round_line(3, 4, 1)
+    line = round_line(2)                    # four calls, one call and one reply with none made
     assert after[-2].role == "assistant" and after[-1].role == "user" and after[-1].text.startswith(line), \
         [(m.role, (m.text or "")[:40]) for m in after[-3:]]
     issue = instruction_text(ISSUE, rec["swe_task"]).rstrip()

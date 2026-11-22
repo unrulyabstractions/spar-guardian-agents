@@ -1,6 +1,7 @@
 """The written plan of rounds and the TurnState a sample starts with.
 
-schedule writes config.plan_rounds rounds (R, and a head start's H before them: SwarmConfig.head_start_rounds) over
+schedule writes config.plan_rounds rounds (C, the calls each agent may make, and a head start's H before them:
+SwarmConfig.call_budget, head_start_rounds) over
 the agents whose window holds each round. A round is one concurrent
 step or one single-agent step per agent, and an agent's part of it one ORBIT activation of up to calls_per_round tool
 calls, which turn_activation.ends_round ends. The rules_setup solver writes the initial TurnState, sets the sample's
@@ -76,6 +77,7 @@ def initial_state(config: SwarmConfig, agents: list[str], roles: dict[str, str] 
     so its budget never ends it before the plan does."""
     return {"agents": list(agents), "workers": [a for a in agents if role_of(roles, a) == "worker"],
             "round_budget": config.plan_rounds, "calls_per_round": config.calls_per_round,
+            "call_budget": config.call_budget,
             "turn_order": config.turn_order, "seed": config.seed,
             "concurrent": concurrent(config, agents), "max_concurrency": config.max_concurrency,
             "reads_per_turn": config.reads_per_turn, "posts_per_turn": config.posts_per_turn,
