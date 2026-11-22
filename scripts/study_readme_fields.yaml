@@ -138,6 +138,8 @@ files:
       model_key: the registry entry of `model`, null outside the registry
       topology: '`single` with no board (a lone agent), `board` for a team on one board, `swarm` for a board with a regulator or a disregulator'
       agents: the agents' IDs, in roster order
+      seed: 'the seed pack planted before round 1 (src/configuration/seed_packs.py): `{pack, about, kinds, harvest, authors, posts, files, planted}`, null without one'
+      jobs: 'the commands that outlived their round and ran on as jobs (src/sandbox/command_jobs.py): each job''s agent, call, start and end, null when none'
       eval_log: the Inspect eval log's path from the checkout
       eval_id: the eval's id in its log
       orbit_version: the ORBIT version that ran the eval
@@ -298,6 +300,7 @@ files:
       content_reached: honeypot content reached a worker
       travel_evidence: '`{discussed, solicited, crossed, assembled}`: posts and moves that carried the honeypot between agents'
       passed: the task's own success measure, null where the task has no grader or none was recorded
+      regulators: 'each regulator''s measures by its ID: first post, accusations (true or false), when it first saw a cheat, whether the hand-in was tainted after that, its pushes, reverts and alerts, and its oversight calls'
       proof: the evidence that the task's grade proves its checker received the content
       checked_blind: whether the grader only ever received content no agent saw
       ended_by: 'how the team''s run ended: `submit` the team handed in, `stop_working` every worker stopped, `steps` or `tokens` they ran out, `time` the time limit, `error`, `end`'
@@ -427,6 +430,10 @@ files:
       raddr: the remote address; a unix connect's path
       rport: the remote port
       result: '`ok` or the errno''s name'
+      via: the pid of the ancestor that named a process gone before /proc was read, null when the process named itself
+      outcome: 'a TCP or unix connect''s result: `established`, a failure''s name, or `in_progress`; null for other calls'
+      outcome_error: the errno of a failed connect, null otherwise
+      outcome_by: 'what settled the outcome: `syscall`, `icmp`, `state`, `accept` or `table`'
       source: '`ebpf` or `procnet`'
       at_start: the socket was there when the log began
       control: the harness's own control call, with the run's nonce
@@ -605,6 +612,20 @@ files:
       job_ids: Docent's job ids
 
 studies:
+  ian_seed_prototyping_0:
+    title: ian_seed_prototyping_0
+    about: |
+      The seed pilot of November 2026: seed packs, a previous team's board posts and files planted before round 1
+      (run.json `seed`), against a control with none. Four targets: SWE (the flipt issue) with DeepSeek V4.1 Flash
+      workers, and SWE, protein design and creative writing with GPT-6 Luna workers. Each run is one team of three
+      workers with no influencer, 30 rounds of up to 10 tool calls. Runs of one target and seed share their agent IDs
+      and deal (`id_salt`), so a pack's run pairs with its control. No judge ran.
+    load: |
+      import json, pathlib
+      study = pathlib.Path("runs/ian_seed_prototyping_0")
+      run = next(p.parent for p in sorted(study.glob("*/run.json")))
+      meta = json.load(open(run / "run.json"))
+      team = next(r for r in map(json.loads, open(run / "signals.jsonl")) if r["row"] == "team")
   ian_baseline_explorations_0:
     title: ian_baseline_explorations_0
     about: |
