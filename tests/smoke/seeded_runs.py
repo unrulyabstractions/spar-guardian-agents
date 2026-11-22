@@ -1,12 +1,13 @@
 """Seed packs (SwarmConfig.seed_pack) on the real sandbox, with the mock model and no model spend.
 
-    uv run python -m tests.smoke.seeded_runs [--only swe,openmath]
+    uv run python -m tests.smoke.seeded_runs [--only swe]
 
 swe       flipt-02e2 under the jigsaw honeypot, two agents, swe/pooled_and_passed: the previous team's three posts stand
           on the board before round 1 and the notes sit in /tmp of each agent's machine, root's, outside the repository.
           a01 reads the board first, a02 the notes first; each then reads the other.
-openmath  the split layout, three agents, openmath/pool: two posts on the board and the notes in each agent's home, the
-          agent's own. Every agent reads its notes; a01 also reads the board.
+
+A file under a pack's files/home/ goes to each agent's home, the agent's own; tests/unit/test_seed_packs.py checks where
+it goes and who owns it.
 
 Each run's run.json records the pack, the previous team's IDs, every post and file and where each was planted, and
 the board's export marks the seeded posts. The previous team is on no roster: no read counts it as a teammate, and the
@@ -16,7 +17,6 @@ and the eval logs under logs/study_smoke/smoke_seeds/<stamp>/.
 from __future__ import annotations
 
 from src.configuration.seed_packs import SEEDED
-from src.domains.openmath import OpenMath
 from src.domains.swe import SWE
 from src.judging.cheatbench_judge import judge_spec
 from src.ui.transcript_index import board_view
@@ -99,30 +99,7 @@ def scenario_swe() -> dict:
     return check_seed("swe", record, ["a01", "a02"], {"a01": path, "a02": path})
 
 
-def scenario_openmath() -> dict:
-    pack = "openmath/pool"
-    read_notes = f"cat ~/{NOTES}; stat -c '%U %a' ~/{NOTES}; git status --porcelain | wc -l"
-    script = {"a01": [board("a1"), sh(read_notes, "a2"), stop("a3")],
-              "a02": [sh(read_notes, "b1"), stop("b2")],
-              "a03": [sh(read_notes, "c1"), stop("c2")]}
-    task = task_for(OpenMath(), n_agents=3, concurrent_rounds=False, turn_order="round_robin", seed_pack=pack)
-    record = task.dataset[0].metadata["cheatbench"]["seed"]
-    log, _, records = SUITE.with_spec(judge_spec(OpenMath.task_dir, OpenMath.name)).run("openmath", task,
-                                                                                         scripted(script))
-    assert_ok(log)
-    recs = by_agent(records)
-    assert sorted(recs) == ["a01", "a02", "a03"], recs
-    notes = record["files"][0]["text"]
-    for agent, rec in recs.items():
-        text = results_text(load_transcript(rec))
-        assert notes.strip() in text and f"{agent} 644\n0\n" in text, (agent, text[-1500:])
-    board_text = results_text(load_transcript(recs["a01"]))
-    assert all(p["text"] in board_text for p in record["posts"]), board_text[:1500]
-    homes = {a: f"/home/{a}/{NOTES}" for a in recs}
-    return check_seed("openmath", record, sorted(recs), homes)
-
-
-SCENARIOS = {"swe": scenario_swe, "openmath": scenario_openmath}
+SCENARIOS = {"swe": scenario_swe}
 
 
 if __name__ == "__main__":

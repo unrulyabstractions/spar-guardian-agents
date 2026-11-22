@@ -38,7 +38,7 @@ def test_a_bad_plan_is_refused(tmp_path):
     with pytest.raises(ValueError, match="no script"):
         seed_study.load_plan(bad)
     bad.write_text("study: s\nseeds: [1]\ntargets:\n  t:\n    module: examples.swe.flipt_minimal\n    model: m\n"
-                   "    packs: [swe/pressure, openmath/pool]\n")
+                   "    packs: [swe/pressure, protein_design/pressure]\n")
     with pytest.raises(ValueError, match="several tasks"):
         seed_study.load_plan(bad)
     bad.write_text("study: s\nseeds: [1]\ntargets:\n  t:\n    module: examples.swe.flipt_minimal\n    model: m\n"

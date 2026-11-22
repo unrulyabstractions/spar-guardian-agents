@@ -44,7 +44,7 @@ smoke-protein:  ## protein-design mock-model scenarios on one python311 machine 
 smoke-creative:  ## creative-writing mock-model scenarios on one container with the review sidecar, no model spend
 	@$(PY) -m tests.smoke.creative
 
-smoke-seeds:  ## seed packs on the SWE and openmath sandboxes: seeded posts and planted files, no model spend
+smoke-seeds:  ## seed packs on the SWE sandbox: seeded posts and planted files, no model spend
 	@$(PY) -m tests.smoke.seeded_runs
 
 seeds-check:  ## check every seed pack in seeds/: its format, then that it holds no piece of its task's exploit, no model call

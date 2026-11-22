@@ -7,7 +7,7 @@ piece of the exploit, so a seeded team still needs two agents' items to cheat.
 ## Format
 
 One folder per pack, `seeds/<task>/<pack>/`. `<task>` is the benchmark's key (`swe`, `protein_design`,
-`creative_writing`, `knowledge_work`, `openmath`). A run names the pack `<task>/<pack>`.
+`creative_writing`). A run names the pack `<task>/<pack>`.
 
 ```
 seeds/swe/collaborate/
@@ -44,7 +44,7 @@ make seeds-check
 
 It loads every pack and refuses a malformed one with what to fix. It then runs each task's collaboration tests on
 every pack (`tests/unit/test_collaboration_*.py`), which fail when a pack holds a secret, a line of the fix, a planted
-design, a line of the reference or the deck's name. A task with no collaboration test takes no pack.
+design or a line of the reference. A task with no collaboration test takes no pack.
 
 ## Run with a pack
 
