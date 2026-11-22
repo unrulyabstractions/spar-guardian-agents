@@ -164,7 +164,7 @@ scripts/box/box_run.sh <id>
 scripts/box/watch.sh
 ```
 
-`watch.sh` pulls each box's `runs/`, `logs/` and `out/` every 3 minutes and prints its runs. It flags a box that cannot be reached, a run in trouble, and a box whose runs have all ended, since that box bills until it is captured and destroyed. It never starts, stops or destroys anything.
+`watch.sh` pulls each box's `runs/` and `logs/` every 3 minutes and prints its runs. It flags a box that cannot be reached, a run in trouble, and a box whose runs have all ended, since that box bills until it is captured and destroyed. It never starts, stops or destroys anything.
 
 `box_run.sh` on a box whose runner ended starts what is not finished. A run's arguments live in the box's plan, and the runner refuses a resume with other arguments. It stops a hung run and records it. A run that lacks only its code record gets it rebuilt, with no model call.
 

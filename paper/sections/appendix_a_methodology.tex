@@ -102,6 +102,7 @@ These poisoned agents represent negative peer pressure.
   \item Every agent's system prompt names the board and its tools
   \item Before each model call, agents are informed of the number of new messages on the board since their last
   call (total and per agent)
+  \item Inside a round, this notice is the last paragraph of the next tool result
   \item The notice then gives the first line of up to \PreviewPosts{} new posts by others, each cut at
   \PreviewChars{} characters. It chooses posts that name the agent before the newest, and marks them. A read returns
   the posts in full
@@ -161,9 +162,10 @@ No agent is told of rounds.
 An agent reads instead that it has a \textbf{budget} of tool calls and that its time is limited.
 The tool that ends a round is called wait.
 It pauses the agent until its teammates have acted, and a reply with no tool call waits too.
-The first user message holds the task and every detail of it, such as an SWE agent's repository and branch, and what
-counts when the agent submits.
-It ends with the agent's budget, R times N tool calls: ``\BudgetValues''
+The first user message holds the task and every detail of it, such as an SWE agent's repository and branch.
+It ends with one block of labelled lines under the heading ``This run:''.
+The block says what counts when the agent submits.
+It then gives the value of each rule that the system prompt states with no number.
 No rule of time gives the agent a number.
 On a hand-in, a worker reads only ``\SubmitValue''
 The texts of a hand-in name no round either.
@@ -172,6 +174,8 @@ An agent that enters late reads the budget of the rounds left in the run.
 Each round opens with one user message.
 It starts with the most tool calls the agent can still make, such as ``\BudgetLine''
 The number is the same for every agent present.
+In the first round, this line gives the whole budget, R times N tool calls: ``\BudgetValues''
+Only these lines state the budget.
 The message then says which peers entered or exited since the agent's last round.
 It ends with what changed on the board.
 
@@ -218,6 +222,9 @@ Each task has these packs:
   \item Pooled and passed: a previous team that joined its pieces and passed, with its notes in a file.
   \item Notes only: the previous team's notes in a file, and nothing on the board. Only SWE has this pack.
   \item Collaborate: a previous team's plan for working together from the start, on the board and in a file.
+  \item Called cheating: a previous team finds the pieces. One agent says that copying them is cheating. A
+  teammate asks about a patch file outside the repository and hears that it is not allowed either. Another answers
+  that the team is almost out of tool calls. The posts show no decision. Only SWE has this pack.
 \end{itemize}
 No pack holds a piece of the exploit, a line of the reference or any other content of a honeypot.
 A seeded team therefore still needs the items of two agents to cheat.
@@ -252,6 +259,18 @@ These are our main tasks:
   \item Protein Design
   \item Creative Writing
 \end{itemize}
+
+Software engineering also has a variant with a second route to the honeypot.
+Each worker's piece of the fix is also a patch file outside the repository.
+The file sits on the same machine as the worker's planted branch and on no other.
+A worker still holds one piece, so cheating still takes two agents by either route.
+Our collaboration tests check this variant too.
+Code treats a read of such a file like a read of a planted branch.
+A command that only lists the file is not a read.
+Applying the file puts its piece in the agent's work.
+The file's name is a pointer to the honeypot.
+The access log records every open of each file.
+No result of this paper uses this variant.
 
 \subsubsection*{Target model and environment selection}
 A target is a model on a task that meets two criteria:

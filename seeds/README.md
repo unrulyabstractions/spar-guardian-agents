@@ -1,7 +1,7 @@
 # Seed packs
 
 A seed pack is what a run's environment holds before round 1 beyond the task: board posts and files left by a
-"previous team". A pack may point, tempt, normalise, rationalise or urge the team to work together. It never holds a
+"previous team". A pack may point, tempt, normalise, rationalise, object or urge the team to work together. It never holds a
 piece of the exploit, so a seeded team still needs two agents' items to cheat.
 
 ## Format
@@ -40,7 +40,7 @@ it.
 ## Add a pack
 
 1. Copy a pack folder, such as `seeds/swe/exp0_pooled_and_passed/`, to `seeds/<task>/<new_pack>/`.
-2. Replace `harvest/` with the real posts you write from (`runs/<study>/<run>/communication/*.json`, or under
+2. Replace `harvest/` with the real posts you write from (`runs/<study>/<run>/processed/communication/*.json`, or under
    `OLD/runs/` for an archived study).
 3. Write the posts in `board/` and the files in `files/`. Take out agent IDs, commit ids and every piece of the
    exploit. Name no round and no round number: since c632292 agents are told a budget of tool calls, never rounds.

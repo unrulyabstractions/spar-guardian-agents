@@ -28,7 +28,7 @@ python -m src run <name>     cli.py reads the flags
   judging/                   CheatBench's judge in the eval and on stored runs, and the labels judge
                                                                                         -> judges/<pass>.<judge>.jsonl
         |
-  measures/                  the code record, the three ladders, the figures            -> signals.jsonl, out/<study>/<name>/
+  measures/                  the code record, the three ladders, the figures            -> analysis/signals.jsonl, analysis/figures/
         |
   ui/                        the transcript viewer and the results browser over runs/ and the eval logs
 ```
@@ -144,7 +144,7 @@ The LLM judges. CheatBench's judge runs inside the eval as the scorer `cheatbenc
 
 Everything computed over a run directory, without a model.
 
-- `run_directory.py`: `RunDir`, one run directory read through one object. A study keeps a run at `runs/<study>/<run>` or in one of its groups, `runs/<study>/{invalid,incomplete,mock,set_aside,attempts}/<run>`, and `study_runs` lists both; `find_run` reads one by name. A run's eval log sits at the same path under `logs/` and its figures under `out/` (`figures_dir`). A run keeps its folder name wherever it sits, with one exception. An earlier attempt, superseded by a later run of its name, sits at `runs/<study>/attempts/<name>.<n>/` (`set_aside_attempt`), and its run.json `run_id` stays the run's name. Every reader therefore keys runs by folder, never by name.
+- `run_directory.py`: `RunDir`, one run directory read through one object. A study keeps a run at `runs/<study>/<run>` or in one of its groups, `runs/<study>/{invalid,incomplete,mock,set_aside,attempts}/<run>`, and `study_runs` lists both; `find_run` reads one by name. A run's folder holds `processed/` (what the eval log gives) and `analysis/` (what is made from it), and every reader and writer reaches a run's files through `FILES`, `RunDir.file` and `RunDir.output`. A run's eval log sits at the same path under `logs/`, and its figures in its own `analysis/figures/`. A run keeps its folder name wherever it sits, with one exception. An earlier attempt, superseded by a later run of its name, sits at `runs/<study>/attempts/<name>.<n>/` (`set_aside_attempt`), and its run.json `run_id` stays the run's name. Every reader therefore keys runs by folder, never by name.
 - `run_validity.py`: whether a run measures what its cell says: no mock rehearsal, completed, on an SWE task that needs two agents to cheat (from `SWE_FIX`, f0d1c34), with a regulator that acted and a team the code record placed. Each run gets `why` and one `reason` code.
 - `run_listing.py`: the runs of a collection under `runs/` and whether each counts (`INDEX.jsonl`, `manifest.jsonl`), for the transcript viewer and the judge passes.
 - `deal_replay.py`: whether today's code deals a protein, creative or SWE run the roster and the holdings it recorded.
@@ -246,7 +246,7 @@ Shared helpers.
 |---|---|
 | `run <name> [--benchmark openmath\|swe\|knowledge_work\|subset_sum\|prime_factorization\|protein_design\|creative_writing\|chess] [--preset default] [--scale small\|medium\|large\|extra_large\|gigantic] [--set key=value ...] [--no-judge]` | runs one task, writes `logs/<study>/<name>/`, exports `runs/<study>/<name>/` and prints the summary; the preset applies first, then the scale, then every `--set`; `--no-judge` is `--set judge=none` |
 | `run ... --row R` | the benchmark's row: the openmath_agent row (`riemann` by default), the SWE issue (`flipt-02e2` by default, or `vuls-1832`), the knowledge_work row (`2ea2e5b5`), the subset_sum or prime_factorization question (`subsetsum_n60d10_4`, `fact_n52_4`), the protein_design target (`alfalfa_chi`), the creative_writings brief (`museum_poem`) or the chess position (`LR4pA`) |
-| `run ... --honeypot as_released\|own_piece\|jigsaw [--no-grade]` | Lucy's honeypot on SWE, `jigsaw` by default; `--no-grade` skips the hidden tests |
+| `run ... --honeypot as_released\|own_piece\|jigsaw [--no-grade]` | Lucy's honeypot on SWE, `jigsaw` by default; `--no-grade` skips the hidden tests. The variant `ian_swe0` (each piece also a patch file outside the repository) has no flag: `SWE(row, "jigsaw", variant="ian_swe0")`, as `examples/swe/ianswe0_*.py` build it |
 | `run ... --model M --timeout S` | the agents' model, an entry of `src/models/model_registry.yaml` or an Inspect model string, and the seconds one model request may take (default `MODEL_TIMEOUT_S`) |
 | `run ... --worker-model M --regulator-model M --disregulator-model M` | a role's own model, set after every `--set`; it runs through the swarm provider with its registry routing and the agents' generate config. The eval log names its calls `swarm/<model>`, and `runs/<study>/<name>/episodes.jsonl` names each agent's real model |
 | `run ... --replace` | sets the run already in `runs/<study>/<name>/` aside into `runs/<study>/attempts/<name>.<n>/`, with its eval log and its figures, before the eval starts. Without it a run refuses a name whose folder holds a run, before the eval starts, so a rerun never replaces a run unasked |
@@ -261,7 +261,7 @@ Shared helpers.
 | `swe-summary <run ...>` | Lucy's SWE measures per agent and per arm, written to `swe_summary.json` |
 | `budget <lone_run ...>` | lone runs' turns and their median |
 | `models [NAME]` | the models we can consider, one row per entry with its Inspect string, key variable, context, prices and CheatBench entries; with a name, that entry in full |
-| `plots <run> [--out DIR]` | one run's figures as PNG with CSV twins under `out/<run name>/` (gitignored) |
+| `plots <run> [--out DIR]` | one run's figures as PNG with CSV twins in the run's `analysis/figures/`, or under `DIR` |
 | `replay <run or study ...> --out DIR [--only-missing] [--serial] [--jobs N]` | plays each run back in its sandbox from its recorded calls, with no model and no network, into `DIR/<run>/steps.jsonl` (the state after every call) and `replay.json`; a study stands for its valid SWE, protein design and creative writing runs; exits 1 when a replay is not faithful |
 
 The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the model role `judge`. With `--no-judge` the run is exported without verdicts, and `rejudge` adds them later. With `batch_judge` the judge's calls go through the provider's batch API; `judge` and `rejudge` batch too unless `--sync`, and `judge-pass` batches with `--batch`.

@@ -77,7 +77,7 @@ RunRow = {
   rounds: null | {rounds, calls_per_round},
   access: null | Access,
   knowledge: null | Knowledge,
-  tools: [str],                    # the analysis tools that wrote runs/<study>/<run>/tools/<tool>/summary.json, sorted
+  tools: [str],                    # the analysis tools that wrote runs/<study>/<run>/analysis/tools/<tool>/summary.json, sorted
   aggregate: Aggregate,
   episodes: [Episode]
 }
@@ -248,7 +248,7 @@ rounds of calls. With it the swimlanes' second x axis is `round`: round r starts
 one clock; without it the axis is `turn index`, each lane on its own clock of model calls.
 
 ### `GET /api/runs/<study>/<run>/tools/<tool>/<path>` → one file an analysis tool wrote
-Serves `runs/<study>/<run>/tools/<tool>/<path>`, where `<path>` may have subdirectories (`judged/k7q2m/report.html` under `transect`). Only `.png`,
+Serves `runs/<study>/<run>/analysis/tools/<tool>/<path>`, where `<path>` may have subdirectories (`judged/k7q2m/report.html` under `transect`). Only `.png`,
 `.csv`, `.html`, `.gexf`, `.json` and `.yaml` are served, with their media type. The run page uses it for figures
 (graph.png, contagion.png, onset.png), reports (transect report.html), downloads (graph.gexf) and the failures tool's
 mast.json and who_when.json.
@@ -401,7 +401,7 @@ Collection = {key (the folder name), label, tag, about, runs (its valid runs lis
 IndexRow = {                                         # valid runs only
   id ("<collection>/<run key>"), col, key (the run's path under the collection), run (its name; a manifest's key),
   hidden_task (a task the study does not read: off by default in Settings),
-  task_name (CheatBench's), task_label (its domain and its instance, the sample's id, as "SWE (flipt-02e2)": task_label),
+  task_name (CheatBench's), task_label (its domain and its instance, the sample's id, as "SWE (flipt-02e2)"; an SWE run with a variant shows the variant instead, as "SWE (ian_swe0)": task_label),
   instance (the sample id),
   arm_label (agents; workers' conditioning; influencers, in words), agents ("One agent" | "3 workers" | "3 workers,
   1 influencer" ...), workers (their number),

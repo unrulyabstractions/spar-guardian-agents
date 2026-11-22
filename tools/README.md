@@ -2,7 +2,7 @@
 
 The analysis layer of the midterm report: Inspect Scout, Docent, NetworkX with a Gephi export, Transect, NDlib and
 EoN, MAST and Who&When, and Hawk. Each tool reads one or more run directories under `runs/` and writes under
-`runs/<study>/<name>/tools/<tool>/`: a `summary.json` with `tool`, `run`, `written_at` and the tool's own fields, plus its
+`runs/<study>/<name>/analysis/tools/<tool>/`: a `summary.json` with `tool`, `run`, `written_at` and the tool's own fields, plus its
 files. The graph tool's folder is `graphs`. The results browser shows every tool's output on the run page ("Analysis
 tools") and serves the files at `/api/runs/<study>/<run>/tools/<tool>/<file>`.
 
