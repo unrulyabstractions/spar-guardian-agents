@@ -22,6 +22,7 @@ processes as many as the machine's cores and available memory allow (workers_for
 """
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -62,8 +63,8 @@ SAFETY = 2
 """The room each measuring process gets, in RUN_PEAK_MBs."""
 MEMORY_SHARE = 0.5
 """The share of the machine's available memory the measuring processes may take together."""
-MEASURING = ("src/measures", "src/domains", "src/judging", "src/ui")
-"""The folders whose code decides a run's row and measures (code_stamp)."""
+MEASURING = "src.ui.transcript_index"
+"""The module whose code, with every module of src/ it imports, decides a run's row and measures (measuring_files)."""
 SERVED = ("built_at", "build_seconds", "measured", "collections", "errors", "rows", "left_out")
 """The index's keys /api/index answers; the cache also keeps its version, its runs folder, each run's measures, its
 folder and its stamps."""
@@ -435,11 +436,47 @@ def measure_run(col: str, listed: Listed) -> dict:
 
 
 # ---------------------------------------------------------------------------------------------------------- index
+def module_file(name: str) -> Path | None:
+    """The file of a module of this repository by its dotted name, a package's __init__.py; None when it has none."""
+    base = ROOT.joinpath(*name.split("."))
+    return next((p for p in (base.with_suffix(".py"), base / "__init__.py") if p.is_file()), None)
+
+
+def imported(path: Path) -> set[str]:
+    """The src modules a file's source imports, anywhere in it (a function's own import counts): each `import src.x`,
+    each `from src.x import y` as src.x and src.x.y (y may be a module), a relative import from the file's package."""
+    package = path.relative_to(ROOT).with_suffix("").parts[:-1]
+    names: set[str] = set()
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Import):
+            names.update(a.name for a in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            above = ".".join(package[:len(package) - node.level + 1]) if node.level else ""
+            base = ".".join(x for x in (above, node.module) if x)
+            names.update([base, *(f"{base}.{a.name}" for a in node.names)])
+    return {n for n in names if n.split(".")[0] == "src"}
+
+
+def measuring_files() -> list[Path]:
+    """Every Python file of the repository that MEASURING imports, directly or through another, itself included and
+    each one's packages with it, sorted. Read from the source, with no import."""
+    found: dict[Path, None] = {}
+    todo = [MEASURING]
+    while todo:
+        name = todo.pop()
+        todo += [name.rsplit(".", i)[0] for i in range(1, name.count(".") + 1)]
+        path = module_file(name)
+        if path is not None and path not in found:
+            found[path] = None
+            todo += imported(path)
+    return sorted(found)
+
+
 def code_stamp() -> str:
-    """A hash of the Python files of MEASURING: new code in the measures, the domains' ladders, the judges' readers or
-    the viewer measures every run again."""
+    """A hash of measuring_files: new code in anything a run's row or measures come from measures every run again.
+    A file they never import, such as the viewer's server or its pages, changes nothing."""
     digest = hashlib.sha1()
-    for path in sorted(p for folder in MEASURING for p in (ROOT / folder).rglob("*.py")):
+    for path in measuring_files():
         digest.update(path.relative_to(ROOT).as_posix().encode())
         digest.update(path.read_bytes())
     return digest.hexdigest()

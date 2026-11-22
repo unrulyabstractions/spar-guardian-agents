@@ -255,7 +255,8 @@ run is left out. The server never writes the data.
 Its one output is the index cache (`--cache`, by default `tmp/transcript_viewer/index.json`): each run's index row, its
 folder and its measures (`RunFiles.measured`: CheatBench's verdicts, the three ladders' measures and the judge
 labels), under a stamp of the run's files (their count, bytes and latest change, `stamp`) and of the code
-(`code_stamp`, a hash of `src/measures`, `src/domains`, `src/judging` and `src/ui`). A start measures again only the
+(`code_stamp`, a hash of `src/ui/transcript_index.py` and every file of `src/` it imports, directly or through
+another: a change to the viewer's server or pages measures nothing again). A start measures again only the
 runs whose stamp changed, in as many processes as the machine holds (`workers_for`: half the available memory at
 600 MB a process, at most the cores but one, at least one; the start prints the choice), and prints `measured k of n
 runs` as it goes; `--rebuild`, a new `INDEX_VERSION` (now 18) or new code measures every run. A process measures a run

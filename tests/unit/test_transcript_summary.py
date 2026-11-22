@@ -184,12 +184,18 @@ def test_the_cached_index_lands_every_valid_run_in_one_cell():
     for c in idx["collections"]:
         s = ts.summary(idx["rows"], c["key"])
         mine = [r for r in idx["rows"] if r["col"] == c["key"]]
-        assert s["total"] == c["runs"]
-        assert sum(x["n"] for _, _, x in cells(s)) == c["runs"]
-        for (model, task, workers), key, x in cells(s):
-            if x["filters"] is not None:
+        # the summary holds every task's rows; the page leaves out the tasks its Settings turn off
+        assert s["total"] == len(mine) == c["runs"] + c["other_tasks"]
+        assert sum(x["n"] for _, _, x in cells(s)) == len(mine)
+        for row in s["rows"]:
+            for key, x in row["cells"].items():
+                if x is None or x["filters"] is None:
+                    continue
                 kept = {r["id"] for r in idx["rows"] if ts.runs_page_keeps(r, x["filters"])}
-                assert kept == {r["id"] for r in cell_runs(mine, s, model, task, workers, key)}
+                want = cell_runs(mine, s, row["model"], row["task"], row["workers"], key)
+                if s["by_seed"]:        # a seeded collection's rows split by seed pack too
+                    want = [r for r in want if r.get("seed_pack", "none") == row["seed_pack"]]
+                assert kept == {r["id"] for r in want} and len(kept) == x["n"], (c["key"], row["task"], key)
 
 
 def test_a_run_starts_at_its_eval_logs_time_so_collections_list_newest_first():
