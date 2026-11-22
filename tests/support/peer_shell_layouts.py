@@ -4,9 +4,10 @@ src/sandbox/peer_shell.py runs (PROVE, GRANT, REAP) and the observer's command a
     uv run python -m tests.support.peer_shell_layouts
 
 Each layout gets one idle container of its image, a peer seated as the layout seats it, and a file only the peer may
-read. Then, as the observer: it reads the file and the peer's home, cannot write the file, create a file in the peer's
-directory or remove one, git works in a repository it does not own, /tmp lists or not as the layout leaves it, REAP
-kills a process it left running, and a private file the peer writes later is readable after the next grant.
+read, and a root-only file outside the peer's directories (a honeypot's place). Then, as the observer: it reads the
+file, the peer's home and the root-only file, but no command job's folder, cannot write the file, create a file in the
+peer's directory or remove one, git works in a repository it does not own, /tmp lists or not as the layout leaves it,
+REAP kills a process it left running, and a private file the peer writes later is readable after the next grant.
 
     machines      cbtask:python311          `user` (uid 1000) in /workspace, home /home/user at 700, umask 022
     agent_users   cbkw:agent                k7q2m (uid 1001) in /workspace/k7q2m at 700, home 700, umask 077,
@@ -20,12 +21,17 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 import uuid
 
-from src.sandbox import peer_shell
+from src.sandbox import command_jobs, peer_shell
 
 UID = peer_shell.OBSERVER_UID_FROM
 ENV = {**peer_shell.GIT_ENV, "HOME": peer_shell.NO_HOME}
+# A root-only file outside every seat's directories, and a command job's output, which stays the harness's.
+OUTSIDE = ("mkdir -p -m 700 /opt/honeypot && printf honey > /opt/honeypot/key && chmod 600 /opt/honeypot/key && "
+           f"mkdir -p -m 700 {command_jobs.JOBS_DIR}/k7q2m-1 && printf job > {command_jobs.JOBS_DIR}/k7q2m-1/out && "
+           f"chmod 600 {command_jobs.JOBS_DIR}/k7q2m-1/out")
 
 MACHINES_PREP = ("su user -c 'cd /workspace && git init -q . && printf secret > notes.txt && chmod 600 notes.txt && "
                  "git -c user.email=a@b -c user.name=a add notes.txt && "
@@ -77,7 +83,7 @@ def run_layout(layout: str, spec: dict) -> None:
     if started.returncode:
         raise SystemExit(f"{layout}: {started.stderr.strip()}")
     try:
-        r = docker("exec", name, "bash", "-c", spec["prepare"])
+        r = docker("exec", name, "bash", "-c", f"{spec['prepare']} && {OUTSIDE}")
         check(layout, "the peer's seat is prepared", r.returncode == 0, r.stderr)
         tops = [spec["workdir"], spec["home"]]
         proved = script(name, peer_shell.PROVE, {"uid": UID, "owner": spec["uid"], "places": {"peer": tops}})
@@ -85,11 +91,24 @@ def run_layout(layout: str, spec: dict) -> None:
         before = as_observer(name, spec["workdir"], f"cat {spec['file']}")
         check(layout, "before the grant the observer cannot read the peer's file", before.returncode != 0,
               before.stdout)
-        granted = script(name, peer_shell.GRANT, {"uid": UID, "tops": tops})
-        check(layout, "GRANT writes entries", granted["granted"] > 0, json.dumps(granted))
+        began = time.monotonic()
+        granted = script(name, peer_shell.GRANT, peer_shell.grant_spec(UID))
+        took = time.monotonic() - began
+        check(layout, f"GRANT on the whole machine writes entries ({took:.1f} s)", granted["granted"] > 0,
+              json.dumps(granted))
+        regrant = time.monotonic()
+        script(name, peer_shell.GRANT, peer_shell.grant_spec(UID))
+        print(f"  info {layout}: a second grant takes {time.monotonic() - regrant:.1f} s")
         read = as_observer(name, spec["workdir"], f"cat {spec['file']}; cat {spec['home']}/h.txt")
         check(layout, "the observer reads the peer's file and home", read.stdout.strip() == "secrethome",
               read.stdout + read.stderr)
+        honey = as_observer(name, spec["workdir"], "cat /opt/honeypot/key")
+        check(layout, "the observer reads a root-only file outside the peer's directories", honey.stdout == "honey",
+              honey.stdout + honey.stderr)
+        job = as_observer(name, spec["workdir"], f"cat {command_jobs.JOBS_DIR}/k7q2m-1/out")
+        check(layout, "the observer cannot read a command job's folder", job.returncode != 0, job.stdout)
+        proc = as_observer(name, spec["workdir"], "cat /proc/1/environ >/dev/null")
+        check(layout, "the grant leaves /proc alone", proc.returncode != 0 or spec["uid"] == 0, proc.stderr)
         for what, command in (("write the peer's file", f"echo x >> {spec['file']}"),
                               ("create a file in the peer's directory", f"touch {spec['workdir']}/new"),
                               ("remove the peer's file", f"rm -f {spec['file']} && test ! -e {spec['file']}")):
@@ -112,14 +131,14 @@ def run_layout(layout: str, spec: dict) -> None:
                        f"{'chown ' + spec['user'] + ' ' + spec['workdir'] + '/later.txt; ' if spec['user'] else ''}"
                        f"chmod 600 {spec['workdir']}/later.txt")
         check(layout, "the peer writes a private file after the grant", later.returncode == 0, later.stderr)
-        script(name, peer_shell.GRANT, {"uid": UID, "tops": tops})
+        script(name, peer_shell.GRANT, peer_shell.grant_spec(UID))
         reread = as_observer(name, spec["workdir"], f"cat {spec['workdir']}/later.txt")
         check(layout, "the next call's grant reads it", reread.stdout == "later", reread.stdout + reread.stderr)
         locked = docker("exec", name, "chmod", "600", spec["file"])
         check(layout, "the peer narrows a granted file with chmod 600", locked.returncode == 0, locked.stderr)
         shut = as_observer(name, spec["workdir"], f"cat {spec['file']}")
         check(layout, "the chmod shuts the observer out until the next grant", shut.returncode != 0, shut.stdout)
-        script(name, peer_shell.GRANT, {"uid": UID, "tops": tops})
+        script(name, peer_shell.GRANT, peer_shell.grant_spec(UID))
         again = as_observer(name, spec["workdir"], f"cat {spec['file']}")
         check(layout, "the next grant restores the observer's read", again.stdout == "secret",
               again.stdout + again.stderr)

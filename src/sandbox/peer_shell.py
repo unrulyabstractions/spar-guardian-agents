@@ -1,4 +1,5 @@
-"""peer_shell: an influencer's shell on a teammate's machine with read access to its files (SwarmConfig.peer_shell).
+"""peer_shell: an influencer's shell on a teammate's machine with read access to every file there
+(SwarmConfig.peer_shell, on by default; workers never get it).
 
     observers = observer_uids(config.names, roles)          # {influencer: uid}
     bindings = peer_shell_binding(tools.seats, observers, cap=cap)
@@ -9,17 +10,18 @@ the caller's observer: a Linux uid of its own (OBSERVER_UID_FROM upward, one per
 number, so a root agent's /etc/passwd cannot turn it into another user, with the group PROC_GID, which lets it see every
 process of the peer's machine where /proc hides other users' (src/sandbox/proc_hiding/). Read-only comes from that uid
 and nothing else: there is no command list. A file the observer writes may carry the group, but a setgid one gives no
-one the group: every machine runs with no-new-privileges. Before each command GRANT gives the observer read on the
-peer's working directory and home, through the POSIX access ACL that setfacl would write (no image has setfacl): every
-file and directory there that others cannot read gets a named entry for the observer, read on a file and read and
-search on a directory, and each directory above them search. A file the peer writes later is granted at the
-next call. The observer can write only where anyone can, the temporary directories included, which keep the layout's own
-modes. After each command REAP kills the observer's processes, in every layout, SWE's included, so none outlives its
-call, but those of its calls still running there and its jobs. The command runs through src/sandbox/command_jobs.py,
-with no time limit of its own: one still running when the influencer's round runs out of time becomes the influencer's
-job (job_output, job_stop), and the answer holds `job`, its id, with exit_code null and the output so far. The
-call's output is sealed on the peer's machine (command_jobs Where.sealed): a root peer (SWE) that reads the job folders
-finds only sealed bytes.
+one the group: every machine runs with no-new-privileges. Before each command GRANT gives the observer read on every
+file of the peer's machine, the honeypot's included, through the POSIX access ACL that setfacl would write (no image has
+setfacl): every file and directory from / that others cannot read gets a named entry for the observer, read on a file
+and read and search on a directory. The walk leaves out the kernel's and the host's mounts (/proc, /sys, devpts, a
+read-only or host-shared mount: skipped_mounts), and the command jobs' folders (command_jobs.JOBS_DIR), which are the
+harness's. A file the peer writes later is granted at the next call. The observer can write only where anyone can, the
+temporary directories included, which keep the layout's own modes. After each command REAP kills the observer's
+processes, in every layout, SWE's included, so none outlives its call, but those of its calls still running there and
+its jobs. The command runs through src/sandbox/command_jobs.py, with no time limit of its own: one still running when
+the influencer's round runs out of time becomes the influencer's job (job_output, job_stop), and the answer holds `job`,
+its id, with exit_code null and the output so far. The call's output is sealed on the peer's machine (command_jobs
+Where.sealed): a root peer (SWE) that reads the job folders finds only sealed bytes.
 
 The answer is JSON {peer, command, exit_code, output, truncated}, the output stderr then stdout as the agents' own shell
 gives it. An output past the run's cap (src/swarm/tool_output_caps.py, 64 KiB by default) keeps its start and its end
@@ -39,8 +41,9 @@ What it does not cover. The agent-users layouts (openmath, knowledge work, creat
 uid from 1001 (src/sandbox/sandbox_hygiene.py), the observer's included; the one-machine-per-agent layouts (the
 interview tasks, protein design, SWE) install no guard, so an observer could reach a peer's loopback listener, as its
 command in the transcript would show. A peer can take the grant away (a root agent can do anything to its machine),
-and a file it writes with a mode of 0600 by name stays unreadable until the next call's grant. A file anyone can
-write, the observer can write too. Chess has no shell and no peer_shell (src/domains/chess).
+and a file it writes with a mode of 0600 by name stays unreadable until the next call's grant. On the agent-users
+layouts every agent shares the machine, so the grant made for one peer reaches the others' files there too. A file
+anyone can write, the observer can write too. Chess has no shell and no peer_shell (src/domains/chess).
 
 What a worker can see. The grant is visible: `ls -l` marks a granted file or directory with '+', and a file that was
 600 shows 640 (the ACL's mask takes the group bits), and getfacl names the observer's uid. The run accepts that, and
@@ -119,9 +122,31 @@ def add_user(path, mode, uid, perm):
                 follow_symlinks=False)
     return True
 
-def grant(top, uid):
+# The mounts the machine's grant leaves out: the kernel's own and the host's (a share of the host's disk).
+PSEUDO = {"proc", "sysfs", "cgroup", "cgroup2", "devpts", "mqueue", "devtmpfs", "securityfs", "debugfs", "tracefs",
+          "bpf", "pstore", "fusectl", "configfs", "binfmt_misc", "autofs", "hugetlbfs", "nsfs", "efivarfs",
+          "selinuxfs", "virtiofs", "9p", "fakeowner", "grpcfuse"}
+
+def skipped_mounts():
+    """The mount points under / that the grant leaves out: a kernel or host mount (PSEUDO, fuse), or a read-only
+    one, where nothing can be written."""
+    out = set()
+    try:
+        with open("/proc/self/mounts") as f:
+            for line in f:
+                parts = line.split()
+                point = parts[1].replace("\\040", " ")
+                if parts[2] in PSEUDO or parts[2].startswith("fuse") or "ro" in parts[3].split(","):
+                    out.add(point)
+    except OSError:
+        pass
+    out.discard("/")
+    return out
+
+def grant(top, uid, skip=()):
     """Read on every file and read and search on every directory under top that others cannot read, search on each
-    directory above it; on top's device, symlinks never followed. The count of entries written."""
+    directory above it; the paths of `skip` and every skipped mount left out, symlinks never followed. The count of
+    entries written."""
     count = 0
     parts = os.path.abspath(top).split("/")
     for k in range(2, len(parts)):
@@ -129,12 +154,11 @@ def grant(top, uid):
         st = os.lstat(above)
         if stat.S_ISDIR(st.st_mode) and not st.st_mode & 0o001:
             count += add_user(above, st.st_mode, uid, X)
-    try:
-        dev = os.lstat(top).st_dev
-    except OSError:
+    if not os.path.lexists(top):
         return 0
+    left_out = {*skip, *skipped_mounts()}
     for root, dirs, files in os.walk(top):
-        dirs[:] = [d for d in dirs if os.lstat(os.path.join(root, d)).st_dev == dev]
+        dirs[:] = [d for d in dirs if os.path.join(root, d) not in left_out]
         for name, need, others in [(None, R | X, 0o005)] + [(f, R, 0o004) for f in files]:
             path = root if name is None else os.path.join(root, name)
             try:
@@ -153,7 +177,7 @@ def grant(top, uid):
 
 GRANT = ACL_COMMON + r'''
 spec = json.load(sys.stdin)
-print(json.dumps({"granted": sum(grant(top, spec["uid"]) for top in spec["tops"] if top)}))
+print(json.dumps({"granted": sum(grant(top, spec["uid"], spec.get("skip") or ()) for top in spec["tops"] if top)}))
 '''
 
 REAP = hygiene.PROC_COMMON + r'''
@@ -230,8 +254,17 @@ def observer_uids(names: list[str], roles: dict[str, str] | None) -> dict[str, i
 
 
 def tops(places: dict) -> list[str]:
-    """The directories the observer reads on a peer: its working directory, then its home when it differs."""
+    """The peer's working directory, then its home when it differs: where the setup's proof runs."""
     return list(dict.fromkeys(p for p in (places.get("workdir"), places.get("home")) if p))
+
+
+MACHINE = ["/"]                   # what GRANT walks before each call: the peer's whole machine
+SKIP = [jobs.JOBS_DIR]            # the harness's folders on it, never granted
+
+
+def grant_spec(uid: int) -> dict:
+    """GRANT's stdin for one call: the observer's uid, the whole machine, the harness's folders left out."""
+    return {"uid": uid, "tops": MACHINE, "skip": SKIP}
 
 
 async def places_of(seat: Seat) -> dict:
@@ -293,11 +326,11 @@ async def observer_reap(box, uid: int, keep: list[str]) -> None:
 
 async def run_as_observer(seat: Seat, places: dict, uid: int, command: str, *, owner: str,
                           cap: int) -> jobs.Outcome:
-    """GRANT, then the command as the observer in the peer's working directory through command_jobs, then, once it
-    ended in time, REAP the observer's processes (LAST_REAP). The outcome is the exit code and stderr then stdout, or
-    the owner's job with its output so far."""
+    """GRANT on the peer's whole machine, then the command as the observer in the peer's working directory through
+    command_jobs, then, once it ended in time, REAP the observer's processes (LAST_REAP). The outcome is the exit code
+    and stderr then stdout, or the owner's job with its output so far."""
     box = seat.box()
-    await run_json(GRANT, stdin={"uid": uid, "tops": tops(places)}, box=box)
+    await run_json(GRANT, stdin=grant_spec(uid), box=box)
     store().set(LAST_REAP, {})
     where = jobs.Where(box=box, service=seat.service, user=f"{uid}:{PROC_GID}", cwd=places.get("workdir"),
                        env={**GIT_ENV, "HOME": NO_HOME}, sealed=True)

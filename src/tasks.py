@@ -199,7 +199,7 @@ def deliverable(benchmark: Benchmark, plan: Plan) -> Deliverable:
 
 def observers(benchmark: Benchmark, plan: Plan, tools: AgentTools) -> dict[str, int]:
     """Each influencer's observer uid under SwarmConfig.peer_shell (src/sandbox/peer_shell.py), else none. A domain
-    whose agents have no shell of their own (chess) refuses peer_shell."""
+    whose agents have no shell of their own (chess) turns peer_shell off in its plan (Benchmark.plan)."""
     config = plan.config
     found = peer_shell.observer_uids(config.names, plan.roles) if config.peer_shell else {}
     if found and tools.seats is None:

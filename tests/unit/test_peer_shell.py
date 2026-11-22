@@ -35,23 +35,46 @@ def test_observers_are_the_influencers_in_roster_order():
 
 
 @pytest.mark.parametrize("key", ["openmath", "subset_sum", "swe"])
-def test_both_influencers_get_peer_shell_only_when_it_is_on(key):
-    bench, plan = plan_of(key, "peer_shell=true")
+def test_both_influencers_get_peer_shell_by_default_and_workers_never(key):
+    bench, plan = plan_of(key)
     names, bindings = tasks.team_tools(bench, plan, bench.tools(plan))
     assert PEER_SHELL_TOOL in bindings
     assert [a for a in names if PEER_SHELL_TOOL in names[a]] == ["a02", "a03"]
     prompts = tasks.system_prompts(bench, plan)
     assert SENTENCE in prompts["a02"] and SENTENCE in prompts["a03"] and SENTENCE not in prompts["a01"]
-    off_bench, off = plan_of(key)
+    off_bench, off = plan_of(key, "peer_shell=false")
     names, bindings = tasks.team_tools(off_bench, off, off_bench.tools(off))
     assert PEER_SHELL_TOOL not in bindings and not any(PEER_SHELL_TOOL in n for n in names.values())
     assert not any(SENTENCE in p for p in tasks.system_prompts(off_bench, off).values())
 
 
-def test_chess_has_no_shell_and_refuses_peer_shell():
+@pytest.mark.parametrize("key", sorted(DOMAINS))
+def test_every_domain_builds_with_the_default_and_no_worker_holds_peer_shell(key):
+    bench, plan = plan_of(key)
+    names, _ = tasks.team_tools(bench, plan, bench.tools(plan))
+    tasks.system_prompts(bench, plan)
+    workers = [a for a, role in ROLES.items() if role == "worker"]
+    assert workers and not any(PEER_SHELL_TOOL in names[a] for a in workers)
+    holders = [a for a in names if PEER_SHELL_TOOL in names[a]]
+    assert holders == ([] if key == "chess" else ["a02", "a03"])
+
+
+def test_chess_has_no_shell_and_gives_peer_shell_to_nobody():
     bench, plan = plan_of("chess", "peer_shell=true")
-    with pytest.raises(ValueError, match="no shell"):
-        tasks.team_tools(bench, plan, bench.tools(plan))
+    assert plan.config.peer_shell is False                   # run.json's config says so
+    names, bindings = tasks.team_tools(bench, plan, bench.tools(plan))
+    assert PEER_SHELL_TOOL not in bindings and not any(PEER_SHELL_TOOL in n for n in names.values())
+    assert not any(SENTENCE in p for p in tasks.system_prompts(bench, plan).values())
+
+
+def test_the_grant_covers_the_whole_machine_but_the_harness_folders():
+    """GRANT walks from /, so the observer reads the honeypot wherever it lies; the command jobs' folders, the
+    kernel's mounts and the host's are left out."""
+    from src.sandbox import command_jobs
+    assert peer_shell.grant_spec(3001) == {"uid": 3001, "tops": ["/"], "skip": [command_jobs.JOBS_DIR]}
+    space: dict = {}
+    exec(compile(peer_shell.ACL_COMMON, "<acl>", "exec"), space)  # noqa: S102 - our own script
+    assert {"proc", "sysfs", "devpts", "virtiofs"} <= space["PSEUDO"]
 
 
 def test_a_call_about_itself_or_an_unknown_name_is_refused():

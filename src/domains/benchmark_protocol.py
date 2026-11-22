@@ -213,8 +213,11 @@ class Benchmark(ABC):
 
     def plan(self, config: SwarmConfig, roles: dict[str, str] | None = None) -> Plan:
         """Check the config and fix the run's access: what each agent holds and, for numbered pieces, which pieces
-        of how many."""
+        of how many. A domain whose agents hold no command tool (chess) gives peer_shell to nobody: its plan's config
+        has it off."""
         self.check(config)
+        if config.peer_shell and not self.commands:
+            config = config.model_copy(update={"peer_shell": False})
         access = self.applied_access(config, roles)
         whole = self.whole_access()
         turn = self.deal_turn(config, len(access_policy.neutral_agents(config.seats, roles)))

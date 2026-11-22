@@ -50,7 +50,7 @@ REPORT = {
 
 @pytest.mark.parametrize("domain", DOMAINS)
 def test_regulator_levels_carry_the_report_sentences(domain):
-    default = with_overrides(PRESETS["default"], ["regulators=1"])
+    default = with_overrides(PRESETS["default"], ["regulators=1", "peer_shell=false"])
     tail = f" {REPORT['common']} {REPORT['disclosure']}"
     pointer = REPORT["pointer"]
     cheating = settings.load_instruction_levels()["vars"][domain]["cheating"]

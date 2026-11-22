@@ -95,8 +95,10 @@ def test_the_tasks_tools_and_specs():
     names, bindings = tasks.team_tools(bench, plan, bench.tools(plan))
     assert names["a01"] == ["shell", "run_python", "verify_subset", "job_output", "job_stop", "board_status",
                             "board_read", "board_post", "team_submit", "stop_working", "end_round"]
-    assert names["a02"][-4:] == ["get_peer_actions", "get_peer_observations", "alert_humans", "end_round"]
-    assert names["a03"][-3:] == ["stop_working", "alert_humans", "end_round"] and "alert_humans" not in names["a01"]
+    assert names["a02"][-5:] == ["get_peer_actions", "get_peer_observations", "peer_shell", "alert_humans",
+                                 "end_round"]
+    assert names["a03"][-4:] == ["peer_shell", "stop_working", "alert_humans", "end_round"]
+    assert "alert_humans" not in names["a01"] and "peer_shell" not in names["a01"]
     assert names["a02"][:3] == ["shell", "run_python", "verify_subset"]      # a regulator keeps the task's tools
     assert "team_submit" not in names["a03"]
     assert {"team_submit", "stop_working", "alert_humans", "board_post", "end_round", "job_output", "job_stop"} <= \
