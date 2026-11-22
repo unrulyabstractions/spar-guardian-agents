@@ -73,7 +73,7 @@ def sha256(path: Path) -> str:
 def inventory(folders: list[Path]) -> dict[Path, tuple[int, str]]:
     """{file: (size, sha256)} of every file under the folders (symlinks are listed, not followed)."""
     files = sorted({path for folder in folders if folder.is_dir() for path in folder.rglob("*")
-                    if path.is_file() or path.is_symlink()})
+                    if (path.is_file() or path.is_symlink()) and path.relative_to(folder).parts[0] not in SKIPPED})
     out = {}
     with progress.Counter(len(files), "hashed", "files") as count:
         for path in files:
@@ -89,11 +89,16 @@ def holds_run(folder: Path) -> bool:
     return any(True for _ in folder.rglob(OLD_RUN_JSON))
 
 
+SKIPPED: set[str] = set()
+"""Studies the move leaves for a later pass (--skip): one a smoke test still writes, say."""
+
+
 def old_runs(root: Path) -> list[Path]:
-    """Every folder under the root with a run.json at its top, not inside processed/ or analysis/."""
+    """Every folder under the root with a run.json at its top, not inside processed/ or analysis/, nor in a study
+    SKIPPED names."""
     found = []
     for folder, dirs, files in os.walk(root):
-        dirs[:] = sorted(d for d in dirs if d not in LAYERS)
+        dirs[:] = sorted(d for d in dirs if d not in LAYERS and not (Path(folder) == root and d in SKIPPED))
         if OLD_RUN_JSON in files:
             found.append(Path(folder))
     return found
@@ -174,7 +179,7 @@ def plan(root: Path) -> tuple[list[tuple[Path, Path]], list[Path], list[Path], d
                     moves.append((child, run / LAYOUT[FIGURES] / child.name))
     if out_root.is_dir():
         for path in sorted(out_root.rglob("*")):
-            if path.is_dir():
+            if path.is_dir() or path.relative_to(out_root).parts[0] in SKIPPED:
                 continue
             if junk(path):
                 deletes.append(path)
@@ -271,11 +276,13 @@ def local(roots: list[Path], dry_run: bool) -> int:
         progress.detail("lost", len(lost))
         progress.detail("changed", len(changed))
         progress.detail("old layout", f"{len(remaining_old)} runs with run.json at their top")
-        progress.detail("out", "removed" if not out_root.exists() else f"{out_root} still holds files")
+        out_left = out_root.exists() and any(p.name not in SKIPPED for p in out_root.iterdir())
+        progress.detail("out", f"{out_root} still holds files" if out_left else
+                        "removed" if not out_root.exists() else "only the skipped studies' figures left")
         progress.detail("emptied", f"{len(removed) + len(emptied)} emptied folders removed")
         for path in (lost + changed)[:20]:
             progress.detail("", f"{path} -> {mapped(path, moves)}", err=True)
-        if lost or changed or remaining_old or out_root.exists():
+        if lost or changed or remaining_old or out_left:
             failures += 1
         record.mkdir(parents=True, exist_ok=True)
         with (record / "moves.tsv").open("a") as handle:
@@ -426,10 +433,13 @@ def main(argv: list[str] | None = None) -> int:
     move = sub.add_parser("local", help="move the run folders here")
     move.add_argument("roots", nargs="*", type=Path, default=[ROOT / "runs", ROOT / "OLD" / "runs"])
     move.add_argument("--dry-run", action="store_true")
+    move.add_argument("--skip", action="append", default=[], metavar="STUDY",
+                      help="a study to leave for a later pass (repeat for several)")
     hub_parser = sub.add_parser("hub", help="bring the dataset to the stored layout")
     hub_parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
     if args.command == "local":
+        SKIPPED.update(args.skip)
         return local(args.roots, args.dry_run)
     return hub(args.dry_run)
 

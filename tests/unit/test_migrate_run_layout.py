@@ -70,6 +70,19 @@ def test_a_run_moves_into_the_layout_with_its_figures_and_every_byte(tmp_path, b
     assert migrate.main(["local", str(tmp_path / "runs")]) == 0                  # a second pass moves nothing
 
 
+def test_a_skipped_study_stays_for_a_later_pass(tmp_path, backups, monkeypatch):
+    monkeypatch.setattr(migrate, "SKIPPED", set())
+    run = older_run(tmp_path, "study_x/r1", {"run.json": "{}"})
+    smoke = older_run(tmp_path, "study_smoke/s1", {"run.json": "{}"})
+    write_text(tmp_path / "out" / "study_smoke" / "s1" / "timeline.png", "png")
+    assert migrate.main(["local", str(tmp_path / "runs"), "--skip", "study_smoke"]) == 0
+    assert RunDir(run).is_run() and (smoke / "run.json").is_file()
+    assert (tmp_path / "out" / "study_smoke" / "s1" / "timeline.png").is_file()
+    migrate.SKIPPED.clear()
+    assert migrate.main(["local", str(tmp_path / "runs")]) == 0
+    assert RunDir(smoke).is_run() and not (tmp_path / "out").exists()
+
+
 def test_a_target_that_exists_stops_the_plan_before_any_move(tmp_path, backups):
     run = older_run(tmp_path, "study_x/r1", {"run.json": "{}", "episodes.jsonl": "{}\n",
                                              "processed/episodes.jsonl": "other"})
