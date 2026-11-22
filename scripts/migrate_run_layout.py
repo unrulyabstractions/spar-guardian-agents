@@ -195,11 +195,11 @@ def plan(root: Path) -> tuple[list[tuple[Path, Path]], list[Path], list[Path], d
     return moves, sorted(set(deletes)), emptied, counts
 
 
-def mapped(path: Path, moves: list[tuple[Path, Path]]) -> Path:
-    """Where a file sits after the moves: the target of the move whose source is it or holds it."""
-    for source, target in moves:
-        if path == source or path.is_relative_to(source):
-            return target / path.relative_to(source)
+def mapped(path: Path, moves: dict[Path, Path]) -> Path:
+    """Where a file sits after the moves ({source: target}): the target of the move whose source is it or holds it."""
+    for source in (path, *path.parents):
+        if source in moves:
+            return moves[source] / path.relative_to(source)
     return path
 
 
@@ -260,11 +260,11 @@ def local(roots: list[Path], dry_run: bool) -> int:
         removed = remove_empty(out_root)
         progress.step("List every file after the move and compare")
         after = inventory(watched)
-        lost, changed = [], []
+        lost, changed, by_source = [], [], dict(moves)
         for path, (size, digest) in before.items():
             if path in deletes:
                 continue
-            new = mapped(path, moves)
+            new = mapped(path, by_source)
             if new not in after:
                 lost.append(path)
             elif after[new] != (size, digest):
@@ -281,14 +281,14 @@ def local(roots: list[Path], dry_run: bool) -> int:
                         "removed" if not out_root.exists() else "only the skipped studies' figures left")
         progress.detail("emptied", f"{len(removed) + len(emptied)} emptied folders removed")
         for path in (lost + changed)[:20]:
-            progress.detail("", f"{path} -> {mapped(path, moves)}", err=True)
+            progress.detail("", f"{path} -> {mapped(path, by_source)}", err=True)
         if lost or changed or remaining_old or out_left:
             failures += 1
         record.mkdir(parents=True, exist_ok=True)
         with (record / "moves.tsv").open("a") as handle:
             for path, (size, digest) in before.items():
                 if path not in deletes:
-                    handle.write(f"{path}\t{mapped(path, moves)}\t{size}\t{digest}\n")
+                    handle.write(f"{path}\t{mapped(path, by_source)}\t{size}\t{digest}\n")
         every_move += moves
     if dry_run:
         progress.done("dry run: nothing moved")
