@@ -1600,3 +1600,53 @@ uses, and true of every study cell before). The paper does not describe peer_she
 default, and the regulator box names only get_peer_actions and get_peer_observations) or the job folders, so 89e29d6
 and e505880 changed nothing. The differ list already says the study runs had no round time and no jobs. Figure 7
 draws no late wait, so it is unchanged. Results, Discussion, Conclusion and Abstract report the runs.
+
+## Regulator texts, board previews, peer_shell, alerts, the SWE remote, push notices, regulator measures, 2026-11-22
+
+The code under the reported runs (6631bbe, b0e995d, b80ed5d, d51861b, 44abb90, a4365d0, 6b7777f, a92a486, 8c2b87d,
+f6dd0c0; 20a6915, d06b94a, 2bbf3a5 changed nothing the paper says). Every run.json of study_exploration_1 records
+mention_board false, notice counts and no peer_shell; a study SWE regulator's transcript holds the old cheating text and
+no "What counts for the team" or "How to read the team" line.
+
+Regenerated: `regulator_suffix.tex` (the box gains the peer_shell sentence); `params.tex` gains `\PreviewPosts` and
+`\PreviewChars` (`_turn_rules_filter.py` PREVIEW_POSTS, PREVIEW_CHARS). Redrawn: Figure 6 (`topology_compare`, the
+notice key reads "notice: new posts, first lines"). `figures.py` fig_information draws the worker as told of the board
+(mention_board on); that figure is not in the paper.
+
+Sentences changed (old, then new), all in Appendix A:
+- Regulators: "in four ways" became "in five ways", with the added item "They can run shell commands on any teammate's
+  machine, as an account that can read every file there."; "The alert ends their own turns, and the run goes on."
+  became "They keep working after the alert."
+- Regulators' first message: added "At every level, it then says what counts when the team hands in its work." and
+  "On SWE, it also says how to read team/main and the branches that teammates push."
+- Disregulator: "it can read every teammate's tool calls and what those calls returned." became "... tool calls, what
+  those calls returned and every file on a teammate's machine."
+- Figure 6 caption: "a notice of new posts per sender." became "... per sender, with previews of their first lines."
+- Communication: added "Every agent's system prompt names the board and its tools", "The notice then gives the first
+  line of up to \PreviewPosts{} new posts by others, each cut at \PreviewChars{} characters. It chooses posts that name
+  the agent before the newest, and marks them. A read returns the posts in full" (the code prints the chosen posts in
+  board order; prompts.yaml's comment says newest first), and "On SWE and protein design, each influencer reads every
+  move of main on the team's remote before its next round: who pushed, the new head, and how to read it. Workers read
+  no such message".
+- Rounds: added "On SWE, the end of an agent's round also kills every process its calls left running, except its jobs."
+- Entries and exits: "submits, stops working, alerts humans or runs out of rounds" became "submits, stops working or
+  runs out of rounds"; added "An alert ends no agent's turns." and "Every peer reads ``k7q2m has alerted humans.'' once,
+  before its next round."
+- Collaboration: added "On SWE, no agent can change the hooks, configuration or HEAD of the team's remote, even as root.
+  We log every command that tries."
+- Metrics: added "Regulator measures: When each regulator first posted and first accused a worker, whether its
+  accusations were true, and whether the hand-in came after it saw a worker reach the honeypot", and a subsection
+  "Regulator measures" after Alerts (targeted post, accusation, true accusation, first sight, the hand-in after it,
+  pushes, reverts, alerts, reads per round; `src/measures/regulator_measures.py`).
+- Other parameters: "in eighteen ways" became "in twenty-six ways", with eight sentences last: "No worker's system
+  prompt named the board or its tools. The board's notice gave only the number of new posts per sender. No influencer
+  had a shell on a teammate's machine. No influencer read a message when main of the team's remote moved. No regulator
+  was told what counts when the team hands in its work, or on SWE how to read that work. On SWE, a regulator's
+  definition of cheating did not count code written after seeing the fix. On SWE, nothing locked the team's remote
+  against an agent with root. Nothing killed what an SWE agent's calls left running at the end of its round."
+
+Checked and unchanged: Methods ("They cannot submit, and they can read their teammates' tool calls." holds), Table 1
+(the study's honeypot row describes the runs, which had no peer_shell), Table 3, the level tables, the peer tools' rows
+(the paper gives no row format), the head start and the submit hold (off by default, in no sentence), the SWE first
+message ("what counts when the agent submits" holds after 20a6915), Results, Discussion, Conclusion and Abstract (they
+report the runs).

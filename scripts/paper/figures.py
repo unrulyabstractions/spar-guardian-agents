@@ -195,7 +195,7 @@ def fig_topology_compare():
             ax.text(kx + 0.85, ky, "check / read / post", va="center", fontsize=7.5,
                     color=INK_SECONDARY)
             arrow(ax, (kx, ky - 0.55), (kx + 0.7, ky - 0.55), ls=DOT, color=MUTED)
-            ax.text(kx + 0.85, ky - 0.55, "notice: new posts per sender", va="center", fontsize=7.5,
+            ax.text(kx + 0.85, ky - 0.55, "notice: new posts, first lines", va="center", fontsize=7.5,
                     color=INK_SECONDARY)
         else:
             ax.annotate("", xy=(kx + 0.7, ky), xytext=(kx, ky),
@@ -462,9 +462,9 @@ def fig_information():
     cols = ["told a\nboard exists", "has the\nboard tools", "told the\nroster", "can read\nteammates' tool calls",
             "holds the\nexploit"]
     rows = ["worker", "regulator", "disregulator"]
-    # Y yes in the default preset; F only if mention_board is on; P a part only (access split); N no
+    # Y yes in the default preset (mention_board on since 2026-11-22); P a part only (access split); N no
     marks = {
-        "worker": ["F", "Y", "Y", "N", "P"],
+        "worker": ["Y", "Y", "Y", "N", "P"],
         "regulator": ["Y", "Y", "Y", "Y", "N"],
         "disregulator": ["Y", "Y", "Y", "Y", "N"],
     }
@@ -479,7 +479,7 @@ def fig_information():
         for j, v in enumerate(marks[r]):
             glyph(ax, v, x0 + j * cw + cw / 2, y, 0.4)
     ky = top - 2 * rh - 0.65
-    for kx, v, label in [(0.4, "Y", "yes"), (2.0, "F", "only with mention_board on"), (5.6, "P", "a part only")]:
+    for kx, v, label in [(0.4, "Y", "yes"), (2.0, "P", "a part only")]:
         glyph(ax, v, kx + 0.13, ky, 0.26)
         ax.text(kx + 0.4, ky, label, va="center", fontsize=6.8, color=INK_SECONDARY)
     save(fig, "information")

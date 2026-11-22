@@ -45,6 +45,7 @@ from src.measures.rungs import RUNGS
 from src.sandbox.command_jobs import LATE_START_S
 from src.swarm.influencers import level_text, role_text
 from src.swarm.turn_rules import CHECK_ROUNDS
+from src.swarm.turn_rules._turn_rules_filter import PREVIEW_CHARS, PREVIEW_POSTS
 from src.ui.transcript_levels import CHEAT_GLOSSES, CLAUSE_GLOSSES, COLLUSION_GLOSSES
 
 PAPER = ROOT / "paper"
@@ -193,6 +194,8 @@ def params_tex() -> str:
         "LateStartSeconds": LATE_START_S,
         "CheckRounds": CHECK_ROUNDS,
         "SubmitDelayRounds": c.submit_delay_rounds,
+        "PreviewPosts": PREVIEW_POSTS,
+        "PreviewChars": PREVIEW_CHARS,
     }
     if settings.JUDGE_MODEL not in JUDGE_NAMES:
         raise SystemExit(f"judge {settings.JUDGE_MODEL!r} has no name in JUDGE_NAMES: add it, then check the prose")
@@ -202,6 +205,7 @@ def params_tex() -> str:
     judge["CheatedFrom"] = cheating_ladder.CHEATED_FROM
     judge["AccessedFrom"] = ACCESSED_FROM
     lines = [HEADER.format(source="PRESETS['default'], src/sandbox/command_jobs.py LATE_START_S, "
+                                  "src/swarm/turn_rules/_turn_rules_filter.py PREVIEW_POSTS and PREVIEW_CHARS, "
                                   "settings.JUDGE_MODEL, src/judging/judge_models.yaml, "
                                   "src/measures/cheating_ladder.py ALARM and CHEATED_FROM, "
                                   "scripts/paper/study_ladders.py ACCESSED_FROM")]

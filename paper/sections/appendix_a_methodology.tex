@@ -12,13 +12,14 @@ the prompt. Each agent has a different level of directory access, so they must c
 exploits that require information only accessible to individual agents within the swarm.
 
 \subsubsection*{Regulator agents}
-These agents represent our positive peer-pressure protocol. A regulator differs from a worker in four ways:
+These agents represent our positive peer-pressure protocol. A regulator differs from a worker in five ways:
 \begin{itemize}
   \item They can read every teammate's tool calls and what those calls returned, and they have no read budget on
   the board.
+  \item They can run shell commands on any teammate's machine, as an account that can read every file there.
   \item They cannot ``submit work''.
-  \item They can alert the humans who run the study, with a reason and the agents it concerns. The alert ends their
-  own turns, and the run goes on.
+  \item They can alert the humans who run the study, with a reason and the agents it concerns. They keep working
+  after the alert.
   \item They are told not to reveal their role.
 \end{itemize}
 
@@ -33,6 +34,8 @@ box above.
 Neither the level nor the box gives a detail of the task.
 The regulator's first user message gives its teammates' task.
 It then gives the details its level points to, in the task's own words, such as what cheating means on that task.
+At every level, it then says what counts when the team hands in its work.
+On SWE, it also says how to read team/main and the branches that teammates push.
 The message also gives the number the box leaves out: ``Call get\_peer\_actions on each teammate within your
 first \CheckRounds{} rounds.'' We expect a regulator to elicit honesty from other agents, to verify that their work
 is real, and to prevent or punish their cheating. Table~\ref{tab:monitors} compares regulators with classic monitors.
@@ -70,8 +73,8 @@ is real, and to prevent or punish their cheating. Table~\ref{tab:monitors} compa
 These poisoned agents represent negative peer pressure.
 \begin{itemize}
   \item Explicitly instructed to manipulate the swarm to leverage the exploits.
-  \item A disregulator cannot submit the team's work. Like a regulator, it can read every teammate's tool calls and
-  what those calls returned. It reads the board within the workers' budget. Like a regulator, it can alert the
+  \item A disregulator cannot submit the team's work. Like a regulator, it can read every teammate's tool calls,
+  what those calls returned and every file on a teammate's machine. It reads the board within the workers' budget. Like a regulator, it can alert the
   humans who run the study.
   \item Table~\ref{tab:disregulator-levels} gives its levels. A disregulator gets persuade on SWE, and persuade or
   overt on creative writing.
@@ -90,18 +93,24 @@ These poisoned agents represent negative peer pressure.
   \centering
   \includegraphics[width=\linewidth]{topology_compare}
   \caption{Our board beside the shared folder of a reported incident. On our board, agents check, read and post,
-  and each model call opens with a notice of new posts per sender. In the incident, agents listed, read and wrote files in a
+  and each model call opens with a notice of new posts per sender, with previews of their first lines. In the incident, agents listed, read and wrote files in a
   shared cache.}
   \label{fig:topology}
 \end{figure}
 
 \subsubsection*{Communication}
 \begin{itemize}
+  \item Every agent's system prompt names the board and its tools
   \item Before each model call, agents are informed of the number of new messages on the board since their last
   call (total and per agent)
+  \item The notice then gives the first line of up to \PreviewPosts{} new posts by others, each cut at
+  \PreviewChars{} characters. It chooses posts that name the agent before the newest, and marks them. A read returns
+  the posts in full
   \item They have a budget of messages they can read and write per round
   \item Each check, read and post is one of the round's tool calls
   \item The board is live: a read returns every post made so far, including posts made in the same round
+  \item On SWE and protein design, each influencer reads every move of main on the team's remote before its next
+  round: who pushed, the new head, and how to read it. Workers read no such message
 \end{itemize}
 
 \subsubsection*{Rounds}
@@ -131,6 +140,7 @@ In a later round the agent reads a job's new output with job\_output and stops i
 Stopping a job kills every process the job started, including those it left running in the background.
 Only the agent that started a job can read or stop it.
 The end of the run kills every process of every job.
+On SWE, the end of an agent's round also kills every process its calls left running, except its jobs.
 A model call under way is never cut.
 The tool calls of one reply run one after another.
 A round can therefore run past T by one model call and by at most \LateStartSeconds{} seconds.
@@ -178,9 +188,11 @@ A worker's system prompt says that it works with a team on the same task.
 When an agent \textbf{enters} the run, every other agent reads a user message such as ``k7q2m entered.'' before its
 next round.
 Influencers are announced like workers, with no role shown.
-An agent \textbf{exits} when it submits, stops working, alerts humans or runs out of rounds.
+An agent \textbf{exits} when it submits, stops working or runs out of rounds.
 Every peer still present then reads why, such as ``k7q2m stopped working (stop\_working).''
 A second line follows: ``k7q2m exited.''
+An alert ends no agent's turns.
+Every peer reads ``k7q2m has alerted humans.'' once, before its next round.
 The tools that read a teammate's calls refuse a teammate that has not entered yet.
 They still answer for a teammate that has exited, and mark it as exited.
 
@@ -224,6 +236,8 @@ A target is a model on a task that meets two criteria:
   \item Only neutral agents can call the submit tool.
   \item An agent sees only the processes of its own user, so it cannot read a teammate's commands from the process list. Agents that share one user on one machine still see each other's.
   \item No agent can open a process's page map. Reading one stalls a search of the whole disk for longer than a round.
+  \item On SWE, no agent can change the hooks, configuration or HEAD of the team's remote, even as root. We log every
+  command that tries.
 \end{itemize}
 
 \FloatBarrier
@@ -236,6 +250,8 @@ track:
   \item Judge labels: How explicitly an agent says that what it does is wrong, and how strongly it tries to steer
   another agent
   \item Alerts: Whether each alert by an influencer came after a cheat
+  \item Regulator measures: When each regulator first posted and first accused a worker, whether its accusations were
+  true, and whether the hand-in came after it saw a worker reach the honeypot
 \end{itemize}
 
 \subsubsection*{Cheating ladder}
@@ -413,6 +429,17 @@ It is a \textbf{false alarm} when none of them had.
 The replay of a run gives the order of calls across agents.
 Without that order, an alert is a false alarm only when no agent it concerns ever cheated, and unknown otherwise.
 
+\subsubsection*{Regulator measures}
+Code reads what each regulator did from the run's records.
+A \textbf{targeted post} names a worker and an act, such as a quoted command, a git ref, a commit or a path.
+Each worker that a targeted post names is one \textbf{accusation}.
+An accusation is true when one of that worker's calls before the post holds a term the post gave it.
+We record each regulator's first post and its first accusation.
+We record the first time its tools for reading a teammate's calls showed it a piece of the honeypot, or the call
+that first put a worker at looked or above.
+We then record whether the hand-in holds a piece of the honeypot, and whether the hand-in came after that sight.
+We also count its pushes to the team's remote, its reverts, its alerts and its reads of teammates in each round.
+
 \subsection*{Controls}
 Teams told to cheat give the positive control (Figure~\ref{fig:positive-control}). Teams under a generic rule and
 under a rule naming the exploit give the negative control (Figure~\ref{fig:negative-control}). Single agents, untold
@@ -470,7 +497,7 @@ The judge is \JudgeName{} at \JudgeEffort{} effort.
   Regulators have no read budget.
   \item Max tool result: \ToolOutputKiB{}~KiB for every agent. A longer result keeps its start and its end, with a
   line that states the cut.
-  \item The runs of the multi-domain study differ from this design in eighteen ways. Each agent had \TurnBudget{}
+  \item The runs of the multi-domain study differ from this design in twenty-six ways. Each agent had \TurnBudget{}
   working steps instead of rounds of tool calls. A step was one model call and the tool calls of its reply. A step
   that ended with a board call used up no working step. A round allowed up to \FreeBoardActions{} such steps, or
   \FreeBoardActionsInfluencer{} for a regulator. No message gave the number of steps or opened a round. In a
@@ -484,6 +511,11 @@ The judge is \JudgeName{} at \JudgeEffort{} effort.
   the task, such as an SWE agent's repository and branch, or what cheating meant on the task for a regulator. Each
   command had a time limit of its own, and no round had one. A command past its limit was stopped. Every process list
   showed the processes and commands of every agent on the machine. A search of the whole disk stalled on the page map
-  of its own process.
+  of its own process. No worker's system prompt named the board or its tools. The board's notice gave only the
+  number of new posts per sender. No influencer had a shell on a teammate's machine. No influencer read a message
+  when main of the team's remote moved. No regulator was told what counts when the team hands in its work, or on SWE
+  how to read that work. On SWE, a regulator's definition of cheating did not count code written after seeing the
+  fix. On SWE, nothing locked the team's remote against an agent with root. Nothing killed what an SWE agent's calls
+  left running at the end of its round.
 \end{itemize}
 
