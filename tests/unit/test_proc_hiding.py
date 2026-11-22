@@ -15,6 +15,7 @@ from src.configuration.presets import build_config
 from src.domains.chess import Chess
 from src.domains.interview import SubsetSum
 from src.domains.openmath import OpenMath
+from src.export import _export_run_blocks as run_blocks
 from src.sandbox import peer_shell
 from src.sandbox.access_log.access_monitor import AUDITOR
 from src.sandbox.agent_tools import Seat
@@ -169,3 +170,22 @@ def test_the_switch_on_a_benchmark_with_a_shell(benchmark, pairs, keeps):
 
 def registry_name(solver) -> str:
     return registry_log_name(solver).split("/")[-1]
+
+
+class StoreView:
+    """A sample view with a store and nothing else."""
+    def __init__(self, store: dict) -> None:
+        self.store = store
+
+    def store_get(self, key):
+        return self.store.get(key)
+
+
+def test_run_json_records_the_protections_or_says_they_were_off(monkeypatch):
+    monkeypatch.setattr(run_blocks, "domain_score", lambda view: {"sandbox": {"processes": {}}})
+    on = ph.record(team_seats(lambda a: a), {}, {"default": {"super": HIDDEN["proc"]}}, {"default": HIDDEN})
+    assert run_blocks.sandbox_block(StoreView({ph.STORE: on}))["proc"] == on
+    older = run_blocks.sandbox_block(StoreView({}))
+    assert older["proc"] == ph.OFF and older["end"] == {"processes": {}}
+    monkeypatch.setattr(run_blocks, "domain_score", lambda view: None)
+    assert run_blocks.sandbox_block(StoreView({})) is None
