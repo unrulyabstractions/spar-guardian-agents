@@ -245,7 +245,7 @@ def test_an_upload_is_one_commit_named_for_the_study_and_runs_and_is_checked_on_
     assert len(operations) == 5
     out = capsys.readouterr().out
     assert "5 of 5 files on the Hub with the same bytes, 0 of 0 deleted" in out
-    assert f"commit       c{1:039d}" in out
+    assert f"commit       1 of 1: c{1:039d}" in out
     assert "https://huggingface.co/datasets/unrulyabstractions/spar-swarm/tree/main/study_x" in out
 
 
@@ -414,3 +414,15 @@ def test_the_apart_controls_are_scanned_for_keys_like_a_study(apart, api, capsys
 ])
 def test_local_of_is_the_pulls_mapping(tmp_path, remote):
     assert upload.local_of(remote, remote.split("/")[0], tmp_path) == pull.local_path(remote, tmp_path)
+
+
+def test_a_large_upload_goes_in_parts_with_the_deletes_last(root, api, monkeypatch):
+    monkeypatch.setattr(upload, "COMMIT_FILES", 2)
+    FakeApi.hub.update({"study_x/runs/run_gone/processed/run.json": b"{}"})
+    assert upload.main(["study_x", "--token", FAKE, "--delete-stale"], root=root) == 0
+    made = commits(api)
+    assert len(made) > 1 and all(len(ops) <= 2 for *_, ops in made[:-1])
+    assert all(not isinstance(op, CommitOperationDelete) for *_, ops in made[:-1] for op in ops)
+    assert any(isinstance(op, CommitOperationDelete) for op in made[-1][3])
+    assert made[0][2].endswith(f"part 1 of {len(made)}")
+

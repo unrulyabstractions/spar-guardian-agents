@@ -28,6 +28,9 @@ PROG = "python scripts/upload_runs_to_hf.py"
 OLD_LAYOUT = "set_aside_"
 """logs/<study>/set_aside_*/ hold old-layout copies of runs made again (a run folder and its log side by side). They
 never go, and --delete-stale deletes the Hub's copies of them when no local file of runs/<study>/ names them."""
+COMMIT_FILES = 4000
+"""The most files one commit adds: a commit of tens of thousands times out at the Hub's gateway (504). A study's
+deletes go in its last commit, after every add has landed."""
 KINDS = ("add", "change", "same", "delete", "stale", "keep")
 """What the upload does to a dataset path; compare says which is which."""
 NO_TOKEN = "no Hugging Face token: run `hf auth login`, or `export HF_TOKEN=<token>`, or pass --token"
@@ -309,24 +312,28 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
     if args.dry_run:
         progress.done("dry run: nothing uploaded")
         return 0
-    operations = ([CommitOperationAdd(path_in_repo=remote, path_or_fileobj=str(local[remote]))
-                   for remote in ops["add"] + ops["change"]]
-                  + [CommitOperationDelete(path_in_repo=remote) for remote in ops["delete"]])
-    if not operations:
+    adds = [CommitOperationAdd(path_in_repo=remote, path_or_fileobj=str(local[remote]))
+            for remote in ops["add"] + ops["change"]]
+    deletes = [CommitOperationDelete(path_in_repo=remote) for remote in ops["delete"]]
+    if not adds and not deletes:
         progress.done("the Hub already holds every file with the same bytes; nothing to commit")
         return 0
 
     message = f"{args.study}: " + ("the whole study" if not runs else ", ".join(runs[:5])
                                    + (f" and {len(runs) - 5} more" if len(runs) > 5 else ""))
     message += f" ({len(ops['add'])} added, {len(ops['change'])} changed, {len(ops['delete'])} deleted)"
-    progress.step(f"Upload {len(ops['add']) + len(ops['change'])} files and delete {len(ops['delete'])} in one commit")
-    try:
-        commit = api.create_commit(repo_id=args.repo, repo_type="dataset", commit_message=message,
-                                   operations=operations)
-    except Exception as ex:  # a gateway timeout can come back while the Hub still applies the commit
-        failed("the upload", ex, "; the commit may still land, so look at the dataset's commits, then rerun with "
-                                 "--dry-run to see what the Hub holds")
-    progress.detail("commit", getattr(commit, "oid", None) or "unknown")
+    parts = [adds[at:at + COMMIT_FILES] for at in range(0, len(adds), COMMIT_FILES)] or [[]]
+    parts[-1] = parts[-1] + deletes
+    progress.step(f"Upload {len(adds)} files and delete {len(deletes)} in {len(parts)} commit(s), the deletes last")
+    for number, operations in enumerate(parts, 1):
+        try:
+            commit = api.create_commit(repo_id=args.repo, repo_type="dataset", operations=operations,
+                                       commit_message=message + (f", part {number} of {len(parts)}"
+                                                                 if len(parts) > 1 else ""))
+        except Exception as ex:  # a gateway timeout can come back while the Hub still applies the commit
+            failed("the upload", ex, "; the commit may still land, so look at the dataset's commits, then rerun "
+                                     "with --dry-run to see what the Hub holds")
+        progress.detail("commit", f"{number} of {len(parts)}: {getattr(commit, 'oid', None) or 'unknown'}")
     progress.step("Confirm the Hub's bytes")
     try:
         after = hub_tree(api, args.repo, args.study, folders, single)
