@@ -10,7 +10,7 @@
 # BOX_OPENROUTER_API_KEY alone: a key made for this launch with a credit limit in OpenRouter's dashboard, revoked after
 # the destroys. scripts/box/box_key.py refuses it first unless OpenRouter caps it and enough is left for the box's runs
 # at their dollar caps. --main-key sends OPENROUTER_API_KEY instead, the user's order of 2026-11-02 for
-# study_exploration_1, under those same two checks. Nothing else sends the main key (--allow-main-key stays refused).
+# ian_baseline_explorations_1, under those same two checks. Nothing else sends the main key (--allow-main-key stays refused).
 #
 # Once /root/box_id shows the endpoint reaches this instance, box_runner.py run starts the jobs under nohup setsid, with
 # /root/.box_env sourced. Its output goes to /root/screen.log and its pid to /root/screen.pid. A runner alive on the box

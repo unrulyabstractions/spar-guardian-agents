@@ -40,8 +40,9 @@ rehearsal takes no share. A box that held no cell run belongs to no cell: the re
 count it.
 
 Whole and valid are src.measures.run_validity's, of the run, never of an attempt. Nothing here writes. study_table.py
-states study_exploration_1, and study_exploration_0 reuses its run names, so the readout refuses any other study. It
-refuses a checkout without runs/boxes.json, runs/<study> or logs/<study>, so missing data never reads as $0.
+states ian_baseline_explorations_1, and ian_baseline_explorations_0 reuses its run names, so the readout refuses any
+other study. It refuses a checkout without runs/boxes.json, runs/<study> or logs/<study>, so missing data never reads as
+$0.
 """
 from __future__ import annotations
 
@@ -236,8 +237,8 @@ def readout(root: Path = settings.ROOT, study: str = TABLE_STUDY, stage: str | N
             now: datetime | None = None) -> dict:
     """Every cell with a run (of one stage, or all), each with its runs; the boxes of those stages; the totals."""
     if study != TABLE_STUDY:
-        raise ValueError(f"study_table.py states {TABLE_STUDY}, not {study}; study_exploration_0 reuses its run names, "
-                         f"so another study's runs would land in the wrong cells")
+        raise ValueError(f"study_table.py states {TABLE_STUDY}, not {study}; ian_baseline_explorations_0 reuses its "
+                         f"run names, so another study's runs would land in the wrong cells")
     if stage is not None and stage not in STAGES:
         raise ValueError(f"unknown stage {stage!r}; choose one of {list(STAGES)}")
     missing = missing_data(root, study)
@@ -370,7 +371,7 @@ def text(result: dict) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--stage", choices=list(STAGES), help="one stage of study_table.py; every stage by default")
-    parser.add_argument("--study", default=settings.STUDY, help=f"the study to read; only {TABLE_STUDY} has a table")
+    parser.add_argument("--study", default=TABLE_STUDY, help=f"the study to read; only {TABLE_STUDY} has a table")
     parser.add_argument("--root", type=Path, default=settings.ROOT, help="the checkout whose runs/ and logs/ to read")
     parser.add_argument("--json", action="store_true", help="print one JSON document")
     args = parser.parse_args(argv)

@@ -1,7 +1,7 @@
 """Each study's README.md, generated from its own files and the code: runs/<study>/README.md.
 
-    uv run python -m scripts.study_readme runs/study_exploration_1           # write the README
-    uv run python -m scripts.study_readme runs/study_exploration_1 --check   # write nothing; exit 1 when it differs
+    uv run python -m scripts.study_readme runs/ian_baseline_explorations_1           # write the README
+    uv run python -m scripts.study_readme runs/ian_baseline_explorations_1 --check  # write nothing; 1 when it differs
     uv run python -m scripts.study_readme --all [--check]                    # every study in STUDIES that is here
 
 A README holds what the study is (its `about` in scripts/study_readme_fields.yaml), its layout as a tree with counts,
@@ -42,7 +42,8 @@ from src.ui.transcript_levels import LADDERS, ORDER, label_about
 
 FIELDS_FILE = Path(__file__).with_name("study_readme_fields.yaml")
 README = "README.md"
-STUDIES = ("study_exploration_0", "study_exploration_1", "study_smoke", "study_orbit2_check", "apart_controls")
+STUDIES = ("ian_baseline_explorations_0", "ian_baseline_explorations_1", "study_smoke", "study_orbit2_check",
+           "apart_controls")
 """The studies that get a README, in the order --all writes them."""
 MANIFEST_STUDY = "apart_controls"
 """The collection whose runs sit at <model>/<task>/<cell>/s<seed>/ with a manifest.jsonl, not in groups."""

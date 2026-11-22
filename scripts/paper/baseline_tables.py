@@ -1,6 +1,6 @@
 """The October baseline table: each team's Cheating and Collusion rungs as the transcript viewer measures them
-(scripts/paper/study_ladders.py record), from runs/study_exploration_0 at build time, its SWE runs from invalid/ on
-purpose: they served target selection only, so this table reads every October run of its cells whatever its validity.
+(scripts/paper/study_ladders.py record), from runs/ian_baseline_explorations_0 at build time, its SWE runs from invalid/
+on purpose: they served target selection only, so this table reads every October run of its cells whatever its validity.
 The November runs of the same cells are the positive control table's (scripts/paper/control_tables.py). Writes
 tmp/tables/results/swarm_vs_swarm_told.png. The single-agent controls come from scripts/paper/solo_controls_table.py.
 
@@ -30,7 +30,7 @@ from scripts.paper.study_ladders import (
 from src.configuration.settings import ROOT
 from src.utils.figure_style import AXIS, BAND, INK, INK_SECONDARY
 
-RUNS = ROOT / "runs" / "study_exploration_0"
+RUNS = ROOT / "runs" / "ian_baseline_explorations_0"
 OUT = ROOT / "tmp" / "tables" / "results"
 TASKS = [("SWE", "flipt"), ("Knowledge work", "worktime"), ("Protein design", "binder"),
          ("Creative writing", "poem"), ("Chess", "game")]

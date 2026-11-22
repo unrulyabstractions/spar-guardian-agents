@@ -1,7 +1,7 @@
 """The judge pass "labels": one call per agent of a run, every agent, scoring the two judge labels shown beside the
 ladders (never rungs).
 
-    units, skipped = labels_units(Path("runs/study_exploration_1/flipt_minimal_cheat_dsflash_fixed3"))
+    units, skipped = labels_units(Path("runs/ian_baseline_explorations_1/flipt_minimal_cheat_dsflash_fixed3"))
 
 The labels are src/measures/judge_labels.py LABELS, each defined in its own prompt file (labels_disclosure.md,
 labels_manipulation.md) and asked together through labels_prompt.md, which gives the score anchors
@@ -20,7 +20,7 @@ The judge reads the agent's instructions, its own posts in full, the posts by ot
 READ_POST_CHARS), its visible reasoning in order with call numbers, and its actions: each tool call under the same call
 number, cut to CALL_CHARS, with the head of what it returned (RESULT_CHARS) and an error mark where Inspect recorded an
 error. Instructions past INSTRUCTIONS_CHARS, reasoning past REASONING_CHARS and actions past ACTIONS_CHARS lose their
-middle, with a line saying what was cut. Counted offline on the valid runs of study_exploration_1 (522 agents,
+middle, with a line saying what was cut. Counted offline on the valid runs of ian_baseline_explorations_1 (522 agents,
 o200k_base), a call's message is 8,616 tokens on average (median 8,106, largest 19,398); the middle of the reasoning
 is cut for 90 agents and of the actions for 157.
 

@@ -23,7 +23,7 @@ from src.measures.run_index import FIELDS, INDEX, build
 from src.models.model_registry import resolve
 from tests.support.run_builder import write_status_log
 
-STUDY = "study_exploration_1"
+STUDY = "ian_baseline_explorations_1"
 LOG = "2026-11-01T03-31-41-00-00_run_abc.eval"
 LUNA, OPUS, DSFLASH = "gpt-6-luna-openrouter", "claude-opus-5-5-openrouter", "deepseek-flash-openrouter"
 REFUSAL = "API integrators: you can reduce refusals by configuring a fallback model"
@@ -232,9 +232,10 @@ def test_an_earlier_attempt_is_listed_as_superseded_and_never_counts_as_a_second
     assert (earlier["instance_id"], earlier["instance_source"]) == (4001, "manifest")
     assert recs[name]["valid"] and notes["names_twice"] == []
     other = tmp_path / "other"
-    make_run(other, "binder_solo_luna1", "protein_design", study="study_exploration_0", group="attempts",
+    make_run(other, "binder_solo_luna1", "protein_design", study="ian_baseline_explorations_0", group="attempts",
              folder_name="binder_solo_luna1.2")
-    [rec] = build(other / "runs" / "study_exploration_0", join_for(other / "runs" / "study_exploration_0"))[0]
+    study = other / "runs" / "ian_baseline_explorations_0"
+    [rec] = build(study, join_for(study))[0]
     assert (rec["run"], rec["valid"], rec["reason"]) == ("binder_solo_luna1", False, "superseded")
 
 
@@ -303,7 +304,7 @@ def test_the_notes_name_what_the_table_lacks_where_it_disagrees_and_every_odd_fo
 
 
 def test_another_study_takes_its_cell_from_the_name_and_the_same_validity_as_every_study(tmp_path):
-    study = "study_exploration_0"
+    study = "ian_baseline_explorations_0"
     make_run(tmp_path, "binder_minimal_dsflash1", "protein_design", study=study, model=DSFLASH, status="error")
     make_run(tmp_path, "flipt_solo_luna2", "software_engineering", study=study, seed=2, commit="4c04d18")
     make_run(tmp_path, "poem_solo_dsflashcheckmock1", "creative_writings", study=study, model=DSFLASH)

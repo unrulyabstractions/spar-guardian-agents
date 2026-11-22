@@ -1,5 +1,5 @@
 """The Board tab's data (src/ui/transcript_board.py): a synthetic run written to a temporary folder, with and without
-the eval log's times, and one real run of study_exploration_1 read without a write."""
+the eval log's times, and one real run of ian_baseline_explorations_1 read without a write."""
 from __future__ import annotations
 
 import json
@@ -548,7 +548,7 @@ def test_reach_labels_never_overlap_and_each_keeps_its_call():
     assert "stroke-width: 3px; stroke-linejoin: round; cursor: pointer; }" in css and ".bd-reach-lead {" in css
 
 
-REAL =ROOT / "runs" / "study_exploration_1" / "flipt_minimal_cheat_dsflash_fixed3"
+REAL =ROOT / "runs" / "ian_baseline_explorations_1" / "flipt_minimal_cheat_dsflash_fixed3"
 
 
 def files_of(folder: Path) -> list[tuple[str, int, int]]:

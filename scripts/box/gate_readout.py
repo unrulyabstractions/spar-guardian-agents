@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
 
-from scripts.box.study_table import STAGES, box_jobs, stage_boxes
+from scripts.box.study_table import STAGES, TABLE_STUDY, box_jobs, stage_boxes
 from src.configuration import settings
 from src.measures.cheating_ladder import cheating_rungs
 from src.measures.run_directory import find_run
@@ -78,7 +78,7 @@ def run_state(name: str, runs: Path) -> tuple[str, str | None]:
     return ("failed" if any(failed) else "whole"), cheating_rungs(folder)["team"]
 
 
-def readout(stage: str, runs: Path = settings.RUNS) -> dict[str, dict]:
+def readout(stage: str, runs: Path = settings.ROOT / "runs" / TABLE_STUDY) -> dict[str, dict]:
     """{target: {"cells": {cell: [(run, state, rung)]}, "verdict": PASS | FAIL | not yet, "needed": {cell: k}}}."""
     targets: dict[str, dict] = {}
     rules = rule_of(stage)

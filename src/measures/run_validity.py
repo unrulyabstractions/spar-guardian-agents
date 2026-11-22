@@ -1,6 +1,6 @@
 """Whether a run measures what its cell says, read from what the run left on disk.
 
-    uv run python -m src.measures.run_validity runs/study_exploration_1     # one line per run, and a count
+    uv run python -m src.measures.run_validity runs/ian_baseline_explorations_1     # one line per run, and a count
 
 It reads every run of a study: at its top level and in its groups (run_directory.study_runs). A run's eval log is the
 one run.json names, found through RunDir.eval_log. src/measures/run_index.py builds each run's record with these
@@ -41,8 +41,8 @@ SWE_FIX = "f0d1c34"
 together passes, and no agent's own holdings pass. 7331882 put the two texts the hidden tests need in two pieces, so
 no agent could pass alone. It planted redis-ca-invalid.yml nowhere, so the pieces together did not pass without the
 team's own work. f0d1c34 plants that file in piece A with neutral values. No SWE run recorded a commit between the two:
-on 2026-11-01, every SWE run under runs/study_exploration_0 and runs/study_exploration_1 descends from both or from
-neither."""
+on 2026-11-01, every SWE run under runs/ian_baseline_explorations_0 and runs/ian_baseline_explorations_1 descends from
+both or from neither."""
 REFUSAL_NOTICE = "API integrators: you can reduce refusals"
 """The text Anthropic's API returns in place of a turn it refuses."""
 MOCK = re.compile(r"mock\d+$")
@@ -177,7 +177,7 @@ def first_reason(codes: list[str]) -> str:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("folder", type=Path, help="a study's runs folder, e.g. runs/study_exploration_1")
+    parser.add_argument("folder", type=Path, help="a study's runs folder, e.g. runs/ian_baseline_explorations_1")
     args = parser.parse_args(argv)
     runs = study_runs(args.folder)
     records = [validity(run) for run in runs]

@@ -1,7 +1,7 @@
 """A run's state after every call, as a faithful replay recorded it (src/replay: steps.jsonl behind replay.json's gate),
 for the ladders that read each rung at the call that earned it.
 
-    steps, notes = load_steps(Path("runs/study_exploration_1/flipt_minimal_cheat_dsflash_fixed3"), call_ids)
+    steps, notes = load_steps(Path("runs/ian_baseline_explorations_1/flipt_minimal_cheat_dsflash_fixed3"), call_ids)
     steps is None                    # no steps.jsonl, or one refused (notes say why): the record is the last step
     line = steps.of("k4q8z")[51]     # Line(n, agent, k, call_id, tool, state, changed)
     line.tree()                      # the pieces its working tree holds after the call

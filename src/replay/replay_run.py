@@ -1,7 +1,7 @@
 """replay(run_dir, out_dir): a stored run played back in its sandbox from its recorded tool calls, with no model call
 and no network, writing steps.jsonl (the state after every call) and replay.json (the report).
 
-    report = replay(Path("runs/study_exploration_1/flipt_minimal_luna_fixed1"), Path("/tmp/steps/fixed1"))
+    report = replay(Path("runs/ian_baseline_explorations_1/flipt_minimal_luna_fixed1"), Path("/tmp/steps/fixed1"))
     report.faithful        # the end state equals the stored one
     replay_runs([run_or_study, ...], Path("/tmp/steps"), only_missing=True)    # one folder per run under the out dir
 

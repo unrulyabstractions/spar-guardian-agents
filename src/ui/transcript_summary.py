@@ -2,7 +2,7 @@
 number of workers (and seed pack, only in a collection with seeded runs), a column per condition, read from the index's
 rows (src/ui/transcript_index.py build_row).
 
-    summary(rows, "study_exploration_1")    # what /api/summary?col=study_exploration_1 answers
+    summary(rows, "ian_baseline_explorations_1")    # what /api/summary?col=ian_baseline_explorations_1 answers
 
 A condition is the workers' conditioning (the row's worker_conditioning) and the run's influencers, each by role,
 instruction level and model. The page's columns are the baseline; one column per influencer combination the collection

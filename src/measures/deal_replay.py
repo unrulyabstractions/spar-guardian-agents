@@ -10,8 +10,8 @@ today's domain class and the influencers a run draws, then compares. A deal that
 give other agents or other holdings: a measure that plans the run again, such as a collaboration test, does not
 describe it. A deal today's code refuses means the config no longer runs at all.
 
-The replay covers protein design, creative writing and SWE (REPLAYED), the tasks of study_exploration_1. It needs no
-sandbox and no model.
+The replay covers protein design, creative writing and SWE (REPLAYED), the tasks of ian_baseline_explorations_1. It
+needs no sandbox and no model.
 """
 from __future__ import annotations
 

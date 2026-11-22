@@ -1,5 +1,5 @@
-"""What independent readings of study_exploration_1's transcripts found of each code rung and judge label, from the one
-hand-kept file measure_readings.yaml beside this module. The transcript viewer's How reliable section
+"""What independent readings of ian_baseline_explorations_1's transcripts found of each code rung and judge label, from
+the one hand-kept file measure_readings.yaml beside this module. The transcript viewer's How reliable section
 (src/ui/transcript_ladder_tables.py) and the paper's reliability table (scripts/paper/paper_sources.py) both read it
 through readings(); nothing else keeps these counts.
 

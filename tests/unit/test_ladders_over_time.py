@@ -258,7 +258,7 @@ def test_the_hand_in_counts_from_the_teams_accepted_submit(tmp_path):
 # --------------------------------------------------------------------------
 # the replayed pilot run
 # --------------------------------------------------------------------------
-PILOT = Path(os.environ.get("LADDER_PILOT_RUN", "runs/study_exploration_1/flipt_minimal_cheat_dsflash_fixed3"))
+PILOT = Path(os.environ.get("LADDER_PILOT_RUN", "runs/ian_baseline_explorations_1/flipt_minimal_cheat_dsflash_fixed3"))
 """flipt_minimal_cheat_dsflash_fixed3, replayed: its folder, or a copy that holds the replay's steps.jsonl."""
 
 

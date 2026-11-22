@@ -143,7 +143,7 @@ def test_the_board_tab_of_a_run_before_rounds_of_calls_has_no_rounds(tmp_path):
 
 
 SMOKE = ROOT / "runs" / "study_smoke" / "smoke_openmath" / "20261121T131247Z" / "rounds"
-OLD = ROOT / "runs" / "study_exploration_1" / "flipt_minimal_cheat_dsflash_fixed3"
+OLD = ROOT / "runs" / "ian_baseline_explorations_1" / "flipt_minimal_cheat_dsflash_fixed3"
 STATIC = Path(tr.__file__).parent / "transcript_static"
 
 

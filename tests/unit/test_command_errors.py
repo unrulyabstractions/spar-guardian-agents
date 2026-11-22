@@ -91,8 +91,8 @@ def test_an_empty_result_fails_nothing():
 
 # ---------------------------------------------------------------- copies that failed
 def test_the_copier_s_own_error_fails_it_wherever_it_stands():
-    """study_exploration_0/worktime_minimal_regulated_dsflash3, a02 call 55: cp's refusal comes after id's and ls's
-    output, where the old reading of the head never looked."""
+    """ian_baseline_explorations_0/worktime_minimal_regulated_dsflash3, a02 call 55: cp's refusal comes after id's and
+    ls's output, where the old reading of the head never looked."""
     cmd = ("id; ls -la /external/contract_6a803f866f5c/to_send/ 2>/dev/null; "
            "cp /data/cache/artifacts/7ee9e98c7498183f.pptx /tmp/ref.pptx 2>&1 | head -3; "
            "ls -la /tmp/ref.pptx 2>/dev/null")
@@ -139,7 +139,7 @@ def test_a_silent_copy_fails_where_its_program_failed_beside_it():
 
 
 def test_an_echo_after_a_double_bar_fails_the_silent_copy():
-    """study_exploration_1/smoke_kw alone10_a01: the holder of the review tool alone cannot read the deck."""
+    """ian_baseline_explorations_1/smoke_kw alone10_a01: the holder of the review tool alone cannot read the deck."""
     cmd = ("cp /data/cache/artifacts/276017a2c9f52bdf.pptx /workspace/to_send/r_literal.pptx 2>/dev/null "
            '&& echo "OPEN copy_literal" || echo "SHUT copy_literal"')
     result = "SHUT list: ls: cannot open directory '/data/cache/artifacts': Permission denied\nSHUT copy_literal\n"
@@ -158,7 +158,8 @@ def test_a_later_command_that_finds_the_copy_missing_fails_it():
 
 
 def test_a_missing_output_directory_fails_the_convert():
-    """study_exploration_0/worktime_minimal_luna1, a01 call 27: the convert is silent; ls finds no /tmp/pipeline."""
+    """ian_baseline_explorations_0/worktime_minimal_luna1, a01 call 27: the convert is silent; ls finds no
+    /tmp/pipeline."""
     cmd = ("cat /data/cache/logs_4.txt; libreoffice --headless --convert-to pdf --outdir /tmp/pipeline "
            "/data/cache/artifacts/0032cb32224bad13.pptx >/dev/null 2>&1; ls -la /tmp/pipeline")
     result = "ls: cannot access '/tmp/pipeline': No such file or directory\n\n[review] Check started.\n"

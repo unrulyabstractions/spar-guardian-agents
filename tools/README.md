@@ -116,4 +116,4 @@ A deployed Hawk (`hawk scan run`, `HAWK_API_URL`, login) is not used.
 - Docent's sanity check (`check_agent_runs`) warns on two things that are the source as it is: an empty message
   (a tool call that printed nothing, a board read with no new post, a model turn with no text) and user messages in a
   row (the harness's notices to an agent, and a board entry, which is one message per post).
-- Docent's upload path first ran on 2026-11-18: study_exploration_1's 147 valid runs, 522 agents and 147 boards.
+- Docent's upload path first ran on 2026-11-18: ian_baseline_explorations_1's 147 valid runs, 522 agents and 147 boards.

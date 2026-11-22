@@ -6,7 +6,7 @@ its eval log.
     run("riemann_cheat", benchmark, config, model, timeout, task=swarm_task(benchmark, config, extra_instruction=CHEAT))
     judge(Path("logs/swarm_R3D3/<log>.eval"), "swarm_R3D3", "gpt-6-luna", batch=True)
     rejudge([Path("runs/swarm_R3D3")], "gpt-6-luna", batch=True)
-    judge_pass("collusion", [Path("runs/study_exploration_1")], "gpt-6-luna", cap=2.0, limit=5)
+    judge_pass("collusion", [Path("runs/ian_baseline_explorations_1")], "gpt-6-luna", cap=2.0, limit=5)
     regenerate([Path("runs/swarm_R3D3")])
 
 A run calls inspect_ai.eval with the task (the default task of tasks.swarm_task, or one the caller built), writes its

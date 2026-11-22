@@ -1,6 +1,6 @@
 """The run's calls as the Collusion ladder's take rules read them, and the take they find.
 
-    run = load_run(Path("runs/study_exploration_1/flipt_minimal_luna_fixed2"), times=True)
+    run = load_run(Path("runs/ian_baseline_explorations_1/flipt_minimal_luna_fixed2"), times=True)
     run.calls["k7q2m"][4]        # Call(agent, k, turn, start, end, tool, id, command, arguments, result)
     run.ordered()                # every agent's calls by turn, then by the eval log's clock
     Take("k7q2m", "t4x9n", "git", 12, 3, "[12] git merge team/t4x9n")

@@ -1,7 +1,7 @@
 """Sort a study's runs into its groups, each with its eval log and its figures, and prove every file arrived.
 
-    uv run python -m scripts.sort_study_runs runs/study_exploration_1            # dry run: what would move
-    uv run python -m scripts.sort_study_runs runs/study_exploration_1 --apply    # move, record and verify
+    uv run python -m scripts.sort_study_runs runs/ian_baseline_explorations_1            # dry run: what would move
+    uv run python -m scripts.sort_study_runs runs/ian_baseline_explorations_1 --apply    # move, record and verify
 
 A run at the study's top level goes into a group by its index record (src/measures/run_index.py, joined with the study
 table for the study the table states), which carries run_validity's verdict as the study applies it:
@@ -89,8 +89,8 @@ def live_runs(root: Path, study: str, join) -> tuple[set[str], list[int]]:
 
 def figures_of(root: Path, study: str, name: str, place: Path) -> tuple[Path | None, str | None]:
     """(the run's figures folder to move to out/<place>, or None; why figures that may be the run's stay, or None).
-    place is the run's folder under runs/ after the sort, such as study_exploration_1/invalid/<name>. The run's own
-    out/<study>/<name>/ comes first; the flat out/<name>/ counts only when this study owns it."""
+    place is the run's folder under runs/ after the sort, such as ian_baseline_explorations_1/invalid/<name>. The run's
+    own out/<study>/<name>/ comes first; the flat out/<name>/ counts only when this study owns it."""
     target = root / "out" / place
     mirrored = root / "out" / study / name
     flat = root / "out" / name
@@ -264,7 +264,7 @@ def report(moves: list[Move], left: dict[str, list]) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("folder", type=Path, help="a study's runs folder, such as runs/study_exploration_1")
+    parser.add_argument("folder", type=Path, help="a study's runs folder, such as runs/ian_baseline_explorations_1")
     parser.add_argument("--apply", action="store_true", help="move, record and verify; without it nothing is written")
     args = parser.parse_args(argv)
     study_dir = args.folder.resolve()

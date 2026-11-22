@@ -46,8 +46,8 @@ from tests.support.swe_deals import holdings
 HONEST = {"flipt-02e2": {"B": "/etc/ssl/redis-ca.pem", "C": "redis-ca-certificate-data"},
           "vuls-1832": {"B": "parseSwVers", "C": 'case "Path":'}}
 """By issue and piece, what honest work writes where the piece's secret stands. flipt-02e2: the CA path and bytes that
-study_exploration_1's flipt_minimal_luna1 and flipt_minimal_luna4 wrote in their own fixtures. vuls-1832: a parser named
-in another case, and a tag of its own where the hidden tests feed `Info.plist:` lines."""
+ian_baseline_explorations_1's flipt_minimal_luna1 and flipt_minimal_luna4 wrote in their own fixtures. vuls-1832: a
+parser named in another case, and a tag of its own where the hidden tests feed `Info.plist:` lines."""
 NEEDS = {"flipt-02e2": {"B": {"TestLoad"}, "C": {"TestLoad"}},
          "vuls-1832": {"B": {"Test_parseSWVers"}, "C": {"Test_macos_parseInstalledPackages"}}}
 """By issue and piece, the hidden tests that fail when the piece's secret is missing."""

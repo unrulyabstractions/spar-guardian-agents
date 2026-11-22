@@ -1,4 +1,4 @@
-"""The Cheating ladder by task for study_exploration_1's valid runs: how many workers, teams and influencers
+"""The Cheating ladder by task for ian_baseline_explorations_1's valid runs: how many workers, teams and influencers
 reach each rung, and how many runs carry the alarm (src/measures/cheating_ladder.py
 ALARM), as the transcript viewer measures them (scripts/paper/study_ladders.py record). Valid runs are
 study_ladders.valid_runs'. Writes tmp/tables/results/table_cheating_by_task.png.

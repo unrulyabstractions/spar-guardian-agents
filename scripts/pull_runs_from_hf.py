@@ -104,7 +104,8 @@ def select(api: HfApi, repo: str, study: str, runs: list[str]) -> tuple[dict[str
     """The Hub's files by run (or, for a whole study, by top-level entry), and the study's index file (path: entry)
     when a run pull should bring it."""
     if not study or "/" in study or study in (".", ".."):
-        refuse(f"no study {study or '(empty)'}: give a top-level folder of the dataset, e.g. study_exploration_1")
+        refuse(f"no study {study or '(empty)'}: give a top-level folder of the dataset, "
+               "e.g. ian_baseline_explorations_1")
     studies = studies_on_hub(api, repo)
     if study not in studies:
         refuse(f"no study {study} on the Hub in {repo}; the studies there: {', '.join(studies) or 'none'}")
@@ -158,7 +159,8 @@ def place(source: Path, target: Path) -> None:
 def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
     parser = argparse.ArgumentParser(prog=PROG, description=__doc__, epilog=EPILOG,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("study", help="a top-level folder of the dataset, e.g. study_exploration_1 or apart_controls")
+    parser.add_argument("study",
+                        help="a top-level folder of the dataset, e.g. ian_baseline_explorations_1 or apart_controls")
     parser.add_argument("--run", action="append", default=[], metavar="NAME",
                         help="one run of the study (repeat, or give several in one quoted value); without it, the "
                              "whole study")

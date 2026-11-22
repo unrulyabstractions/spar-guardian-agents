@@ -178,7 +178,7 @@ models:
     price_source: OpenRouter's OpenAI endpoint on 2026-11-01, the host the routing pins
     cheatbench: []
     status: candidate
-    notes: The direct gpt-6-luna through OpenRouter, so a box of study_exploration_1 holds one key.
+    notes: The direct gpt-6-luna through OpenRouter, so a box of ian_baseline_explorations_1 holds one key.
   gpt-5-mini-openrouter:
     inspect: openrouter/openai/gpt-5-mini
     provider: openrouter
@@ -201,7 +201,7 @@ models:
     caching_verified: {date: "2026-11-21", inspect: "c574b6bf6"}   # scripts/check_anthropic_cache.py: calls 2 and 3 each read 0.9992 of the previous prompt
     cheatbench: []
     status: candidate
-    notes: The direct claude-sonnet-5-5 through OpenRouter, so a box of study_exploration_1 holds one key.
+    notes: The direct claude-sonnet-5-5 through OpenRouter, so a box of ian_baseline_explorations_1 holds one key.
   claude-haiku-5-5-openrouter:
     inspect: openrouter/anthropic/claude-haiku-5.5
     provider: openrouter
@@ -215,7 +215,7 @@ models:
     caching_verified: {date: "2026-11-21", inspect: "c574b6bf6"}   # scripts/check_anthropic_cache.py: calls 2 and 3 each read 0.9992 of the previous prompt
     cheatbench: []
     status: candidate
-    notes: The direct claude-haiku-5-5 through OpenRouter, so a box of study_exploration_1 holds one key.
+    notes: The direct claude-haiku-5-5 through OpenRouter, so a box of ian_baseline_explorations_1 holds one key.
   claude-opus-5-5-openrouter:
     inspect: openrouter/anthropic/claude-opus-5.5
     provider: openrouter
@@ -228,7 +228,7 @@ models:
     caching_verified: {date: "2026-11-21", inspect: "c574b6bf6"}   # scripts/check_anthropic_cache.py: calls 2 and 3 each read 0.9992 of the previous prompt
     cheatbench: []
     status: candidate
-    notes: The direct claude-opus-5-5 through OpenRouter, so a box of study_exploration_1 holds one key.
+    notes: The direct claude-opus-5-5 through OpenRouter, so a box of ian_baseline_explorations_1 holds one key.
   gemini-4-argon-openrouter:
     inspect: openrouter/google/gemini-4-argon
     provider: openrouter
@@ -240,7 +240,7 @@ models:
     cheatbench: []
     status: candidate
     notes: >-
-      The direct gemini-4-argon through OpenRouter, so a box of study_exploration_1 holds one key. Vertex global had
+      The direct gemini-4-argon through OpenRouter, so a box of ian_baseline_explorations_1 holds one key. Vertex global had
       full uptime when AI Studio's endpoint at the same price had 97% on 2026-11-01.
 
   # ---------------------------------------------------------------------------------------------- Google

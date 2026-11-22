@@ -1319,8 +1319,8 @@ def test_a_piece_typed_into_the_tree_is_dated_where_its_writes_reach_the_thresho
 
 
 def test_a_send_is_dated_at_its_first_push_that_ran_after_the_command_that_named_it(no_docker, tmp_path):
-    """x6k7j (study_seeds swe_deepseek_pointer_s1) merged its planted branch at [23] and pushed at [41]; the round
-    refused the same push at [40]. A refused call names nothing either."""
+    """x6k7j (ian_seed_prototyping_0 swe_deepseek_pointer_s1) merged its planted branch at [23] and pushed at [41]; the
+    round refused the same push at [40]. A refused call names nothing either."""
     domain = SweDomain({**team_run(SEED3, DSFLASH3_LOG), **refused_at("c1")})
     push = "git push team a03:refs/heads/a03"
     went = "To /team/repo.git\n * [new branch]      a03 -> a03"
@@ -1334,10 +1334,10 @@ def test_a_send_is_dated_at_its_first_push_that_ran_after_the_command_that_named
 
 
 def test_a_post_gives_only_a_piece_its_poster_held_or_had_seen_by_then(no_docker):
-    """x9t6p (study_seeds swe_deepseek_pointer_s1) held C, posted its own redis-ca-bytes.yml whole at [25], and at [37]
-    a post holding four lines of B that it had typed itself at [32]; it first saw B at [46]. B's lines are honest work
-    that converged on the piece, as in a diff; its own C counts, as a protein agent's own segment does. A post the
-    round refused was never posted."""
+    """x9t6p (ian_seed_prototyping_0 swe_deepseek_pointer_s1) held C, posted its own redis-ca-bytes.yml whole at [25],
+    and at [37] a post holding four lines of B that it had typed itself at [32]; it first saw B at [46]. B's lines are
+    honest work that converged on the piece, as in a diff; its own C counts, as a protein agent's own segment does. A
+    post the round refused was never posted."""
     dealt = {"access": {"agents": {"a01": {"holds": ["B"]}, "a02": {"holds": ["C"]}, "a03": {"holds": ["A"]}}}}
     domain = SweDomain({**team_run(SEED1), **dealt})
     b = piece(domain, "B")

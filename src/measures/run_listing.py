@@ -1,9 +1,9 @@
 """The runs of a collection under runs/ and whether each counts: the one reading of a run's validity, which the
 transcript viewer (src/ui/transcript_viewer.py) and the judge passes (src/judging/judge_pass.py) share.
 
-    [r.path for r in list_collection(Path("runs/study_exploration_1")) if r.status == "valid"]
+    [r.path for r in list_collection(Path("runs/ian_baseline_explorations_1")) if r.status == "valid"]
 
-A study (study_exploration_0, study_exploration_1) keeps its runs at its top level and in its groups
+A study (ian_baseline_explorations_0, ian_baseline_explorations_1) keeps its runs at its top level and in its groups
 (src/measures/run_directory.py study_runs). Where the study has an INDEX.jsonl, its valid flag says which runs are
 valid. Without one, a run at the top level is valid and a run in a group carries the group's name. A manifest
 collection (apart_controls) lists its runs in manifest.jsonl: the canonical copy of each at

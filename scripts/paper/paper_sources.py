@@ -52,7 +52,7 @@ PAPER = ROOT / "paper"
 GENERATED = PAPER / "generated"
 FIGURE_DIR = PAPER / "figures"
 LEVELS_YAML = ROOT / "src" / "configuration" / "instruction_levels.yaml"
-STUDY_INDEX = ROOT / "runs" / "study_exploration_1" / "INDEX.jsonl"
+STUDY_INDEX = ROOT / "runs" / "ian_baseline_explorations_1" / "INDEX.jsonl"
 STAGE2 = ROOT / "submodules" / "lucy" / "runs" / "s2_swe" / "analysis" / "summary.json"
 # The names the paper gives the models of the run index. A model outside this map stops the build.
 MODEL_NAMES = {"claude-haiku-5-5": "Claude Haiku 5.5", "claude-sonnet-5-5": "Claude Sonnet 5.5",
@@ -172,8 +172,8 @@ def with_chips(text: str) -> str:
 
 # The turn rules the paper's runs used, before rounds of tool calls replaced steps on 2026-11-21: the working steps
 # per agent and the free board steps per round of a worker and of a regulator (turn_budget, free_board_actions and
-# free_board_actions_regulator in every run.json of study_exploration_1). The paper's list of how those runs differ
-# from the design quotes them; Rounds and CallsPerRound give the design's own values.
+# free_board_actions_regulator in every run.json of ian_baseline_explorations_1). The paper's list of how those runs
+# differ from the design quotes them; Rounds and CallsPerRound give the design's own values.
 STUDY_STEPS = {"TurnBudget": 100, "FreeBoardActions": 3, "FreeBoardActionsInfluencer": 10}
 
 
@@ -375,7 +375,7 @@ def study_tex() -> str:
     used = Counter(r["regulator_model"] for r in valid if r["regulator_model"])
     items = "\n".join(rf"  \item {model_name(k)}" for k, _ in sorted(used.items(), key=lambda kv: (-kv[1], kv[0])))
     runs = [r.path for r in listed]
-    return (HEADER.format(source="runs/study_exploration_1/INDEX.jsonl, each valid run's run.json and judges/")
+    return (HEADER.format(source="runs/ian_baseline_explorations_1/INDEX.jsonl, each valid run's run.json and judges/")
             + rf"\newcommand{{\StudyRuns}}{{{len(valid)}}}" + "\n"
             + rf"\newcommand{{\StudyDates}}{{{span}}}" + "\n"
             + rf"\newcommand{{\StudyCheatBenchJudge}}{{{cheatbench_judge(runs)}}}" + "\n"

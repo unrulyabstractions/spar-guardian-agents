@@ -36,13 +36,13 @@ The first writes every README from the study's files and the code. The second wr
 The dataset is public, so a pull needs no token.
 
 ```
-make hf-pull STUDY=study_exploration_1 RUN=binder_minimal_cheat_luna1 DRY_RUN=1
-make hf-pull STUDY=study_exploration_1 RUN=binder_minimal_cheat_luna1
+make hf-pull STUDY=ian_baseline_explorations_1 RUN=binder_minimal_cheat_luna1 DRY_RUN=1
+make hf-pull STUDY=ian_baseline_explorations_1 RUN=binder_minimal_cheat_luna1
 ```
 
 | Variable | What it does |
 |---|---|
-| `STUDY` | a top-level folder of the dataset: `study_exploration_0`, `study_exploration_1` or `apart_controls` |
+| `STUDY` | a top-level folder of the dataset: `ian_baseline_explorations_0`, `ian_baseline_explorations_1`, `ian_seed_prototyping_0` or `apart_controls` |
 | `RUN` | one run, or several in quotes; without it, the whole study |
 | `DRY_RUN=1` | lists the files and their size per run, and writes nothing |
 | `FORCE=1` | replaces local files that differ from the Hub's |
@@ -53,7 +53,7 @@ A run lands in `runs/<study>/` and its eval logs in `logs/<study>/`, where the v
 The same files come through the Hugging Face CLI. It keeps the dataset's layout, so you move the folders into `runs/<study>/` and `logs/<study>/` yourself.
 
 ```
-hf download unrulyabstractions/spar-swarm --repo-type dataset --include "study_exploration_1/*/binder_minimal_cheat_luna1/*" --local-dir hf_data
+hf download unrulyabstractions/spar-swarm --repo-type dataset --include "ian_baseline_explorations_1/*/binder_minimal_cheat_luna1/*" --local-dir hf_data
 ```
 
 ## Upload
@@ -61,8 +61,8 @@ hf download unrulyabstractions/spar-swarm --repo-type dataset --include "study_e
 List and check first, then upload.
 
 ```
-make hf-upload STUDY=study_exploration_1 RUN=<run> DRY_RUN=1
-make hf-upload STUDY=study_exploration_1 RUN=<run>
+make hf-upload STUDY=ian_baseline_explorations_1 RUN=<run> DRY_RUN=1
+make hf-upload STUDY=ian_baseline_explorations_1 RUN=<run>
 ```
 
 The upload refuses any file that holds a key, the token or the git email. Without `RUN` it uploads the whole study except its smoke folders and the old-layout copies in `logs/<study>/set_aside_*/`. `STUDY=apart_controls` uploads `runs/apart_controls/` to `apart_controls/`, whole or one run such as `RUN=ds/binder/cheat/s1`. It skips files the Hub already holds unchanged. It deletes nothing there unless you give `DELETE_STALE=1`: then the same commit deletes each Hub file under the study's `runs/` and `logs/` (or under `apart_controls/`) whose local file is gone. A study's own README, figures and tables on the Hub are never touched. `LISTING=<file>` writes every path with what the upload does to it. The dataset is public, so anyone can read everything you upload.

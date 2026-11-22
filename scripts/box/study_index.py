@@ -1,12 +1,12 @@
 """The index of a study's runs (src/measures/run_index.py), with study_table.py and the fleet joined in for the study
 the table states.
 
-    uv run python -m scripts.box.study_index runs/study_exploration_1            # a summary; writes nothing
-    uv run python -m scripts.box.study_index runs/study_exploration_1 --write    # also writes runs/<study>/INDEX.jsonl
-    uv run python -m scripts.box.study_index runs/study_exploration_0            # a study without a table
+    uv run python -m scripts.box.study_index runs/ian_baseline_explorations_1            # a summary; writes nothing
+    uv run python -m scripts.box.study_index runs/ian_baseline_explorations_1 --write  # also runs/<study>/INDEX.jsonl
+    uv run python -m scripts.box.study_index runs/ian_baseline_explorations_0          # a study without a table
 
-For study_exploration_1 (study_table.TABLE_STUDY) a run's stage, box, cell and arm come from the table, which names
-every run of that study and each mock rehearsal. Its instance is the box whose capture manifest
+For ian_baseline_explorations_1 (study_table.TABLE_STUDY) a run's stage, box, cell and arm come from the table, which
+names every run of that study and each mock rehearsal. Its instance is the box whose capture manifest
 (logs/boxes/<id>/manifest.jsonl) holds the run's eval log or its run.json, of the run's name, with the local file's
 sha256. The eval log's bytes never change, so a run regenerated here keeps its instance. A run whose bytes no capture
 holds takes the one instance the box registry (runs/boxes.json) created for its box that has captured
@@ -202,7 +202,7 @@ def join_for(study_dir: Path) -> TableJoin | None:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("folder", type=Path, help="a study's runs folder, such as runs/study_exploration_1")
+    parser.add_argument("folder", type=Path, help="a study's runs folder, such as runs/ian_baseline_explorations_1")
     parser.add_argument("--write", action="store_true",
                         help="write <folder>/INDEX.jsonl; without it nothing is written")
     args = parser.parse_args(argv)

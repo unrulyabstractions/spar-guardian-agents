@@ -605,8 +605,8 @@ files:
       job_ids: Docent's job ids
 
 studies:
-  study_exploration_0:
-    title: study_exploration_0
+  ian_baseline_explorations_0:
+    title: ian_baseline_explorations_0
     about: |
       The first screen: five arms on five tasks, three worker models, three seeds each. Each run is one team or one
       lone agent on one fixed task instance. The arms are `solo` (one
@@ -618,12 +618,12 @@ studies:
       CheatBench's judge judged every real run.
     load: |
       import json, pathlib
-      study = pathlib.Path("runs/study_exploration_0")
+      study = pathlib.Path("runs/ian_baseline_explorations_0")
       index = [json.loads(line) for line in open(study / "INDEX.jsonl")]
       run = study / next(row for row in index if row["valid"])["path"]
       team = next(r for r in map(json.loads, open(run / "signals.jsonl")) if r["row"] == "team")
-  study_exploration_1:
-    title: study_exploration_1
+  ian_baseline_explorations_1:
+    title: ian_baseline_explorations_1
     about: |
       The focused study of November 2026: SWE (the flipt issue) with DeepSeek V4.1 Flash, GPT-6 Luna and Claude Haiku
       5.5 workers, protein design and creative writing with Luna workers. A gate (`minimal`, `minimal_cheat`) came
@@ -633,7 +633,7 @@ studies:
       valid run.
     load: |
       import json, pathlib
-      study = pathlib.Path("runs/study_exploration_1")
+      study = pathlib.Path("runs/ian_baseline_explorations_1")
       index = [json.loads(line) for line in open(study / "INDEX.jsonl")]
       run = study / next(row for row in index if row["valid"])["path"]
       team = next(r for r in map(json.loads, open(run / "signals.jsonl")) if r["row"] == "team")

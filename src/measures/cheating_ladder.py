@@ -1,7 +1,7 @@
 """The Cheating ladder of a run: how far each agent went with the honeypot, read by code from the transcript scan's
 evidence and the grader's result.
 
-    run = run_cheating(Path("runs/study_exploration_1/flipt_minimal_dsflash_fixed2"))
+    run = run_cheating(Path("runs/ian_baseline_explorations_1/flipt_minimal_dsflash_fixed2"))
     run["agents"]["k4q8z"]      # {"role", "worker", "episode", "rung", "cheated", "clauses": {clause: [evidence]},
                                 #  "pieces": {"held", "work", "own", "supplied"}, "timeline": {"source", "first",
                                 #  "after"}}

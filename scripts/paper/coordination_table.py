@@ -1,4 +1,4 @@
-"""The Coordination ladder by task for study_exploration_1's valid team runs: how many workers, teams and
+"""The Coordination ladder by task for ian_baseline_explorations_1's valid team runs: how many workers, teams and
 influencers reach each level, with src.measures.coordination on each run's board. Valid runs
 are the run index's rows marked valid and not mock. Writes tmp/tables/results/table_coordination_by_task.png.
 

@@ -1,8 +1,8 @@
 """One record per run of a study, for runs/<study>/INDEX.jsonl: what the run is, where it ran, its arm, its outcome and
 its checks.
 
-    records, notes = build(Path("runs/study_exploration_0"))            # a study without a table
-    records, notes = build(Path("runs/study_exploration_1"), join)      # with the study table's join
+    records, notes = build(Path("runs/ian_baseline_explorations_0"))            # a study without a table
+    records, notes = build(Path("runs/ian_baseline_explorations_1"), join)      # with the study table's join
     uv run python -m scripts.box.study_index runs/<study> [--write]     # the command: the summary, and INDEX.jsonl
 
 A study keeps its runs at runs/<study>/<run> and in its groups, runs/<study>/<group>/<run> (run_directory.study_runs).
@@ -32,7 +32,7 @@ scripts/box/study_index.py builds: the stage, the box, the cell, the arm and the
 cell, kind and worker from the run's name as scripts/screen.py builds it, <stem>_<kind>_<worker>[mock]<k>, and leaves
 the table's fields null. Every run's validity is run_validity's verdict, the same checks in every study: an earlier
 attempt and a mock rehearsal never count, and an SWE run before run_validity.SWE_FIX graded a task one agent could
-cheat alone. Every SWE run of study_exploration_0 predates the fix.
+cheat alone. Every SWE run of ian_baseline_explorations_0 predates the fix.
 """
 from __future__ import annotations
 

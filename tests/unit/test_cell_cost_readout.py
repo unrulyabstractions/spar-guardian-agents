@@ -322,9 +322,9 @@ def test_missing_data_is_refused_and_never_read_as_zero(tmp_path, capsys, gone):
     assert refused.value.code == 2 and str(path) in capsys.readouterr().err
 
 
-def test_another_study_is_refused_since_study_exploration_0_reuses_the_tables_run_names(tmp_path):
+def test_another_study_is_refused_since_ian_baseline_explorations_0_reuses_the_tables_run_names(tmp_path):
     with pytest.raises(ValueError, match="reuses its run names"):
-        readout_module.readout(tmp_path, "study_exploration_0", now=NOW)
+        readout_module.readout(tmp_path, "ian_baseline_explorations_0", now=NOW)
 
 
 def test_the_cells_name_every_run_the_boxes_of_each_stage_run():

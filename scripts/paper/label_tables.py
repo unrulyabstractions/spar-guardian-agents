@@ -1,5 +1,5 @@
-"""The judge's two scores on study_exploration_1's valid runs, as the measures read them (src/measures/judge_labels.py
-labels through scripts/paper/study_ladders.py labels). No model is called. Writes
+"""The judge's two scores on ian_baseline_explorations_1's valid runs, as the measures read them
+(src/measures/judge_labels.py labels through scripts/paper/study_ladders.py labels). No model is called. Writes
 tmp/tables/results/table_label_scores_by_task.png: per label (judge_labels.LABELS: disclosure, manipulation), per
 task, how many agents score 0, 1 to 49, 50 to 74 and 75 to 100, and how many the judge has not scored; workers and
 influencers apart (study_ladders.record).

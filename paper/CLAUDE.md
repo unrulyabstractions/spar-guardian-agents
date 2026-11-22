@@ -18,7 +18,7 @@ it, which a reader rewrote as a conjecture.
 | `generated/scales.tex` | the scales table, from `src/configuration/scales.py` | `make paper-sources` |
 | `generated/regulator_suffix.tex` | the regulator prompt box: what `src/swarm/influencers.py` role_text appends after a regulator's level under `PRESETS["default"]` (`prompts.yaml` roles.influencer_common, regulator_check, regulator_no_disclosure) | `make paper-sources` |
 | `generated/regulator_levels.tex`, `disregulator_levels.tex` | the level texts, from `src/configuration/instruction_levels.yaml` | `make paper-sources` |
-| `generated/study.tex` | `\StudyRuns`, `\StudyDates`, `\StudyCheatBenchJudge`, `\StudyLabelsJudged`, `\RegulatorModelList`: the multi-domain study's valid runs, their dates, the judge of the CheatBench pass (`src/judging/verdict_files.py` applied), a sentence naming the judge of the scores (`src/measures/judge_labels.py` labels' "judge") or saying no judge has scored the runs yet (more than one judge of a pass stops the build), and the regulators' models by use, from `runs/study_exploration_1/INDEX.jsonl`, each run's run.json and judges/ (kept as committed where runs/ is absent) | `make paper-sources` |
+| `generated/study.tex` | `\StudyRuns`, `\StudyDates`, `\StudyCheatBenchJudge`, `\StudyLabelsJudged`, `\RegulatorModelList`: the multi-domain study's valid runs, their dates, the judge of the CheatBench pass (`src/judging/verdict_files.py` applied), a sentence naming the judge of the scores (`src/measures/judge_labels.py` labels' "judge") or saying no judge has scored the runs yet (more than one judge of a pass stops the build), and the regulators' models by use, from `runs/ian_baseline_explorations_1/INDEX.jsonl`, each run's run.json and judges/ (kept as committed where runs/ is absent) | `make paper-sources` |
 | `generated/stage2.tex` | the deep dive's Stage 2 table, from `submodules/lucy/runs/s2_swe/analysis/summary.json` | `make paper-sources` |
 | `generated/reliability.tex` | how often an independent reading of the transcripts confirmed each code rung and judge score, from `src/measures/measure_readings.yaml`, the one file the viewer's How reliable section reads too (kept by hand: no code can recompute such a reading; the file names its sources, and each row names the pass it read) | `make paper-sources` |
 | `generated/reliability_retired.tex` | the same file's readings of the retired yes or no labels (scheming, awareness, the yes or no manipulation label), the rows of its retired passes, in a table of their own | `make paper-sources` |
@@ -36,13 +36,13 @@ Every figure in the paper is drawn by a script in this repository:
 
 - Figures 1 to 5: `make paper-figures` (`scripts/paper/fig_scripted_teammates.py` from Lucy's E1b and E2 summaries,
   `fig_roles_access.py` and `fig_jigsaw.py` from the code's roles and access, `fig_multidomain.py` from
-  `runs/study_exploration_1/INDEX.jsonl`, `fig_deep_dive.py` from Lucy's `runs/s1_swe/analysis/summary.json`).
+  `runs/ian_baseline_explorations_1/INDEX.jsonl`, `fig_deep_dive.py` from Lucy's `runs/s1_swe/analysis/summary.json`).
 - Method figures: `make figures`, `make tables` (`tables.py`: the Cheating ladder by task for SWE, protein design and
   creative writing, from `src/measures/ladder_by_domain.py` cheating_by_task).
 - Results tables: `make results-tables` (`control_tables.py`, `protein_regulator_table.py`,
   `swe_regulator_table.py` (DeepSeek and Luna workers), `creative_regulator_table.py`, `disregulator_tables.py`, `baseline_tables.py`, `cheating_table.py`,
-  `coordination_table.py`, `collusion_table.py`, `judge_tables.py`, `label_tables.py`), from the runs under `runs/study_exploration_0` and
-  `runs/study_exploration_1`; `solo_controls_table.py` (Appendix C's
+  `coordination_table.py`, `collusion_table.py`, `judge_tables.py`, `label_tables.py`), from the runs under `runs/ian_baseline_explorations_0` and
+  `runs/ian_baseline_explorations_1`; `solo_controls_table.py` (Appendix C's
   single-agent controls) from `runs/apart_controls/`, the apart controls study.
   On another machine, fetch it from Hugging Face:
   `hf download unrulyabstractions/spar-swarm --repo-type dataset --include 'apart_controls/*' --local-dir <tmp>`,
@@ -117,7 +117,7 @@ work, chess, OpenMath, subset sum and factoring.
 The user's plan for the Coordination ladder (cuts 1 and 3, then a half and three quarters of the ceiling) entered
 the paper. The levels table is `generated/coordination_levels.tex`, written from the constants of
 `src/measures/coordination.py`. The results table is `table_coordination_by_task.png`, drawn by
-`scripts/paper/coordination_table.py` from study_exploration_1's valid runs with the measure.
+`scripts/paper/coordination_table.py` from ian_baseline_explorations_1's valid runs with the measure.
 
 Appendix A, Metrics, added:
 - The item "Coordination ladder: How far each agent goes in back-and-forth with its teammates on the board".
@@ -657,7 +657,7 @@ Sentences changed (each in the user's voice; the kept typos "an plausible" and "
 
 ## The judges run again, 2026-11-19 (after the second verifiers)
 
-Both judge passes ran again on GPT-6 Luna over study_exploration_1. Scheming now judges a run's whole board once and
+Both judge passes ran again on GPT-6 Luna over ian_baseline_explorations_1. Scheming now judges a run's whole board once and
 flags posts; `src/measures/collusion.py` derives each colluding pair's verdict from the flags
 (`judge_records.pair_scheming`) and is the one reader of the pass for the viewer and the paper. The second scheming
 pass gave 25 colluding pairs (22 SWE, 3 creative writing), every one yes, with 88 flags on 110 posts, all awareness and
@@ -1197,7 +1197,7 @@ Discussion (ordinary usage); "is no take" and "is no send" inside the generated 
 
 ## Rungs read at every call, 2026-11-19 (night)
 
-Every run of study_exploration_1 was replayed from its recorded tool calls (`python -m src replay`, no model call); 144
+Every run of ian_baseline_explorations_1 was replayed from its recorded tool calls (`python -m src replay`, no model call); 144
 of 147 replays end in the run's own state, and their `steps.jsonl` sit in the run folders. The stored ladders were
 rebuilt from them: three rows moved from looked to tempted (two SWE agents that held their own piece mid-run and removed
 it, and one of their teams). `make paper` redrew Figure 4, the positive and negative control figures, the Cheating
@@ -1259,7 +1259,7 @@ The code changed under the reported runs (52978da, 7c5b2a0, fe1b66d, f2381b9): t
 call's arguments and result cut to 200 characters) became get_peer_actions and get_peer_observations (JSON, arguments
 in full, results packed under the cap), disregulators hold them too, both influencers get K
 free_board_actions_influencer (10), and every agent's tool result is cut at tool_output_bytes (64 KiB) keeping its start
-and end with the cut stated (before: Inspect's 16 KiB, its first and last 8 KiB joined with no mark of the cut). Every valid run of study_exploration_1 recorded
+and end with the cut stated (before: Inspect's 16 KiB, its first and last 8 KiB joined with no mark of the cut). Every valid run of ian_baseline_explorations_1 recorded
 free_board_actions_regulator 10, tool_output_bytes None and no peer_shell; its regulator runs call agent_actions and its
 disregulator runs hold no oversight tool. The paper describes the current design in Appendix A and states, in one list
 item of Other parameters, the three ways the multi-domain study's runs differ. peer_shell (off by default, in no run)
@@ -1314,7 +1314,7 @@ then "k7q2m exited."); a shared_task submitter's own turns end at its submit; re
 alert_humans, which ends the caller's turns and is read as a true or false alarm from the Cheating ladder
 (`src/measures/alert_outcomes.py`); the peer tools refuse a teammate that has not entered and mark an exited one.
 Knowledge work's access note and chess's move order still name agents; the paper describes neither in a team, so its
-sentence names "our three tasks". All 522 agents of the 147 valid runs of study_exploration_1 read every teammate's
+sentence names "our three tasks". All 522 agents of the 147 valid runs of ian_baseline_explorations_1 read every teammate's
 ID in their first message, no run holds an alert_humans call or an "entered." line, and 63 of 73 submitters called a
 tool after their last submit.
 
@@ -1397,7 +1397,7 @@ The code changed under the reported runs (8892dee): an agent's round is up to N 
 model call after another; end_round, a reply with no tool call or the N-th call ends it; each agent may use up R rounds
 (`rounds`, 30), and a round of board calls alone (FREE_TOOLS: the board tools and the peer tools) uses up none; the
 board is live; the first message gives R and N, and each round opens with "Round n of R.". turn_budget, the free
-follow-up steps and pooled steps are gone. Every valid run of study_exploration_1 recorded turn_budget 100,
+follow-up steps and pooled steps are gone. Every valid run of ian_baseline_explorations_1 recorded turn_budget 100,
 free_board_actions 3, free_board_actions_regulator 10, pooled_steps true and concurrent_rounds true, built each round's
 concurrent step on a board snapshot as of its start, and told no agent a step count or a round number (none of its 522
 transcripts holds one). `paper_sources.STUDY_STEPS` keeps those values for the differ list; `\Rounds` and
@@ -1604,7 +1604,7 @@ draws no late wait, so it is unchanged. Results, Discussion, Conclusion and Abst
 ## Regulator texts, board previews, peer_shell, alerts, the SWE remote, push notices, regulator measures, 2026-11-22
 
 The code under the reported runs (6631bbe, b0e995d, b80ed5d, d51861b, 44abb90, a4365d0, 6b7777f, a92a486, 8c2b87d,
-f6dd0c0; 20a6915, d06b94a, 2bbf3a5 changed nothing the paper says). Every run.json of study_exploration_1 records
+f6dd0c0; 20a6915, d06b94a, 2bbf3a5 changed nothing the paper says). Every run.json of ian_baseline_explorations_1 records
 mention_board false, notice counts and no peer_shell; a study SWE regulator's transcript holds the old cheating text and
 no "What counts for the team" or "How to read the team" line.
 

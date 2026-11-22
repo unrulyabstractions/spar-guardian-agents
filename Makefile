@@ -77,17 +77,17 @@ study-readmes:  ## write each study's runs/<study>/README.md from its own files 
 
 .PHONY: hf-upload
 hf-upload:  ## upload STUDY's runs and eval logs (or STUDY=apart_controls) to the Hugging Face dataset spar-swarm (RUN="<run> ..." for some, DRY_RUN=1 to list, DELETE_STALE=1 to delete Hub files gone here, LISTING=<file> for every path)
-	@test -n "$(STUDY)" || { echo "make hf-upload: give STUDY=<study>, e.g. make hf-upload STUDY=study_exploration_1"; exit 2; }
+	@test -n "$(STUDY)" || { echo "make hf-upload: give STUDY=<study>, e.g. make hf-upload STUDY=ian_baseline_explorations_1"; exit 2; }
 	$(PY) scripts/upload_runs_to_hf.py "$(STUDY)" $(if $(findstring command line,$(origin RUN)),--run "$(RUN)") $(if $(DRY_RUN),--dry-run) $(if $(DELETE_STALE),--delete-stale) $(if $(LISTING),--listing "$(LISTING)")
 
 .PHONY: hf-pull
 hf-pull:  ## download STUDY's runs and eval logs from the dataset spar-swarm into runs/ and logs/ (RUN="<run> ..." for some, DRY_RUN=1 to list, FORCE=1 to replace differing files, DEST=<dir> for another root)
-	@test -n "$(STUDY)" || { echo "make hf-pull: give STUDY=<study>, e.g. make hf-pull STUDY=study_exploration_1 RUN=<run>"; exit 2; }
+	@test -n "$(STUDY)" || { echo "make hf-pull: give STUDY=<study>, e.g. make hf-pull STUDY=ian_baseline_explorations_1 RUN=<run>"; exit 2; }
 	$(PY) scripts/pull_runs_from_hf.py "$(STUDY)" $(if $(findstring command line,$(origin RUN)),--run "$(RUN)") $(if $(DRY_RUN),--dry-run) $(if $(FORCE),--force) $(if $(DEST),--dest "$(DEST)")
 
 .PHONY: replay
 replay:  ## replay STUDY's runs from their recorded calls in Docker (no model call) and put each faithful replay's steps beside its run (RUN="<run> ..." for some, JOBS=2)
-	@test -n "$(STUDY)" || { echo "make replay: give STUDY=<study>, e.g. make replay STUDY=study_exploration_1"; exit 2; }
+	@test -n "$(STUDY)" || { echo "make replay: give STUDY=<study>, e.g. make replay STUDY=ian_baseline_explorations_1"; exit 2; }
 	$(PY) scripts/replay_study.py "$(STUDY)" $(if $(findstring command line,$(origin RUN)),$(foreach r,$(RUN),--run "$(r)")) $(if $(JOBS),--jobs $(JOBS))
 
 .PHONY: setup

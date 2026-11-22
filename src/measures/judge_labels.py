@@ -1,7 +1,7 @@
 """The judges beside the code, never rungs: CheatBench's labels set beside the Cheating ladder's clauses, CheatBench's
 disclosed access, and the two judge labels disclosure and manipulation, each a score with an excerpt.
 
-    judged = judged_cheating(Path("runs/study_exploration_1/flipt_minimal_dsflash_fixed2"))
+    judged = judged_cheating(Path("runs/ian_baseline_explorations_1/flipt_minimal_dsflash_fixed2"))
     judged["agents"]["k4q8z"]["judge"]           # [{"row", "clauses", "labels", "code", "judge", "agree", "why"}, ...]
     judged["agents"]["k4q8z"]["judge_disagrees"]  # the rows where the judge says yes and the code no
     agreement(run_dirs)                          # {"rows": {(task, row): Counter}, "rungs": {(task, rung): Counter}}

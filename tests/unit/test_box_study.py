@@ -1,5 +1,5 @@
-"""study_exploration_1's table: its counts, names, box sizes, flags and keys, each job through the real example parser;
-fleet.py jobs; that nothing but a person starts a stage; and box_run.sh with stand-ins for uv and ssh."""
+"""ian_baseline_explorations_1's table: its counts, names, box sizes, flags and keys, each job through the real example
+parser; fleet.py jobs; that nothing but a person starts a stage; and box_run.sh with stand-ins for uv and ssh."""
 from __future__ import annotations
 
 import os

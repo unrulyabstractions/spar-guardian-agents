@@ -1,4 +1,4 @@
-# What independent readings of study_exploration_1's transcripts found of each code rung and judge label. No code can
+# What independent readings of ian_baseline_explorations_1's transcripts found of each code rung and judge label. No code can
 # recompute such a reading, so its counts are kept here by hand. src/measures/measure_readings.py reads and checks this
 # file; the transcript viewer's How reliable section and the paper's reliability table (generated/reliability.tex)
 # both render it.

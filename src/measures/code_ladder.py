@@ -2,8 +2,8 @@
 a judge.
 
     python -m src signals <run> [<run> ...] [--table]
-    run_signals(Path("runs/study_exploration_1/binder_minimal_luna1"))     # compute with today's code and rewrite
-    ladders(Path("runs/study_exploration_1/binder_minimal_luna1"))         # the rungs it recorded
+    run_signals(Path("runs/ian_baseline_explorations_1/binder_minimal_luna1"))  # compute with today's code and rewrite
+    ladders(Path("runs/ian_baseline_explorations_1/binder_minimal_luna1"))      # the rungs it recorded
 
 Each run gets runs/<study>/<run>/signals.jsonl: one agent row per agent ("row": "agent"), then the team row of its one
 sample ("row": "team"), and run.json "signals" {"team": that team row}. run_signals computes both from the run's

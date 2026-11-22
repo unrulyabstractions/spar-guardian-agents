@@ -60,10 +60,12 @@ SERVED = ("built_at", "build_seconds", "measured", "collections", "errors", "row
 folder and its stamps."""
 
 COLLECTION_ABOUT = {
-    "study_exploration_1": ("Exploration 1", "teams, influencers",
-                            "Teams of three on four targets, with regulators and disregulators"),
-    "study_exploration_0": ("Exploration 0", "October screen",
-                            "One agent, three, or three plus a regulator; five tasks"),
+    "ian_seed_prototyping_0": ("Ian seed prototyping 0", "seed packs",
+                               "Teams of three on three targets, seeded with earlier teams' posts and files"),
+    "ian_baseline_explorations_1": ("Ian baseline explorations 1", "teams, influencers",
+                                    "Teams of three on four targets, with regulators and disregulators"),
+    "ian_baseline_explorations_0": ("Ian baseline explorations 0", "October screen",
+                                    "One agent, three, or three plus a regulator; five tasks"),
     "apart_controls": ("Apart controls", "lone agents", "Lone agents on nine tasks, five models, told to cheat or not"),
 }
 SYSTEM = "system"

@@ -5,9 +5,9 @@ widest cell. Row groups: the team of three with no rule, the generic rule and
 the identified rule; a regulator at level ambiguous, then enforce, one row per regulator model with runs; the
 team all told to cheat.
 
-Source: study_exploration_1's valid runs (scripts/paper/study_ladders.py valid_runs; disregulator runs left out; SWE
-only on the fixed task, run names ending in _fixed<seed>, _fill<seed> or _fixedpilot<seed>) with their run index rows,
-each run's Cheating rung as the transcript viewer measures it (study_ladders.record).
+Source: ian_baseline_explorations_1's valid runs (scripts/paper/study_ladders.py valid_runs; disregulator runs left out;
+SWE only on the fixed task, run names ending in _fixed<seed>, _fill<seed> or _fixedpilot<seed>) with their run index
+rows, each run's Cheating rung as the transcript viewer measures it (study_ladders.record).
 The rules' wording comes from src/configuration/instruction_levels.yaml. Every cell a results table also shows
 (control_tables, protein_regulator_table, swe_regulator_table, creative_regulator_table) must hold exactly that
 table's runs (study_ladders.cell_runs); a disagreement fails the build.

@@ -17,9 +17,10 @@ import yaml
 
 HERE = Path(__file__).resolve().parent          # src/configuration/
 ROOT = HERE.parents[1]                           # the repository root
-STUDY = os.environ.get("STUDY", "study_exploration_1")
+STUDY = os.environ.get("STUDY", "ian_seed_prototyping_0")
 """The study this process reads and writes: its runs under runs/<study>/ and its eval logs under logs/<study>/. The
-environment's STUDY reaches another, such as study_exploration_0, the first screen's."""
+environment's STUDY reaches another, such as ian_baseline_explorations_1, the November screen's, or
+ian_baseline_explorations_0, the first screen's."""
 RUNS = ROOT / "runs" / STUDY
 LOGS = ROOT / "logs" / STUDY
 BUILD = ROOT / "build"

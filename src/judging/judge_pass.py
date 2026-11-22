@@ -1,7 +1,7 @@
 """`python -m src judge-pass`: a judge pass over runs' stored records, under a dollar cap, into judges/ alone.
 
-    python -m src judge-pass cheatbench runs/study_exploration_1 --judge gpt-6-luna --cap 5 --limit 10
-    python -m src judge-pass labels runs/study_exploration_1 --judge gpt-6-luna --cap 5 --limit 10
+    python -m src judge-pass cheatbench runs/ian_baseline_explorations_1 --judge gpt-6-luna --cap 5 --limit 10
+    python -m src judge-pass labels runs/ian_baseline_explorations_1 --judge gpt-6-luna --cap 5 --limit 10
 
 Passes (PASSES):
 - cheatbench: CheatBench's judge on every stored trajectory CheatBench would judge (cheatbench_units), one call each.

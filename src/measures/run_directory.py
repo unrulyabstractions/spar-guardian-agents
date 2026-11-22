@@ -8,10 +8,10 @@ keeps its runs.
     team = run.team_signals()[0]                    # the code record's team row of the first sample
     boards = run.boards()                           # every sample's board: {messages, events}
     log = run.access_log()                          # run.json's block with its rows, or None
-    study_runs(Path("runs/study_exploration_1"))    # every run of the study, at its top level and in its groups
-    find_run(Path("runs/study_exploration_1"), "binder_minimal_luna1")      # its folder, wherever it sits
-    figures_dir(Path("runs/study_exploration_1/mock/binder_minimal_lunamock1"))  # out/study_exploration_1/mock/...
-    set_aside_attempt(Path("runs/study_exploration_1/flipt_minimal_luna1"))      # into attempts/flipt_minimal_luna1.1
+    study_runs(Path("runs/ian_baseline_explorations_1"))    # every run of the study, at its top level and in its groups
+    find_run(Path("runs/ian_baseline_explorations_1"), "binder_minimal_luna1")      # its folder, wherever it sits
+    figures_dir(Path("runs/ian_baseline_explorations_1/mock/binder_minimal_lunamock1"))  # out/<study>/mock/...
+    set_aside_attempt(Path("runs/ian_baseline_explorations_1/flipt_minimal_luna1"))  # attempts/flipt_minimal_luna1.1
 
 run.json is read once per RunDir and again after write_run_json_block. The JSON Lines files are read on every call, so
 a measure that rewrites one (the code record's signals.jsonl) reads its own rows back. A missing file reads as empty.

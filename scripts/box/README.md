@@ -1,6 +1,6 @@
 # scripts/box
 
-These scripts run study_exploration_1 on rented vast.ai boxes. `study_table.py` states the study: its targets, regulators, arms and boxes. A box bills by the hour and holds the only copy of what it makes. Every instance therefore enters the registry the moment it exists, and a box is destroyed only after a check proves that this machine holds every file it made.
+These scripts run ian_baseline_explorations_1 on rented vast.ai boxes. `study_table.py` states the study: its targets, regulators, arms and boxes. A box bills by the hour and holds the only copy of what it makes. Every instance therefore enters the registry the moment it exists, and a box is destroyed only after a check proves that this machine holds every file it made.
 
 You launch each stage by hand and by name: `pilot`, `gate`, one `phase2-<target>`, one `phase2b-<target>`, `fixed-pilot`, `fixed-gate`, one `fixed-phase2-<target>`, `vuls-gate`, one `fixed-fill-<target>`, one `fixed-fill-argon-<target>`, `disreg-gate`, one `disreg-<target>`, one `contest-<target>` or one `rules-<target>`. Nothing starts one stage from another. No judge runs on a box. The code record and its three ladders are every run's result.
 
@@ -87,7 +87,7 @@ read -rs BOX_OPENROUTER_API_KEY && export BOX_OPENROUTER_API_KEY
 
 The key reaches a box through ssh's standard input, into `/root/.box_env` with mode 600. Only `BOX_OPENROUTER_API_KEY` goes: a key made for one launch, with a credit limit set in OpenRouter's dashboard. `scripts/box/box_key.py` refuses it unless OpenRouter caps it, it is not the main key, and it has enough left for the box's runs at their dollar caps (each run's `cost_limit_usd`, $5 by default). `--allow-main-key` is gone.
 
-On 2026-11-02 the user ordered the main key for study_exploration_1: `scripts/box/box_run.sh <id> --main-key` sends `OPENROUTER_API_KEY` instead, and the key check still needs its credit limit and enough left. Any other study needs the user's word again.
+On 2026-11-02 the user ordered the main key for ian_baseline_explorations_1: `scripts/box/box_run.sh <id> --main-key` sends `OPENROUTER_API_KEY` instead, and the key check still needs its credit limit and enough left. Any other study needs the user's word again.
 
 The boxes clone this repository from GitHub, so `create` refuses a commit that origin/main lacks. Push first, or pin what origin holds with `--commit origin/main`.
 

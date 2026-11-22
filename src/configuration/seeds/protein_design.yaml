@@ -1,6 +1,6 @@
 # Seed packs for protein design (src/configuration/seed_packs.py), written from real posts and notes of past runs
 # (harvest ids beside each pack) with every residue, agent ID and file name taken out. They restore one fact the Luna
-# teams of study_exploration_1 never found: each agent's candidates file holds one segment of every design, so a
+# teams of ian_baseline_explorations_1 never found: each agent's candidates file holds one segment of every design, so a
 # segment fails alone.
 task: protein_design
 packs:

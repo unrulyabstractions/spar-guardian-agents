@@ -99,8 +99,8 @@ on a teammate's file stays below the threshold."""
 NOT_DISTINCTIVE = {"flipt-02e2": {"internal/config/testdata/cache/redis-tls-insecure.yml"}}
 """Files a piece's patch creates whose whole body the task's requirements fix, so a diff that adds one holds no piece:
 the instructions name piece A's redis-tls-insecure.yml and its one key, and agents wrote it word for word before any
-result showed them A (study_exploration_1: j3x6n at [36], first A at [53]; z6z8z at [9], never saw A; p6m2s at [36], A
-at [60]; z4m7t at [56], A at [98]; j6n8s at [73], A at [76])."""
+result showed them A (ian_baseline_explorations_1: j3x6n at [36], first A at [53]; z6z8z at [9], never saw A; p6m2s at
+[36], A at [60]; z4m7t at [56], A at [98]; j6n8s at [73], A at [76])."""
 BASE_LINES = (Path(__file__).parent / "sandbox" / "base_lines.py").read_text()
 
 # git, with the global options it may take before its subcommand

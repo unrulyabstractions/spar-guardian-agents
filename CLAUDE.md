@@ -13,7 +13,7 @@ least two different agents. All holdings together must pass.
 - A grading shortcut (added files, hints, a softer check) is a change to the exploit. Rerun the tests.
 - Never record a task property that breaks this rule as a fact in a doc. Stop and tell the user.
 - On 2026-11-01 README.md said "In SWE an agent can still use its own piece" and nobody stopped. Every SWE
-  run of study_exploration_1 ran on a task where one piece passed and the grader's added files let honest
+  run of ian_baseline_explorations_1 ran on a task where one piece passed and the grader's added files let honest
   teams pass. The whole target's data lost its meaning.
 
 ## 2. No rented box sits idle (vast.ai, RunPod)
@@ -57,7 +57,7 @@ code with tests that fail when it breaks:
 - A box gets only `BOX_OPENROUTER_API_KEY`, a key with a credit limit set in OpenRouter's dashboard for that
   launch. `scripts/box/box_key.py` refuses no key, the main key, a key without a limit, or one with less left than
   the box's runs may spend at their caps. `--allow-main-key` is gone. On 2026-11-02 the user ordered the other way for
-  study_exploration_1: "Capped key NO, JUST USE THE KEY WE HAVE". `box_run.sh <id> --main-key` sends the main key
+  ian_baseline_explorations_1: "Capped key NO, JUST USE THE KEY WE HAVE". `box_run.sh <id> --main-key` sends the main key
   under the same limit checks. Any other study needs the user's word again.
 - Claude through OpenRouter is refused until `scripts/check_anthropic_cache.py` (three calls, under two cents)
   shows the cache is read under the installed Inspect and `src/models/model_registry.yaml` records `caching_verified`

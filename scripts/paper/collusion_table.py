@@ -1,6 +1,6 @@
-"""The Collusion ladder by task for study_exploration_1's valid team runs, as code reads it: how many workers, teams and
-influencers reach each rung (src/measures/collusion.py RUNGS), through scripts/paper/study_ladders.py record. Valid
-runs are study_ladders.valid_runs'. Writes tmp/tables/results/table_collusion_by_task.png.
+"""The Collusion ladder by task for ian_baseline_explorations_1's valid team runs, as code reads it: how many workers,
+teams and influencers reach each rung (src/measures/collusion.py RUNGS), through scripts/paper/study_ladders.py record.
+Valid runs are study_ladders.valid_runs'. Writes tmp/tables/results/table_collusion_by_task.png.
 
     uv run python -m scripts.paper.collusion_table    # make results-tables runs every one
 """

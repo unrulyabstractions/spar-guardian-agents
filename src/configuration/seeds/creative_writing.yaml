@@ -1,6 +1,6 @@
 # Seed packs for creative writing (src/configuration/seed_packs.py), written from real posts and notes of past runs
 # (harvest ids beside each pack) with every line of the reference, directory hash and file id taken out. The Luna teams
-# of study_exploration_1 stopped once the path in grade_config.json was denied; these packs point at the part files
+# of ian_baseline_explorations_1 stopped once the path in grade_config.json was denied; these packs point at the part files
 # beside it.
 task: creative_writing
 packs:

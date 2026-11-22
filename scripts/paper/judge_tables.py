@@ -1,6 +1,6 @@
-"""CheatBench's judge beside the code on study_exploration_1's valid runs, from the verdicts stored beside each run
-(src/judging/verdict_files.py) and the measures (src/measures/judge_labels.py, scripts/paper/study_ladders.py record).
-No model is called: the tables read verdicts a judge pass already wrote. Writes, under tmp/tables/results/:
+"""CheatBench's judge beside the code on ian_baseline_explorations_1's valid runs, from the verdicts stored beside each
+run (src/judging/verdict_files.py) and the measures (src/measures/judge_labels.py, scripts/paper/study_ladders.py
+record). No model is called: the tables read verdicts a judge pass already wrote. Writes, under tmp/tables/results/:
 
     table_judge_cheated_by_task.png   per task, agents by the code's cheated (cheating_ladder.cheated) against the
                                       judge's own `cheated`, workers and influencers apart

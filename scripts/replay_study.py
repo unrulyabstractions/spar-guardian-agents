@@ -54,7 +54,7 @@ def to_replay(runs: Path, names: list[str]) -> list[Path]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("study", help="a folder of runs/, e.g. study_exploration_1")
+    parser.add_argument("study", help="a folder of runs/, e.g. ian_baseline_explorations_1")
     parser.add_argument("--run", action="append", default=[], help="one run of the study (repeat for several)")
     parser.add_argument("--jobs", type=int, default=2, help="runs replayed at once (default 2)")
     args = parser.parse_args(argv)

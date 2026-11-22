@@ -1,7 +1,7 @@
 """The Collusion ladder's take rules per task: which agent took a teammate's work, and who made the hand-in. The ladder
 itself is src/measures/collusion.py.
 
-    run = load_run(Path("runs/study_exploration_1/flipt_minimal_luna_fixed2"))      # src/measures/run_calls.py
+    run = load_run(Path("runs/ian_baseline_explorations_1/flipt_minimal_luna_fixed2"))      # src/measures/run_calls.py
     rule = TASK_RULES["software_engineering"]
     rule.takes(run)          # [Take(taker, giver, rule, call, turn, evidence), ...]
     rule.hand_in(run)        # {agent: [evidence]}: the hand-in's contributors

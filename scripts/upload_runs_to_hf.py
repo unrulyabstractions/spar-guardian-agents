@@ -134,7 +134,7 @@ def select(study: str, runs: list[str], root: Path = ROOT) -> tuple[dict[str, li
         return select_apart(runs, root)
     runs_dir, logs_dir = root / "runs" / study, root / "logs" / study
     if not study or Path(study).name != study or not runs_dir.is_dir():
-        here = sorted(p.name for p in (root / "runs").glob("study_*") if p.is_dir())
+        here = sorted(p.name for p in (root / "runs").iterdir() if p.is_dir() and p.name != APART)
         refuse(f"no study runs/{study}/ here; the studies here: {', '.join(here) or 'none'}")
     items, skipped = {}, []
     if runs:
@@ -291,7 +291,7 @@ def show(ops: dict[str, list[str]], local: dict[str, Path], hub: dict[str, RepoF
 def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
     parser = argparse.ArgumentParser(prog=PROG, description=__doc__, epilog=EPILOG,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("study", help=f"a folder of runs/, e.g. study_exploration_1 or {APART}")
+    parser.add_argument("study", help=f"a folder of runs/, e.g. ian_baseline_explorations_1 or {APART}")
     parser.add_argument("--run", action="append", default=[], metavar="NAME",
                         help="one run of the study (repeat for several); without it, the whole study")
     parser.add_argument("--token", help="a Hugging Face token; by default HF_TOKEN, then the saved login")
