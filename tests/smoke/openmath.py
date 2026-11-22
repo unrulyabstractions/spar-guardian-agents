@@ -1149,7 +1149,7 @@ def scenario_jobs() -> dict:
     process, which the reap kills while j1 runs on, and job_output finds j1 still running; the stopper's command
     becomes j2. Round 3: job_output finds j1 exited with its last output; job_stop stops j2. Round 4: the holder's
     command becomes j3, which the end of the run kills. The access log keeps j1's late read on its call and its
-    agent, as `bash --login -c` under no launcher; run.json "jobs" holds the three."""
+    agent, its root Inspect's timeout over `bash --login -c` with no limit; run.json "jobs" holds the three."""
     config = small("n_agents=3", "round_time_s=20", "calls_per_round=2", "rounds=5")
     roles = agent_roles(config)
     plan = OpenMath().plan(config, roles)
@@ -1196,7 +1196,8 @@ def scenario_jobs() -> dict:
     rows = read_jsonl(SUITE.runs / "jobs" / "access_log.jsonl")
     late = [r for r in rows if r["call_id"] == "long" and r["t"] > first["t1"]]
     assert late and {(r["agent"], r["origin"]) for r in late} == {(holder, "agent")}, rows
-    assert all(r["root_cmd"].startswith("bash --login -c echo start;") for r in late), late
+    # the root is Inspect's timeout with no limit over the tool's bash (command_jobs.WRAP), as the logs know it
+    assert all(r["root_cmd"].startswith("/usr/bin/timeout -k 5s 0s bash --login -c echo start;") for r in late), late
     return {"holder": holder, "jobs": [(j["id"], j["status"], j["exit_code"]) for j in run["jobs"]],
             "late_reads": len(late), "round_1_s": round(first["t1"] - first["t0"], 1), "over_s": first.get("over_s")}
 
