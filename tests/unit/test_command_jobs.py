@@ -12,6 +12,8 @@ import secrets
 import signal
 import subprocess
 import time
+from collections.abc import Callable
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -117,7 +119,7 @@ def test_a_command_still_running_when_its_round_runs_out_becomes_a_job(jobs):
             ("a01", "shell", "running", None, None)
         assert record["command"] == "echo early; sleep 2.5; echo late >&2; echo done" and record["bytes"]["out"] == 6
         assert await command_jobs.job_output("a01", "j1", CAP) == f"{JOBS['running'].format(job='j1')} {JOBS['no_new']}"
-        await asyncio.sleep(2.0)
+        await until(command_jobs.owned("a01", "j1").task.done)
         assert await command_jobs.job_output("a01", "j1", CAP) == \
             f"{JOBS['exited'].format(job='j1', code=0)} {JOBS['new']}\nlate\n\ndone\n"
         record = jobs.store[rules.JOBS_STORE]["j1"]
@@ -141,7 +143,7 @@ def test_a_jobs_recorded_end_follows_its_last_action(jobs, tmp_path):
             stamp = f"python3 -c 'import time; open(\"{stamps}\", \"a\").write(repr(time.time()) + \"\\n\")'"
             outcome = await command(jobs, f"sleep 0.4; {stamp}; exit 3")
             assert outcome.job is not None
-            await asyncio.sleep(1.0)
+            await until(command_jobs.owned("a01", outcome.job).task.done)
             await command_jobs.job_output("a01", outcome.job, CAP)
         for number, last in enumerate(stamps.read_text().split(), 1):
             record = jobs.store[rules.JOBS_STORE][f"j{number}"]
@@ -177,7 +179,7 @@ def test_the_end_of_the_run_kills_every_job_still_running(jobs):
         first = await command(jobs, "sleep 0.5; echo ok")
         second = await command(jobs, "sleep 30", agent="a02")
         assert (first.job, second.job) == ("j1", "j2")
-        await asyncio.sleep(1.0)
+        await until(command_jobs.owned("a01", "j1").task.done)
         records = await command_jobs.end_jobs()
         assert [(r["id"], r["agent"], r["status"]) for r in records] == [("j1", "a01", "exited"),
                                                                           ("j2", "a02", "killed")]
@@ -219,25 +221,52 @@ def leftovers(token: str) -> list[int]:
     return [int(pid) for pid in out.split()]
 
 
+WAIT_S = 30.0
+"""The longest a test waits for a condition. Each wait ends as soon as its condition holds, so a loaded machine only
+makes the test slower, never wrong; a condition that never holds fails the assertion after it."""
+
+
+async def until(holds: Callable[[], bool]) -> None:
+    """Wait until holds() is true, or WAIT_S passed."""
+    end = time.monotonic() + WAIT_S
+    while not holds() and time.monotonic() < end:
+        await asyncio.sleep(0.05)
+
+
+def kill_leftovers(*tokens: str) -> None:
+    """The test's cleanup: SIGKILL what is left of its tokens. A process listed may end before its kill (a collector at
+    its last look, a process the reap killed still dying), which is what the cleanup wants."""
+    for pid in [pid for token in tokens for pid in leftovers(token)]:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
 async def settled(token: str, keep: int = 0) -> list[int]:
-    """leftovers(token) once at most `keep` are left, or after 3 s: a job's collector ends at its next look, and a
+    """leftovers(token) once at most `keep` are left, or after WAIT_S: a job's collector ends at its next look, and a
     process the stop missed stays."""
-    for _ in range(30):
-        if len(found := leftovers(token)) <= keep:
-            return found
-        await asyncio.sleep(0.1)
-    return found
+    await until(lambda: len(leftovers(token)) <= keep)
+    return leftovers(token)
 
 
-def background(token: str) -> str:
+def background(token: str, hold: Path | None = None) -> str:
     """A command that leaves four processes behind in four ways and then exits: a background subshell, nohup, a
-    process in a session of its own (its parent alive past the collector's next look) and disown."""
+    process in a session of its own and disown. The collector finds the one in a session of its own through its
+    parent, the command, so the command waits until the collector has recorded it in the call's `procs` before it
+    exits, however late the collector's look comes. With `hold` it also waits until that file exists, so the test
+    decides when it exits. Each wait lasts WAIT_S at most."""
+    procs = f'"{command_jobs.JOBS_DIR}"/*/procs'
+    tries = int(WAIT_S / 0.05)
+    held = f'for _ in $(seq {tries}); do [ -e "{hold}" ] && break; sleep 0.05; done; ' if hold else ""
     return (f"( sleep {token}1 ) & nohup sleep {token}2 >/dev/null 2>&1 & "
-            f"python3 -c 'import os, time; os.setsid(); time.sleep({token}3)' >/dev/null 2>&1 & "
-            f"sleep {token}4 & disown; sleep 0.6; echo left")
+            f"python3 -c 'import os, time; os.setsid(); time.sleep({token}3)' >/dev/null 2>&1 & own=$!; "
+            f"sleep {token}4 & disown; "
+            f"for _ in $(seq {tries}); do grep -qs \"\\\"$own\\\"\" {procs} && break; sleep 0.05; done; "
+            f"{held}echo left")
 
 
-def test_what_a_job_left_running_dies_at_job_stop_and_at_the_end_of_the_run(jobs):
+def test_what_a_job_left_running_dies_at_job_stop_and_at_the_end_of_the_run(jobs, tmp_path):
     """A job that starts background processes and exits leaves them running; job_stop kills them and the job stays
     exited, and the end of the run kills another job's. A process that is no job's (another agent's, the harness's)
     and another agent's job still running are untouched."""
@@ -246,11 +275,15 @@ def test_what_a_job_left_running_dies_at_job_stop_and_at_the_end_of_the_run(jobs
 
     async def scenario():
         jobs.deadline = time.time()
-        a = await command(jobs, background(first))
-        b = await command(jobs, background(second), agent="a02")
+        go = tmp_path / "go"
+        a = await command(jobs, background(first, hold=go))
+        b = await command(jobs, background(second, hold=go), agent="a02")
         c = await command(jobs, f"sleep {other}8", agent="a03")
         assert (a.job, b.job, c.job) == ("j1", "j2", "j3")
-        await asyncio.sleep(1.5)
+        go.touch()
+        ab = [command_jobs.owned("a01", "j1"), command_jobs.owned("a02", "j2")]
+        await until(lambda: all(j.task.done() for j in ab) and len(leftovers(first)) >= 4
+                    and len(leftovers(second)) >= 4)
         assert len(leftovers(first)) >= 4 and len(leftovers(second)) >= 4      # the subshell may stay a bash of its own
         answer = await command_jobs.job_stop("a01", "j1", CAP)
         assert answer.startswith(JOBS["exited"].format(job="j1", code=0))
@@ -263,8 +296,7 @@ def test_what_a_job_left_running_dies_at_job_stop_and_at_the_end_of_the_run(jobs
     try:
         asyncio.run(scenario())
     finally:
-        for pid in leftovers(first) + leftovers(second) + leftovers(other):
-            os.kill(pid, signal.SIGKILL)
+        kill_leftovers(first, second, other)
 
 
 def test_the_rounds_reap_kills_what_its_calls_left_and_spares_its_running_job(jobs):
@@ -281,7 +313,7 @@ def test_the_rounds_reap_kills_what_its_calls_left_and_spares_its_running_job(jo
         jobs.deadline = time.time()
         long = await command(jobs, f"sleep {kept}7 & sleep {kept}8")
         assert long.job == "j1"
-        await asyncio.sleep(1.0)
+        await until(lambda: len(leftovers(done)) >= 4 and len(leftovers(kept)) >= 2)
         assert len(leftovers(done)) >= 4 and len(leftovers(kept)) >= 2
         first = await command_jobs.reap_round("a01", jobs.box, None)
         assert first["calls"] == 1                    # its group dies at once; killed names the members left after it
@@ -294,8 +326,7 @@ def test_the_rounds_reap_kills_what_its_calls_left_and_spares_its_running_job(jo
     try:
         asyncio.run(scenario())
     finally:
-        for pid in leftovers(done) + leftovers(kept) + leftovers(other):
-            os.kill(pid, signal.SIGKILL)
+        kill_leftovers(done, kept, other)
 
 
 def test_a_sealed_call_keeps_no_output_on_its_machine(jobs, tmp_path):
@@ -316,7 +347,7 @@ def test_a_sealed_call_keeps_no_output_on_its_machine(jobs, tmp_path):
         kept = await run("echo SEALMARK-out; echo SEALMARK-err >&2; wc -c | tr -d ' '; sleep 2; echo SEALMARK-late")
         assert kept.job == "j1" and kept.text.endswith(f"{JOBS['so_far']}\nSEALMARK-err\n\nSEALMARK-out\n0\n"), kept
         assert b"SEALMARK" not in on_disk() and len(on_disk()) > 0
-        await asyncio.sleep(2.5)
+        await until(command_jobs.owned("a01", "j1").task.done)
         assert b"SEALMARK" not in on_disk()
         assert await command_jobs.job_output("a01", "j1", CAP) == \
             f"{JOBS['exited'].format(job='j1', code=0)} {JOBS['new']}\nSEALMARK-late\n"
