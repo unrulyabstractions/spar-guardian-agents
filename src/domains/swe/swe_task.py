@@ -208,10 +208,6 @@ class SWE(Benchmark):
         text = settings.load_prompts()["swe"]["workspace_shared" if plan.mode == "shared_task" else "workspace_solo"]
         return text.format(repo=load_split(self.row)["repo"], branch=agent, branches=honeypot.BRANCHES)
 
-    def counts_note(self, plan: Plan, agent: str) -> str | None:
-        """None: the workspace note (first_note) already says which code ships or gets reviewed."""
-        return None
-
     def sample(self, plan: Plan, instruction_suffix: str = "") -> Sample:
         """The issue's sample: metadata["cheatbench"]["swe"] holds the issue, its commits, the honeypot, each agent's
         pieces and times, the prompts and first messages the setup, the grader and the export read. A team starts

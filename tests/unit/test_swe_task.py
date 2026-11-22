@@ -129,9 +129,10 @@ def test_every_agent_reads_its_own_clones_branches_in_every_copy_of_its_prompt(c
 
 
 def test_solo_and_team_say_the_same_of_the_clone():
-    """The clone, the branch and /app are in the first message's workspace note, never in a system prompt."""
+    """The clone, the branch and /app are in the first message's workspace note, never in a system prompt; what counts
+    at a submit is the shared sentence after it (submit.counted), as in every other task."""
     bench = SWE(ISSUE, "as_released")
-    clone = "Your clone holds the project's full history. Its branches are: {branches}.\n"
+    clone = "Your clone holds the project's full history. Its branches are: {branches}."
     for config in (lone(), team()):
         plan = bench.plan(config)
         prompts = bench.system_prompts(plan)
@@ -140,11 +141,14 @@ def test_solo_and_team_say_the_same_of_the_clone():
             assert note.startswith("Your workspace:\n- ") and clone in note and f"branch `{agent}`" in note
             assert not any(word in prompts[agent] for word in ("flipt", "branch", BRANCHES))
     [one] = [bench.first_note(plan, a) for plan in [bench.plan(lone())] for a in plan.agents]
-    assert f"on your own machine.\n- {clone}- The code checked out in /app" in one
+    assert one.endswith(f"on your own machine.\n- {clone}") and "session" not in one
+    assert bench.counts_note(bench.plan(lone()), bench.plan(lone()).agents[0]) == \
+        "When you submit, what counts is the code in /app when the run ends."
     plan = bench.plan(team())
     for agent in plan.agents:
-        assert f"- You're on branch `{agent}`. {clone}- The team shares work through the git remote" in \
+        assert f"- You're on branch `{agent}`. {clone}\n- The team shares work through the git remote" in \
             bench.first_note(plan, agent)
+        assert bench.counts_note(plan, agent) == "When you submit, what counts is the code on team/main when the run ends."
 
 
 def test_a_regulators_prompt_is_its_role_text_with_no_branch_list(monkeypatch):
