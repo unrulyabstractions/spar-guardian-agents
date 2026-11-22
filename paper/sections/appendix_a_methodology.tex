@@ -165,9 +165,12 @@ The first user message gives its value after the rounds' values.
 For example, a worker's system prompt says that a hand-in ends the run a set number of rounds later.
 Its first user message says ``A submit ends the run \SubmitDelayRounds{} rounds after the round of the call.''
 An agent that enters late reads the rounds it has left instead.
-Each round opens with a user message such as ``Round 3 of \Rounds. You have \the\numexpr\Rounds-2\relax{} rounds
+Each round opens with one user message.
+It starts with a line such as ``Round 3 of \Rounds. You have \the\numexpr\Rounds-2\relax{} rounds
 left, including this one. Up to \CallsPerRound{} tool calls this round.''
 The first number is the run's round, the same for every agent present.
+The message then says which peers entered or exited since the agent's last round.
+It ends with what changed on the board.
 
 \begin{figure}[htbp]
   \centering
@@ -185,8 +188,9 @@ The first number is the run's round, the same for every agent present.
 Agents learn of their peers from the conversation.
 No system prompt on our three tasks names a peer.
 A worker's system prompt says that it works with a team on the same task.
-When an agent \textbf{enters} the run, every other agent reads a user message such as ``k7q2m entered.'' before its
-next round.
+When an agent \textbf{enters} the run, every other agent reads a line such as ``k7q2m entered.'' in the message
+that opens its next round.
+Agents that enter together share one line, such as ``k7q2m and t4x9n entered.''
 Influencers are announced like workers, with no role shown.
 An agent \textbf{exits} when it submits, stops working or runs out of rounds.
 Every peer still present then reads why, such as ``k7q2m stopped working (stop\_working).''

@@ -1678,3 +1678,30 @@ code now credits a post with a piece only where its poster held or had seen it, 
 post on the board that holds a piece does not by itself make an agent attempted.", the generated Cheating rungs table
 and the SWE column of the rungs-by-task figures (`ladder_by_domain.py`, unchanged by bc6ec5a), Results, Discussion,
 Conclusion and Abstract.
+
+## One user message per round, 2026-11-22
+
+The code (acdb786): at the start of each round an agent gets one user message, each part its own paragraph: the
+round's line, the presence lines (who entered and left, alerts, holds, pushes; entries in a row as one sentence,
+"a and b entered."), then the board's posts since the agent last looked ("Posts on the board: ..." in its first round,
+"Since your last round the board changed: ..." later). Before, each was its own user message and the board notice
+reached the provider only. The notice inside a round, after a tool call, keeps its text and place. `make paper` at
+c619e3d plus this change changed no generated file or figure under paper/.
+
+Sentences changed (old, then new), all in Appendix A:
+- Rounds: "Each round opens with a user message such as ``Round 3 of \Rounds. ...''" became "Each round opens with one
+  user message. It starts with a line such as ``Round 3 of \Rounds. ...''"; after "The first number is the run's
+  round, the same for every agent present." added "The message then says which peers entered or exited since the
+  agent's last round. It ends with what changed on the board."
+- Entries and exits: "every other agent reads a user message such as ``k7q2m entered.'' before its next round." became
+  "every other agent reads a line such as ``k7q2m entered.'' in the message that opens its next round."; added "Agents
+  that enter together share one line, such as ``k7q2m and t4x9n entered.''"
+
+Checked and unchanged: Communication's "Before each model call, agents are informed of the number of new messages on
+the board since their last call" (the round's message carries the posts since the agent last looked, the notice inside
+a round those since its last call), Figure 6's caption, the influencers' push line and "Every peer reads ``k7q2m has
+alerted humans.'' once, before its next round." (both now in the presence part of the next round's message), the
+differ list ("No message announced an entry or an exit." and "No message gave the number of steps or opened a round."
+hold for the study runs), Results, Discussion, Conclusion and Abstract.
+
+Built in `worktree/paper-one-message` with runs/, logs/, OLD/, build/ and .venv linked from the main tree.
