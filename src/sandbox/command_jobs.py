@@ -7,36 +7,41 @@
     await end_jobs()                                      # the first scorer: every job still running is killed
 
 Every command tool (shell and run_python, a lone agent's bash and python, an influencer's peer_shell) runs its command
-here. The call waits for its command until its round's time runs out (turn_rules.round_deadline: the round's start
-plus SwarmConfig.round_time_s). Once that has passed, the round has one late wait of LATE_START_S, from the start of its
-first call past the deadline: that call and every later call of the round (the calls of one reply run one after
-another) wait only for what is left of it (late_wait), so a reply of k long calls ends its round at T plus one wait,
-not k. A command that ends in time
-returns as it did under Inspect's exec: stderr, a newline, then stdout, the last KEEP_BYTES of each stream, which the
-tool output cap then cuts. A command still running then becomes a job: it keeps running, the call returns its job id
-and its output so far (prompts.yaml jobs.kept) within the agent's cap, and the round ends on time. job_output returns
-the job's new output since the agent's last read and whether it still runs; once it has exited, the exit code.
-job_stop kills it. Both count like shell (they are no board call). A job is its owner's alone: another agent's id
-reads "no such job". end_jobs kills every job still running when the agents stop, before the access log's capture and
-the graders, and the sample store's JOBS_STORE holds each job's record, which run.json "jobs" carries: {id, agent,
-tool, machine, call_id, command, started, ended, status (running, exited, stopped, killed), exit_code, bytes {out,
-err}}.
+here. The call waits for its command until its round's time runs out (turn_rules.round_deadline: the round's start plus
+SwarmConfig.round_time_s). Once that has passed, the round has one late wait of LATE_START_S, from the start of its
+first call past the deadline: that call and every later call of the round (the calls of one reply run one after another)
+wait only for what is left of it (late_wait), so a reply of k long calls ends its round at T plus one wait, not k. A
+command that ends in time returns as it did under Inspect's exec: stderr, a newline, then stdout, the last KEEP_BYTES of
+each stream, which the tool output cap then cuts. A command still running then becomes a job: it keeps running, the call
+returns its job id and its output so far (prompts.yaml jobs.kept) within the agent's cap, and the round ends on time.
+job_output returns the job's new output since the agent's last read and whether it still runs; once it has exited, the
+exit code. job_stop kills it and every process it started, those it left running after it exited included. Both count
+like shell (they are no board call). A job is its owner's alone: another agent's id reads "no such job". end_jobs kills
+every job still running when the agents stop, and every process a job left running, before the access log's capture and
+the graders, and the sample store's JOBS_STORE holds each job's record, which run.json "jobs" carries: {id, agent, tool,
+machine, call_id, command, started, ended, status (running, exited, stopped, killed), exit_code, bytes {out, err}}.
 
 How a command runs. One exec per call, as root: LAUNCH makes the call's directory under JOBS_DIR (mode 700, root's,
 outside /tmp and every workspace, so neither a teammate nor a /tmp snapshot sees it), writes its pid, starts a
-collector, gives the command the user, the working directory and the environment Inspect's exec would (docker gives
-the passwd home as HOME, "/" for a uid with no entry, and the exec's umask), and replaces itself with the command.
-The exec's root process is therefore `/usr/bin/timeout -k 5s 0s bash --login -c <command>`, Inspect's own wrapper with
-its timeout disabled (WRAP), as before but for the duration: the access log and the network log name its origin, its
-agent and its call as they did (exec_digest of the same argv). The exec leads a session of its own (docker makes every
-exec a session leader), so the reaps after each command (sandbox_hygiene.REAP, peer_shell.REAP) spare the session of
-every call still running, a job's included, through the pid file, and STOP kills a job by its session. The collector, a
-detached root process, copies the command's stdout and stderr from two pipes to `out` and `err` in that directory and
-keeps the last KEEP_BYTES of each (Inspect keeps as much of a stream); `meta` holds each stream's total and the bytes
-dropped from its front, and `done` once both pipes closed. READ prints a stream's bytes from an offset: its stderr the
-command's stderr, its stdout the command's stdout then a line of JSON. The exec of the command holds no subprocess
-slot of Inspect's (concurrency=False) and counts as no known work of the sample's working time: the call does while
-it waits.
+collector, gives the command the user, the working directory and the environment Inspect's exec would (docker gives the
+passwd home as HOME, "/" for a uid with no entry, and the exec's umask), and replaces itself with the command. The
+exec's root process is therefore `/usr/bin/timeout -k 5s 0s bash --login -c <command>`, Inspect's own wrapper with its
+timeout disabled (WRAP), as before but for the duration: the access log and the network log name its origin, its agent
+and its call as they did (exec_digest of the same argv). The exec leads a session of its own (docker makes every exec a
+session leader), so the reaps after each command (sandbox_hygiene.REAP, peer_shell.REAP) spare the session of every call
+still running, a job's included, through the pid file. The exec's root is a child subreaper (PR_SET_CHILD_SUBREAPER,
+kept across exec), so a process whose parent dies stays the root's child while the job runs. The collector, a detached
+root process, copies the command's stdout and stderr from two pipes to `out` and `err` in that directory and keeps the
+last KEEP_BYTES of each (Inspect keeps as much of a stream); `meta` holds each stream's total and the bytes dropped from
+its front, and `done` once both pipes closed. Every POLL_S it also looks at the machine's process table (PROCS) and
+keeps in `procs` every process of the job: the root, each child of one, and each process in the root's session or
+process group, so a background process, nohup, disown and a process in a session of its own whose parent is a member are
+all the job's. It goes on looking after the pipes close, until no member is left. STOP kills every member, the group
+first, again until none is left, at job_stop and at the end of the run, whether the exec still runs or not. What it can
+miss: a process that leaves the session and the group and whose whole chain of parents exits between two looks after the
+root itself has exited. READ prints a stream's bytes from an offset: its stderr the command's stderr, its stdout the
+command's stdout then a line of JSON. The exec of the command holds no subprocess slot of Inspect's (concurrency=False)
+and counts as no known work of the sample's working time: the call does while it waits.
 
 What stays outside. A job writes where its user can, and its processes count in the end state like any other
 (sandbox_hygiene.STATE). A root agent (SWE) can read JOBS_DIR on its own machine. A job's later reads and opens fall
@@ -66,6 +71,7 @@ from src.swarm.turn_rules import JOBS_STORE, mark_job, round_deadline
 JOBS_DIR = "/var/lib/swarm_jobs"
 KEEP_BYTES = SandboxEnvironmentLimits.MAX_EXEC_OUTPUT_SIZE     # 10 MiB, what Inspect's exec keeps of a stream
 LATE_START_S = 5          # the one wait of a round's calls that start at or after its end (late_wait)
+POLL_S = 0.05            # how often a call's collector looks at the machine's processes for the job's (PROCS)
 SETTLE_S = 2.0            # how long a read waits for the collector to drain, as docker exec waits for a stream
 INFRA_TIMEOUT_S = 120     # READ, STOP and the end of the run: our own scripts
 STOP_WAIT_S = 30          # how long a stop waits for the killed command's exec to return
@@ -79,7 +85,56 @@ name as an agent's and hash as the call's (shell_commands.AGENT_EXEC, access_mon
 would replace itself with a lone command (`bash -c 'grep x f'` runs grep in its place), and the root would read as
 the harness's. A machine without /usr/bin/timeout runs the command bare."""
 
-LAUNCH = r'''
+PROCS = r'''
+import os, subprocess
+
+def table():
+    """pid -> (ppid, pgid, sid, start) of every live process on the machine, zombies left out: /proc, or ps where
+    there is none (macOS, the unit tests' LocalBox). start tells a pid from a later process that reuses it."""
+    rows = {}
+    if os.path.isdir("/proc/self"):
+        for name in os.listdir("/proc"):
+            if name.isdigit():
+                try:
+                    with open(f"/proc/{name}/stat") as f:
+                        rest = f.read().rsplit(")", 1)[1].split()
+                    if rest[0] != "Z":
+                        rows[int(name)] = (int(rest[1]), int(rest[2]), int(rest[3]), rest[19])
+                except (OSError, IndexError, ValueError):
+                    pass
+        return rows
+    out = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,pgid=,stat=,lstart="], capture_output=True, text=True).stdout
+    for line in out.splitlines():
+        parts = line.split(None, 4)
+        try:
+            if not parts[3].startswith("Z"):
+                pid = int(parts[0])
+                rows[pid] = (int(parts[1]), int(parts[2]), os.getsid(pid), parts[4].strip())
+        except (OSError, IndexError, ValueError):
+            pass
+    return rows
+
+def members(leader, known, rows, skip=()):
+    """The processes of a job alive now, from `known` (pid -> start, the processes seen before, which it gains): each
+    one still alive with its start, every process whose parent is one of them, and every process in the leader's
+    session or process group. The session and the group count only while the leader's pid is its own or free: the
+    kernel hands out no pid still in use as a session or a group, so a process that took the pid later is another
+    exec's."""
+    own = leader not in rows or rows[leader][3] == known.get(leader)
+    alive = {pid for pid, start in known.items() if pid in rows and rows[pid][3] == start}
+    grew = True
+    while grew:
+        grew = False
+        for pid, (ppid, pgid, sid, start) in rows.items():
+            if pid not in alive and pid not in skip and (ppid in alive or own and leader in (sid, pgid)):
+                alive.add(pid)
+                known[pid] = start
+                grew = True
+    return alive
+'''
+"""What LAUNCH's collector and STOP share: the machine's process table and the processes of one job in it."""
+
+LAUNCH = PROCS + r'''
 import fcntl, json, os, pwd, select, signal, sys, time
 spec = json.loads(sys.argv[1])
 argv = sys.argv[2:]
@@ -99,15 +154,36 @@ def write_meta(meta):
         json.dump(meta, f)
     os.replace(path + ".new", path)
 
-def collect(fds):
-    """Copy each pipe to its file, keeping the last `keep` bytes of each; meta's totals, drops and done."""
+def track(leader, known, seen):
+    """One look at the job's processes (members); `procs` holds every one seen, for STOP. The live ones."""
+    alive = members(leader, known, table(), skip={os.getpid()})
+    if len(known) != seen[0]:
+        seen[0] = len(known)
+        with open(os.path.join(where, "procs.new"), "w") as f:
+            json.dump({"leader": leader, "known": known}, f)
+        os.replace(os.path.join(where, "procs.new"), os.path.join(where, "procs"))
+    return alive
+
+def collect(fds, leader, start):
+    """Copy each pipe to its file, keeping the last `keep` bytes of each; meta's totals, drops and done. Every POLL_S
+    look at the job's processes (track), and go on looking once both pipes closed, until none is left or the call's
+    directory is gone (a call that ended in time)."""
     files = {name: open(os.path.join(where, name), "ab", buffering=0) for name in fds}
     meta = {name: {"total": 0, "dropped": 0} for name in fds}
     lock = open(os.path.join(where, "lock"), "w")
     write_meta({**meta, "done": False})
+    known, seen, looked = {leader: start}, [0], 0.0
+    alive = track(leader, known, seen)
     live = dict(fds)
-    while live:
-        ready, _, _ = select.select(list(live.values()), [], [])
+    while live or alive:
+        if time.time() - looked >= POLL_S:
+            if not os.path.isdir(where):
+                return
+            alive, looked = track(leader, known, seen), time.time()
+        if not live:
+            time.sleep(POLL_S)
+            continue
+        ready, _, _ = select.select(list(live.values()), [], [], POLL_S)
         for name, fd in list(live.items()):
             if fd not in ready:
                 continue
@@ -132,9 +208,14 @@ def collect(fds):
                 meta[name]["dropped"] += size - len(tail)
                 write_meta({**meta, "done": False})
                 fcntl.flock(lock, fcntl.LOCK_UN)
-    fcntl.flock(lock, fcntl.LOCK_EX)
-    write_meta({**meta, "done": True})
+        if not live:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            write_meta({**meta, "done": True})
+            fcntl.flock(lock, fcntl.LOCK_UN)
 
+POLL_S = float(spec.get("poll") or 0.05)
+leader = os.getpid()
+start = table().get(leader, (0, 0, 0, None))[3]
 r_out, w_out = os.pipe()
 r_err, w_err = os.pipe()
 first = os.fork()
@@ -147,7 +228,9 @@ if first == 0:
         os.close(w_out)
         os.close(w_err)
         try:
-            collect({"out": r_out, "err": r_err})
+            collect({"out": r_out, "err": r_err}, leader, start)
+        except OSError:
+            pass
         finally:
             os._exit(0)
     os._exit(0)
@@ -184,16 +267,21 @@ os.umask(umask)
 wrap = spec.get("wrap") or []
 if wrap and os.access(wrap[0], os.X_OK):
     argv = [*wrap, *argv]
+try:        # PR_SET_CHILD_SUBREAPER, kept across exec: an orphan of the job stays the root's child while it runs
+    import ctypes
+    ctypes.CDLL(None, use_errno=True).prctl(36, 1, 0, 0, 0)
+except (ImportError, AttributeError, OSError):
+    pass
 try:
     os.execvpe(argv[0], argv, env)
 except OSError as ex:
     os.write(2, f"{argv[0]}: {ex.strerror}\n".encode())
     os._exit(127)
 '''
-"""argv: the spec ({top, name, user, env, keep, wrap}) as JSON, then the command's argv. The pid file is written as
-root, before the user is taken: a reap that sees a process of the user reads its pid file after. From the pid file on,
-the launcher's own failures (a user with no passwd entry) go to the command's stderr. The command gets the exec's own
-umask back; the call's files are made under 077."""
+"""argv: the spec ({top, name, user, env, keep, wrap, poll}) as JSON, then the command's argv. The pid file is written
+as root, before the user is taken: a reap that sees a process of the user reads its pid file after. From the pid file
+on, the launcher's own failures (a user with no passwd entry) go to the command's stderr. The command gets the exec's
+own umask back; the call's files are made under 077."""
 
 READ = r'''
 import fcntl, json, os, sys, time
@@ -243,41 +331,49 @@ sys.stdout.buffer.write(data["out"] + b"\n" + json.dumps(head).encode() + b"\n")
 from its offset (`from`, the bytes already shown; never before what was dropped), its last `keep` bytes, stderr to its
 stderr and stdout to its stdout, then a newline and a line of JSON {found, done, out: {total, from, shown}, err}."""
 
-STOP = r'''
+STOP = PROCS + r'''
 import json, os, signal, sys, time
 spec = json.load(sys.stdin)
-
-def session(pid):
-    try:
-        with open(f"/proc/{pid}/stat") as f:
-            return int(f.read().rsplit(")", 1)[1].split()[3])
-    except (OSError, IndexError, ValueError):
-        return None
-
-leaders = []
-for path in spec["pid_files"]:
-    try:
-        with open(path) as f:
-            leaders.append(int(f.read().strip()))
-    except (OSError, ValueError):
-        pass
 killed = []
-for leader in leaders:
+for where in spec.get("dirs") or [os.path.dirname(path) for path in spec.get("pid_files") or []]:
+    leader, known = None, {}
     try:
-        os.killpg(leader, signal.SIGKILL)
-    except OSError:
+        with open(os.path.join(where, "procs")) as f:
+            procs = json.load(f)
+        leader, known = int(procs["leader"]), {int(k): v for k, v in procs["known"].items()}
+    except (OSError, ValueError, KeyError):
         pass
-    if os.path.isdir("/proc"):
-        for pid in os.listdir("/proc"):
-            if pid.isdigit() and int(pid) != os.getpid() and session(pid) == leader:
-                try:
-                    os.kill(int(pid), signal.SIGKILL)
-                    killed.append(int(pid))
-                except OSError:
-                    pass
-print(json.dumps({"leaders": leaders, "killed": sorted(set(killed))}))
+    if leader is None:
+        try:
+            with open(os.path.join(where, "pid")) as f:
+                leader = int(f.read().strip())
+        except (OSError, ValueError):
+            continue
+    for attempt in range(20):
+        rows = table()
+        if attempt == 0 and (leader not in rows or rows[leader][3] == known.get(leader, rows[leader][3])):
+            known.setdefault(leader, rows.get(leader, (0, 0, 0, None))[3])
+            try:
+                os.killpg(leader, signal.SIGKILL)
+            except OSError:
+                pass
+            rows = table()
+        alive = members(leader, known, rows, skip={os.getpid()})
+        if not alive:
+            break
+        for pid in alive:
+            try:
+                os.kill(pid, signal.SIGKILL)
+                killed.append(pid)
+            except OSError:
+                pass
+        time.sleep(0.05)
+print(json.dumps({"killed": sorted(set(killed))}))
 '''
-"""stdin {pid_files}: SIGKILL every process in the session each pid file names, its process group first."""
+"""stdin {dirs} (or {pid_files}, each in its call's directory): SIGKILL every process of each call's job (PROCS members,
+from the collector's `procs` and the pid file): the leader's process group first, then every member left, again until
+none is, so a process forked while the others die goes too. A job that exited is stopped the same way: what it left
+running dies."""
 
 
 @dataclass(frozen=True)
@@ -334,6 +430,7 @@ class Outcome:
 
 def now() -> float:
     return time.time()
+
 
 
 def launch_argv(spec: dict, argv: list[str]) -> list[str]:
@@ -468,7 +565,8 @@ async def run_command(where: Where, agent: str, tool: str, command: str, argv: l
     `after(pid files to spare)` runs first (the seat's reap), then the output comes back whole, as Inspect's exec
     gave it. Past it: the call becomes a job (the module's docstring), its answer within `cap` bytes."""
     handle = uuid.uuid4().hex[:16]
-    spec = {"top": JOBS_DIR, "name": handle, "user": where.user, "env": where.env, "keep": KEEP_BYTES, "wrap": WRAP}
+    spec = {"top": JOBS_DIR, "name": handle, "user": where.user, "env": where.env, "keep": KEEP_BYTES, "wrap": WRAP,
+            "poll": POLL_S}
     with untracked_sandbox_execs():
         task = asyncio.ensure_future(where.box.exec(launch_argv(spec, argv), input=input, cwd=where.cwd, user="root",
                                                     concurrency=False))
@@ -522,11 +620,12 @@ def finished(call: Call) -> None:
 
 
 async def stop(call: Call, status: str) -> None:
-    """Kill the call's session (STOP) and wait for its exec to return; status names who stopped it."""
-    if not call.task.done():
-        spec = {"pid_files": [call.pid_file]}
-        await call.where.box.exec(["python3", "-I", "-c", STOP], input=json.dumps(spec), user="root",
-                                  timeout=INFRA_TIMEOUT_S)
+    """Kill every process of the call's job (STOP), the exec's and what it left running, and wait for its exec to
+    return; status names who stopped it. A job that had exited keeps "exited": only what it left running dies."""
+    running = not call.task.done()
+    await call.where.box.exec(["python3", "-I", "-c", STOP], input=json.dumps({"dirs": [call.dir]}), user="root",
+                              timeout=INFRA_TIMEOUT_S)
+    if running:
         await asyncio.wait({call.task}, timeout=STOP_WAIT_S)
         call.status = status
         call.ended = call.ended or now()
@@ -570,13 +669,14 @@ def job_bindings(cap: Callable[[str], int]) -> dict[str, ToolFactory]:
 
 
 async def end_jobs() -> list[dict]:
-    """At the end of the run: kill every command call still running (a job's status "killed"), let each exec
-    return, and write every job's record with its totals. The records, in order. Safe to call twice."""
+    """At the end of the run: kill every process of every command call still held, a job's and what a job that
+    exited left running (a job still running gets status "killed"), let each exec return, and write every job's
+    record with its totals. The records, in order. Safe to call twice."""
     for call in list(calls().values()):
-        if not call.task.done():
-            try:
-                await stop(call, "killed")
-            except Exception:  # noqa: BLE001 - a machine already gone ends its jobs with it
+        try:
+            await stop(call, "killed")
+        except Exception:  # noqa: BLE001 - a machine already gone ends its jobs with it
+            if not call.task.done():
                 call.status, call.ended = "killed", call.ended or now()
         finished(call)
         if call.job is not None:

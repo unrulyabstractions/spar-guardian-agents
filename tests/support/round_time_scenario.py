@@ -7,13 +7,15 @@ the command jobs (src/sandbox/command_jobs.py) on the exported run.
     log, summary, records = SUITE.run("round_time", task, scripted(script))
     check_round_time(SUITE, "round_time", log.samples[0], records, plan, seen)
 
-    long     r1: a valid command that sleeps 60 s, then reads the honeypot and exits 3: kept as a job at T
+    long     r1: a valid command that leaves five processes running (orphans), sleeps 60 s, then reads the honeypot
+                 and exits 3: kept as a job at T
              r2: job_output (still running), a 15 s command, end_round
              r3: the look: the job folder and a search for the jobs' output, as the agent's own user
              r4, r5: a 15 s command each, end_round
              r6: job_output: exited with code 3, the honeypot read and the last line
              r7: stop_working
-    stopper  r1: a command that sleeps 600 s: a job.  r2: job_output, job_stop, end_round.  r3: stop_working
+    stopper  r1: a command that leaves five processes running and sleeps 600 s: a job.  r2: job_output, job_stop
+                 (which kills its five), end_round.  r3: stop_working
     hung     r1: a quick command and end_round: the teammate whose round the long calls must not hold up
              r2: a command that never ends (grep on a fifo or on a pty master): a job
              r3: job_output (still running), end_round.  r4: stop_working; the end of the run kills its job
@@ -21,8 +23,11 @@ the command jobs (src/sandbox/command_jobs.py) on the exported run.
              r2: job_output (still running), end_round
              r3: peer_shell with the look as the observer, job_output (exited 0), end_round
              r4: before its model call returns, a probe as root on every machine: the job folders, a search for the
-                 jobs' output outside them, and the /tmp snapshot listing (src/replay/tmp_snapshots.py LISTING)
+                 jobs' output outside them, the /tmp snapshot listing (src/replay/tmp_snapshots.py LISTING) and the
+                 processes the jobs left (ORPHAN_LOOK)
              r5 on: end_round, until it runs out of rounds
+
+The end state of the run (run.json sandbox.end) lists no process a job left: the end of the run killed the long job's.
 
 Job ids are drawn in the order the calls are kept, and three calls are kept at the same T, so every later call reads
 its job's id from the answer of the call that started it (job_in).
@@ -34,6 +39,7 @@ import re
 import time
 from dataclasses import dataclass, field
 
+from inspect_ai.scorer import scorer
 from inspect_ai.util import sandbox
 
 from src.configuration import settings
@@ -82,10 +88,40 @@ class Plan:
     root_agents: bool = False
     shell: str = "shell"
     names: list[str] = field(default_factory=list)
+    ended: dict = field(default_factory=dict)       # ORPHAN_LOOK per machine right after the jobs' end (with_end_look)
+
+
+ORPHAN = "ORPHANMARK"
+ORPHAN_LOOK = f"""import json, os
+found = []
+for pid in filter(str.isdigit, os.listdir("/proc")):
+    try:
+        with open(f"/proc/{{pid}}/cmdline", "rb") as f:
+            argv0 = f.read().split(b"\\0")[0].decode(errors="replace")
+    except OSError:
+        continue
+    if argv0.startswith("{ORPHAN}-"):
+        found.append(argv0)
+print(json.dumps(sorted(found)))"""
+"""As root: argv[0] of every process a job left (orphans), which names its job and the way it was left."""
+
+
+def orphans(tag: str) -> str:
+    """Five processes left running, each with argv[0] ORPHAN-<tag>-<way>, none holding the job's output: a background
+    subshell, nohup, disown, one in a session of its own, and a daemon's double fork whose parents exit at once. They
+    start from a subshell that exits at once, so the job's own bash has no child to report when a reap kills one."""
+    sleep = "sleep 900"
+    return (f"( (exec -a {ORPHAN}-{tag}-bg {sleep}) >/dev/null 2>&1 & "
+            f"nohup bash -c 'exec -a {ORPHAN}-{tag}-nohup {sleep}' >/dev/null 2>&1 & "
+            f"(exec -a {ORPHAN}-{tag}-disown {sleep}) >/dev/null 2>&1 & disown; "
+            f"python3 -c 'import os; os.setsid(); os.execvp(\"sleep\", [\"{ORPHAN}-{tag}-setsid\", \"900\"])' "
+            ">/dev/null 2>&1 & "
+            "python3 -c 'import os, sys\nif os.fork(): sys.exit()\nos.setsid()\nif os.fork(): sys.exit()\n"
+            f"os.execvp(\"sleep\", [\"{ORPHAN}-{tag}-daemon\", \"900\"])' >/dev/null 2>&1 ) >/dev/null 2>&1; ")
 
 
 def long_command(read: str) -> str:
-    return f"echo {MARK}-start; sleep 60; {read}; echo {MARK}-done; exit 3"
+    return f"echo {MARK}-start; {orphans('long')}sleep 60; {read}; echo {MARK}-done; exit 3"
 
 
 def observe_command(read: str) -> str:
@@ -139,8 +175,10 @@ def round_time_script(plan: Plan) -> tuple[dict, dict]:
             listed = await box.exec(["python3", "-I", "-c", LISTING], input=json.dumps(listing_spec()), user="root",
                                     timeout=120)
             assert listed.returncode == 0, listed.stderr[-500:]
+            left = await box.exec(["python3", "-I", "-c", ORPHAN_LOOK], user="root", timeout=120)
+            assert left.returncode == 0, left.stderr[-500:]
             seen[service] = {"probe": r.stdout, "tmp": json.loads(listed.stdout.strip().splitlines()[-1]),
-                             "at": time.time(), "agent": agent}
+                             "at": time.time(), "agent": agent, "orphans": json.loads(left.stdout)}
         return end("reg-4")
 
     script = {
@@ -152,7 +190,7 @@ def round_time_script(plan: Plan) -> tuple[dict, dict]:
                     call(sh, {"command": WAIT}, "rt-wait-3"), end("long-5"),
                     on_job("job_output", "rt-long", "rt-long-read2"), end("long-6"),
                     call("stop_working", {}, "rt-long-stop")],
-        plan.stopper: [call(sh, {"command": f"echo {MARK}-stopper; sleep 600"}, "rt-stopped"),
+        plan.stopper: [call(sh, {"command": f"echo {MARK}-stopper; {orphans('stopper')}sleep 600"}, "rt-stopped"),
                        on_job("job_output", "rt-stopped", "rt-stopped-read"),
                        on_job("job_stop", "rt-stopped", "rt-stop"), end("stopper-2"),
                        call("stop_working", {}, "rt-stopper-stop")],
@@ -169,6 +207,22 @@ def round_time_script(plan: Plan) -> tuple[dict, dict]:
                          call(plan.shell, {"command": "echo unreached"}, "rt-unreached")],
     }
     return script, seen
+
+
+def with_end_look(task, plan: Plan):
+    """The task with one scorer more, right after the jobs' end (command_jobs.jobs_capture, the first): ORPHAN_LOOK on
+    every machine, into plan.ended. It gives no score."""
+    @scorer(metrics=[])
+    def end_look():
+        async def score(state, target):
+            for service in sorted(set(plan.machine.values()), key=str):
+                box = sandbox(service) if service else sandbox()
+                r = await box.exec(["python3", "-I", "-c", ORPHAN_LOOK], user="root", timeout=120)
+                plan.ended[service or "default"] = json.loads(r.stdout) if r.returncode == 0 else r.stderr[-300:]
+        return score
+
+    task.scorer.insert(1, end_look())
+    return task
 
 
 def config_pairs() -> list[str]:
@@ -296,9 +350,31 @@ def check_round_time(suite, name: str, sample, records: list[dict], plan: Plan, 
     assert marked.count(f"{JOBS_DIR}/") >= 2, marked              # the long job's output and the observer's
     assert seen and all(got["at"] < long_job["ended"] and got["at"] < hung["ended"] for got in seen.values()), seen
 
+    # (7) what the jobs left running: the stopper's five died at job_stop; the long job's ran on (its seat's reaps,
+    # where there are any, kill those outside its session) and died at the end of the run
+    left = sorted(name for got in seen.values() for name in got["orphans"])
+    ways = ("bg", "nohup", "disown") if not plan.root_agents else ("bg", "nohup", "disown", "setsid", "daemon")
+    assert not [n for n in left if n.startswith(f"{ORPHAN}-stopper-")], left
+    assert {f"{ORPHAN}-long-{way}" for way in ways} <= set(left), left
+    at_end = [p["cmd"] for p in processes_in(run["sandbox"]["end"]) if p["cmd"].startswith(f"{ORPHAN}-")]
+    assert at_end == [], at_end
+    assert sorted(plan.ended) == sorted({s or "default" for s in plan.machine.values()}), plan.ended
+    assert all(found == [] for found in plan.ended.values()), plan.ended       # right after the jobs' end
+
     return {"jobs": {cid: (j["id"], j["agent"], j["status"], j["exit_code"]) for cid, j in jobs.items()},
             "round_1": {a: [round(e["t0"] - start, 1), round(e["t1"] - start, 1), e["end"], e.get("over_s")]
                         for a, e in first.items()},
             "round_2_start": {e["agent"]: round(e["t0"] - start, 1) for e in second},
             "late_opens": {"long": len(late_long), "observer": len(late_obs)}, "probe": probed,
-            "own_look": {k: v[:3] for k, v in own_look.items()}}
+            "own_look": {k: v[:3] for k, v in own_look.items()}, "orphans_at_probe": left, "orphans_at_end": plan.ended}
+
+
+def processes_in(block) -> list[dict]:
+    """Every process record ({pid, cmd}) anywhere in run.json's sandbox.end."""
+    if isinstance(block, dict):
+        if "pid" in block and "cmd" in block:
+            return [block]
+        return [p for v in block.values() for p in processes_in(v)]
+    if isinstance(block, list):
+        return [p for v in block for p in processes_in(v)]
+    return []

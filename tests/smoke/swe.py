@@ -626,7 +626,8 @@ def scenario_round_time() -> dict:
         long_cmd=round_time_scenario.long_command(read), observe_cmd=round_time_scenario.observe_command(read),
         hung_cmd="grep -c x /dev/ptmx", root_agents=True, names=config.names)
     script, seen = round_time_scenario.round_time_script(plan)
-    log, summary, records = SUITE.run("round_time", swarm_task(benchmark, config), scripted(script))
+    task = round_time_scenario.with_end_look(swarm_task(benchmark, config), plan)
+    log, summary, records = SUITE.run("round_time", task, scripted(script))
     sample = assert_ok(log)
     return round_time_scenario.check_round_time(SUITE, "round_time", sample, records, plan, seen,
                                                 lambda lines: len(lines) == 1 and int(lines[0]) > 3)

@@ -6,6 +6,10 @@ running at the end of the run are killed, and the round ends on time (turn_rules
 from __future__ import annotations
 
 import asyncio
+import os
+import secrets
+import signal
+import subprocess
 import time
 from types import SimpleNamespace
 
@@ -183,6 +187,61 @@ def test_the_calls_of_a_reply_past_its_round_time_share_one_late_wait(jobs, monk
         await command_jobs.end_jobs()
 
     asyncio.run(scenario())
+
+
+def leftovers(token: str) -> list[int]:
+    """The pids of this machine's processes whose command line holds the test's own random token (a job's collector
+    too, while it runs: its argv holds the command)."""
+    out = subprocess.run(["pgrep", "-f", token], capture_output=True, text=True).stdout
+    return [int(pid) for pid in out.split()]
+
+
+async def settled(token: str, keep: int = 0) -> list[int]:
+    """leftovers(token) once at most `keep` are left, or after 3 s: a job's collector ends at its next look, and a
+    process the stop missed stays."""
+    for _ in range(30):
+        if len(found := leftovers(token)) <= keep:
+            return found
+        await asyncio.sleep(0.1)
+    return found
+
+
+def background(token: str) -> str:
+    """A command that leaves four processes behind in four ways and then exits: a background subshell, nohup, a
+    process in a session of its own (its parent alive past the collector's next look) and disown."""
+    return (f"( sleep {token}1 ) & nohup sleep {token}2 >/dev/null 2>&1 & "
+            f"python3 -c 'import os, time; os.setsid(); time.sleep({token}3)' >/dev/null 2>&1 & "
+            f"sleep {token}4 & disown; sleep 0.6; echo left")
+
+
+def test_what_a_job_left_running_dies_at_job_stop_and_at_the_end_of_the_run(jobs):
+    """A job that starts background processes and exits leaves them running; job_stop kills them and the job stays
+    exited, and the end of the run kills another job's. A process that is no job's (another agent's, the harness's)
+    and another agent's job still running are untouched."""
+    first, second, other = (str(7000 + secrets.randbelow(2000)) + str(i) for i in range(3))
+    outsider = subprocess.Popen(["sleep", f"{other}9"], start_new_session=True)
+
+    async def scenario():
+        jobs.deadline = time.time()
+        a = await command(jobs, background(first))
+        b = await command(jobs, background(second), agent="a02")
+        c = await command(jobs, f"sleep {other}8", agent="a03")
+        assert (a.job, b.job, c.job) == ("j1", "j2", "j3")
+        await asyncio.sleep(1.5)
+        assert len(leftovers(first)) >= 4 and len(leftovers(second)) >= 4      # the subshell may stay a bash of its own
+        answer = await command_jobs.job_stop("a01", "j1", CAP)
+        assert answer.startswith(JOBS["exited"].format(job="j1", code=0))
+        assert await settled(first) == [] and len(leftovers(second)) >= 4
+        assert outsider.pid in leftovers(other) and len(leftovers(other)) >= 2      # a03's job runs on
+        records = await command_jobs.end_jobs()
+        assert [r["status"] for r in records] == ["exited", "exited", "killed"]
+        assert await settled(second) == [] and await settled(other, keep=1) == [outsider.pid]
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        for pid in leftovers(first) + leftovers(second) + leftovers(other):
+            os.kill(pid, signal.SIGKILL)
 
 
 def test_a_batch_kept_at_once_takes_one_id_each(jobs):

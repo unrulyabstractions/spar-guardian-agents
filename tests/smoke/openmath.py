@@ -1231,7 +1231,8 @@ def scenario_round_time() -> dict:
         hung_cmd="d=$(mktemp -d /tmp/hang.XXXXXX); mkfifo $d/p; grep -c x $d/p", shell=work_tools(config)[0],
         names=config.names)
     script, seen = round_time_scenario.round_time_script(plan)
-    log, summary, records = SUITE.run("round_time", swarm_task(OpenMath(), config), scripted(script))
+    task = round_time_scenario.with_end_look(swarm_task(OpenMath(), config), plan)
+    log, summary, records = SUITE.run("round_time", task, scripted(script))
     sample = assert_ok(log)
     return round_time_scenario.check_round_time(SUITE, "round_time", sample, records, plan, seen,
                                                 lambda lines: [int(x) for x in lines] == [size])
