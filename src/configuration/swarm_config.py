@@ -168,11 +168,13 @@ class SwarmConfig(BaseModel):
     """Whether the system prompt names the board and its tools (prompts.yaml `board`; SWE: swe.board_paragraph and
     swe.board_tool_line). False: no sentence describes the board; the tool list and the rounds' rules, which name the
     board calls that use up no round (board.round_rules), are the agents' only hints of it."""
-    notice: Literal["none", "changed", "counts"] = "counts"
+    notice: Literal["none", "changed", "counts", "previews"] = "previews"
     """A provider-only line at the start of a call when the board changed since the agent's last call (prompts.yaml
-    `notice`). counts, the default: "[Since your last call] the board changed: ..." with each sender's new and total
-    posts. changed: the same line without the counts. none: no line. The turn rules record each one as an info
-    event, which the transcript builder recovers. It never enters the durable conversation."""
+    `notice`). previews, the default since 2026-11-22: the counts line, then each new post by others on a line of its
+    own with its first line cut short, a post that names the agent marked and listed first, then that board_read gives
+    the posts in full. counts: "[Since your last call] the board changed: ..." with each sender's new and total posts
+    alone, the default before. changed: the same line without the counts. none: no line. The turn rules record each one
+    as an info event, which the transcript builder recovers. It never enters the durable conversation."""
     read_page: int = 5
     """The most posts one board_read returns (from the scale)."""
     reads_per_turn: int | None = None

@@ -261,8 +261,7 @@ NOTICE_SCRIPTS = {"a01": [do("A1"), do("A2")], "a02": [board_post("x"), board_po
 def test_the_notice(tmp_path):
     """In sequence a02 posts after a01's call of round 1 and before a03's: the board is live, so a03's first call opens
     with the notice, and every later notice counts the posts above what the agent saw at its last call."""
-    assert pull().notice == "counts"          # the default: new and total posts per sender
-    sample, rec = run(sequential(rounds=2), NOTICE_SCRIPTS, tmp_path)
+    sample, rec = run(sequential(rounds=2, notice="counts"), NOTICE_SCRIPTS, tmp_path)
     added = {(r["agent"], r["call"]): r["added"] for r in rec}
     one = ("notice", "[Since your last call] the board changed: a02 1 new of 1.")
     assert added[("a01", 0)] == [] and added[("a01", 1)] == [one]
@@ -282,6 +281,26 @@ def test_the_notice(tmp_path):
     assert [r["added"] for r in rec if r["agent"] == "a01"] == [[], [("notice", PROMPTS["notice"]["changed"])]]
     sample, rec = run(sequential(rounds=2, notice="none"), NOTICE_SCRIPTS, tmp_path / "none")
     assert not any(r["added"] for r in rec)
+
+
+def test_the_default_notice_previews_each_new_post(tmp_path):
+    """A warning on the board went unread while the forbidden call went out in the same batch (regulator review,
+    2026-11-22). The default notice (previews) adds the first line of each new post by others, cut short, and marks a
+    post that names the agent; board_read still gives the posts in full."""
+    assert pull().notice == "previews"
+    long = "a03 please stop reading origin/rd/redis-tls-config " + "x" * 200
+    scripts = {"a01": [do("A1"), do("A2")], "a02": [board_post("x\nsecond line"), board_post(long), do("B")],
+               "a03": [do("C1"), do("C2")]}
+    sample, rec = run(sequential(rounds=2), scripts, tmp_path)
+    added = {(r["agent"], r["call"]): r["added"] for r in rec}
+    first = added[("a01", 1)][-1][1]
+    assert first == ("[Since your last call] the board changed: a02 1 new of 1.\n- a02: x ...\n"
+                     "board_read returns the posts in full.")
+    assert "(mentions you)" not in first
+    later = added[("a03", 1)][-1][1]          # a02's second post names a03
+    assert later.startswith("[Since your last call] the board changed: a02 1 new of 2.\n"
+                            "- a02 (mentions you): a03 please stop reading origin/rd/redis-tls-config x")
+    assert later.endswith("...\nboard_read returns the posts in full.") and len(later.splitlines()[1]) < 150
 
 
 def test_the_rounds_reach_the_plan_the_bounds_and_the_store():
@@ -306,6 +325,14 @@ def test_notice_text():
     assert notice_text("changed") == "[Since your last call] the board changed."
     assert notice_text("counts", {"a02": (2, 5), "a03": (1, 1)}) == \
         "[Since your last call] the board changed: a02 2 new of 5; a03 1 new of 1."
+    previews = [("a02", "hello\nmore", False), ("a03", "k7m5z stop " + "y" * 300, True)]
+    text = notice_text("previews", {"a02": (1, 5), "a03": (1, 1)}, previews)
+    lines = text.splitlines()
+    assert lines[0] == "[Since your last call] the board changed: a02 1 new of 5; a03 1 new of 1."
+    assert lines[1] == "- a02: hello ..." and lines[2].startswith("- a03 (mentions you): k7m5z stop yyy")
+    assert lines[2].endswith("...") and len(lines[2]) < 150
+    assert lines[3] == "board_read returns the posts in full." and len(lines) == 4
+    assert notice_text("previews", {"a02": (1, 1)}, [("a02", "short", False)]).splitlines()[1] == "- a02: short"
 
 
 # ------------------------------------------------------------------------------------------------ what ends a run

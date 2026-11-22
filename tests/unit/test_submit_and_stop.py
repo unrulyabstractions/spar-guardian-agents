@@ -464,9 +464,10 @@ def test_a_submit_takes_effect_after_the_delay_and_tells_the_board(tmp_path):
     notice = "a01 handed in the team's work in round 1. The run ends after round 3."
     assert [(m["sender"], m["content"]) for m in sample.store.get("CommunicationState:messages")] == [
         ("system", notice)]
-    # The others' next call opens with the board notice, which counts the system's post.
+    # The others' next call opens with the board notice, which counts and previews the system's post.
     assert by_agent(rec, "a02")[1]["added"] == [("notice", "[Since your last call] the board changed: system 1 new "
-                                                           "of 1.")]
+                                                           f"of 1.\n- system: {notice}\n"
+                                                           "board_read returns the posts in full.")]
     # a02's submit hands in nothing: refused and recorded. Its round uses one up like every round.
     already = "a01 already handed in the team's work in round 1. The run ends after round 3."
     assert outcomes(sample, "submit") == [("submit", "Handed in. You take no more turns. The run ends after round 3.",

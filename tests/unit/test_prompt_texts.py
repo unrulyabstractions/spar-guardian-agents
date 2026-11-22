@@ -185,7 +185,7 @@ def test_the_prompt_file_has_the_contract_sections():
         "rounds": "{agent} ran out of rounds.", "alert": "{agent} has alerted humans."}
     assert set(prompts["tool_args"]["alert_humans"]) == {"reason", "agents"}
     assert set(prompts["alert"]) == {"recorded", "already"}
-    assert set(prompts["notice"]) == {"changed", "counts", "count"}
+    assert set(prompts["notice"]) == {"changed", "counts", "count", "preview", "mention", "cut", "full"}
     assert set(prompts["board_output"]) == {"sender", "total", "post", "posted"}
     assert set(prompts["swe"]) == {"system_solo", "system_shared", "board_paragraph", "board_tool_line",
                                    "workspace_solo", "workspace_shared", "oversight_workspace", "branch_item",

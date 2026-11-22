@@ -2,14 +2,14 @@
 
 TurnRulesFilter changes what the provider receives and never the durable conversation. It removes react()'s assistant
 paragraph from the system message (provider_system_text), withholds ORBIT's channel tools, opens a call with the board
-notice when the board changed, and appends the continue prompt when the input would end with a model turn. Everything
-it adds stays in place on every later call (TurnState.added), so the history a provider receives only grows: a provider
-that binds a replayed thinking block to the turns before it refuses a history that lost a message, and a changed prefix
-misses every prompt cache. The defense that carries it also shows team_submit to the model as submit (shown_as_submit),
-gates and times every tool call of a round (_turn_rounds.counted), and is the one part of the turn rules that writes
-the durable conversation: before each round it appends the round's line and the presence lines due to the activated
-member (apply_pre_turn: _turn_rounds.open_round, _turn_presence.deliver). turn_rules_defense builds the
-DefenseConfig that installs all of it on every agent.
+notice when the board changed (by default the counts and each new post's first line, notice_text), and appends the
+continue prompt when the input would end with a model turn. Everything it adds stays in place on every later call
+(TurnState.added), so the history a provider receives only grows: a provider that binds a replayed thinking block to the
+turns before it refuses a history that lost a message, and a changed prefix misses every prompt cache. The defense that
+carries it also shows team_submit to the model as submit (shown_as_submit), gates and times every tool call of a round
+(_turn_rounds.counted), and is the one part of the turn rules that writes the durable conversation: before each round it
+appends the round's line and the presence lines due to the activated member (apply_pre_turn: _turn_rounds.open_round,
+_turn_presence.deliver). turn_rules_defense builds the DefenseConfig that installs all of it on every agent.
 
 Inspect writes the ModelEvent before ORBIT's model filters run (FilteredModelAPI sits under Inspect's
 Model.generate), so ModelEvent.input keeps the paragraph and lacks what the filter adds, and ModelEvent.tools
@@ -20,6 +20,8 @@ not receive; and "notice" and "continue" carrying each added message, which the 
     experiment["defenses"] = [turn_rules_defense(config).model_dump(mode="json")]
 """
 from __future__ import annotations
+
+import re
 
 from inspect_ai.agent import AgentPrompt
 from inspect_ai.log import transcript
@@ -46,6 +48,10 @@ from src.swarm.turn_rules._turn_state import (
     bump,
     current_round,
 )
+
+# The board notice's previews (notice=previews): the most new posts it previews, and the most characters of each.
+PREVIEW_POSTS = 5
+PREVIEW_CHARS = 120
 
 TURN_RULES_TYPE = "swarm.turn_rules.v1"
 TURN_RULES_NAME = "turn_rules"
@@ -93,10 +99,27 @@ def shown_as_submit(tool):
     return renamed if isinstance(tool, ToolDef) else renamed.as_tool()
 
 
-def notice_text(kind: str, counts: dict[str, tuple[int, int]] | None = None) -> str | None:
+def preview_line(text: str) -> str:
+    """A post's first line that holds text, cut to PREVIEW_CHARS, with prompts.yaml notice.cut where anything of the
+    post was left out."""
+    lines = [line.strip() for line in text.strip().splitlines()]
+    first = next((line for line in lines if line), "")
+    shown = first[:PREVIEW_CHARS].rstrip()
+    cut = shown != text.strip()
+    return shown + (load_prompts()["notice"]["cut"] if cut else "")
+
+
+def mentions(text: str, agent: str) -> bool:
+    """Whether a post names the agent by its ID, as a word."""
+    return re.search(rf"(?<![\w-]){re.escape(agent)}(?![\w-])", text) is not None
+
+
+def notice_text(kind: str, counts: dict[str, tuple[int, int]] | None = None,
+                previews: list[tuple[str, str, bool]] | None = None) -> str | None:
     """The board notice (prompts.yaml notice) for notice=kind, or None for "none".
 
-    counts maps each sender with new posts to (new, total), in the order to print."""
+    counts maps each sender with new posts to (new, total), in the order to print. previews, for kind "previews",
+    lists the posts to preview as (sender, text, whether it names the agent), in the order to print."""
     if kind == "none":
         return None
     notice = load_prompts()["notice"]
@@ -104,7 +127,12 @@ def notice_text(kind: str, counts: dict[str, tuple[int, int]] | None = None) -> 
         return notice["changed"]
     lines = "; ".join(notice["count"].format(sender=sender, new=new, total=total)
                       for sender, (new, total) in (counts or {}).items())
-    return notice["counts"].format(counts=lines)
+    head = notice["counts"].format(counts=lines)
+    if kind == "counts":
+        return head
+    shown = [notice["preview"].format(sender=sender, mention=notice["mention"] if named else "",
+                                      line=preview_line(text)) for sender, text, named in previews or []]
+    return "\n".join([head, *shown, notice["full"]])
 
 
 class TurnRulesFilter(ModelFilter):
@@ -136,8 +164,9 @@ class TurnRulesFilter(ModelFilter):
     def _notice(self, st: TurnState, agent: str, team: bool) -> tuple[str, str] | None:
         """The board notice when the board holds posts by others above the sequence the agent saw at its last call.
 
-        counts gives each such sender's new posts (above that sequence) and total posts. The board is read through
-        ORBIT's read_messages, live: a post made earlier in the round counts."""
+        counts gives each such sender's new posts (above that sequence) and total posts; previews, for
+        notice=previews, the newest PREVIEW_POSTS of those posts, the ones that name the agent first. The board is read
+        through ORBIT's read_messages, live: a post made earlier in the round counts."""
         if self.config.notice == "none" or not team:
             return None
         try:
@@ -153,7 +182,11 @@ class TurnRulesFilter(ModelFilter):
         for sender in sorted({m.sender for m in posts if m.sequence > seen}):
             mine = [m for m in posts if m.sender == sender]
             counts[sender] = (sum(1 for m in mine if m.sequence > seen), len(mine))
-        text = notice_text(self.config.notice, counts)
+        fresh = [m for m in posts if m.sequence > seen]
+        named = {m.sequence: mentions(str(m.content), agent) for m in fresh}
+        chosen = sorted(fresh, key=lambda m: (not named[m.sequence], -m.sequence))[:PREVIEW_POSTS]
+        previews = [(m.sender, str(m.content), named[m.sequence]) for m in sorted(chosen, key=lambda m: m.sequence)]
+        text = notice_text(self.config.notice, counts, previews)
         return ("notice", text) if text else None
 
     def _restored(self, st: TurnState, agent: str, messages: list) -> list:
