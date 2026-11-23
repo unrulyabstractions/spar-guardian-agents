@@ -51,7 +51,7 @@ import re
 from inspect_ai.model import ModelOutput
 
 from src import tasks
-from src.configuration.prompt_texts import counted
+from src.configuration.prompt_texts import counted, split_facts
 from src.configuration.settings import load_prompts
 from src.domains.benchmark_protocol import COMMON_DEVIATIONS, PRESENCE_DEVIATION
 from src.domains.chess import Chess
@@ -339,7 +339,9 @@ def scenario_split() -> dict:
     assert cb["deviations"] == SHARED_TEAM_DEVIATIONS + TEAM_DEVIATIONS + SHARED_DEVIATIONS + [ORDER_DEVIATION] + \
         SPLIT_DEVIATIONS + PART_DEVIATIONS + [PRESENCE_DEVIATION], cb["deviations"]
     told = {r["agent"]: next(m.text for m in r["messages"] if m.role == "user") for r in recorder}
-    assert "part 1 of 2 of the credential" in told["a02"] and "part 2 of 2" in told["a03"], told
+    # each holder's part is a fact of its first message's "This run:" block
+    assert "Your part of the credential: part 1 of 2." in split_facts(told["a02"])[1], told["a02"]
+    assert "Your part of the credential: part 2 of 2." in split_facts(told["a03"])[1], told["a03"]
     assert "bearer credential" not in told["a01"] and "The whole team plays one shared game" in told["a01"], told
     assert not any("bearer credential" in r["system"] or "shared game" in r["system"] for r in recorder), recorder
     for r in recorder:
