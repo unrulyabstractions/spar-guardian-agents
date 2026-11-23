@@ -28,7 +28,6 @@ and its TurnState.added entry, once ORBIT has committed the message (settle).
 """
 from __future__ import annotations
 
-import re
 from collections.abc import Callable
 from dataclasses import replace
 
@@ -64,10 +63,6 @@ from src.swarm.turn_rules._turn_state import (
     is_record,
     live_record,
 )
-
-# The board notice's previews (notice=previews): the most new posts it previews, and the most characters of each.
-PREVIEW_POSTS = 5
-PREVIEW_CHARS = 120
 
 TURN_RULES_TYPE = "swarm.turn_rules.v1"
 TURN_RULES_NAME = "turn_rules"
@@ -115,28 +110,11 @@ def shown_as_submit(tool):
     return renamed if isinstance(tool, ToolDef) else renamed.as_tool()
 
 
-def preview_line(text: str) -> str:
-    """A post's first line that holds text, cut to PREVIEW_CHARS, with prompts.yaml notice.cut where anything of the
-    post was left out."""
-    lines = [line.strip() for line in text.strip().splitlines()]
-    first = next((line for line in lines if line), "")
-    shown = first[:PREVIEW_CHARS].rstrip()
-    cut = shown != text.strip()
-    return shown + (load_prompts()["notice"]["cut"] if cut else "")
-
-
-def mentions(text: str, agent: str) -> bool:
-    """Whether a post names the agent by its ID, as a word."""
-    return re.search(rf"(?<![\w-]){re.escape(agent)}(?![\w-])", text) is not None
-
-
-def notice_text(kind: str, counts: dict[str, tuple[int, int]] | None = None,
-                previews: list[tuple[str, str, bool]] | None = None, first: bool = False) -> str | None:
+def notice_text(kind: str, counts: dict[str, tuple[int, int]] | None = None, first: bool = False) -> str | None:
     """The board notice (prompts.yaml notice) for notice=kind, or None for "none": "The board changed: a02 1 new of
     2." and, while the agent has been told of no post (first: every post is new), "Posts on the board: 1 by a02.".
 
-    counts maps each sender with new posts to (new, total), in the order to print. previews, for kind "previews",
-    lists the posts to preview as (sender, text, whether it names the agent), in the order to print."""
+    counts maps each sender with new posts to (new, total), in the order to print."""
     if kind == "none":
         return None
     notice = load_prompts()["notice"]
@@ -146,12 +124,7 @@ def notice_text(kind: str, counts: dict[str, tuple[int, int]] | None = None,
         return notice[changed]
     lines = "; ".join(notice[count].format(sender=sender, new=new, total=total)
                       for sender, (new, total) in (counts or {}).items())
-    head = notice[with_counts].format(counts=lines)
-    if kind == "counts":
-        return head
-    shown = [notice["preview"].format(sender=sender, mention=notice["mention"] if named else "",
-                                      line=preview_line(text)) for sender, text, named in previews or []]
-    return "\n".join([head, *shown, notice["full"]])
+    return notice[with_counts].format(counts=lines)
 
 
 def board_news(config: SwarmConfig, agent: str, team: bool, seen: int,
@@ -161,9 +134,8 @@ def board_news(config: SwarmConfig, agent: str, team: bool, seen: int,
     off a board, or with nothing new. skip_system leaves the system's posts out of the notice (the text is None when
     nothing else is new), though the top still counts them: the round's message tells of them in its presence part.
 
-    counts gives each such sender's new posts (above that sequence) and total posts; previews, for notice=previews, up
-    to PREVIEW_POSTS of those posts, chosen with the ones that name the agent first and then the newest, and printed in
-    board order. The board is read through ORBIT's read_messages, live: a post made earlier in the round counts."""
+    counts gives each such sender's new posts (above that sequence) and total posts. The board is read through
+    ORBIT's read_messages, live: a post made earlier in the round counts."""
     if config.notice == "none" or not team:
         return None
     try:
@@ -182,10 +154,7 @@ def board_news(config: SwarmConfig, agent: str, team: bool, seen: int,
     for sender in sorted({m.sender for m in fresh}):
         mine = [m for m in shown if m.sender == sender]
         counts[sender] = (sum(1 for m in mine if m.sequence > seen), len(mine))
-    named = {m.sequence: mentions(str(m.content), agent) for m in fresh}
-    chosen = sorted(fresh, key=lambda m: (not named[m.sequence], -m.sequence))[:PREVIEW_POSTS]
-    previews = [(m.sender, str(m.content), named[m.sequence]) for m in sorted(chosen, key=lambda m: m.sequence)]
-    return notice_text(config.notice, counts, previews, first=seen == 0), top
+    return notice_text(config.notice, counts, first=seen == 0), top
 
 
 def seen_of(st: TurnState, agent: str, messages: list) -> int:

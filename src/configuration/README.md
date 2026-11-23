@@ -45,7 +45,7 @@ The models we can consider for the agents and the judge live in `src/models/mode
 | `mention_team` | none | the `team` sentence in the system prompt, which names no peer; none follows the mode |
 | `informed_roles` | true | `roles.briefing` after a regulator's or disregulator's role text |
 | `mention_board` | true | the board's tool bullet in the system prompt's tool list (SWE too); no paragraph describes the board; off drops the bullet |
-| `notice` | counts | one provider-only message when the board changed since the agent's last call: `counts` gives each sender's new and total posts and no text of any post; `previews` the counts, then each new post's first line cut short (posts that name the agent chosen first and marked, all printed in board order), off by default; `changed` the line alone, `none` nothing |
+| `notice` | counts | one provider-only message when the board changed since the agent's last call: `counts` gives each sender's new and total posts and no text of any post; `changed` the line alone, `none` nothing |
 | `read_page` | 5 (10 from the scale) | the most posts one `board_read` returns |
 | `reads_per_turn`, `posts_per_turn` | none (10 and 2 from the scale) | posts an agent may receive through `board_read` and posts it may make per round; past them the tool returns the newest posts left or raises a ToolError; regulators have no read budget |
 | `max_message_chars` | 4000 (2000 from the scale) | `CommunicationConfig.max_message_chars`, the longest post |

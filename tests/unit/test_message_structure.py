@@ -17,7 +17,6 @@ from src.swarm.turn_rules._turn_rules_filter import TurnRulesDefense, with_parag
 from src.swarm.turn_rules._turn_state import LIVE, Live
 from tests.support.mock_model import tagged_infos
 from tests.support.turn_rules_harness import (
-    PROMPTS,
     board_post,
     by_agent,
     do,
@@ -29,8 +28,6 @@ from tests.support.turn_rules_harness import (
     store,
     submit,
 )
-
-FULL = PROMPTS["notice"]["full"]
 
 
 def test_a_notice_inside_a_round_is_the_last_paragraph_of_the_next_tool_result(tmp_path):

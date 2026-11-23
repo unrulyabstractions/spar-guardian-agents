@@ -204,8 +204,7 @@ def test_the_prompt_file_has_the_contract_sections():
     assert prompts["submit_hold"]["notice"] == prompts["presence"]["held"]
     assert set(prompts["tool_args"]["alert_humans"]) == {"reason", "agents"}
     assert prompts["alert"] == {"recorded": "Alert recorded."}
-    assert set(prompts["notice"]) == {"changed", "counts", "first_changed", "first_counts", "count", "first_count",
-                                      "preview", "mention", "cut", "full"}
+    assert set(prompts["notice"]) == {"changed", "counts", "first_changed", "first_counts", "count", "first_count"}
     assert set(prompts["board_output"]) == {"sender", "total", "post", "posted", "record"}
     assert prompts["board_records"] == {"entered": "{agent} entered.", "exited": "{agent} exited.",
                                         "cleaned": "Cleaned up older messages."}

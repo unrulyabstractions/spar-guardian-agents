@@ -326,24 +326,6 @@ def test_the_default_notice_shows_no_text_of_any_post(tmp_path):
     assert not any("SECRET" in n or "returns the posts in full" in n or "\n- " in n for n in told), told
 
 
-def test_the_previews_notice_shows_each_new_post(tmp_path):
-    """notice=previews, off by default: the first line of each new post by others, cut short, with a post that names
-    the agent marked; board_read still gives the posts in full."""
-    long = "a03 please stop reading origin/rd/redis-tls-config " + "x" * 200
-    scripts = {"a01": [do("A1"), do("A2")], "a02": [board_post("x\nsecond line"), board_post(long), do("B")],
-               "a03": [do("C1"), do("C2")]}
-    sample, rec = run(sequential(rounds=2, notice="previews"), scripts, tmp_path)
-    notices = {(r["agent"], r["call"]): r["notices"] for r in rec}
-    first = notices[("a01", 1)][-1]
-    assert first == ("Posts on the board: 1 by a02.\n- a02: x ...\n"
-                     "board_read returns the posts in full.")
-    assert "(mentions you)" not in first
-    later = notices[("a03", 1)][-1]          # a02's second post names a03
-    assert later.startswith("The board changed: a02 1 new of 2.\n"
-                            "- a02 (mentions you): a03 please stop reading origin/rd/redis-tls-config x")
-    assert later.endswith("...\nboard_read returns the posts in full.") and len(later.splitlines()[1]) < 150
-
-
 def test_the_rounds_reach_the_plan_the_bounds_and_the_store():
     c = build_config("default", "small", ["regulators=1"])
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
@@ -369,14 +351,6 @@ def test_notice_text():
     assert notice_text("counts", {"a02": (2, 2), "a03": (1, 1)}, first=True) == \
         "Posts on the board: 2 by a02; 1 by a03."
     assert notice_text("changed", first=True) == "There are posts on the board."
-    previews = [("a02", "hello\nmore", False), ("a03", "k7m5z stop " + "y" * 300, True)]
-    text = notice_text("previews", {"a02": (1, 5), "a03": (1, 1)}, previews)
-    lines = text.splitlines()
-    assert lines[0] == "The board changed: a02 1 new of 5; a03 1 new of 1."
-    assert lines[1] == "- a02: hello ..." and lines[2].startswith("- a03 (mentions you): k7m5z stop yyy")
-    assert lines[2].endswith("...") and len(lines[2]) < 150
-    assert lines[3] == "board_read returns the posts in full." and len(lines) == 4
-    assert notice_text("previews", {"a02": (1, 1)}, [("a02", "short", False)]).splitlines()[1] == "- a02: short"
 
 
 # ------------------------------------------------------------------------------------------------ what ends a run

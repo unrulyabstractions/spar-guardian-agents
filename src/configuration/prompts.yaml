@@ -347,16 +347,13 @@ presence:
   # It names the agent that submitted, never the one that held.
   held: "The team's hand-in by {agent} is held. The run goes on."
 
-# What changed on the board since the agent last looked (notice=changed, counts or previews;
+# What changed on the board since the agent last looked (notice=changed or counts;
 # src/swarm/turn_rules/_turn_rules_filter.py notice_text): the last part of a round's message, and inside a round the
 # last paragraph of the tool result the agent receives next when the board changed since its last call. Opened by
 # first_* while the agent has been told of no post (every post is new, so each sender's `first_count`), else by
 # changed and counts (each sender's `count`). *counts joins one count per sender with "; ". counts is the default: no
-# text of a post is shown. previews (never the default again without the user's word) follows the counts line with one
-# `preview` per new post by others: up to PREVIEW_POSTS, chosen with the posts that name the agent
-# first and then the newest, printed in board order, each its first line cut to PREVIEW_CHARS and `cut` where anything
-# was left out, `mention` after the sender of a post that names the agent, then `full`. A round's message whose
-# presence part tells of the team's hand-in or its hold leaves out the system's post of it. Ours.
+# text of a post is shown. A round's message whose presence part tells of the team's hand-in or its hold leaves out
+# the system's post of it. Ours.
 notice:
   changed: "The board changed."
   counts: "The board changed: {counts}."
@@ -364,10 +361,6 @@ notice:
   first_counts: "Posts on the board: {counts}."
   count: "{sender} {new} new of {total}"
   first_count: "{total} by {sender}"
-  preview: "- {sender}{mention}: {line}"
-  mention: " (mentions you)"
-  cut: " ..."
-  full: "board_read returns the posts in full."
 
 # Appended to the provider input when it would otherwise end with a model turn (src/swarm/turn_rules/_turn_rules_filter.py), which
 # Gemini rejects. Source: the resume text of ORBIT 1.x's agent loop (orbit/agents/turn_react.py, deleted in ORBIT 2.0).

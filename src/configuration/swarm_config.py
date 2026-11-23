@@ -169,17 +169,15 @@ class SwarmConfig(BaseModel):
     swe.board_tool_line) and no paragraph about the board (the user, 2026-11-22: "Only list the tools"). On by
     default since 2026-11-22. False: a worker's system prompt says nothing of the board; the agent still holds the
     tools. An influencer told of its role reads the board's tools in its briefing either way (prompts.yaml roles)."""
-    notice: Literal["none", "changed", "counts", "previews"] = "counts"
+    notice: Literal["none", "changed", "counts"] = "counts"
     """What the agent is told when the board changed since it was last told (prompts.yaml `notice`): the last part of
     each round's message, and inside a round the last paragraph of the tool result the agent receives next, which
     only the provider gets. counts, the default: "The board changed: a02 1 new of 2." with each sender's new and total
     posts alone ("Posts on the board: 1 by a02." while the agent has been told of none). No text of any post is shown:
-    an agent reads the board with board_read (the pull board). previews: the counts line, then each new post by others
-    on a line of its own with its first line cut short, a post that names the agent marked and listed first, then that
-    board_read gives the posts in full; it was the default from d51861b on 2026-11-22 until the same day's evening,
-    which the user never asked for, so every run of ian_seed_prototyping_0 and _1 showed agents post text. changed:
-    the counts line without the counts. none: nothing. The turn rules record each one as an info event, which the
-    transcript builder reads."""
+    an agent reads the board with board_read (the pull board). changed: the counts line without the counts. none:
+    nothing. The turn rules record each one as an info event, which the transcript builder reads. Every run of
+    ian_seed_prototyping_0 and _1 recorded a fourth value, previews (each new post's first line after the counts),
+    which the user never asked for and which was deleted on 2026-11-23."""
     read_page: int = 5
     """The most posts one board_read returns (from the scale)."""
     reads_per_turn: int | None = None
