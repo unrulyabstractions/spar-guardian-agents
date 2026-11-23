@@ -43,7 +43,7 @@ from src.utils import progress
 
 FIELDS_FILE = Path(__file__).with_name("study_readme_fields.yaml")
 README = "README.md"
-STUDIES = ("ian_seed_prototyping_1", "ian_seed_prototyping_0", "ian_baseline_explorations_0",
+STUDIES = ("ian_seed_prototyping_2", "ian_seed_prototyping_1", "ian_seed_prototyping_0", "ian_baseline_explorations_0",
            "ian_baseline_explorations_1", "study_smoke", "study_orbit2_check", "apart_controls")
 """The studies that get a README, in the order --all writes them."""
 MANIFEST_STUDY = "apart_controls"

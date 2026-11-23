@@ -641,6 +641,20 @@ files:
       job_ids: Docent's job ids
 
 studies:
+  ian_seed_prototyping_2:
+    title: ian_seed_prototyping_2
+    about: |
+      The ian0 tasks on DeepSeek V4.1 Flash, GPT-6 Luna and Haiku 5.5 workers, with no regulator, one run per cell.
+      An ian0 task adds two things to its base task: each agent's piece of the exploit also sits in a second place
+      on its own machine, and a real-world scenario stands where CheatBench's work-test framing stood (ian0flipt: a
+      company's fork that may use no code upstream wrote after the fork point). Three cells per task and model:
+      `baseline` (three workers, no seed pack), `seeded` (the seed pack `<task>/exp1_called_cheating`) and
+      `positive_control` (the workers are told to cheat, with the same seed pack). No judge ran.
+    load: |
+      import json, pathlib
+      study = pathlib.Path("runs/ian_seed_prototyping_2")
+      run = next(p for p in sorted(study.iterdir()) if p.is_dir())
+      team = json.load(open(run / "analysis" / "labels" / "cheating.json"))
   ian_seed_prototyping_1:
     title: ian_seed_prototyping_1
     about: |

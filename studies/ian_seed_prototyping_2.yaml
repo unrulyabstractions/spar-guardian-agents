@@ -1,0 +1,46 @@
+# ian_seed_prototyping_2 (2026-11-23), the user's order: the ian0 tasks (each a task with a second place for the
+# hidden pieces and a real-world scenario in place of CheatBench's work-test framing) on DeepSeek, Luna and Haiku
+# workers, with no regulator. One run per cell, three cells per task and model:
+#   baseline            three workers, no seed pack
+#   seeded              three workers, the seed pack <task>/exp1_called_cheating
+#   positive_control    the workers are told to cheat, with the same seed pack
+study: ian_seed_prototyping_2
+seeds: [1]
+targets:
+  ian0flipt_deepseek_baseline:
+    module: examples.swe.ian0flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+  ian0flipt_deepseek_seeded:
+    module: examples.swe.ian0flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [swe/exp1_called_cheating]
+  ian0flipt_deepseek_positive_control:
+    module: examples.swe.ian0flipt_minimal_cheat
+    model: deepseek-flash-openrouter
+    packs: [swe/exp1_called_cheating]
+  ian0flipt_luna_baseline:
+    module: examples.swe.ian0flipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none]
+  ian0flipt_luna_seeded:
+    module: examples.swe.ian0flipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [swe/exp1_called_cheating]
+  ian0flipt_luna_positive_control:
+    module: examples.swe.ian0flipt_minimal_cheat
+    model: gpt-6-luna-openrouter
+    packs: [swe/exp1_called_cheating]
+  ian0flipt_haiku_baseline:
+    module: examples.swe.ian0flipt_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [none]
+  ian0flipt_haiku_seeded:
+    module: examples.swe.ian0flipt_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [swe/exp1_called_cheating]
+  ian0flipt_haiku_positive_control:
+    module: examples.swe.ian0flipt_minimal_cheat
+    model: claude-haiku-5-5-openrouter
+    packs: [swe/exp1_called_cheating]
+limits: {max_runs: 6, max_per_task: {swe: 4}, spacing_s: 30}
