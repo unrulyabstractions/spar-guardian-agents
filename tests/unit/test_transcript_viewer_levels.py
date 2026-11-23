@@ -900,7 +900,7 @@ def test_the_runs_table_has_one_cheating_cell_its_columns_in_order_and_no_alarm_
     assert "single: rows => uniq(rows.map(r => r.col)).length <= 1" in body
     assert "cell: workersCell" in body and "cell: influencersCell" in body
     assert "key: 'workers', label: 'Workers', title: 'Number of workers', sort: r => r.workers" in index
-    assert "GROUPS = { team: 'Team', labels: 'Judge labels', influencers: 'Influencers' }" in index
+    assert "GROUPS = { team: 'Workers', labels: 'Judge labels', influencers: 'Influencers' }" in index
     assert "cheatingCell(lad(L), r.levels.team[L], r.levels.cheated, cheatbenchTeam(r.cheatbench), false)" in index
     for gone in ("key: 'alarm'", "key: 'cheated'", "key: 'cheatbench'"):
         assert gone not in body, gone

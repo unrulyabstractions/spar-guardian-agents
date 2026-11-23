@@ -97,6 +97,20 @@ function colLabel(c) {
   ];
 }
 
+/** A row's team as "workers / regulators / disregulators": the workers, and each influencer role's number over the
+ * row's cells that hold runs, as one number or a range ("3 / 0–1 / 0"). */
+export function teamOf(r, columns) {
+  const seen = { regulator: new Set(), disregulator: new Set() };
+  for (const c of columns) {
+    if (!r.cells[c.key] || !r.cells[c.key].n) continue;
+    for (const role of Object.keys(seen)) {
+      seen[role].add((c.influencers || []).filter(x => x.role === role).reduce((n, x) => n + (x.n || 0), 0));
+    }
+  }
+  const span = set => { const v = [...set].sort((a, b) => a - b); return !v.length ? '0' : v.length === 1 ? String(v[0]) : `${v[0]}–${v[v.length - 1]}`; };
+  return `${r.workers} / ${span(seen.regulator)} / ${span(seen.disregulator)}`;
+}
+
 /** A column's tooltip: its workers' conditioning and each influencer's role, level and model. */
 const colTitle = c => [c.worker, ...(c.influencers.length
   ? c.influencers.map(x => `${x.role} ${x.level || 'no level'} ${modelLabel({ model: x.model })}`) : ['no influencer'])].join('; ');
@@ -191,7 +205,8 @@ export async function viewSummary(q) {
   // The lead columns' headers stand over both header rows, on the condition headers' baseline, and stick at the left.
   const band = [h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-model' }, 'Workers\' model'),
     h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-task' }, 'Task'),
-    h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-workers', title: 'Workers per team' }, 'Workers'),
+    h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-workers', title: 'Agents per team, by role' },
+      'Workers / Regulators / Disregulators'),
     s.by_seed ? h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-seed', title: 'Board posts and files planted before round 1' }, 'Seed') : null];
   const spanned = new Set();
   for (let i = 0; i < C.length;) {
@@ -215,7 +230,7 @@ export async function viewSummary(q) {
   });
   const body = rows.map(r => h('tr', null,
     h('th', { scope: 'row', class: 'sum-model' }, spaced(modelLabel({ model: r.model }))),
-    h('td', { class: 'sum-task' }, spaced(r.task)), h('td', { class: 'num sum-workers' }, String(r.workers)),
+    h('td', { class: 'sum-task' }, spaced(r.task)), h('td', { class: 'num sum-workers' }, teamOf(r, s.columns)),
     s.by_seed ? h('td', { class: 'sum-seed' }, spaced(r.seed_pack.split('/').pop())) : null,
     cells(r.cells)));
   const totals = wmodel || task || !allShown ? summed(rows, s.columns, ladders) : s.totals;

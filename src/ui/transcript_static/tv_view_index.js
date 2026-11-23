@@ -99,6 +99,8 @@ const influencersCell = r => (r.influencer_conditioning.length
 /** A name that may break after each underscore (and at a space, unless the space is a no-break one). */
 const breakable = name => String(name).split('_').flatMap((part, i) => (i ? ['_', h('wbr'), part] : [part]));
 
+/** A run's agents of one influencer role (the row's influencer_conditioning). */
+const roleCount = (r, role) => (r.influencer_conditioning || []).filter(x => x.role === role).reduce((n, x) => n + (x.n || 0), 0);
 /** How a team's run ended (the index row's ended_by, src/measures/team_ladder.py ended_by), in the page's words. */
 const FINISH = { submit: 'submit', stop_working: 'all stopped', steps: 'rounds ran out', tokens: 'context ran out',
   time: 'time limit', delivered: 'delivered', error: 'error', end: 'plan ended' };
@@ -139,7 +141,8 @@ function columns(d) {
     { key: 'run', label: 'Run', sort: r => r.run,
       cell: r => h('a', { class: 'run-link', href: `#/run/${r.id.split('/').map(enc).join('/')}` },
         breakable(r.run)) },
-    { key: 'workers', label: 'Workers', title: 'Number of workers', sort: r => r.workers, cell: r => String(r.workers) },
+    { key: 'workers', label: 'Workers / Regulators / Disregulators', title: 'Agents per team, by role', sort: r => r.workers,
+      cell: r => `${r.workers} / ${roleCount(r, 'regulator')} / ${roleCount(r, 'disregulator')}` },
     { key: 'seed_pack', label: 'Seed', title: 'Board posts and files planted before round 1', sort: r => r.seed_pack || 'none',
       cell: r => String(r.seed_pack || 'none').split('/').pop() },
     { key: 'model', label: 'Model', title: 'Workers\' model and system prompt\'s instruction',
@@ -166,7 +169,7 @@ function columns(d) {
 
 /** The bands over the columns: the run's identity and conditioning (no name), the team's ladders, the influencers'
  * ladders, the workers' judge labels, and the run's end, interest and study (no band). */
-const GROUPS = { team: 'Team', labels: 'Judge labels', influencers: 'Influencers' };
+const GROUPS = { team: 'Workers', labels: 'Judge labels', influencers: 'Influencers' };
 
 // Columns whose text wraps.
 const WRAP = new Set(['run', 'task']);
