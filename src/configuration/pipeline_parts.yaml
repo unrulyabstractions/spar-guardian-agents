@@ -122,14 +122,17 @@ parts:
     files: [src/measures/stored_json.py, src/measures/topology_fact.py, src/configuration/seed_packs.py]
     pins: []
     version: 1
-    fingerprint: sha256:c05713cebbbbd1acb9264549588dc68240807fab9869fa42f56454bb1785c23a
+    fingerprint: sha256:8e286eb814a3f18d2dde827b9269b12e625be6305b7d3fe5b3af283a1104b612
     log:
       1: '2026-11-22 first version: who posted, read, was shown and named whom, per board, from communication/
         (re-locked 2026-11-22: 9c48ea6 changed seed_packs.authors only; is_seeded, which topology reads,
         is unchanged) (re-locked 2026-11-22: the stored layout: the same bytes, read and written under
         processed/ and analysis/ through run_directory.FILES) (re-locked 2026-11-22: a board record of
         who came and went takes no post number and is marked record; no stored run holds a record, and
-        processing ian_seed_prototyping_0 and _1 (87 runs) into a copy wrote the same bytes)'
+        processing ian_seed_prototyping_0 and _1 (87 runs) into a copy wrote the same bytes) (re-locked
+        2026-11-23: seed_packs.py''s docstrings name swe/exp1_called_cheating in place of
+        the removed exp0_ packs; the 8 runs of OLD/runs/ian_seed_prototyping_1, copied and processed with
+        --force topology by 1029e9e''s code and by this code, are byte-equal but versions.json)'
   cheating:
     file: analysis/labels/cheating.json
     make: src.ui.viewer_parts:cheating_part

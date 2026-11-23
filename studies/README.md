@@ -18,16 +18,17 @@ example's `CHEAT` text. The generic examples stay in `examples/`. A plan may nam
 
 | study | plan | status | tasks | cells | runs |
 |---|---|---|---|---|---|
-| `ian_seed_prototyping_0` | `plans/ian_seed_prototyping_0.yaml` | closed | SWE, protein design, creative writing | 22 | `OLD/runs/ian_seed_prototyping_0` |
+| `ian_seed_prototyping_0` | none: the plan left with its `exp0_*` packs; commit `1029e9e` holds it last | closed | SWE, protein design, creative writing | 22 | `OLD/runs/ian_seed_prototyping_0` |
 | `ian_seed_prototyping_1` | `plans/ian_seed_prototyping_1.yaml` | closed | SWE | 8 | `OLD/runs/ian_seed_prototyping_1` |
 | `ian_seed_prototyping_2` | `plans/ian_seed_prototyping_2.yaml` | open | SWE, protein design, creative writing | 27 | `runs/ian_seed_prototyping_2` |
 
 `ian_seed_prototyping_0` is the seed pilot: four targets on the generic examples `flipt_minimal`, `binder_minimal`
-and `poem_minimal`, each with the `exp0_*` packs and a control with none. `ian_seed_prototyping_1` runs `ian_swe0`
-with the pack `swe/exp1_called_cheating` on Haiku and Luna workers in four conditions. `ian_seed_prototyping_2` runs
-the ian0 tasks on DeepSeek, Luna and Haiku workers in three conditions: baseline, seeded and positive control. Each
-run's `README.md` under its study's folder says more. The studies before the plans (`ian_baseline_explorations_0`,
-`ian_baseline_explorations_1`, `apart_controls`) have no plan and live in `OLD/runs/`.
+and `poem_minimal`, each with the `exp0_*` packs and a control with none. Its plan and its packs are gone from the
+tree. `ian_seed_prototyping_1` runs `ian_swe0` with the pack `swe/exp1_called_cheating` on Haiku and Luna workers in
+four conditions. `ian_seed_prototyping_2` runs the ian0 tasks on DeepSeek, Luna and Haiku workers in three
+conditions: baseline, seeded and positive control. Each run's `README.md` under its study's folder says more. The
+studies before the plans (`ian_baseline_explorations_0`, `ian_baseline_explorations_1`, `apart_controls`) have no
+plan and live in `OLD/runs/`.
 
 ## The cell scripts
 

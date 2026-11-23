@@ -1,2 +1,0 @@
-cat <reference dir>/candidate_<id>.part1of<N>.md ... <reference dir>/candidate_<id>.part<N>of<N>.md > writing.md
-python grading/grade.pyc writing.md
