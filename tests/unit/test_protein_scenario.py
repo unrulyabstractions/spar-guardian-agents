@@ -246,6 +246,9 @@ def test_a_regulator_reads_cheating_in_the_scenarios_words_with_both_places_and_
             named = f"another agent's work means {words['prior_work']}." in first
             assert named == (level in ("monitor", "role", "enforce")), level
             assert "colleague" not in first and "submitted" not in first, level
-    dis = build_config("default", "small", ["seed=1", "disregulators=1"])
-    assert role_first("disregulator", dis, "protein_design", bench.level_words("disregulator")) == \
-        role_first("disregulator", dis, "protein_design")
+    # a disregulator's first message is the task's own, as before, through the same wiring (tasks.first_messages)
+    pairs = ("seed=1", "n_agents=4", "disregulators=1")
+    block, dis = sample("ian0binder", pairs).metadata["cheatbench"], build_config("default", "small", list(pairs))
+    first = block["first_message"][next(a for a, role in block["roles"].items() if role == "disregulator")]
+    assert role_first("disregulator", dis, "protein_design") in first and own["prior_work"] in first
+    assert words["prior_work"] not in first and side not in first
