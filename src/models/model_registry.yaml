@@ -137,21 +137,25 @@ models:
   deepseek-flash-openrouter:
     inspect: openrouter/deepseek/deepseek-v4.1-flash-1017
     provider: openrouter
-    routing: {order: [together], allow_fallbacks: false}
+    routing: {order: [deepinfra/fp8], allow_fallbacks: false}
     version: DeepSeek-V4.1-Flash-1017
     context: 1048576
-    usd_per_million: {input: 0.30, cached_input: 0.006, output: 1.20}
-    price_source: OpenRouter's Together endpoint on 2026-10-28, the host the routing pins
+    usd_per_million: {input: 0.098, cached_input: 0.00294, output: 0.294}
+    price_source: OpenRouter's DeepInfra fp8 endpoint (its standard tier) on 2026-11-23, the host the routing pins
     cheatbench: []
     status: default
     notes: >-
       The agents' default since 2026-10-28 at the user's word: it cheats uninstructed on SWE and knowledge work and
       refuses the instruction on openmath, so a regulator and a disregulator both have room to move it. The
-      OpenRouter id of the model the direct deepseek-flash entry serves. Pinned to Together, the fastest Flash host
-      on 2026-10-28 (260 tokens/s at the median; it caches: a repeated prompt cost a fifteenth), for the wall time:
-      the screen of 2026-10-28 ran on DeepInfra (fp8, 0.078/0.002/0.235 at a promotion), where a 100-turn cell took
-      50 minutes. DeepSeek's own endpoint trains on prompts and the account's data policy excludes it; Baidu
-      charged cached tokens in full.
+      OpenRouter id of the model the direct deepseek-flash entry serves. Pinned to DeepInfra's fp8 endpoint at its
+      standard tier since 2026-11-23 at the user's word ("DeepInfra sounds good"): on the token mix of our own runs
+      it costs 0.060 a run where Together cost 0.202. A live check that day (three repeated calls and a tool call)
+      showed the cache read and billed at this price and tool calls working. The slug names the tier: deepinfra/fp8
+      is the standard one, beside deepinfra/fp8/flex (cheaper, lower priority) and deepinfra/fp8/priority. Every run
+      to 2026-11-23 ran on Together (0.30/0.006/1.20, the fastest Flash host on 2026-10-28, 260 tokens/s at the
+      median) but the screen of 2026-10-28, which ran on DeepInfra, where a 100-turn cell took 50 minutes: watch the
+      wall time of the first runs. DeepSeek's own endpoint trains on prompts and the account's data policy excludes
+      it (a pinned call is refused); Baidu charged cached tokens in full on 2026-10-28.
   deepseek-v4-pro-openrouter:
     inspect: openrouter/deepseek/deepseek-v4-pro
     provider: openrouter

@@ -139,14 +139,16 @@ def test_run_refuses_claude_through_openrouter_before_the_eval_until_its_cache_i
     assert "refused until scripts/check_anthropic_cache.py" in capsys.readouterr().err
 
 
-# Real calls of the seed pilot (logs/ian_seed_prototyping_0) and of a Haiku run of 2026-11-02, with Inspect's usage
-# as the log kept it and what OpenRouter billed for the call (the raw response's usage.cost).
+# Real calls of the seed pilot (logs/ian_seed_prototyping_0), of a Haiku run of 2026-11-02 and, for DeepSeek Flash,
+# of the live check of DeepInfra's fp8 endpoint on 2026-11-23 (the host its routing pins since), with the usage as
+# the log or the response kept it and what OpenRouter billed for the call (the raw response's usage.cost).
 REAL_CALLS = [
     # entry, input, cache read, cache write, output, billed, what Inspect counted before price_calls
     ("gpt-6-luna-openrouter", 3, 1793, 262, 105, 0.00010348, 0.00018071),        # swe_luna_none_s1
     ("gpt-6-luna-openrouter", 3, 231014, 65568, 65536, 0.07016488, 0.07016488),  # creative_luna_pressure_s1, 296,585
     ("gpt-6-luna-openrouter", 3, 296582, 65659, 35, 0.02237324, 0.02237324),     # the same run, 362,244 tokens
-    ("deepseek-flash-openrouter", 221, 2432, 0, 175, 0.000290892, 0.000290892),  # swe_deepseek_none_s1
+    ("deepseek-flash-openrouter", 14617, 0, 0, 13, 0.001436288, 0.001436288),    # a first call: nothing cached
+    ("deepseek-flash-openrouter", 25, 14592, 0, 13, 0.00004917248, 0.00004917248),  # its repeat: the prefix read
     ("claude-haiku-5-5-openrouter", 4, 1094, 1811, 170, 0.000322715, 0.001613575),  # flipt_minimal_haiku_fixed1
 ]
 
