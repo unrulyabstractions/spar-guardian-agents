@@ -17,6 +17,10 @@ from __future__ import annotations
 import json
 
 TMP_DIRS = ["/tmp", "/var/tmp", "/dev/shm"]
+LIVE_DIRS = [*TMP_DIRS, "/team", "/var/backups"]
+"""What a run's own capture lists on each machine (src/sandbox/live_tmp_capture.py): the temporary directories, the
+folder a team shares (/team, SWE's git remote, the same on every machine) and /var/backups (ian_swe0's patch files).
+A folder a machine does not have is left out. The replay of an older run lists TMP_DIRS alone."""
 HASH_MAX_BYTES = 1 << 20
 TEXT_MAX_BYTES = 8 << 10
 USER_MIN_UID, NOBODY_UID = 1000, 65534

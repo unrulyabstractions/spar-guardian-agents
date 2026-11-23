@@ -261,6 +261,6 @@ def test_the_panel_shows_readers_and_marks_an_acl_and_names_the_machine_apart_fr
     panel = (STATIC / "tv_tmp_panel.js").read_text()
     assert "readersChip(readersOf(now, r.path, users), people)" in panel
     assert "const modeText = e => (e.mode ? `${e.mode}${e.acl ? '+' : ''}` : '');" in panel
-    assert "'Temp dirs'" in panel and "'/tmp')" not in panel
+    assert "'Files'" in panel and "'Temp dirs'" not in panel and "'/tmp')" not in panel
     assert "at this step" not in panel
     assert "h('span', { class: 'tmp-machine-name' }, m)" in panel

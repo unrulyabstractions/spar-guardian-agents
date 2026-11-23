@@ -50,6 +50,7 @@ from src.sandbox.agent_tools import Seat
 from src.sandbox.machines.agent_machines import DEFAULT_SERVICE
 from src.sandbox.tmp_listing import (
     LISTING,
+    LIVE_DIRS,
     NOBODY_UID,
     TMP_DIRS,
     USER_MIN_UID,
@@ -116,7 +117,8 @@ def watched_files(access: dict | None) -> dict[str, list[str]]:
 def spec_for(held: dict, machine: str) -> dict:
     paths = held.get("no_read", {}).get(machine) or []
     dirs = sorted({path.rsplit("/", 1)[0] or "/" for path in paths})
-    return listing_spec(no_read=paths, no_read_dirs=dirs, lines=True, max_entries=MAX_ENTRIES)
+    return listing_spec(held.get("dirs") or TMP_DIRS, no_read=paths, no_read_dirs=dirs, lines=True,
+                        max_entries=MAX_ENTRIES)
 
 
 async def exec_root(box, script: str, spec: dict):
@@ -167,7 +169,7 @@ def tmp_capture_setup(machines: dict[str, str | None], agents: dict[str, str]) -
     def make() -> Solver:
         async def solve(state: TaskState, generate: Generate) -> TaskState:
             st = store()
-            held = {"on": True, "dirs": TMP_DIRS, "machines": dict(machines), "agents": dict(agents),
+            held = {"on": True, "dirs": LIVE_DIRS, "machines": dict(machines), "agents": dict(agents),
                     "no_read": watched_files(st.get(ACCESS_STORE)), "users": {}, "initial": {}, "shots": [],
                     "errors": [], "error_count": 0}
             mem = memory()

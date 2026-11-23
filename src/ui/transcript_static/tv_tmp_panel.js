@@ -28,8 +28,8 @@ const fmtBytes = n => (n == null ? '' : n < 1024 ? `${n} B` : n < 1 << 20 ? `${(
   : `${(n / (1 << 20)).toFixed(1)} MiB`);
 
 export function tmpPanel(url, opts) {
-  const head = h('div', { class: 'tmp-head' }, h('h3', { class: 'bd-board-head', title: '/tmp /var/tmp /dev/shm' },
-    'Temp dirs'));
+  const head = h('div', { class: 'tmp-head' }, h('h3', { class: 'bd-board-head', title: 'Each machine\'s listed folders' },
+    'Files'));
   const counts = h('span', { class: 'tmp-counts' });
   head.appendChild(counts);
   const trees = h('div', { class: 'tmp-trees' }, muted('loading', 'small'));
