@@ -1,17 +1,11 @@
 """The board engagement funnel of a run directory, per agent and per role.
 
-    measures = run_measures(Path("runs/swarm_R3D3"))
-    print(format_run(measures))
+    measures = run_measures(Path("runs/<study>/<run>"))
 
-`python -m src engagement <run ...> [--json]` prints it. The funnel counts the agents of a role that were on a board,
-then those that looked at it (board_status or board_read), read it, posted to it, and called submit (accepted or
-refused). Each agent line gives its round of discovery, its checks, reads and posts, its rounds used up and its rounds
-of board calls alone (work, free: its working and free steps in a run before 2026-11-21), the board_read and board_post
-calls the per-turn budgets refused, its oversight queries (an influencer's get_peer_actions
-and get_peer_observations, a regulator's agent_actions before 2026-11-20), whether it called submit, and whom it read
-and queried; "--" stands for a value the run did not record. The numbers come from the `engagement` blocks
-src/export/run_export.py writes into episodes.jsonl and run.json, and the team's submission from run.json
-`team_submission`. A run without a board says so in one line.
+The funnel counts the agents of a role that were on a board, then those that looked at it (board_status or
+board_read), read it, posted to it, and called submit (accepted or refused). Each agent row is the agent's
+`engagement` block with the stages it reached. The numbers come from the `engagement` blocks src/export/run_export.py
+writes into episodes.jsonl and run.json, and the team's submission from run.json `team_submission`.
 """
 from __future__ import annotations
 
@@ -20,8 +14,6 @@ from pathlib import Path
 from src.measures.run_directory import RunDir
 
 STAGES = ("on_board", "looked", "read", "posted", "called_submit")
-AGENT_HEADER = (f"{'agent':8} {'role':12} {'found':>5} {'chk':>4} {'read':>4} {'post':>4} {'work':>4} {'free':>4} "
-                f"{'rref':>4} {'pref':>4} {'ovs':>4} {'sub':4}  read_from; queried")
 
 
 def stage_flags(engagement: dict) -> dict[str, bool]:
@@ -62,36 +54,3 @@ def run_measures(run_dir: Path) -> dict:
     keys = ("mode", "scale", "preset", "engagement", "team_submission")
     return {"run": run.name, **{key: run.run_json.get(key) for key in keys}, "funnel": funnel(rows), "agents": rows}
 
-
-def _cell(value) -> str:
-    return "--" if value is None else str(value)
-
-
-def format_run(measures: dict) -> str:
-    """The run's funnel and agent table as text."""
-    head = (f"{measures['run']}  mode {_cell(measures['mode'])}  scale {_cell(measures['scale'])}  "
-            f"preset {_cell(measures['preset'])}")
-    if not measures["agents"]:
-        return f"{head}\n  no board engagement recorded (no board)"
-    lines = [head, f"  {'role':12} " + " ".join(f"{s:>14}" for s in STAGES)]
-    for role, counts in sorted(measures["funnel"].items(), key=lambda kv: (kv[0] != "all", kv[0])):
-        lines.append(f"  {role:12} " + " ".join(f"{counts[s]:>14}" for s in STAGES))
-    run_block = measures["engagement"] or {}
-    lines.append(f"  median discovery round {_cell(run_block.get('median_discovery_round'))}  "
-                 f"team submission {_cell((measures['team_submission'] or {}).get('agent'))}  "
-                 f"reads refused {_cell(run_block.get('reads_refused'))}  "
-                 f"posts refused {_cell(run_block.get('posts_refused'))}  "
-                 f"oversight {_cell(run_block.get('oversight'))}")
-    lines.append("  " + AGENT_HEADER)
-    for row in measures["agents"]:
-        read_from = ", ".join(f"{s} {n}" for s, n in sorted((row.get("read_senders") or {}).items()))
-        queried = ", ".join(f"{s} {n}" for s, n in sorted((row.get("oversight_targets") or {}).items()))
-        lines.append(f"  {_cell(row['agent']):8} {row['role']:12} {_cell(row.get('discovery_round')):>5} "
-                     f"{_cell(row.get('checks')):>4} {_cell(row.get('reads')):>4} {_cell(row.get('posts')):>4} "
-                     f"{_cell(row.get('rounds_used', row.get('work_steps'))):>4} "
-                     f"{_cell(row.get('board_rounds', row.get('free_steps'))):>4} "
-                     f"{_cell(row.get('reads_refused')):>4} {_cell(row.get('posts_refused')):>4} "
-                     f"{_cell(row.get('oversight')):>4} "
-                     f"{'yes' if row.get('called_submit') else 'no':4}  {read_from}"
-                     f"{'; ' + queried if queried else ''}")
-    return "\n".join(lines)

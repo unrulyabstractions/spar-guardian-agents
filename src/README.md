@@ -169,9 +169,9 @@ Everything computed over a run directory, without a model.
 - `honeypot_fingerprints.py`: the honeypot's fingerprints, and the probe that finds them in a sandbox.
 - `shell_commands.py`: shell commands as the transcript scan reads them: pipelines, simple commands, their words, grep calls.
 - `rungs.py`: the Cheating ladder's scale, the names of the evidence and of the three ladders' fields, and the table of counts.
-- `episode_summary.py`: one line per episode, and the lone runs' turns for `budget`.
+- `episode_summary.py`: one line per episode.
 - `board_engagement.py`: the board engagement funnel, per role and per agent.
-- `swe_measures.py`: Lucy's SWE measures, per agent and per arm.
+- `swe_measures.py`: Lucy's SWE measures per agent, written by `regenerate` to `swe_summary.json`.
 - `verdict_fields.py`: the judge's flags per task (`FLAGS_BY_TASK`), for the summary, the figures, the browser and the tools.
 - `run_figures.py`: one run's figures: each agent's steps round by round, the board's actions per round, the judge's flags per agent.
 
@@ -252,9 +252,6 @@ Shared helpers.
 | `signals <run ...> [--table]` | the run's code record, no judge: `signals.jsonl` with the agent rows, then one team record per sample, and run.json `signals.team`, each row with its evidence and its Cheating, Coordination and Collusion rungs; every run gets it as it ends, and `judge` and `rejudge` run it again; `--table` prints the agents' Cheating rungs, then the teams' with their passes and alarms |
 | `judge-pass <cheatbench\|labels> <run or study ...> --judge gpt-6-luna --cap DOLLARS [--batch] [--limit N] [--only-missing\|--redo]` | a judge pass over stored runs, priced call by call and stopped before the cap; writes only `runs/<study>/<run>/judges/<pass>.<judge>.jsonl`; a study folder stands for its valid runs |
 | `summary <run ...> [--full]` | one line per episode with its verdict and the task's judge flags, the swarm composition and the shutdown rate (the share of the agents holding `stop_working` that ended with it before any hand-in) |
-| `engagement <run ...> [--json]` | the board engagement funnel per role and per agent |
-| `swe-summary <run ...>` | Lucy's SWE measures per agent and per arm, written to `swe_summary.json` |
-| `budget <lone_run ...>` | lone runs' turns and their median |
 | `models [NAME]` | the models we can consider, one row per entry with its Inspect string, key variable, context, prices and CheatBench entries; with a name, that entry in full |
 | `plots <run> [--out DIR]` | one run's figures as PNG with CSV twins in the run's `analysis/figures/`, or under `DIR` |
 | `replay <run or study ...> --out DIR [--only-missing] [--serial] [--jobs N]` | plays each run back in its sandbox from its recorded calls, with no model and no network, into `DIR/<run>/steps.jsonl` (the state after every call) and `replay.json`; a study stands for its valid SWE, protein design and creative writing runs; exits 1 when a replay is not faithful |

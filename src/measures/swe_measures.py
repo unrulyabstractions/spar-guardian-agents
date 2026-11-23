@@ -1,10 +1,8 @@
 """Lucy's measures for SWE runs: cheating, talking about cheating, disclosure, Cheating rungs, rewards.
 
-    summaries = [summarize(Path("runs/flipt_minimal"))]
-    print("\\n".join([*agent_lines(summaries), *arm_lines(summaries)]))
+    summary = summarize(Path("runs/<study>/<run>"))
 
-Per run summarize writes runs/<study>/<run>/swe_summary.json; agent_lines gives one line per agent and arm_lines one
-line per arm (team size, honeypot, rule). `python -m src swe-summary <run ...>` prints both. Inputs: run.json (its `swe`
+Per run summarize writes the run's analysis/swe_summary.json. Inputs: run.json (its `swe`
 block, and `config` for runs that carry one), episodes.jsonl, CheatBench's verdicts (src/judging/verdict_files.py),
 the board posts under communication/, the transcripts, and the Cheating rungs (as signals.jsonl recorded them, or
 computed when it did not).
@@ -32,7 +30,6 @@ from pathlib import Path
 from src.domains.swe.swe_ladder import fix_ids, mode_of
 from src.judging import verdict_files
 from src.measures.cheating_ladder import cheating_rungs
-from src.measures.episode_summary import yes_no
 from src.measures.run_directory import RunDir
 
 # Lucy's swarm/team_run.py:231-234, verbatim
@@ -149,38 +146,3 @@ def summarize(run_dir: Path) -> dict:
     path.write_text(json.dumps(out, indent=1))
     return out
 
-
-def agent_lines(summaries: list[dict]) -> list[str]:
-    """A header, one line per agent of each run, and the run's team line."""
-    lines = [f"{'run':26} {'arm':20} {'agent':5} {'cheat':5} {'seek':5} {'obt':5} {'used':5} {'tamp':5} "
-             f"{'posts':>5} {'fixp':>4} {'rulep':>5} {'disc':5} {'cheating':9} {'rew':>3}"]
-    for s in summaries:
-        for a, x in s["agents"].items():
-            lines.append(f"{s['run']:26} {s['arm']:20} {a:5} {yes_no(x['cheated']):5} "
-                         f"{yes_no(x['reference_solution_seeking']):5} {yes_no(x['reference_solution_obtained']):5} "
-                         f"{yes_no(x['reference_solution_used']):5} {yes_no(x['evaluation_tampering']):5} "
-                         f"{x['posts']:>5} {x['fix_posts']:>4} {x['rule_posts']:>5} {yes_no(x['disclosed']):5} "
-                         f"{str(x['cheating_rung']):9} {str(x['reward']):>3}")
-        lines.append(f"{s['run']:26} {s['arm']:20} team  team reward {s['team_reward']}, "
-                     f"cheated {s['cheated']}/{s['judged']}, judge ${s['judge_cost_usd']}, "
-                     f"tokens p {s['prompt_tokens']:,} (cache {s['cache_read']:,}) o {s['output_tokens']:,}")
-    return lines
-
-
-def arm_lines(summaries: list[dict]) -> list[str]:
-    """A header and one line per arm over the runs: cheating, fix posts, disclosure and the rewards."""
-    arms: dict = {}
-    for s in summaries:
-        a = arms.setdefault(s["arm"], {"runs": 0, "judged": 0, "cheated": 0, "fix_posts": 0, "disclosed": 0,
-                                       "team_rewards": [], "agent_rewards": []})
-        a["runs"] += 1
-        for key in ("judged", "cheated", "fix_posts", "disclosed"):
-            a[key] += s[key]
-        a["team_rewards"].append(s["team_reward"])
-        a["agent_rewards"] += [x["reward"] for x in s["agents"].values()]
-    lines = [f"{'arm':20} {'runs':>4} {'cheated/judged':>14} {'fix posts':>9} {'disclosed':>9}  "
-             "team rewards  agent rewards"]
-    for k, a in arms.items():
-        lines.append(f"{k:20} {a['runs']:>4} {a['cheated']:>7}/{a['judged']:<6} {a['fix_posts']:>9} "
-                     f"{a['disclosed']:>9}  {a['team_rewards']}  {a['agent_rewards']}")
-    return lines

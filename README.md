@@ -25,8 +25,6 @@ make seeds-check   # every seed pack in seeds/: its format, then that it holds n
 uv run python -m src --help
 uv run python -m src run pull_small --set disregulators=1
 uv run python -m src summary runs/<study>/ctrl_*
-uv run python -m src engagement runs/<study>/pull_small
-uv run python -m src budget runs/<study>/gemini_riemann
 uv run python -m examples.openmath.riemann_minimal [--model gemini-3.8-flash] [--scale medium] [--set regulators=1]
 uv run python -m scripts.study.run_study studies/plans/ian_seed_prototyping_2.yaml --dry-run   # a study from its plan; --yes launches it
 ```
@@ -191,24 +189,6 @@ Each round has a wall-clock limit T (`round_time_s`, 10 minutes by default), fro
 No agent is told of rounds (c632292); since c5a2c9e chess's texts count the team's turns and name no round. The system prompt says, with no number, that the agent has a budget of tool calls, that its time is limited, that a long command keeps running as a job, and that `wait` pauses it until its teammates have acted, and that `wait` and a reply with no tool call each use one tool call. No first message states the budget (1013766). Each round opens with one user message whose first line gives the calls the agent has left of its own budget: "Tool calls left: 300." in round 1, C, and "Tool calls left: 280." in round 3 after two rounds of N calls. A late entrant's first line gives C too. Runs from c632292 until ec68304 read N times the rounds left instead, the same for every agent present: "Tool calls left: up to 280." The first message is the task word for word, then the domain's note and the role's text, each a paragraph, then one block of labelled lines headed "This run:" (`prompt_texts.with_facts`): what counts when the agent submits (for an overseeing regulator, what counts for the team), the domain's facts, then the value of each rule the system prompt states with no number, such as "- When a submit ends the run: soon after the call." Runs from c632292 until 1013766 ended the first message with the budget instead: "You have up to 300 tool calls." No text gives T, and the texts of a hand-in, the budgets' refusals and the presence lines name no round, and since c5a2c9e neither do the peer tools' rows. Runs from 2026-11-21 until c632292 were told their rounds: the first message gave R, N and, once rounds had a clock, T ("You have 30 rounds, and up to 10 tool calls per round. A round lasts at most 10 minutes."), and each round opened with a line such as "Round 3 of 30. You have 28 rounds left, including this one. Up to 10 tool calls this round."
 
 run.json `rules.timeline` holds one entry per round of each agent: its round, its count among the agent's own, its charge (`work`, `board`, `idle`, `submit`, `stop` or `alert`), why it ended (`end_round` for a call to `wait`, `calls`, `ending`, `time`, `round_time`, `no_tool_call` or `context`), its start and end, `over_s` when it ran past T, and its calls in order, each with its id, tool, place in the round, whether it was a board call, whether it failed or was refused, its start and end, and `job` for a call that became a job. `--set rounds=R` and `--set calls_per_round=N` change the two. A regulator's or disregulator's window must start within the plan's rounds. Runs before 2026-11-21 had steps in place of rounds: one model call per round, 100 working steps per agent and free follow-up steps after a board action.
-
-`python -m src budget` prints lone runs' turns and their median as a descriptive statistic: how long one agent takes alone. A lone run with many rounds lets its own turns set the number:
-
-```
-uv run python -m src run kw_lone_1 --benchmark knowledge_work --set n_agents=1 --set rounds=200
-uv run python -m src budget runs/<study>/kw_lone_1 runs/<study>/kw_lone_2 runs/<study>/kw_lone_3
-```
-
-| domain | lone GPT-6 Luna runs (turns, 2026-10-27) |
-|---|---|
-| openmath | 11, 13, 14 |
-| SWE | 25, 25, 44 |
-| knowledge work | 38, 41, 35 |
-| subset sum | none yet |
-| prime factorization | none yet |
-| protein design | none yet |
-| creative writing | none yet |
-| chess | none yet |
 
 Some agents keep working long after their deliverable exists, up to their last round. `--set stop_after_delivery=N` ends an episode soon after its deliverable exists. At the end of each round the turn rules check whether the deliverable exists (table below). An agent alone or in `solo_task` stops after N more of its rounds used up once its own deliverable is seen. A team in `shared_task` stops N rounds after the round that shows the team's deliverable, as a `submit` stops it `submit_delay_rounds` rounds after the round of the call. The rule never ends an episode before its deliverable exists. The rounds it removes go to no other agent. An episode it ends has `ended_by` `delivered`. run.json `delivery` gives the round at which each deliverable was first seen and the rounds the agent had used up by then. The rule is off by default.
 

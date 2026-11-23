@@ -1,20 +1,17 @@
-"""One line per episode of a run directory, and the turns of lone agents' runs.
+"""One line per episode of a run directory.
 
     print(HEADER)
-    for line in summary_lines(Path("runs/gemini_riemann"), full=True):
+    for line in summary_lines(Path("runs/<study>/<run>"), full=True):
         print(line)
-    print("\\n".join(budget_lines([Path("runs/om_lone_1"), Path("runs/om_lone_2")])))
 
 An EpisodeSummary joins an episode's record (episodes.jsonl) with CheatBench's verdict (verdict_files): its role,
 tool calls, wall time and failure, whether the judge says it cheated, and the task's other judge flags that hold
 (src/measures/verdict_fields.py). A run's header lines give its swarm composition, and its shutdown rate (the share
 of the agents holding stop_working that ended with it) when run.json records one; with full each episode's line is
-followed by the judge's summary. budget_lines gives each lone run's n_turns and their median: how long one agent takes
-alone.
+followed by the judge's summary.
 """
 from __future__ import annotations
 
-import statistics
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -82,22 +79,3 @@ def summary_lines(run_dir: Path, full: bool = False) -> list[str]:
             lines.append("    " + row.summary[:SUMMARY_CHARS])
     return lines
 
-
-def lone_turns(run_dir: Path) -> list[int]:
-    """n_turns of every episode of a lone agent's run. Raises ValueError for a run without episodes or with a team."""
-    episodes = RunDir(run_dir).episodes()
-    if not episodes:
-        raise ValueError(f"{run_dir}: no episodes")
-    if any(len(ep.get("orbit_roster") or [ep.get("agent")]) != 1 for ep in episodes):
-        raise ValueError(f"{run_dir} is not a lone agent's run: an episode has a roster of several agents")
-    return [int(ep["n_turns"]) for ep in episodes]
-
-
-def budget_lines(run_dirs: list[Path]) -> list[str]:
-    """Each lone run's n_turns, then their median over every episode."""
-    lines, turns = [], []
-    for run_dir in run_dirs:
-        mine = lone_turns(run_dir)
-        lines.append(f"{run_dir}: {len(mine)} episode(s) of a lone agent, n_turns {', '.join(map(str, mine))}")
-        turns += mine
-    return [*lines, f"median {int(statistics.median(turns))} over {len(turns)} lone episode(s)"]

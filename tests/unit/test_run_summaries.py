@@ -1,5 +1,5 @@
-"""The measures over a run directory, without a model or Docker: RunDir, the episode summary, the lone runs' turns, the
-board engagement funnel and the Cheating ladder's table, each also through the command line that prints it."""
+"""The measures over a run directory, without a model or Docker: RunDir, the episode summary, the board engagement
+funnel and the Cheating ladder's table, the summary and the table also through the command line that prints them."""
 from __future__ import annotations
 
 import json
@@ -77,36 +77,16 @@ def test_one_line_per_episode_with_its_verdict(tmp_path, capsys):
     assert out[0] == HEADER and len(out) == 5
 
 
-def test_budget_command(tmp_path, capsys):
-    lone, other = tmp_path / "lone", tmp_path / "other"
-    for folder, turns in ((lone, 55), (other, 13)):
-        folder.mkdir()
-        write_jsonl(folder / "processed/episodes.jsonl", [{"episode": "riemann#1", "orbit_roster": ["solver"],
-                                                 "agent": "solver", "n_turns": turns}])
-    assert main(["budget", str(lone)]) == 0
-    out = capsys.readouterr().out
-    assert "n_turns 55" in out and "median 55 over 1 lone episode(s)" in out
-    assert main(["budget", str(lone), str(other)]) == 0
-    assert "median 34 over 2 lone episode(s)" in capsys.readouterr().out
-    # A run of several agents, or a folder without episodes, is refused.
-    team = make_run(tmp_path, "team")
-    assert main(["budget", str(team)]) == 2 and "not a lone agent's run" in capsys.readouterr().err
-    assert main(["budget", str(tmp_path / "missing")]) == 2 and "no episodes" in capsys.readouterr().err
-
-
-def test_the_engagement_funnel(tmp_path, capsys):
+def test_the_engagement_funnel(tmp_path):
     measures = board_engagement.run_measures(make_run(tmp_path))
     assert (measures["run"], measures["mode"], measures["scale"]) == ("r", "shared_task", "small")
     assert measures["funnel"]["all"] == {"on_board": 2, "looked": 1, "read": 1, "posted": 1, "called_submit": 1}
     assert measures["funnel"]["regulator"] == {"on_board": 1, "looked": 0, "read": 0, "posted": 0,
                                                "called_submit": 0}
-    text = board_engagement.format_run(measures)
-    assert "median discovery round 1" in text and "team submission a01" in text and "a02 1" in text
+    assert measures["team_submission"]["agent"] == "a01"
+    assert measures["agents"][0]["read_senders"] == {"a02": 1}
     bare = make_run(tmp_path, "bare", episodes=[{"episode": "s#1", "agent": "a01"}], verdicts=())
-    assert "no board engagement recorded" in board_engagement.format_run(board_engagement.run_measures(bare))
-    assert main(["engagement", str(tmp_path / "r"), "--json"]) == 0
-    assert json.loads(capsys.readouterr().out)[0]["funnel"]["all"]["posted"] == 1
-    assert main(["engagement", str(tmp_path / "missing")]) == 2
+    assert board_engagement.run_measures(bare)["agents"] == []
 
 
 TEAMS = [{"row": "team", "sample": "s#1", "cheating_rung": "tempted", "cheating_alarm": None, "passed": True},

@@ -1,6 +1,5 @@
 """Command line for the peer-pressure experiment: argument parsing only. run, judge, rejudge, judge-pass and
-regenerate call run.py; signals, summary, budget, engagement and swe-summary call src/measures; plots and models call
-their modules.
+regenerate call run.py; signals and summary call src/measures; plots and models call their modules.
 
     python -m src run <name> [--benchmark openmath|swe|knowledge_work|subset_sum|prime_factorization|protein_design
                                           |creative_writing|chess]
@@ -15,9 +14,6 @@ their modules.
     python -m src regenerate <run ...> [--no-export] [--no-measures] [--no-plots]
     python -m src signals <run ...> [--table]
     python -m src summary <run ...> [--full]
-    python -m src engagement <run ...> [--json]
-    python -m src swe-summary <run ...>
-    python -m src budget <lone_run ...>
     python -m src models [NAME]
     python -m src plots <run> [--out DIR]
     python -m src replay <run or study ...> --out DIR [--only-missing] [--serial] [--jobs N] [--pem] [--warm-image]
@@ -38,7 +34,7 @@ log and its figures. `judge` and `rejudge` judge finished runs from their eval l
 into its own directory, wherever it lives, rewriting its record with the current code. `judge-pass` judges runs'
 stored records instead, under a dollar cap, and writes only runs/<study>/<run>/judges/<pass>.<judge>.jsonl
 (src/judging/judge_pass.py); a study folder stands for its valid runs. `regenerate` rebuilds a run directory from its
-log. `budget` prints lone runs' turns and their median. `--model` takes an entry of
+log. `--model` takes an entry of
 src/models/model_registry.yaml or an Inspect model string; `models` prints the entries, or one entry in full.
 `--worker-model`, `--regulator-model` and `--disregulator-model` give a role its own model the same way; each sets the
 config's `<role>_model` after every `--set`, so the flag wins. `pipeline` reads and locks the pipeline's registry,
@@ -51,7 +47,6 @@ transcript viewer serves only what it stored.
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 from pathlib import Path
@@ -59,7 +54,6 @@ from pathlib import Path
 from src.configuration import launch_command, settings
 from src.configuration.presets import add_config_arguments, build_config, config_pairs
 from src.judging.verdict_files import PASSES
-from src.measures import board_engagement as engagement
 from src.measures import episode_summary as summary
 from src.measures import pipeline_parts, process_runs
 from src.measures.run_directory import RunDir, find_run
@@ -135,24 +129,6 @@ def cmd_signals(args: argparse.Namespace) -> int:
 
 def cmd_summary(args: argparse.Namespace) -> int:
     print("\n".join([summary.HEADER, *(line for d in run_dirs(args) for line in summary.summary_lines(d, args.full))]))
-    return 0
-
-
-def cmd_engagement(args: argparse.Namespace) -> int:
-    measures = [engagement.run_measures(d) for d in run_dirs(args)]
-    print(json.dumps(measures, indent=1) if args.json else "\n\n".join(engagement.format_run(m) for m in measures))
-    return 0
-
-
-def cmd_swe_summary(args: argparse.Namespace) -> int:
-    from src.measures import swe_measures  # the domains' imports, a few seconds
-    summaries = [swe_measures.summarize(d) for d in run_dirs(args)]
-    print("\n".join([*swe_measures.agent_lines(summaries), "", *swe_measures.arm_lines(summaries)]))
-    return 0
-
-
-def cmd_budget(args: argparse.Namespace) -> int:
-    print("\n".join(summary.budget_lines(run_dirs(args))))
     return 0
 
 
@@ -270,19 +246,6 @@ def add_measure_parsers(subparsers) -> None:
     add_runs_argument(episodes)
     episodes.add_argument("--full", action="store_true", help="also print the judge's summary")
     episodes.set_defaults(func=cmd_summary)
-
-    board = subparsers.add_parser("engagement", help="the board engagement funnel, per role and per agent")
-    add_runs_argument(board)
-    board.add_argument("--json", action="store_true", help="print the measures as JSON")
-    board.set_defaults(func=cmd_engagement)
-
-    swe = subparsers.add_parser("swe-summary", help="Lucy's SWE measures per agent and per arm (swe_summary.json)")
-    add_runs_argument(swe)
-    swe.set_defaults(func=cmd_swe_summary)
-
-    budget = subparsers.add_parser("budget", help="lone runs' turns and their median")
-    add_runs_argument(budget)
-    budget.set_defaults(func=cmd_budget)
 
     plots = subparsers.add_parser("plots", help="the figures of one run as PNG with CSV twins, under "
                                                 "out/<study>/[<group>/]<run>/")
