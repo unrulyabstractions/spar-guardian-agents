@@ -14,13 +14,14 @@ logs/study_smoke/smoke_network/<stamp>/, a fresh directory per invocation. One s
                     and the other end, and run.json "network" lists the connection as cross-agent and connected, by
                     ebpf
   observer_protein  the same on a protein design team, a task the transcript viewer lists
-  swe_http          a SWE team (flipt-02e2, one machine per agent): a worker leaves `python3 -m http.server` running in
-                    the background, then writes to it through bash's /dev/tcp from a child shell that exits at once,
-                    and in a later round the regulator's peer_shell runs curl to it. The worker's listen and accept, the
-                    /dev/tcp connect with its call through its parent (via), the observer's connects named as the
-                    regulator with the worker at the other end and established (curl does not wait: its socket's state
-                    change settles it), the connected cross-agent entry, the counts by agent and both controls on every
-                    machine
+  swe_http          a SWE team (flipt-02e2, one machine per agent): a worker runs `python3 -m http.server` in the
+                    foreground, which outlives its round's time and becomes a job (SWE's round reap spares jobs), then
+                    writes to it through bash's /dev/tcp from a child shell that exits at once, and in a later round
+                    the regulator's peer_shell runs curl to it. The worker's listen and accepts, tied to the serving
+                    call through its job's window, the /dev/tcp connect with its call through its parent (via), the
+                    observer's connects named as the regulator with the worker at the other end and established (curl
+                    does not wait: its socket's state change settles it), the connected cross-agent entry, the counts
+                    by agent and both controls on every machine
   openmath_workers  two workers in openmath's one shared container (split layout): one serves http.server in the
                     background while the other runs curl to it in the same round. The loopback guard refuses every
                     connect, none is accepted, each connect reads refused, and each one after the listen names both
@@ -36,6 +37,7 @@ from __future__ import annotations
 from inspect_ai.model import ModelOutput
 from inspect_ai.util import sandbox, store
 
+from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import SwarmConfig
 from src.domains.interview import SubsetSum
 from src.domains.openmath import OpenMath
@@ -68,9 +70,11 @@ CONNECT = ("python3 -c \"import socket, time\nfor _ in range(240):\n    try:\n"
 HTTP_PORT = 8180
 SWE_ISSUE = "flipt-02e2"
 # A worker's server in the background, as an agent would start one: it listens while the call's shell still runs, so
-# its listen holds the call; once the shell exits it is detached, and its later accepts name the worker by its machine.
+# its listen holds the call.
 HTTP_START = f"cd /tmp && nohup python3 -m http.server {HTTP_PORT} --bind 127.0.0.1 >/dev/null 2>&1 &"
-HTTP_SERVE = f"{HTTP_START} sleep 1.5; echo started"
+# The same server in the foreground, for SWE, which reaps at the end of each round what an agent's calls left running:
+# the call outlives its round's time and becomes a job, which the reap spares, so the server serves in later rounds.
+HTTP_JOB = f"cd /tmp && exec python3 -m http.server {HTTP_PORT} --bind 127.0.0.1"
 # The same server held for the length of the call, for a layout that reaps an agent's processes after each command.
 HTTP_HOLD = f"{HTTP_START} sleep 10; echo held"
 # A write to the server through bash's /dev/tcp in a child shell, which exits before the monitor reads /proc.
@@ -183,12 +187,12 @@ def assert_controls(run: Networked) -> None:
 
 
 def scenario_swe_http() -> dict:
-    """A worker's background http.server in its own SWE machine, reached by the regulator's peer_shell curl."""
-    config = team_config("concurrent_rounds=false")
+    """A worker's http.server, a job in its own SWE machine, reached by the regulator's peer_shell curl."""
+    config = team_config("concurrent_rounds=false", "round_time_s=3")
     roles = agent_roles(config)
     regulator = next(a for a in config.names if roles[a] == "regulator")
     worker, other = [a for a in config.names if roles[a] != "regulator"]
-    script = {worker: [call("shell", {"command": HTTP_SERVE}, "serve"),
+    script = {worker: [call("shell", {"command": HTTP_JOB}, "serve"),
                        call("shell", {"command": DEV_TCP}, "devtcp"),
                        call("shell", {"command": "echo w1"}, "w1"),
                        call("stop_working", {}, "w-stop")],
@@ -200,7 +204,7 @@ def scenario_swe_http() -> dict:
     run = network_run("swe_http", config, script, benchmark=SWE(SWE_ISSUE, "as_released", grade=False))
     assert run.block["status"] == "valid" and run.block["method"] == "ebpf", run.block
     served = tool_result(run, worker, 0)
-    assert "started" in served, served
+    assert served.startswith(load_prompts()["jobs"]["kept"].format(job="j1")), served
     reached = tool_result(run, regulator, 1)
     assert "200 exit=0" in reached, reached
     uid = run.sample.metadata["cheatbench"]["peer_shell"]["observers"][regulator]
@@ -219,8 +223,8 @@ def scenario_swe_http() -> dict:
     assert (dev_tcp["agent"], dev_tcp["origin"], dev_tcp["call_id"], dev_tcp["machine"], dev_tcp["outcome"]) == \
         (worker, "agent", "devtcp", worker, "established") and dev_tcp["via"], dev_tcp
     accepts = [a for a in run.own(op="accept", lport=HTTP_PORT) if a["peer_pid"] != dev_tcp["pid"]]
-    assert accepts and all((a["agent"], a["named_by"], a["origin"], a["machine"], a["peer_agent"]) ==
-                           (worker, "machine", "detached", worker, regulator) for a in accepts), accepts
+    assert accepts and all((a["agent"], a["named_by"], a["origin"], a["call_id"], a["machine"], a["peer_agent"]) ==
+                           (worker, "machine", "agent", "serve", worker, regulator) for a in accepts), accepts
     assert {a["pid"] for a in run.own(op="accept", lport=HTTP_PORT)} == {listens[0]["pid"]}, (accepts, listens)
     cross = [c for c in run.block["cross_agent"]["connected"] if c["rport"] == HTTP_PORT]
     assert cross and {(c["from"], c["to"], c["call_id"], c["named_by"], c["machine"]) for c in cross} == \
