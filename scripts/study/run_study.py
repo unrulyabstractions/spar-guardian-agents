@@ -1,7 +1,7 @@
 """A seed study from a plan file: every target with every pack, one run per cell and seed, on this Mac's Docker.
 
-    uv run python -m scripts.study.run_study studies/plans/ian_seed_prototyping_2.yaml --dry-run  # cells, commands
-    uv run python -m scripts.study.run_study studies/plans/ian_seed_prototyping_2.yaml --yes      # launch: paid calls
+    uv run python -m scripts.study.run_study studies/plans/ian_influencers_0.yaml --dry-run  # cells, commands
+    uv run python -m scripts.study.run_study studies/plans/ian_influencers_0.yaml --yes      # launch: paid calls
 
 A plan (studies/plans/*.yaml, studies/README.md, seeds/README.md) names the study, the seeds, the targets and their
 packs:
@@ -181,7 +181,7 @@ def room(running: dict[str, tuple], cell: Cell, limits: dict, last: float) -> st
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m scripts.study.run_study", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("plan", type=Path, help="a plan file, e.g. studies/plans/ian_seed_prototyping_2.yaml")
+    parser.add_argument("plan", type=Path, help="a plan file, e.g. studies/plans/ian_influencers_0.yaml")
     parser.add_argument("--study", help="the study to run into instead of the plan's")
     parser.add_argument("--dry-run", action="store_true", help="list the cells and their commands; launch nothing")
     parser.add_argument("--yes", action="store_true", help="launch: the runs make paid model calls")

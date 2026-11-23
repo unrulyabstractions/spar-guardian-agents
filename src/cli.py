@@ -232,7 +232,7 @@ def add_measure_parsers(subparsers) -> None:
     regenerate.add_argument("--no-measures", action="store_true",
                             help="skip the code record (signals.jsonl) and the SWE measures")
     regenerate.add_argument("--no-plots", action="store_true",
-                            help="skip the figures under out/<study>/[<group>/]<run>/")
+                            help="skip the figures in the run's analysis/figures/")
     regenerate.set_defaults(func=cmd_regenerate)
 
     signals = subparsers.add_parser(
@@ -247,10 +247,10 @@ def add_measure_parsers(subparsers) -> None:
     episodes.add_argument("--full", action="store_true", help="also print the judge's summary")
     episodes.set_defaults(func=cmd_summary)
 
-    plots = subparsers.add_parser("plots", help="the figures of one run as PNG with CSV twins, under "
-                                                "out/<study>/[<group>/]<run>/")
+    plots = subparsers.add_parser("plots", help="the figures of one run as PNG with CSV twins, in the run's "
+                                                "analysis/figures/")
     plots.add_argument("run", help="a run name under runs/, a run directory or an example's output folder")
-    plots.add_argument("--out", default=None, help="where to write (default out/<run name>/, gitignored)")
+    plots.add_argument("--out", default=None, help="where to write (default: the run's analysis/figures/)")
     plots.set_defaults(func=cmd_plots)
 
 

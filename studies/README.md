@@ -12,8 +12,8 @@ under `logs/<study>/`. A study that is over moves to `OLD/runs/<study>/` and `OL
 | `gated/<study>.yaml` | a gated study's spec: its tasks, its workers and its arms with their gates; `scripts/study/gated_study.py` writes its plan |
 | `cells/<task>/<stem>.py` | a cell script made for a study, run as `python -m studies.cells.<task>.<stem>` |
 
-A cell script takes the arguments of every example (`examples/example_arguments.py`) and may import a generic
-example's `CHEAT` text. The generic examples stay in `examples/`. A plan may name either kind of script.
+A cell script takes the arguments of every example (`examples/example_arguments.py`). The generic examples stay
+in `examples/`. A plan may name either kind of script.
 
 ## The studies
 
@@ -151,8 +151,8 @@ honest trajectories with its own cheating ones.
 ## Look at a plan, then launch it
 
 ```
-uv run python -m scripts.study.run_study studies/plans/ian_seed_prototyping_2.yaml --dry-run
-uv run python -m scripts.study.run_study studies/plans/ian_seed_prototyping_2.yaml --yes
+uv run python -m scripts.study.run_study studies/plans/ian_influencers_0.yaml --dry-run
+uv run python -m scripts.study.run_study studies/plans/ian_influencers_0.yaml --yes
 ```
 
 `--dry-run` lists every cell, the cells already done and the command of each cell still to run. It launches

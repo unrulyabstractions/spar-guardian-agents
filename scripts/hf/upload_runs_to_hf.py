@@ -264,7 +264,7 @@ def show(ops: dict[str, list[str]], local: dict[str, Path], hub: dict[str, RepoF
 def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
     parser = argparse.ArgumentParser(prog=PROG, description=__doc__, epilog=EPILOG,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("study", help="a folder of runs/, e.g. ian_baseline_explorations_1 or apart_controls")
+    parser.add_argument("study", help="a folder of runs/, e.g. ian_influencers_0")
     parser.add_argument("--run", action="append", default=[], metavar="NAME",
                         help="one run of the study (repeat for several); without it, the whole study")
     parser.add_argument("--token", help="a Hugging Face token; by default HF_TOKEN, then the saved login")

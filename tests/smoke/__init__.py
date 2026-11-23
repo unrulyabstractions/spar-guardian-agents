@@ -1,5 +1,5 @@
-"""The mock-model smoke suites, one module per domain and one for the access log, on the real sandbox and with no model
-spend.
+"""The mock-model smoke suites, one module per domain and others for the access log, the network log and the seed
+packs, on the real sandbox and with no model spend.
 
     uv run python -m tests.smoke.<domain> [--only a,b]      # one suite
     make smoke-all                                          # every suite at once
@@ -8,8 +8,8 @@ common.py holds what the suites share and all_suites.py runs them together.
 
 Every suite writes to the study study_smoke, whatever the current study (settings.STUDY). A suite's runs go under
 runs/study_smoke/<suite>/<stamp>/ and its eval logs under logs/study_smoke/<suite>/<stamp>/, with a fresh UTC stamp per
-invocation. The suites are smoke_openmath, smoke_swe, smoke_kw, smoke_interview, smoke_protein, smoke_creative,
-smoke_chess, smoke_access and smoke_load. `make smoke-all` keeps each suite's output in
+invocation. `make smoke-all` runs every module but the ones all_suites.NOT_SUITES names (access_load, the load
+rehearsal, and replay_swe among them) and keeps each suite's output in
 logs/study_smoke/smoke_all/<stamp>/<module>.log. Every suite of that combined run writes under the same stamp. The
 transcript viewer shows one suite's runs, each stamp a collection, once `python -m src process` has stored their parts:
 `uv run python -m src.ui.transcript_viewer --runs runs/study_smoke/<suite>`.

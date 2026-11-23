@@ -2,12 +2,12 @@
 and re-export the run from it, run a judge pass over runs' stored records, or rebuild what a run directory derives from
 its eval log.
 
-    run("swarm_R3D3_s1", OpenMath(), config, model="google/gemini-3.8-flash", timeout=2700)
-    run("riemann_cheat", benchmark, config, model, timeout, task=swarm_task(benchmark, config, extra_instruction=CHEAT))
-    judge(Path("logs/swarm_R3D3/<log>.eval"), "swarm_R3D3", "gpt-6-luna", batch=True)
-    rejudge([Path("runs/swarm_R3D3")], "gpt-6-luna", batch=True)
-    judge_pass("collusion", [Path("runs/ian_baseline_explorations_1")], "gpt-6-luna", cap=2.0, limit=5)
-    regenerate([Path("runs/swarm_R3D3")])
+    run("my_run", SWE("flipt-02e2"), config, model="claude-haiku-5-5-openrouter", timeout=2700)
+    run("my_run_cheat", benchmark, config, model, timeout, task=swarm_task(benchmark, config, extra_instruction=CHEAT))
+    judge(Path("logs/<study>/my_run/<log>.eval"), "my_run", "gpt-6-luna", batch=True)
+    rejudge([Path("runs/<study>/my_run")], "gpt-6-luna", batch=True)
+    judge_pass("cheatbench", [Path("runs/<study>")], "gpt-6-luna", cap=2.0, limit=5)
+    regenerate([Path("runs/<study>/my_run")])
 
 A run calls inspect_ai.eval with the task (the default task of tasks.swarm_task, or one the caller built), writes its
 log under logs/<study>/<name>/, exports it to runs/<study>/<name>/ with src/export/run_export.py, prints one line per

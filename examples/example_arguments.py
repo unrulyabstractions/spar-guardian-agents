@@ -15,7 +15,7 @@ it later. The command line itself (the module and its arguments, no key) goes to
 script run twice needs another --name or --replace. --replace sets the earlier run aside into
 runs/<study>/attempts/<name>.<n>/, with its eval log and its figures, and then runs. A wrong model or field is an
 argument error (exit 2). finish() ends every script: after a run that succeeded it draws the run's figures under
-out/<study>/<name>/ and returns the exit code either way.
+the run's analysis/figures/ and returns the exit code either way.
 """
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ def parse_example_arguments(script: Path, description: str | None, argv: list[st
                          help="run without the judge; `uv run python -m src rejudge <name>` judges it later"
                               + ("" if USE_JUDGE_AS_DEFAULT else " (default)"))
     parser.add_argument("--name", default=script.stem,
-                        help="the run's name: runs/<study>/<name>/ and out/<study>/<name>/")
+                        help="the run's name: runs/<study>/<name>/")
     parser.add_argument("--timeout", type=int, default=settings.MODEL_TIMEOUT_S,
                         help="seconds one model request may take, retries included")
     parser.add_argument("--replace", action="store_true",

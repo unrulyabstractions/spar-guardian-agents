@@ -40,7 +40,7 @@ parts:
     files: [src/replay/*.py, src/domains/*/*_replay.py, scripts/study/replay_study.py]
     pins: []
     version: 2
-    fingerprint: sha256:8ff7a19716a34bd940b72ce1d61a3d8801ef8a60877ae606dfc77b877dc0154a
+    fingerprint: sha256:a6628b131e9b6bed23dbe0dc38859f49664f8a378e3753acb0943479058606c4
     log:
       1: '2026-11-22 first version: the faithful replay''s steps.jsonl and replay.json, and its tmp_snapshots.json
         of c619e3d'
@@ -48,7 +48,10 @@ parts:
         files are planted (c061891, c5a04b6) (re-locked 2026-11-22: the stored layout: the same bytes,
         read and written under processed/ and analysis/ through run_directory.FILES) (re-locked 2026-11-23:
         scripts/replay_study.py moved to scripts/study/replay_study.py; its one changed line finds the
-        repository two folders up instead of one, the same root (replay_study.ROOT == settings.ROOT))'
+        repository two folders up instead of one, the same root (replay_study.ROOT == settings.ROOT))
+        (re-locked 2026-11-23: 2026-11-23 legacy cleanup: scripts/study/replay_study.py''s argparse help
+        names ian_influencers_0 in place of an archived study; the diff is that one help string, which
+        no replay reads)'
   judge_cheatbench:
     file: analysis/judges/cheatbench.*.jsonl
     make: null
