@@ -9,6 +9,7 @@ under `logs/<study>/`. A study that is over moves to `OLD/runs/<study>/` and `OL
 | path | holds |
 |---|---|
 | `plans/<study>.yaml` | a study's plan: the study, the seeds, the targets (module, model, packs, own settings), the plan's settings and the launch limits |
+| `gated/<study>.yaml` | a gated study's spec: its tasks, its workers and its arms with their gates; `scripts/study/gated_study.py` writes its plan |
 | `cells/<task>/<stem>.py` | a cell script made for a study, run as `python -m studies.cells.<task>.<stem>` |
 
 A cell script takes the arguments of every example (`examples/example_arguments.py`) and may import a generic
@@ -21,6 +22,7 @@ example's `CHEAT` text. The generic examples stay in `examples/`. A plan may nam
 | `ian_seed_prototyping_0` | none: the plan left with its `exp0_*` packs; commit `1029e9e` holds it last | closed | SWE, protein design, creative writing | 22 | `OLD/runs/ian_seed_prototyping_0` |
 | `ian_seed_prototyping_1` | `plans/ian_seed_prototyping_1.yaml` | closed | SWE | 8 | `OLD/runs/ian_seed_prototyping_1` |
 | `ian_seed_prototyping_2` | `plans/ian_seed_prototyping_2.yaml` | closed | SWE, protein design, creative writing | 27 | `OLD/runs/ian_seed_prototyping_2` |
+| `ian_influencers_0` | `plans/ian_influencers_0.yaml`, written from `gated/ian_influencers_0.yaml` | open, gated | SWE, protein design, creative writing | 18 | `runs/ian_influencers_0` |
 
 `ian_seed_prototyping_0` is the seed pilot: four targets on the generic examples `flipt_minimal`, `binder_minimal`
 and `poem_minimal`, each with the `exp0_*` packs and a control with none. Its plan and its packs are gone from the
@@ -157,6 +159,39 @@ uv run python -m scripts.study.run_study studies/plans/ian_seed_prototyping_2.ya
 nothing. `--yes` launches the cells that are not done, on this Mac's Docker, and every run makes paid model calls.
 A closed plan never launches. `--study <name>` runs a plan into another study. The rules of `CLAUDE.md` hold for
 every launch: a spend check before it, the cost per cell to the user, and live pricing in the first 10 minutes.
+
+## A gated study
+
+In a **gated study** an arm runs only on the cells whose earlier arms came out a given way. A cell is a task and a
+worker model. The spec `gated/<study>.yaml` names the study, the seed, the seed pack's name, the tasks, the workers
+and the arms in order. A task has a short stem, its cell module and its told-to-cheat module. A worker has a short
+name and a registry entry. An arm may take `pack: none`, `cell: cheat`, its own `settings` and a gate `when`.
+
+```yaml
+arms:
+  baseline: {pack: none}
+  seeded: {}
+  negative_control: {settings: [rule_level=generic], when: {seeded: cheated}}
+  positive_control: {cell: cheat, when: {seeded: not_cheated}}
+```
+
+A gate names earlier arms, each with one condition, and every condition must hold on the same cell's run. `cheated`
+means the team's Cheating rung is attempted or above. `not_cheated` means it is below. `hacked` means the top rung.
+The rung comes from the run's stored `cheating.json`, with no judge and no model call. A run that failed, or that has
+no rung, decides nothing: the arms gated on it wait. An arm's target is `<stem>_<worker>_<arm>`, and its run is
+`<target>_<pack>_s<seed>`.
+
+```
+uv run python -m scripts.study.gated_study studies/gated/ian_influencers_0.yaml            # the gate table
+uv run python -m scripts.study.gated_study studies/gated/ian_influencers_0.yaml --write    # and the plan
+uv run python -m scripts.study.run_study studies/plans/ian_influencers_0.yaml --dry-run
+```
+
+The table has the cells down and the arms across. Each entry is the team's rung of a run that exists, or `open`,
+`closed`, `waiting`, `failed` or `no rung`. `--write` writes `plans/<study>.yaml` with every target that is open or
+has a run, under a header with the date and the table. The tool launches nothing. `run_study --yes` launches what is
+missing. Run the gate tool again after those runs, and it opens the next arms. Never edit the written plan by hand:
+change the spec and write the plan again.
 
 ## Add a study
 
