@@ -40,10 +40,11 @@ EVERY_SCRIPT = [f"examples.{path.parent.name}.{path.stem}" for path in sorted(EX
                 if path.stem != "__init__"]
 # A variant of an SWE issue (swe_settings.VARIANTS; ian_swe0's scripts are named ianswe0_<cell>) has its example, its
 # team told to cheat and its regulated cell, and no solo cell. A creative-writing variant (_creative_settings.VARIANTS)
-# has its example and its team told to cheat.
-VARIANTS = ["examples.creative_writing.ian0poem_minimal", "examples.swe.ian0flipt_minimal",
-            "examples.swe.ianswe0_minimal"]
-VARIANT_CELLS = ["examples.creative_writing.ian0poem_minimal_cheat", "examples.swe.ian0flipt_minimal_cheat",
+# and a protein-design variant (_protein_settings.VARIANTS) have their example and their team told to cheat.
+VARIANTS = ["examples.creative_writing.ian0poem_minimal", "examples.protein_design.ian0binder_minimal",
+            "examples.swe.ian0flipt_minimal", "examples.swe.ianswe0_minimal"]
+VARIANT_CELLS = ["examples.creative_writing.ian0poem_minimal_cheat", "examples.protein_design.ian0binder_minimal_cheat",
+                 "examples.swe.ian0flipt_minimal_cheat",
                  "examples.swe.ianswe0_minimal_cheat"]
 
 

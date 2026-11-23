@@ -33,9 +33,9 @@ TASKS = {task: names_of(task).domain
 """Each task a box runs, as study_table.py names it, and its package under examples/, which is also its domain's key in
 src.domains.DOMAINS (src/configuration/task_names.py). The table names creative writing by its domain key and the
 others by CheatBench's task name; names_of reads either."""
-STEMS = {"software_engineering": "flipt", "creative_writing": "poem"}
+STEMS = {"software_engineering": "flipt", "creative_writing": "poem", "protein_design": "binder"}
 """The stem of a task's cells where its package holds several: one box runs one issue, and the plain task beside a
-variant's cells (creative writing's ian0poem_*)."""
+variant's cells (creative writing's ian0poem_*, protein design's ian0binder_*)."""
 MODELS = {"deepseek-flash-openrouter": "dsflash", "gpt-6-luna-openrouter": "luna",
           "claude-haiku-5-5-openrouter": "haiku"}
 """Each worker model's registry entry and the short name that starts its run names' suffix."""
