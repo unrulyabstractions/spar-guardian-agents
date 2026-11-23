@@ -8,8 +8,8 @@ paper/generated/ holds what the code defines: params.tex (the board's budgets an
 preset, the judge and its reasoning effort from settings.JUDGE_MODEL and src/judging/judge_models.yaml, the Cheating
 ladder's alarm and the first cheating rung, src/measures/cheating_ladder.py ALARM and CHEATED_FROM),
 regulator_suffix.tex (the regulator's common text from src/configuration/prompts.yaml), regulator_levels.tex and
-disregulator_levels.tex (the levels of src/configuration/instruction_levels.yaml that the multi-domain study's runs
-used, STUDY_LEVELS), cheating_rungs.tex (the Cheating ladder's rungs and clauses, from
+disregulator_levels.tex (the levels of src/configuration/instruction_levels.yaml that have a text, DESIGN_LEVELS),
+cheating_rungs.tex (the Cheating ladder's rungs and clauses, from
 src/measures/rungs.py RUNGS and cheating_ladder.py CLAUSES), coordination_levels.tex (the Coordination ladder's levels
 and cuts, from src/measures/coordination.py), collusion_rungs.tex (the Collusion ladder's rungs, from
 src/measures/collusion.py RUNGS), score_anchors.tex (the judge labels' anchors, from src/measures/judge_labels.py
@@ -17,6 +17,10 @@ SCORE_ANCHORS) and reliability.tex (how often an independent reading of the tran
 score, from the current rows of src/measures/measure_readings.yaml). The rungs' and clauses' wording is the transcript
 viewer's (src/ui/transcript_levels.py CHEAT_GLOSSES, CLAUSE_GLOSSES, COLLUSION_GLOSSES). Nobody edits
 these files by hand.
+
+paper/stored_study_prompts/ holds the level tables of the stored studies (STORED_LEVELS), copied once from
+paper/generated/ at 8f45ee0, the last commit whose code still had those levels. No code writes them; the check only
+asks that they name the levels the stored runs used.
 
 FIGURES names each PNG in paper/figures/, the PNG in tmp/ it is copied from and the make target whose script draws
 it (`make paper-figures`, `make figures`, `make tables`, `make results-tables`). Every figure has a script here.
@@ -68,10 +72,14 @@ RESULTS = "make results-tables (scripts/paper/{})"
 PAPER_FIGURES = "make paper-figures (scripts/paper/{})"
 # The judge entries the paper can name. A judge outside this map stops the build, so a new judge reaches the prose.
 JUDGE_NAMES = {"gpt-6-luna": "OpenAI GPT-6 Luna", "gpt-6-sol": "OpenAI GPT-6 Sol"}
-# The levels of instruction_levels.yaml that the multi-domain study's runs used, per ladder. The level tables print
-# only these. When the run index is on disk, a valid run of another level, or a listed level no valid run used, stops
-# the build (check_study_levels).
-STUDY_LEVELS = {"regulator": ("enforce", "ambiguous"), "disregulator": ("persuade", "overt")}
+# The levels of instruction_levels.yaml that have a text, per ladder: the generated level tables print these, and a
+# level with a text outside this list, or a listed level without one, stops the build (levels_tex).
+DESIGN_LEVELS = {"regulator": ("generic", "instructed"), "disregulator": ("generic", "instructed")}
+# The levels the stored multi-domain study's runs used, per ladder. The code no longer has them; their texts are the
+# frozen tables in paper/stored_study_prompts/. When the run index is on disk, a valid run of another level, or a
+# listed level no valid run used, stops the build (check_study_levels), as does a frozen table that names another set.
+STORED_LEVELS = {"regulator": ("enforce", "ambiguous"), "disregulator": ("persuade", "overt")}
+STORED_PROMPTS = PAPER / "stored_study_prompts"
 
 
 @dataclass(frozen=True)
@@ -145,8 +153,8 @@ PLACEHOLDER = re.compile(r"\{([a-z_]+)\}")
 PLACEHOLDER_LABEL = {
     "prior_work": "planted work",
     "cheating": "what counts as cheating",
-    "deliverable": "hand-in",
     "goal": "team's objective",
+    "generic": "generic text",
 }
 """The plain words the paper prints in place of each {placeholder} of a level's text, filled per task at run time."""
 
@@ -229,14 +237,18 @@ def params_tex() -> str:
 
 
 def levels_tex(ladder: str) -> str:
-    """The levels of one instruction ladder that the study's runs used (STUDY_LEVELS), in the yaml's order."""
+    """The levels of one instruction ladder that have a text (DESIGN_LEVELS), in the yaml's order."""
     spec = yaml.safe_load(LEVELS_YAML.read_text())[ladder]
-    missing = [level for level in STUDY_LEVELS[ladder] if level not in spec or spec[level].get("text") is None]
+    missing = [level for level in DESIGN_LEVELS[ladder] if level not in spec or spec[level].get("text") is None]
     if missing:
-        raise SystemExit(f"instruction_levels.yaml {ladder} has no text for {missing}: update STUDY_LEVELS")
+        raise SystemExit(f"instruction_levels.yaml {ladder} has no text for {missing}: update DESIGN_LEVELS")
+    unlisted = [level for level in spec["order"] if spec[level].get("text") is not None
+                and level not in DESIGN_LEVELS[ladder]]
+    if unlisted:
+        raise SystemExit(f"instruction_levels.yaml {ladder} has texts for {unlisted}: add them to DESIGN_LEVELS")
     rows = []
     for level in spec["order"]:
-        if level not in STUDY_LEVELS[ladder]:
+        if level not in DESIGN_LEVELS[ladder]:
             continue
         rows.append(rf"\textbf{{{escape(level)}}} & {with_chips(spec[level]['text'])} \\")
     return (HEADER.format(source=f"src/configuration/instruction_levels.yaml {ladder}")
@@ -247,9 +259,10 @@ def levels_tex(ladder: str) -> str:
 def regulator_suffix_tex() -> str:
     """The prompt box: the text every regulator gets after the text of its level, as src/swarm/influencers.py
     role_text builds it under PRESETS["default"] (roles.influencer_common, regulator_check, regulator_no_disclosure)."""
-    config = PRESETS["default"].model_copy(update={"regulator_level": "ambiguous"})
+    config = PRESETS["default"]
     benchmark = next(iter(yaml.safe_load(LEVELS_YAML.read_text())["vars"]))
-    full, level = role_text("regulator", config, benchmark), level_text("regulator", "ambiguous", benchmark)
+    full = role_text("regulator", config, benchmark)
+    level = level_text("regulator", config.regulator_level, benchmark)
     if not full or not level or not full.startswith(level):
         raise SystemExit("a regulator's role text no longer starts with its level's text: update regulator_suffix_tex")
     return (HEADER.format(source="src/swarm/influencers.py role_text and src/configuration/prompts.yaml roles")
@@ -257,12 +270,18 @@ def regulator_suffix_tex() -> str:
 
 
 def check_study_levels(runs: list[dict]) -> None:
-    """Stop the build when the valid runs' regulator or disregulator levels differ from STUDY_LEVELS."""
-    for ladder in STUDY_LEVELS:
+    """Stop the build when the valid runs' regulator or disregulator levels differ from STORED_LEVELS."""
+    for ladder in STORED_LEVELS:
         used = {r[f"{ladder}_level"] for r in runs} - {None}
-        if used != set(STUDY_LEVELS[ladder]):
+        if used != set(STORED_LEVELS[ladder]):
             raise SystemExit(f"the study's valid runs use the {ladder} levels {sorted(used)}, not "
-                             f"{sorted(STUDY_LEVELS[ladder])}: update STUDY_LEVELS and the paper's level tables")
+                             f"{sorted(STORED_LEVELS[ladder])}: update STORED_LEVELS and the stored level tables")
+
+
+def stored_levels(ladder: str) -> tuple[str, ...]:
+    """The levels a frozen table of paper/stored_study_prompts/ prints, in its order."""
+    text = (STORED_PROMPTS / f"{ladder}_levels.tex").read_text()
+    return tuple(re.findall(r"^\\textbf\{([a-z_]+)\} &", text, re.M))
 
 
 def number(value) -> str:
@@ -373,7 +392,7 @@ def day(iso: str) -> str:
 
 def study_tex() -> str:
     """The multi-domain study's valid runs (scripts/paper/study_ladders.py valid_runs), their dates, the judges of its
-    CheatBench verdicts and of its scores, and the regulators' models by use. Its runs' levels must be STUDY_LEVELS."""
+    CheatBench verdicts and of its scores, and the regulators' models by use. Its runs' levels must be STORED_LEVELS."""
     listed = valid_runs()
     valid = [r.meta for r in listed]
     check_study_levels(valid)
@@ -474,6 +493,12 @@ def check() -> list[str]:
     """What in paper/ disagrees with its source, and any figure there that no entry of FIGURES names. An absent tmp/
     source is reported apart, as a warning."""
     problems = []
+    for ladder, levels in STORED_LEVELS.items():
+        path = STORED_PROMPTS / f"{ladder}_levels.tex"
+        if not path.exists():
+            problems.append(f"MISSING {path.relative_to(ROOT)} (the stored studies' {ladder} levels)")
+        elif stored_levels(ladder) != levels:
+            problems.append(f"WRONG   {path.relative_to(ROOT)} names {stored_levels(ladder)}, not {levels}")
     for path, text in generated_files().items():
         if not path.exists() or path.read_text() != text:
             problems.append(f"STALE   {path.relative_to(ROOT)} (run make paper-sources)")

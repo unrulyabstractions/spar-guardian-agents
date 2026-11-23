@@ -1,7 +1,8 @@
 """The LaTeX paper in paper/ keeps step with the code: each file under paper/generated/ equals what
 scripts/paper/paper_sources.py renders from the code now, every figure the paper includes is named in FIGURES and
-exists, the level tables carry the levels the study's runs used, the rung tables every rung of the Cheating
-and Collusion ladders, and no section names a rung or level of the ladders the three replaced."""
+exists, the level tables carry the code's levels and the stored tables the levels the study's runs used, the rung
+tables every rung of the Cheating and Collusion ladders, and no section names a rung or level of the ladders the three
+replaced."""
 from __future__ import annotations
 
 import json
@@ -43,16 +44,25 @@ def test_every_generated_file_is_input_by_the_paper():
 
 
 @pytest.mark.parametrize("ladder", ["regulator", "disregulator"])
-def test_level_tables_hold_only_the_levels_the_study_used(ladder):
-    """A level table prints the levels the multi-domain study's runs used and no other level of the ladder."""
+def test_level_tables_hold_every_level_with_a_text(ladder):
+    """A generated level table prints every level of the ladder that has a text, and only those."""
     spec = yaml.safe_load(paper_sources.LEVELS_YAML.read_text())[ladder]
     tex = paper_sources.levels_tex(ladder)
     for level in spec["order"]:
-        assert (rf"\textbf{{{level}}}" in tex) == (level in paper_sources.STUDY_LEVELS[ladder]), level
+        assert (rf"\textbf{{{level}}}" in tex) == (spec[level].get("text") is not None), level
+        assert (level in paper_sources.DESIGN_LEVELS[ladder]) == (spec[level].get("text") is not None), level
+
+
+@pytest.mark.parametrize("ladder", ["regulator", "disregulator"])
+def test_stored_level_tables_name_the_stored_levels(ladder):
+    """The frozen table of the stored studies names exactly STORED_LEVELS, and the paper inputs it."""
+    assert paper_sources.stored_levels(ladder) == paper_sources.STORED_LEVELS[ladder]
+    text = "".join(p.read_text() for p in SECTIONS.glob("*.tex"))
+    assert f"stored_study_prompts/{ladder}_levels" in text
 
 
 def test_study_levels_are_the_levels_of_the_valid_runs():
-    """STUDY_LEVELS equals the levels the study's valid runs carry, and a run of any other level stops the build."""
+    """STORED_LEVELS equals the levels the study's valid runs carry, and a run of any other level stops the build."""
     if not paper_sources.STUDY_INDEX.exists():
         pytest.skip("the run index is not on this machine")
     from scripts.paper.study_ladders import valid_runs

@@ -30,6 +30,8 @@ from src.utils.figure_style import INK, INK_SECONDARY, MUTED, PLANE, PRINT_DPI, 
 OUT = ROOT / "tmp" / "figures" / "paper" / "fig2_roles_access.png"
 STAGE2 = ROOT / "submodules" / "lucy" / "runs" / "s2_swe"
 ROLES = ("worker", "regulator", "disregulator")
+STORED_LEVEL_FIELDS = ("rule_level", "regulator_level", "disregulator_level")
+
 
 def one(values: set, what: str):
     """The single value every run agrees on, or an error naming the disagreement."""
@@ -57,8 +59,11 @@ def multi_domain() -> dict:
         runs += 1
         workers = sorted(len(holds[n]["holds"]) for n, role in swarm["roles"].items() if role == "worker")
         teams.add((swarm["workers"], swarm["regulators"], swarm["disregulators"], tuple(workers)))
-        # a run records the config of its day; a field renamed since (free_board_actions_regulator) is left out
-        config = SwarmConfig.model_validate({k: v for k, v in run["config"].items() if k in SwarmConfig.model_fields})
+        # a run records the config of its day; a field renamed since (free_board_actions_regulator) is left out, and
+        # so are the instruction levels, whose stored values (enforce, persuade, ...) the code no longer has and
+        # which decide no role's submit
+        config = SwarmConfig.model_validate({k: v for k, v in run["config"].items()
+                                             if k in SwarmConfig.model_fields and k not in STORED_LEVEL_FIELDS})
         submit.add(tuple(config.holds_submit(role) for role in ROLES))
     n_workers, n_reg, n_dis, worker_items = one(teams, "the team")
     return {"workers": n_workers, "regulators": n_reg, "disregulators": n_dis, "worker_items": worker_items,

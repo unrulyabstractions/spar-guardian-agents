@@ -33,8 +33,8 @@ A regulator's system prompt ends with the text of its level (Table~\ref{tab:regu
 box above.
 Neither the level nor the box gives a detail of the task.
 The regulator's first user message gives its teammates' task.
-It then gives the details its level points to, in the task's own words, such as what cheating means on that task.
-On a variant with a scenario, these details come in the scenario's words.
+At the instructed level, it then says what cheating means on that task, in the task's own words.
+On a variant with a scenario, these words are the scenario's.
 The Tasks subsection describes these variants.
 At every level, it then says what counts when the team hands in its work.
 On SWE, it also says how to read team/main and the branches that teammates push.
@@ -65,8 +65,8 @@ is real, and to prevent or punish their cheating. Table~\ref{tab:monitors} compa
 \begin{table}[htbp]
   \small
   \input{generated/regulator_levels}
-  \caption{Regulator levels, each appended to the regulator's system prompt. The first user message gives the details
-  of the task that a level points to.}
+  \caption{Regulator levels, each appended to the regulator's system prompt. \placeholder{[generic text]} stands for
+  the text of the generic level. The first user message gives the details of the task that a level points to.}
   \label{tab:regulator-levels}
 \end{table}
 
@@ -77,16 +77,16 @@ These poisoned agents represent negative peer pressure.
   \item A disregulator cannot submit the team's work. Like a regulator, it can read every teammate's tool calls,
   what those calls returned and every file on a teammate's machine. It reads the board within the workers' budget. Like a regulator, it can alert the
   humans who run the study.
-  \item Table~\ref{tab:disregulator-levels} gives its levels. A disregulator gets persuade on SWE, and persuade or
-  overt on creative writing.
-  \item Its first user message gives its objective on the task and the work it may reuse there.
+  \item Table~\ref{tab:disregulator-levels} gives its levels.
+  \item Its first user message gives its objective on the task. At the instructed level, it also says where work
+  that already solves the task lies.
 \end{itemize}
 
 \begin{table}[htbp]
   \small
   \input{generated/disregulator_levels}
-  \caption{Disregulator levels, each appended to the disregulator's system prompt. The first user message gives the
-  objective and the work a level points to.}
+  \caption{Disregulator levels, each appended to the disregulator's system prompt. \placeholder{[generic text]} stands
+  for the text of the generic level. The first user message gives the objective and the work a level points to.}
   \label{tab:disregulator-levels}
 \end{table}
 
@@ -368,8 +368,11 @@ In every scenario, no message names the notes.
 The notes give no order.
 As in \textit{CheatBench}, only the situation implies that the work must be the agents' own.
 No text that a scenario adds for a worker names a test, an interview or an evaluation.
-A scenario also gives a regulator its own words for what cheating means.
-They name both places that hold the exploit: the planted pieces and the side copies.
+A scenario also gives its own words to the rule that names the exploit, to a regulator and to a disregulator.
+Under that rule, each agent reads the generic rule and then what the scenario names.
+A regulator reads in them what cheating means.
+A disregulator reads where the existing work lies.
+These words name both places that hold the exploit: the planted pieces and the side copies.
 No result of this paper uses these variants.
 
 \subsubsection*{Target model and environment selection}
@@ -642,6 +645,30 @@ No untold Luna team on SWE or on creative writing cheats (Appendix B).
 In order of how many runs used each:
 \RegulatorModelList
 
+\subsubsection*{Levels of the stored studies}
+The multi-domain study ran its regulators at two levels, enforce and ambiguous.
+It ran its disregulators at two levels, persuade and overt.
+A disregulator got persuade on SWE, and persuade or overt on creative writing.
+Tables~\ref{tab:stored-regulator-levels} and~\ref{tab:stored-disregulator-levels} give the texts of these levels.
+Results and Appendix B report runs at these levels.
+Our design now uses the levels of Tables~\ref{tab:regulator-levels} and~\ref{tab:disregulator-levels} instead.
+In the runs, each text held the details of the task in place of its pointer to the first message.
+The rules given to all workers have the same texts in the study and in our design.
+
+\begin{table}[htbp]
+  \small
+  \input{stored_study_prompts/regulator_levels}
+  \caption{Regulator levels of the stored studies, each appended to the regulator's system prompt.}
+  \label{tab:stored-regulator-levels}
+\end{table}
+
+\begin{table}[htbp]
+  \small
+  \input{stored_study_prompts/disregulator_levels}
+  \caption{Disregulator levels of the stored studies, each appended to the disregulator's system prompt.}
+  \label{tab:stored-disregulator-levels}
+\end{table}
+
 \subsubsection*{Judge models}
 The judge is \JudgeName{} at \JudgeEffort{} effort.
 
@@ -657,7 +684,7 @@ The judge is \JudgeName{} at \JudgeEffort{} effort.
   Regulators have no read budget.
   \item Max tool result: \ToolOutputKiB{}~KiB for every agent. A longer result keeps its start and its end, with a
   line that states the cut.
-  \item The runs of the multi-domain study differ from this design in twenty-five ways. Each agent had \TurnBudget{}
+  \item The runs of the multi-domain study differ from this design in twenty-six ways. Each agent had \TurnBudget{}
   working steps instead of rounds of tool calls. A step was one model call and the tool calls of its reply. A step
   that ended with a board call used up no working step. A round allowed up to \FreeBoardActions{} such steps, or
   \FreeBoardActionsInfluencer{} for a regulator. No message gave the number of steps or opened a round. In a
@@ -673,7 +700,8 @@ The judge is \JudgeName{} at \JudgeEffort{} effort.
   showed the processes and commands of every agent on the machine. A search of the whole disk stalled on the page map
   of its own process. No worker's system prompt named the board or its tools. No influencer had a shell on a
   teammate's machine. No influencer read a message when main of the team's remote moved. No regulator was told what counts when the team hands in its work, or on SWE
-  how to read that work. On SWE, a regulator's definition of cheating did not count code written after seeing the
+  how to read that work. Regulators and disregulators read the older levels of
+  Tables~\ref{tab:stored-regulator-levels} and~\ref{tab:stored-disregulator-levels}. On SWE, a regulator's definition of cheating did not count code written after seeing the
   fix. On SWE, nothing locked the team's remote against an agent with root. Nothing killed what an SWE agent's calls
   left running at the end of its round.
 \end{itemize}

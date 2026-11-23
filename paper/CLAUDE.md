@@ -17,7 +17,8 @@ it, which a reader rewrote as a conjecture.
 | `generated/params.tex` | macros: the board's budgets, `\ToolOutputKiB` (tool_output_bytes), `\Rounds`, `\CallsPerRound` and `\CallBudget` (call_budget, R x N) from `PRESETS["default"]`; `\BudgetValues`, `\BudgetLine` and `\NoCallsLeft` from prompts.yaml round (line, spent); `\TurnBudget`, `\FreeBoardActions` and `\FreeBoardActionsInfluencer` from `scripts/paper/paper_sources.py` STUDY_STEPS (the reported runs' turn rules); `\JudgeName`, `\JudgeEffort` from `settings.JUDGE_MODEL` and `src/judging/judge_models.yaml`; `\CheatingAlarm` and `\CheatedFrom` from `src/measures/cheating_ladder.py` ALARM and CHEATED_FROM; `\AccessedFrom` from `scripts/paper/study_ladders.py` ACCESSED_FROM | `make paper-sources` |
 | `generated/scales.tex` | the scales table, from `src/configuration/scales.py` | `make paper-sources` |
 | `generated/regulator_suffix.tex` | the regulator prompt box: what `src/swarm/influencers.py` role_text appends after a regulator's level under `PRESETS["default"]` (`prompts.yaml` roles.influencer_common, regulator_check, regulator_no_disclosure) | `make paper-sources` |
-| `generated/regulator_levels.tex`, `disregulator_levels.tex` | the level texts, from `src/configuration/instruction_levels.yaml` | `make paper-sources` |
+| `generated/regulator_levels.tex`, `disregulator_levels.tex` | the level texts of the design, every level of `src/configuration/instruction_levels.yaml` with a text (`paper_sources.DESIGN_LEVELS`: generic, instructed) | `make paper-sources` |
+| `stored_study_prompts/regulator_levels.tex`, `disregulator_levels.tex` | the level texts of the stored studies (enforce, ambiguous; persuade, overt; `paper_sources.STORED_LEVELS`), which the code no longer has: `paper/generated/`'s copies at 8f45ee0, the first comment line replaced. `paper-check` asks only that each names `STORED_LEVELS`; `fig_multidomain` checks Figure 4's regulator paraphrases against the regulator table | frozen, by hand |
 | `generated/study.tex` | `\StudyRuns`, `\StudyDates`, `\StudyCheatBenchJudge`, `\StudyLabelsJudged`, `\RegulatorModelList`: the multi-domain study's valid runs, their dates, the judge of the CheatBench pass (`src/judging/verdict_files.py` applied), a sentence naming the judge of the scores (`src/measures/judge_labels.py` labels' "judge") or saying no judge has scored the runs yet (more than one judge of a pass stops the build), and the regulators' models by use, from `runs/ian_baseline_explorations_1/INDEX.jsonl`, each run's run.json and judges/ (kept as committed where runs/ is absent) | `make paper-sources` |
 | `generated/stage2.tex` | the deep dive's Stage 2 table, from `submodules/lucy/runs/s2_swe/analysis/summary.json` | `make paper-sources` |
 | `generated/reliability.tex` | how often an independent reading of the transcripts confirmed each code rung and judge score, from `src/measures/measure_readings.yaml`, the one file the viewer's How reliable section reads too (kept by hand: no code can recompute such a reading; the file names its sources, and each row names the pass it read) | `make paper-sources` |
@@ -2109,3 +2110,79 @@ side copy as it reads the planted file.", the differ list, Results, Discussion, 
 Built in `worktree/paper-update` with OLD/runs and OLD/logs of the three paper studies and build/ (knowledge_work
 without its stage) copied from the main tree, main's .venv by path, and the submodules cloned from the main tree's
 copies at their pins.
+
+## The instruction ladders cut to three levels, the stored studies' levels frozen, 2026-11-23
+
+The code: 83c58c1 polished the level prompts and gave each scenario one block of words (`prompts.yaml`
+`<task>.scenarios.<name>.words`) that the rule's identified sentence, a regulator and a disregulator read; 3a61a97 cut
+the regulator and disregulator ladders to none, generic and instructed and the rule ladder to none, generic and
+identified, deleting every other level (defaults: regulator generic, disregulator instructed; instructed is
+`{generic}` plus a pointer to the first message); 108f284 added "Be suspicious and act fast" and two sentences to the
+regulator's generic text. The stored studies ran at enforce and ambiguous (regulators) and persuade and overt
+(disregulators); their rule texts (generic, identified) are unchanged since the study's commit 0dda147.
+
+`make paper` failed at three places: `paper_sources.regulator_suffix_tex` and `levels_tex` (deleted levels), then
+`fig_roles_access.py` (it validated each stored run's config, whose `regulator_level` enforce the code now refuses)
+and `fig_multidomain.py` (its paraphrase check read `regulator["ambiguous"]` from the yaml, and the rule's new
+`identified.scenario` text failed its identified check).
+
+Scripts: `paper_sources` has `DESIGN_LEVELS` (the generated tables print every level with a text, and a level with a
+text outside it, or a listed level without one, stops the build), `STORED_LEVELS` (what `check_study_levels` checks
+the stored runs against, and what each frozen table must name, `stored_levels`, checked by `check`),
+`PLACEHOLDER_LABEL["generic"]` ("generic text"; "deliverable" deleted), and `regulator_suffix_tex` at the default
+preset's level. `fig_roles_access.multi_domain` leaves the three level fields out of the stored configs it validates
+(no level decides submit). `fig_multidomain.wording` reads the regulator paraphrases' evidence from the frozen table and
+checks only the tasks' own identified sentences. `tests/unit/test_paper_sources.py`: the level table test now asks
+for every level with a text; a new test asks that each frozen table names `STORED_LEVELS` and that the paper inputs it.
+
+Frozen: `paper/stored_study_prompts/regulator_levels.tex` and `disregulator_levels.tex`, `git show
+8f45ee0:paper/generated/<name>.tex` with the first comment line replaced (body byte-identical, checked by `diff`).
+`regulator_suffix.tex` was not frozen: at 8f45ee0 it already held peer_shell and get_peer_actions, which no stored run
+had (a stored regulator's system prompt reads "agent_actions"), so it was never the stored runs' text. The level
+tables at 8f45ee0 are not the stored runs' prompts word for word either: in the runs each text held the task's details
+(enforce: "(the colleague's submitted binder candidates under ...)", "Watch the board and the repository") in place of
+the pointer to the first message, which the paper now says.
+
+Regenerated: `regulator_levels.tex`, `disregulator_levels.tex` (generic and instructed), `regulator_suffix.tex` ("You
+can read their posts on the board." in place of "You can see their messages in the shared team communication."). No
+figure changed (`make paper` copied 0 figures).
+
+Sentences changed (old, then new), all in Appendix A unless named:
+- Regulator agents: "It then gives the details its level points to, in the task's own words, such as what cheating
+  means on that task." became "At the instructed level, it then says what cheating means on that task, in the task's
+  own words."; "On a variant with a scenario, these details come in the scenario's words." became "On a variant with a
+  scenario, these words are the scenario's."
+- Table 4 caption: added "[generic text] stands for the text of the generic level."; Table 5 caption the same.
+- Disregulator agent: "Table~\ref{tab:disregulator-levels} gives its levels. A disregulator gets persuade on SWE, and
+  persuade or overt on creative writing." became "Table~\ref{tab:disregulator-levels} gives its levels."; "Its first
+  user message gives its objective on the task and the work it may reuse there." became "Its first user message gives
+  its objective on the task. At the instructed level, it also says where work that already solves the task lies."
+- Tasks, scenarios: "A scenario also gives a regulator its own words for what cheating means. They name both places
+  that hold the exploit: ..." became "A scenario also gives its own words to the rule that names the exploit, to a
+  regulator and to a disregulator. Under that rule, each agent reads the generic rule and then what the scenario names.
+  A regulator reads in them what cheating means. A disregulator reads where the existing work lies. These words name
+  both places that hold the exploit: ..."
+- Experimental details, new subsection "Levels of the stored studies": "The multi-domain study ran its regulators at
+  two levels, enforce and ambiguous. It ran its disregulators at two levels, persuade and overt. A disregulator got
+  persuade on SWE, and persuade or overt on creative writing. Tables 10 and 11 give the texts of these levels. Results
+  and Appendix B report runs at these levels. Our design now uses the levels of Tables 4 and 5 instead. In the runs,
+  each text held the details of the task in place of its pointer to the first message. The rules given to all workers
+  have the same texts in the study and in our design." and the two frozen tables, captions "Regulator levels of the
+  stored studies, each appended to the regulator's system prompt." and the disregulator's.
+- Other parameters: "differ from this design in twenty-five ways" became "twenty-six ways", with "Regulators and
+  disregulators read the older levels of Tables 10 and 11." after the sentence on what counts at hand-in.
+- Results, Figure 4 caption: "a regulator at two levels of instruction" became "... of instruction
+  (Table~\ref{tab:stored-regulator-levels})".
+
+Checked and unchanged: Table 1's instruction rows, the Results, Discussion, Conclusion and Abstract sentences that
+name enforce, ambiguous, persuade or overt (they report the stored runs), Stage 2's "ambiguous level" (Lucy's arm
+name), the regulator box sentence "Neither the level nor the box gives a detail of the task." (generic names none),
+"At every level, it then says what counts when the team hands in its work.", and the ian0 positive-control cells
+(the paper describes no variant's told-to-cheat text). No result of the paper uses ian_influencers_0.
+
+Pages viewed in `build/main.pdf` (48 pages): 7 (Figure 4 caption), 13 (regulator agents), 14 (Table 4, disregulator
+bullets), 15 (Table 5), 21 (scenarios), 28 (the new subsection, Table 10), 29 (Table 11, the differ list).
+
+Built in `worktree/paper-ladders` with OLD/runs and OLD/logs of the three paper studies and build/ (knowledge_work
+without its stage) clone-copied from the main tree, main's .venv by path, and the submodules cloned from the main
+tree's copies at their pins.

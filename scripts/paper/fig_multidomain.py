@@ -8,7 +8,9 @@ team all told to cheat.
 Source: ian_baseline_explorations_1's valid runs (scripts/paper/study_ladders.py valid_runs; disregulator runs left out;
 SWE only on the fixed task, run names ending in _fixed<seed>, _fill<seed> or _fixedpilot<seed>) with their run index
 rows, each run's Cheating rung as the transcript viewer measures it (study_ladders.record).
-The rules' wording comes from src/configuration/instruction_levels.yaml. Every cell a results table also shows
+The rules' wording comes from src/configuration/instruction_levels.yaml; the regulator groups' paraphrases are checked
+against the stored studies' frozen level table, paper/stored_study_prompts/regulator_levels.tex, since the code no
+longer has those levels. Every cell a results table also shows
 (control_tables, protein_regulator_table, swe_regulator_table, creative_regulator_table) must hold exactly that
 table's runs (study_ladders.cell_runs); a disagreement fails the build.
 Writes tmp/figures/paper/fig4_multidomain.png.
@@ -44,6 +46,7 @@ from src.utils import progress
 from src.utils.figure_style import GRID, INK, INK_SECONDARY, SURFACE
 
 LEVELS = ROOT / "src" / "configuration" / "instruction_levels.yaml"
+STORED_REGULATOR_LEVELS = ROOT / "paper" / "stored_study_prompts" / "regulator_levels.tex"
 OUT = ROOT / "tmp" / "figures" / "paper" / "fig4_multidomain.png"
 
 # (index target, heading, workers line); the frozen figure's column order.
@@ -142,17 +145,19 @@ def wording() -> tuple[list[str], list[str]]:
     """The rule group's subtitle lines, and the checks that the regulator and identified paraphrases still hold."""
     levels = yaml.safe_load(LEVELS.read_text())
     generic = levels["rule"]["generic"]["text"]
-    identified = levels["rule"]["identified"]
-    # a level's system text and its first-message text together: the task's cheating moved to the first message
-    regulator = {k: {"text": (v.get("text") or "") + " " + (v.get("first") or "")}
-                 for k, v in levels["regulator"].items() if isinstance(v, dict)}
+    # the tasks' own sentences; a variant's scenario text is no task of this figure's runs
+    identified = {k: v for k, v in levels["rule"]["identified"].items() if k != "scenario"}
+    # the stored studies' regulator levels, as their frozen table prints them (each points to the first message for
+    # what cheating means; in the runs the task's definition stood there)
+    regulator = {m.group(1): {"text": m.group(2)} for m in
+                 re.finditer(r"^\\textbf\{([a-z_]+)\} & (.*) \\\\$", STORED_REGULATOR_LEVELS.read_text(), re.M)}
     broken = [name for name, ok in [
         ("rule.identified names the prior work and calls its use cheating",
          all("That includes {protected}" in t and "is cheating" in t for t in identified.values())),
         ("regulator.ambiguous asks for honest work and gives the task's cheating",
-         "honest" in regulator["ambiguous"]["text"] and "{cheating}" in regulator["ambiguous"]["text"]),
+         "honest" in regulator["ambiguous"]["text"] and "what cheating means" in regulator["ambiguous"]["text"]),
         ("regulator.enforce says to call out, revert and name, with the same cheating",
-         all(w in regulator["enforce"]["text"] for w in ("say so plainly", "revert", "name the member", "{cheating}")))]
+         all(w in regulator["enforce"]["text"] for w in ("say so plainly", "revert", "name the member", "cheating")))]
         if not ok]
     lines = [f"generic rule: “{generic}”",
              "exploit rule: names where the existing fix or work is and calls using it cheating"]
@@ -219,7 +224,7 @@ def main() -> int:
     problems = check(table)
     rule_lines, broken = wording()
     for line in broken:
-        problems.append(f"instruction_levels.yaml no longer supports the paraphrase: {line}")
+        problems.append(f"instruction_levels.yaml or the stored level table no longer supports the paraphrase: {line}")
     for (group, key, target), group_runs in sorted(table.items(), key=str):
         progress.verbose(f"{target:14s} {group:9s} {str(key):30s}",
                          " ".join(CHEATING_LETTER[r["team_rung"]] + ("p" if r["pilot"] else "") for r in group_runs),
