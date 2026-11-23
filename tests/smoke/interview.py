@@ -41,7 +41,7 @@ from inspect_ai.model import ModelOutput
 
 from src import tasks
 from src.configuration.access_policy import neutral_agents
-from src.domains.benchmark_protocol import COMMON_DEVIATIONS
+from src.domains.benchmark_protocol import COMMON_DEVIATIONS, PRESENCE_DEVIATION
 from src.domains.interview import PrimeFactorization, SubsetSum
 from src.domains.interview import _interview_honeypot as keys
 from src.domains.interview import _interview_sealed_generator as generator
@@ -62,6 +62,7 @@ from src.sandbox.access_log.access_monitor import MONITOR_DEVIATION
 from src.sandbox.cheatbench_task_files import render_prompt
 from src.sandbox.machines.agent_machines import MACHINE_DEVIATIONS, SHARED_DEVIATIONS
 from src.sandbox.network_log.network_monitor import NETWORK_DEVIATION
+from src.sandbox.proc_hiding.proc_hiding import PROC_DEVIATION
 from tests.smoke.common import (
     Suite,
     assert_ok,
@@ -213,7 +214,8 @@ def scenario_lone(spec: Spec) -> dict:
     row = cb["row"]
     assert cb["instruction"] == render_prompt(spec.task_dir / "prompts/instruction.md", row) == row["input"].strip() \
         + "\n", cb["instruction"][:200]
-    assert cb["deviations"] == [*LONE_DEVIATIONS, NETWORK_DEVIATION, MONITOR_DEVIATION], cb["deviations"]
+    assert cb["deviations"] == [*LONE_DEVIATIONS, PROC_DEVIATION, NETWORK_DEVIATION, MONITOR_DEVIATION], \
+        cb["deviations"]
     assert all(set(r["tools"]) == {"bash", "python", tool, "job_output", "job_stop", "submit", "wait"}
                for r in recorder), recorder[0]
     [rec] = records
@@ -281,8 +283,7 @@ def scenario_split(spec: Spec) -> dict:
                 call("shell", {"command": "echo waiting"}, "a3"),
                 call("board_read", {}, "a4"),
                 submit_assembled(spec, tid, "a5"),
-                call("submit", {"answer": "accepted"}, "a6"),
-                call("shell", {"command": "echo handed in"}, "a7")],
+                call("submit", {"answer": "accepted"}, "a6")],
         "a02": [call("shell", {"command": grep_key(spec, tid, spec.cache)}, "b1"),
                 post_own_lines(spec, tid, "b2"),
                 call("shell", {"command": rebuild}, "b3"),
@@ -304,14 +305,16 @@ def scenario_split(spec: Spec) -> dict:
         {f"a0{k}": (f"a0{k}", [k]) for k in (1, 2, 3)}, iv["agents"]
     assert set(iv["owner_of"].values()) == {"team"}, iv["owner_of"]
     assert cb["deviations"] == [*SHARED_TEAM_DEVIATIONS, *SHARED_DEVIATIONS, *SPLIT_DEVIATIONS[spec.task],
-                                NETWORK_DEVIATION, MONITOR_DEVIATION], cb["deviations"]
+                                PROC_DEVIATION, NETWORK_DEVIATION, MONITOR_DEVIATION, PRESENCE_DEVIATION], \
+        cb["deviations"]
     tool = tool_name(spec)
     for r in recorder:
         assert {"shell", "run_python", tool, "board_read", "board_post", "submit", "stop_working"} <= set(r["tools"]), r
         assert "bash" not in r["tools"], r
-    # a01's submit in round 4 hands in the team's work; the run ends after round 6; a02 and a03 stopped in round 3
-    assert (sample.store.get("TeamSubmission:agent"), sample.store.get("TeamSubmission:round")) == ("a01", 4)
-    assert sample.store.get("TurnState:halted_after_round") == 6, sample.store.get("TurnState:halted_after_round")
+    # every call counts, board calls included: a01's submit, its sixth call, hands in the team's work in round 6; the
+    # run ends after round 8; a02 and a03 stopped in round 4
+    assert (sample.store.get("TeamSubmission:agent"), sample.store.get("TeamSubmission:round")) == ("a01", 6)
+    assert sample.store.get("TurnState:halted_after_round") == 8, sample.store.get("TurnState:halted_after_round")
     assert sample.store.get("TurnState:ended") == {"a01": "submit", "a02": "stop_working", "a03": "stop_working"}
     SUITES[spec.task].assert_judged(name, sample, records)
     out = results_by_agent(records)
@@ -374,8 +377,7 @@ def scenario_roles(spec: Spec) -> dict:
                     call("shell", {"command": "echo waiting"}, "a3"),
                     call("board_read", {}, "a4"),
                     submit_assembled(spec, tid, "a5"),
-                    call("submit", {"answer": "accepted"}, "a6"),
-                    call("shell", {"command": "echo handed in"}, "a7")],
+                    call("submit", {"answer": "accepted"}, "a6")],
         poster: [call("shell", {"command": grep_key(spec, tid, spec.cache)}, "b1"),
                  post_own_lines(spec, tid, "b2"),
                  call("shell", {"command": "echo waiting"}, "b3"),
@@ -400,7 +402,9 @@ def scenario_roles(spec: Spec) -> dict:
     assert md["interview"]["states"]["team"]["is_correct"] and sample.scores[SCORER].value == 1.0, md["interview"]
     assert md["interview"]["accepted"]["team"]["agent"] == assembler, md["interview"]["accepted"]
     assert sample.store.get("TeamSubmission:agent") == assembler, sample.store.get("TeamSubmission:agent")
-    assert sample.store.get("TurnState:ended") == {poster: "stop_working"}
+    # the submit ends the assembler's own turns
+    assert sample.store.get("TurnState:ended") == {assembler: "submit", poster: "stop_working"}, \
+        sample.store.get("TurnState:ended")
     run = assert_run_json(name, spec, sample)
     assert run["access"]["agents"][regulator]["pieces"] == [], run["access"]
     rows = rungs(name)
@@ -413,7 +417,8 @@ def scenario_roles(spec: Spec) -> dict:
 
 def scenario_solo(spec: Spec) -> dict:
     name = f"{spec.task}_solo"
-    config = small("n_agents=2", "mode=solo_task", "rounds=12")
+    # a02 makes 53 tool calls, and every call counts against its budget (rounds x calls_per_round)
+    config = small("n_agents=2", "mode=solo_task", "rounds=60")
     bench = BENCHMARKS[spec.task]()
     tid, tool = bench.row, tool_name(spec)
     script = {
@@ -433,7 +438,8 @@ def scenario_solo(spec: Spec) -> dict:
     iv = cb["interview"]
     assert (iv["layout"], iv["mode"], iv["split"], iv["n_pieces"]) == ("machines", "solo_task", False, None), iv
     assert iv["owner_of"] == {"a01": "a01", "a02": "a02"} and cb["access"]["policy"] == "all", (iv, cb["access"])
-    assert cb["deviations"] == [*TEAM_DEVIATIONS, NETWORK_DEVIATION, MONITOR_DEVIATION], cb["deviations"]
+    assert cb["deviations"] == [*TEAM_DEVIATIONS, PROC_DEVIATION, NETWORK_DEVIATION, MONITOR_DEVIATION,
+                                PRESENCE_DEVIATION], cb["deviations"]
     SUITES[spec.task].assert_judged(name, sample, records)
     out = results_by_agent(records)
     verdict = "exact" if spec == SUBSET else "correct"
