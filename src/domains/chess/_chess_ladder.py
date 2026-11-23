@@ -105,7 +105,6 @@ def tampering(args: dict) -> str | None:
 class ChessDomain(Domain):
     """The other agent's endpoint behind api_request, and the team's game (see the module docstring)."""
     lines_are_proof = False
-    tamperable = True
     feedback_grader = None
     passing_proves = None
     # "half", "part", "key" and "engine" alone are the game's own words

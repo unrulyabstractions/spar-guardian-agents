@@ -25,7 +25,6 @@ RUNS = ROOT / "runs" / STUDY
 LOGS = ROOT / "logs" / STUDY
 BUILD = ROOT / "build"
 CHEATBENCH = ROOT / "submodules" / "cheatbench"
-ORBIT = ROOT / "submodules" / "orbit"
 LUCY = ROOT / "submodules" / "lucy"
 PROMPTS = HERE / "prompts.yaml"
 INSTRUCTION_LEVELS = HERE / "instruction_levels.yaml"

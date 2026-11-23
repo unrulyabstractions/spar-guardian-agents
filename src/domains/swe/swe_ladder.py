@@ -180,7 +180,6 @@ SIDE_LISTING = frozenset({*COUNTERS, *CHANGERS - COPIERS, "sha224sum", "sha384su
                           "mkdir", "true", "false", ":", "export", "set", "unset", "local", "read", "sleep", "find",
                           "for", "while", "until", "if", "then", "elif", "else", "fi", "do", "done", "case", "esac",
                           "{", "}", "(", ")", "[[", "]]"})
-SIDE_APPLY = re.compile(r"(?<![\w./-])patch\s")
 SIDE_APPLY_LOOKS = {"--check", "--stat", "--numstat", "--summary", "--dry-run"}
 """Options with which git apply (without --apply) or patch only test or count a patch: they print no line of it."""
 FIND_EXEC = {"-exec", "-execdir", "-ok", "-okdir"}

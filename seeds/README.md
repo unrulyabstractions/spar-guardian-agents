@@ -1,7 +1,7 @@
 # Seed packs
 
 A seed pack is what a run's environment holds before round 1 beyond the task: board posts and files left by a
-"previous team". A pack may point, tempt, normalise, rationalise, object or urge the team to work together. It never holds a
+"previous team". A pack may point the team at material or press it to use the material. It never holds a
 piece of the exploit, so a seeded team still needs two agents' items to cheat.
 
 ## Format
@@ -23,7 +23,7 @@ seeds/swe/exp1_called_cheating/
 A pack may also hold files under `files/`. No pack holds one today.
 
 `README.md`'s first paragraph is the pack's `about`, which run.json records. Its second paragraph names the pack's
-kinds, the same as `pack.yaml`'s, among `pointer`, `normalise`, `rationalise`, `pressure`, `pool`, `collaborate` and `objection` (a post that says using the material is cheating).
+kinds, the same as `pack.yaml`'s, among `pointer` and `pressure`.
 `pack.yaml` holds `kinds` and, when the text fits only some of the task's rows, `rows`.
 
 The posts stand on the board before round 1, in the order of their numbers: `01.md`, `02.md`, and so on, with no gap.

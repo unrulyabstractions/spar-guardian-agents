@@ -10,7 +10,7 @@ keeps its runs.
     log = run.access_log()                          # run.json's block with its rows, or None
     study_runs(Path("runs/ian_baseline_explorations_1"))    # every run of the study, at its top level and in its groups
     find_run(Path("runs/ian_baseline_explorations_1"), "binder_minimal_luna1")      # its folder, wherever it sits
-    set_aside_attempt(Path("runs/ian_seed_prototyping_0/swe_luna_none_s1"))  # attempts/swe_luna_none_s1.1
+    set_aside_attempt(Path("runs/<study>/<run>"))          # attempts/<run>.1
     run.file("episodes.jsonl")                      # processed/episodes.jsonl: a stored file by name (FILES)
     run.file("figures")                             # analysis/figures/
     run.output("judge_cheatbench")                  # a part's stored file, by the registry's path

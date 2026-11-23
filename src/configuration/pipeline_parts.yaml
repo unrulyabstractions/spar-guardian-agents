@@ -19,7 +19,7 @@ parts:
     files: [src/export/*.py]
     pins: []
     version: 1
-    fingerprint: sha256:a2deed2c29bbe9c26a9b497e855267b40da35128883678061930a4af101f0978
+    fingerprint: sha256:42bf51c4f5abbdc5e5679cd43f119b78e5fc49b0d8f6d02cb2116ebdd303c3a6
     log:
       1: '2026-11-22 first version: the eval log turned into run files by src/export of c619e3d (re-locked
         2026-11-22: the stored layout: the same bytes, written under processed/ and analysis/ through
@@ -30,7 +30,9 @@ parts:
         episode''s beliefs) is written only by a run that asked (SwarmConfig.belief_probe), which no stored
         run did: three runs of ian_seed_prototyping_2, one per task, exported again from their eval logs
         with this code: 53 files, byte-equal but run.json, which differs only by the signals block that
-        the measures add afterwards (every other key equal, in the same order))'
+        the measures add afterwards (every other key equal, in the same order)) (re-locked 2026-11-23:
+        2026-11-23 legacy cleanup: docstrings only (the results browser and openmath examples dropped);
+        the module''s code without docstrings is the same AST)'
   replay:
     file: [processed/replay/steps.jsonl, processed/replay/replay.json, processed/tmp_snapshots.json]
     make: null
@@ -55,13 +57,15 @@ parts:
       src/judging/judge_models.yaml]
     pins: ['submodule:cheatbench']
     version: 1
-    fingerprint: sha256:b2177a95223daa03283f41f00d84b0a0f0eb726d64c617f75f641603427dc79c
+    fingerprint: sha256:b922df489df31fe7eb3440a093037fe2e84d188d2a7017eca31f3a98a25c12cd
     log:
       1: '2026-11-22 first version: CheatBench''s verdicts per episode, the eval''s scorer and judge-pass
         of c619e3d (re-locked 2026-11-22: the stored layout: the same bytes, written under processed/
         and analysis/ through run_directory.FILES) (re-locked 2026-11-23: the unused judge_addendum option
         is deleted: no stored run set it, and judge-pass cheatbench builds the same 954 units (message,
-        schema, prompt record, identity) over all 327 judged stored runs)'
+        schema, prompt record, identity) over all 327 judged stored runs) (re-locked 2026-11-23: 2026-11-23
+        legacy cleanup: docstrings only (the results browser and openmath examples dropped); the module''s
+        code without docstrings is the same AST)'
   judge_scores:
     file: analysis/judges/labels.*.jsonl
     make: null
@@ -89,7 +93,7 @@ parts:
       src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*]
     pins: []
     version: 2
-    fingerprint: sha256:2a02b8c5cf1fd43f49b5485a11da3a4962658795caaed5dcdb7c772994e755c4
+    fingerprint: sha256:15b8099c252c5a820036df6c545a207c7c39bf6d25827a9997f66163740688fe
     log:
       1: '2026-11-22 first version: the code record''s agent and team rows (code_ladder.signal_rows) of
         b7b1bed, and run.json''s signals block (re-locked 2026-11-22: the stored layout: the same bytes,
@@ -136,7 +140,10 @@ parts:
         2026-11-23: the ian0 notes file only on a machine or workspace that holds a side copy (_swe_honeypot._side_copies)
         changes how a new run is built, not what a ladder reads: ian_seed_prototyping_2 copied from OLD/
         and reprocessed in a scratch copy with --force signals, cheating and collusion, 783 files byte-equal
-        but the 27 versions.json, logs unchanged)'
+        but the 27 versions.json, logs unchanged) (re-locked 2026-11-23: 2026-11-23 legacy cleanup: unused
+        Domain.tamperable, swe_ladder.SIDE_APPLY and seed_packs'' old-layout hints and unused kinds removed,
+        docstrings updated; two scratch copies of OLD/runs/ian_seed_prototyping_2 reprocessed with --force,
+        one by main''s code (5998980) and one by this, are byte-equal but the parts'' stamps in versions.json)'
   topology:
     file: processed/facts/topology.json
     make: src.measures.topology_fact:topology_part
@@ -144,7 +151,7 @@ parts:
     files: [src/measures/stored_json.py, src/measures/topology_fact.py, src/configuration/seed_packs.py]
     pins: []
     version: 1
-    fingerprint: sha256:88b90e6de4d4c1d69404fa9cb7093254876e955d74b69a27032909abc14cdede
+    fingerprint: sha256:9704cf5f86276ecf3b164ccc1ca4776b318365643fb5118565282b77e9590f16
     log:
       1: '2026-11-22 first version: who posted, read, was shown and named whom, per board, from communication/
         (re-locked 2026-11-22: 9c48ea6 changed seed_packs.authors only; is_seeded, which topology reads,
@@ -157,7 +164,10 @@ parts:
         topology by 1029e9e''s code and by this code, are byte-equal but versions.json) (re-locked 2026-11-23:
         seed_packs.py''s docstring names scripts/study/run_study.py; the 8 runs of OLD/runs/ian_seed_prototyping_1,
         copied and processed with --force topology by 508d2c2''s code and by this code, are byte-equal
-        but versions.json)'
+        but versions.json) (re-locked 2026-11-23: 2026-11-23 legacy cleanup: unused Domain.tamperable,
+        swe_ladder.SIDE_APPLY and seed_packs'' old-layout hints and unused kinds removed, docstrings updated;
+        two scratch copies of OLD/runs/ian_seed_prototyping_2 reprocessed with --force, one by main''s
+        code (5998980) and one by this, are byte-equal but the parts'' stamps in versions.json)'
   cheating:
     file: analysis/labels/cheating.json
     make: src.ui.viewer_parts:cheating_part
@@ -171,7 +181,7 @@ parts:
       src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*]
     pins: []
     version: 2
-    fingerprint: sha256:3abb7c5fc551e6b72574191c414b17073179946b442eed430de5cb1b6f7e767a
+    fingerprint: sha256:623e8301775c5e3fc79be5bc695f66ba52c63519c9bde68254596d73e8ebce47
     log:
       1: '2026-11-22 first version: the Cheating ladder with CheatBench''s labels beside its clauses,
         as the viewer keeps it, of b7b1bed (re-locked 2026-11-22: the stored layout: the same bytes, read
@@ -219,7 +229,10 @@ parts:
         2026-11-23: the ian0 notes file only on a machine or workspace that holds a side copy (_swe_honeypot._side_copies)
         changes how a new run is built, not what a ladder reads: ian_seed_prototyping_2 copied from OLD/
         and reprocessed in a scratch copy with --force signals, cheating and collusion, 783 files byte-equal
-        but the 27 versions.json, logs unchanged)'
+        but the 27 versions.json, logs unchanged) (re-locked 2026-11-23: 2026-11-23 legacy cleanup: unused
+        Domain.tamperable, swe_ladder.SIDE_APPLY and seed_packs'' old-layout hints and unused kinds removed,
+        docstrings updated; two scratch copies of OLD/runs/ian_seed_prototyping_2 reprocessed with --force,
+        one by main''s code (5998980) and one by this, are byte-equal but the parts'' stamps in versions.json)'
   coordination:
     file: analysis/labels/coordination.json
     make: src.measures.coordination:coordination_part
@@ -227,11 +240,15 @@ parts:
     files: [src/measures/stored_json.py, src/measures/coordination.py, src/measures/topology_fact.py]
     pins: []
     version: 1
-    fingerprint: sha256:e9e3224fc458d495877eba3f40bbbfa80806ce77c7765ad775ef49fd59bc3ca5
+    fingerprint: sha256:b469f7c0dc3b3692e6e99da6254a5f752f5b4840712951e995e629173ec98073
     log:
       1: '2026-11-22 first version: the Coordination ladder from the stored topology (re-locked 2026-11-22:
         a board record of who came and went takes no post number and is marked record; no stored run holds
-        a record, and processing ian_seed_prototyping_0 and _1 (87 runs) into a copy wrote the same bytes)'
+        a record, and processing ian_seed_prototyping_0 and _1 (87 runs) into a copy wrote the same bytes)
+        (re-locked 2026-11-23: 2026-11-23 legacy cleanup: unused Domain.tamperable, swe_ladder.SIDE_APPLY
+        and seed_packs'' old-layout hints and unused kinds removed, docstrings updated; two scratch copies
+        of OLD/runs/ian_seed_prototyping_2 reprocessed with --force, one by main''s code (5998980) and
+        one by this, are byte-equal but the parts'' stamps in versions.json)'
   collusion:
     file: analysis/labels/collusion.json
     make: src.ui.viewer_parts:collusion_part
@@ -245,7 +262,7 @@ parts:
       src/domains/*/*_settings.py, src/domains/*/second/**/*]
     pins: []
     version: 2
-    fingerprint: sha256:7ae599171a188b362f7c70365809f3fa3541189ba1a972c6c1fbc6bb1871d0e4
+    fingerprint: sha256:7ac438e5df1c6f49f6f8a177f65ec43fc1d6eff6b69b806fc5f9afaa6963c55b
     log:
       1: '2026-11-22 first version: the Collusion ladder as the viewer keeps it, of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -291,7 +308,10 @@ parts:
         2026-11-23: the ian0 notes file only on a machine or workspace that holds a side copy (_swe_honeypot._side_copies)
         changes how a new run is built, not what a ladder reads: ian_seed_prototyping_2 copied from OLD/
         and reprocessed in a scratch copy with --force signals, cheating and collusion, 783 files byte-equal
-        but the 27 versions.json, logs unchanged)'
+        but the 27 versions.json, logs unchanged) (re-locked 2026-11-23: 2026-11-23 legacy cleanup: unused
+        Domain.tamperable, swe_ladder.SIDE_APPLY and seed_packs'' old-layout hints and unused kinds removed,
+        docstrings updated; two scratch copies of OLD/runs/ian_seed_prototyping_2 reprocessed with --force,
+        one by main''s code (5998980) and one by this, are byte-equal but the parts'' stamps in versions.json)'
   judged:
     file: analysis/labels/judged.json
     make: src.ui.viewer_parts:judged_part
@@ -300,11 +320,14 @@ parts:
       src/judging/verdict_files.py, src/ui/viewer_parts.py]
     pins: []
     version: 1
-    fingerprint: sha256:ce98779507bfd5e34b499f195ded06fd11568af1f64253d1a8c56f54ce054c7c
+    fingerprint: sha256:a1c02bdb033d829bbd2b499fe837bf8bc30916fca481a9c348e4682e806987e3
     log:
       1: '2026-11-22 first version: the judge labels and CheatBench''s verdicts, of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
-        through run_directory.FILES)'
+        through run_directory.FILES) (re-locked 2026-11-23: 2026-11-23 legacy cleanup: unused Domain.tamperable,
+        swe_ladder.SIDE_APPLY and seed_packs'' old-layout hints and unused kinds removed, docstrings updated;
+        two scratch copies of OLD/runs/ian_seed_prototyping_2 reprocessed with --force, one by main''s
+        code (5998980) and one by this, are byte-equal but the parts'' stamps in versions.json)'
   disregulator_roles:
     file: analysis/labels/disregulator_roles.json
     make: src.measures.disregulator_roles:disregulator_part
@@ -315,7 +338,7 @@ parts:
       src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*]
     pins: []
     version: 1
-    fingerprint: sha256:1191233db9bc122422ef79a4276b714227790d2117bdd4acf5db30885c4a370d
+    fingerprint: sha256:9e35ef12f400ae9e21a5429215598c52acb665095fb16bbead526eaa2aa134ee
     log:
       1: '2026-11-23 first version: what each disregulator did with its role (carried_out, filtered, refused,
         dropped, unknown), with mode, disclosed and the evidence, by code from the board, the code record''s
@@ -323,7 +346,11 @@ parts:
         the ian0 notes file only on a machine that holds a side patch (_swe_honeypot._side_copies, called
         by the SWE setup alone; no measure reads it): ian_seed_prototyping_2 copied from OLD/ twice and
         processed with --force signals, cheating, collusion and disregulator_roles by main''s code (fe38d76)
-        and by this code: the two copies byte-equal but the 27 versions.json)'
+        and by this code: the two copies byte-equal but the 27 versions.json) (re-locked 2026-11-23: 2026-11-23
+        legacy cleanup: unused Domain.tamperable, swe_ladder.SIDE_APPLY and seed_packs'' old-layout hints
+        and unused kinds removed, docstrings updated; two scratch copies of OLD/runs/ian_seed_prototyping_2
+        reprocessed with --force, one by main''s code (5998980) and one by this, are byte-equal but the
+        parts'' stamps in versions.json)'
   row:
     file: analysis/row.json
     make: src.ui.viewer_parts:row_part

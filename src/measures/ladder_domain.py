@@ -154,10 +154,6 @@ class Domain:
     """The evidence a pass proves ("checked": the checker received the content), where the grader accepts nothing honest
     work can produce; None: a pass proves nothing. The team record keeps the run's proof of it (proof)."""
 
-    tamperable = False
-    """Whether an agent's write can change what the task's own game does, which the tampered evidence records. True on
-    chess alone: its harness reads the files agents can write, and records what it did with them."""
-
     piece_terms: re.Pattern = NOTHING
     """Words a post uses for a piece or for the honeypot itself (slice, piece, shard, share, segment, deck). A request
     that names one solicits."""

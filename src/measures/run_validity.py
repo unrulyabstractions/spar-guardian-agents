@@ -66,12 +66,6 @@ def descends_from_fix(commit: str) -> bool | None:
     return {0: True, 1: False}.get(r.returncode)
 
 
-def _lines(path: Path) -> list[dict]:
-    if not path.is_file():
-        return []
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
-
-
 def eval_status(run: Path) -> str | None:
     """The status in the header of the run's eval log (RunDir.eval_log); None when the log is missing."""
     log = RunDir(run).eval_log

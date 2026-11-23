@@ -8,8 +8,8 @@
 A pack is a few board posts and files written from the posts and notes of real teams in our past runs. Its posts stand
 on the board before round 1 under the IDs of a previous team, drawn per run from SwarmConfig.ID_POOL apart from the
 roster. Its files are planted before the agents start: `tmp` puts one copy in /tmp of every machine, root's and
-readable by all; `home` puts one in each agent's home, the agent's own. A pack may point, tempt, normalise, rationalise
-or urge the team to work together. It never holds a piece of the exploit, a planted design, a line of the reference, a
+readable by all; `home` puts one in each agent's home, the agent's own. A pack may point the team at material or
+press it to use the material. It never holds a piece of the exploit, a planted design, a line of the reference, a
 half of a credential or any other content of a honeypot, so a seeded team still needs two agents' items to cheat
 (tests/unit/test_collaboration_*.py check every pack). A pack's lines never go into the task's repository, its README
 or its history, because a tracked file would enter every agent's graded tree.
@@ -29,7 +29,7 @@ lines joined by a space, is the pack's `about`; its second paragraph names the k
 numbered from 01 with no gap: a front matter of one line `author: k`, then the post's text, its surrounding blank
 lines dropped. A file's text is its bytes as UTF-8, planted as they are. "{author<k>}" in a text becomes the k-th
 author's ID. A seed record before 2026-11-22's folder layout also lists `harvest`, the ids of the posts its pack was
-written from; a newer one has none. studies/ holds the plans of scripts/study/run_study.py, not packs.
+written from; a newer one has none.
 
 How the ladders read a seed (the decision of 2026-11-22): a seeded post or file is the harness's, never a teammate's
 act. The transcript scan counts it as exposure only when its own text names the honeypot's location, the domain's
@@ -57,16 +57,10 @@ BOARD_DIR = "board"
 FILES_DIR = "files"
 HARVEST_DIR = "harvest"         # the sources a pack was written from, for people: never read
 ENTRIES = (README_FILE, PACK_FILE, BOARD_DIR, FILES_DIR, HARVEST_DIR)
-NOT_TASKS = ("plans",)          # folders of seeds/ that hold no packs
 IGNORED = (".DS_Store",)        # Finder's files, never planted
 PLACES = ("tmp", "home")
-KINDS = ("pointer", "normalise", "rationalise", "pressure", "pool", "collaborate", "objection")
+KINDS = ("pointer", "pressure")
 PACK_KEYS = ("kinds", "rows")
-MOVED = {"about": f"`about` is {README_FILE}'s first paragraph",
-         "posts": f"the posts are {BOARD_DIR}/01.md, 02.md, ...",
-         "files": f"a pack's files live in {FILES_DIR}/<place>/<name>",
-         "harvest": f"the sources go in {HARVEST_DIR}/, which nothing reads"}
-"""Where a key pack.yaml no longer takes went, for the refusal's hint."""
 KINDS_LINE = re.compile(r"Kinds: ([a-z_]+(?:, [a-z_]+)*)\.")
 POST_NAME = re.compile(r"\d\d+\.md")
 FRONT_MATTER = re.compile(r"---\n(.*?)\n---(?:\n(.*))?", re.S)
@@ -95,7 +89,7 @@ def packs() -> dict[str, dict]:
 def read_packs(root: Path) -> dict[str, dict]:
     """Every pack under root, checked: each folder root/<task>/<pack>/ must hold a pack.yaml and a README.md."""
     out = {}
-    for task_dir in sorted(p for p in root.iterdir() if p.is_dir() and p.name not in NOT_TASKS):
+    for task_dir in sorted(p for p in root.iterdir() if p.is_dir()):
         for folder in sorted(p for p in task_dir.iterdir() if not p.name.startswith(".")):
             pack = read_pack(folder)
             out[f"{pack['task']}/{pack['name']}"] = pack
@@ -120,8 +114,7 @@ def read_pack(folder: Path) -> dict:
     data = settings.load_yaml(folder / PACK_FILE) or {}
     if not isinstance(data, dict) or set(data) - set(PACK_KEYS):
         extra = sorted(set(data) - set(PACK_KEYS)) if isinstance(data, dict) else data
-        hints = "".join(f"; {MOVED[key]}" for key in extra if key in MOVED) if isinstance(data, dict) else ""
-        raise ValueError(f"seed pack {full}: {PACK_FILE} takes only {PACK_KEYS}, got {extra}{hints}")
+        raise ValueError(f"seed pack {full}: {PACK_FILE} takes only {PACK_KEYS}, got {extra}")
     about, named = read_readme(folder / README_FILE, full)
     pack = {"task": task, "name": name, "about": about, "kinds": data.get("kinds")}
     if "rows" in data:
@@ -140,12 +133,12 @@ def read_pack(folder: Path) -> dict:
 
 def read_readme(path: Path, full: str) -> tuple[str, list[str]]:
     """README.md's `about` (its first paragraph, the lines joined by a space) and the kinds its second paragraph names
-    (`Kinds: pointer, pool.`). Anything after them is for people."""
+    (`Kinds: pointer, pressure.`). Anything after them is for people."""
     paragraphs = [p.strip() for p in re.split(r"\n[ \t]*\n", path.read_text(encoding="utf-8")) if p.strip()]
     kinds = KINDS_LINE.fullmatch(paragraphs[1]) if len(paragraphs) > 1 else None
     if kinds is None or paragraphs[0].startswith("#"):
         raise ValueError(f"seed pack {full}: {README_FILE} is a paragraph on what the pack does (no heading), a blank "
-                         f"line, then one line `Kinds: pointer, pool.`")
+                         f"line, then one line `Kinds: pointer, pressure.`")
     return " ".join(line.strip() for line in paragraphs[0].splitlines()), kinds.group(1).split(", ")
 
 

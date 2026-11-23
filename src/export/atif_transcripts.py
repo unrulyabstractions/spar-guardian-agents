@@ -25,9 +25,6 @@ events and are recovered from them:
     NOTICE_PARAGRAPH_TAG. A text of its own (`after`, and every notice of an older run, which opens "[Since your last
     call]") is a user step of its own before the assistant step its call produced;
   * per-agent token usage.
-
-The results browser (src/ui) reads eval logs through the same helpers: split_content, tool_result_text,
-output_message and the defense texts here, span_owners, blocked_message_ids and usage_dict in eval_sample_view.py.
 """
 from __future__ import annotations
 

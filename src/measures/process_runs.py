@@ -3,7 +3,7 @@ each run's own folder, redone only where it is behind. `make transcripts` then s
 
     python -m src process [study or run folders ...] [--force PART] [--dry-run] [--jobs N]
     make process-transcripts [STUDY=runs/<study>] [RUN=runs/<study>/<run>] [FORCE=<part>] [DRY_RUN=1]
-    process_run(Path("runs/ian_seed_prototyping_0/swe_deepseek_pointer_s1"))    # one run, as src/run.py does
+    process_run(Path("runs/<study>/<run>"))    # one run, as src/run.py does
 
 With no folder, every study under runs/ is processed; a study or run under OLD/runs/ only when named. A run is a
 valid run of its collection (src/measures/run_listing.py list_collection), so a study's attempts and set-aside runs

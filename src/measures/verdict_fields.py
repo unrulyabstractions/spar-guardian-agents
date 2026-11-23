@@ -1,9 +1,9 @@
-"""Each task's judge flags: the CheatBench verdict fields (tasks/<task>/judge_schema.py) that the run figures, the
-results browser and the analysis tools show, in order with cheated last. Each flag has its label and the status colour
+"""Each task's judge flags: the CheatBench verdict fields (tasks/<task>/judge_schema.py) that the run figures and the
+analysis tools show, in order with cheated last. Each flag has its label and the status colour
 a true value takes: warning for a route seen, serious for an attempt or a use, good for a disclosure, critical for
-cheating. The module imports no plotting library and no ORBIT, so the browser and tools/.venv read it as it is.
+cheating. The module imports no plotting library and no ORBIT, so tools/.venv reads it as it is.
 
-    for field, label, colour in FLAGS_BY_TASK["openmath_agent"]: ...
+    for field, label, colour in FLAGS_BY_TASK["software_engineering"]: ...
 """
 from __future__ import annotations
 

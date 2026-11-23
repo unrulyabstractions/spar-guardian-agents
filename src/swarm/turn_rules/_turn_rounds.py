@@ -162,11 +162,6 @@ def name_job_call(job: str, call_id: str) -> None:
         st.set(JOBS_STORE, jobs)
 
 
-def rounds_left(round_number: int, of: int) -> int:
-    """The plan's rounds left in this round of R, this one included: a record, never told to an agent."""
-    return max(of - round_number + 1, 0)
-
-
 def round_line(left: int) -> str:
     """The line that opens a round's message (prompts.yaml round.line): the tool calls the agent has left of C."""
     return load_prompts()["round"]["line"].format(left=left)

@@ -47,8 +47,8 @@ def test_every_pack_loads_and_its_task_has_a_collaboration_check():
 POST = "---\nauthor: 1\n---\nhi\n"
 
 
-def write_pack(root, name="t/p", readme="a\n\nKinds: pool.\n", yaml_text="kinds: [pool]\n", posts=None, files=None,
-               extra=None):
+def write_pack(root, name="t/p", readme="a\n\nKinds: pressure.\n", yaml_text="kinds: [pressure]\n", posts=None,
+               files=None, extra=None):
     """A pack folder in the layout of seeds/README.md: README.md, pack.yaml, board/<name> for each post (one post by
     author 1 by default), files/<place>/<name>, and any other entry of the folder (extra, path to bytes)."""
     folder = root / name
@@ -94,16 +94,15 @@ def files_only(add) -> str:
 def test_a_pack_folder_gives_its_posts_and_its_files_as_bytes(tmp_path):
     """README.md's first paragraph, its lines joined, is the pack's about; each board/NN.md a post, its text without
     the surrounding blank lines; files/ as bytes. harvest/ is never read, whatever it holds."""
-    write_pack(tmp_path, readme="A previous team's\nplan.\n\nKinds: pool, pointer.\n\nNotes for people.\n",
-               yaml_text="kinds: [pool, pointer]\nrows: [r1]\n",
+    write_pack(tmp_path, readme="A previous team's\nplan.\n\nKinds: pressure, pointer.\n\nNotes for people.\n",
+               yaml_text="kinds: [pressure, pointer]\nrows: [r1]\n",
                posts={"01.md": "---\nauthor: 1\n---\n\nhi `there`\n\n", "02.md": "---\nauthor: 2\n---\n{author1}: yes",
                       ".DS_Store": b"\0"},
                files={"home/b.md": "x\r\n\u00e9".encode(), "tmp/a.txt": b"{author1} was here\n",
                       "tmp/.DS_Store": b"\0"},
                extra={"harvest/run__7.md": b"\xff not even text", "harvest/sub/x": b"", ".DS_Store": b"\0"})
-    (tmp_path / "plans").mkdir()
     pack = seed_packs.read_packs(tmp_path)["t/p"]
-    assert pack == {"task": "t", "name": "p", "about": "A previous team's plan.", "kinds": ["pool", "pointer"],
+    assert pack == {"task": "t", "name": "p", "about": "A previous team's plan.", "kinds": ["pressure", "pointer"],
                     "rows": ["r1"],
                     "posts": [{"author": 1, "text": "hi `there`"}, {"author": 2, "text": "{author1}: yes"}],
                     "files": [{"place": "tmp", "name": "a.txt", "text": "{author1} was here\n"},
@@ -113,17 +112,14 @@ def test_a_pack_folder_gives_its_posts_and_its_files_as_bytes(tmp_path):
 
 
 @pytest.mark.parametrize("given, error", [
-    ({"yaml_text": "about: a\nkinds: [pool]\n"}, "`about` is README.md's first paragraph"),
-    ({"yaml_text": "kinds: [pool]\nposts: [{author: 1, text: hi}]\n"}, "the posts are board/01.md"),
-    ({"yaml_text": "kinds: [pool]\nfiles: []\n"}, "files live in files/"),
-    ({"yaml_text": "kinds: [pool]\nharvest: [swe-01]\n"}, "the sources go in harvest/"),
-    ({"yaml_text": "kinds: [pool]\ntask: t\n"}, "takes only"),
+    ({"yaml_text": "about: a\nkinds: [pressure]\n"}, "takes only"),
+    ({"yaml_text": "kinds: [pressure]\ntask: t\n"}, "takes only"),
     ({"yaml_text": "kinds: [sneaky]\n", "readme": "a\n\nKinds: sneaky.\n"}, "kinds"),
     ({"readme": None}, "needs a README.md"),
-    ({"readme": "a\n"}, "then one line `Kinds: pointer, pool.`"),
-    ({"readme": "a\nKinds: pool.\n"}, "then one line `Kinds: pointer, pool.`"),
-    ({"readme": "# t/p\n\na\n\nKinds: pool.\n"}, "no heading"),
-    ({"readme": "a\n\nKinds: pressure.\n"}, "README.md names the kinds ['pressure'], pack.yaml ['pool']"),
+    ({"readme": "a\n"}, "then one line `Kinds: pointer, pressure.`"),
+    ({"readme": "a\nKinds: pressure.\n"}, "then one line `Kinds: pointer, pressure.`"),
+    ({"readme": "# t/p\n\na\n\nKinds: pressure.\n"}, "no heading"),
+    ({"readme": "a\n\nKinds: pointer.\n"}, "README.md names the kinds ['pointer'], pack.yaml ['pressure']"),
     ({"posts": {}}, "no post and no file: its posts go in board/01.md"),
     ({"posts": {"01.md": POST, "03.md": POST}}, "numbered with no gap; got ['01.md', '03.md'], missing ['02.md']"),
     ({"posts": {"1.md": POST}}, "not in the numbering ['1.md']"),
@@ -151,7 +147,7 @@ def test_a_malformed_pack_is_refused_with_what_to_fix(tmp_path, given, error):
 
 def test_a_folder_without_a_pack_yaml_and_a_bad_name_are_refused(tmp_path):
     (tmp_path / "t" / "p").mkdir(parents=True)
-    (tmp_path / "t" / "p" / "pack.yml").write_text("kinds: [pool]\n")
+    (tmp_path / "t" / "p" / "pack.yml").write_text("kinds: [pressure]\n")
     with pytest.raises(ValueError, match="needs a pack.yaml"):
         seed_packs.read_packs(tmp_path)
     other = tmp_path / "other"
@@ -207,8 +203,8 @@ def test_the_field_takes_a_pack_or_none_and_refuses_the_rest(more_packs):
 
 def test_the_record_draws_a_previous_team_off_the_roster_and_fills_its_ids(more_packs):
     """A pack of three posts by two authors and a file in /tmp, its author placeholders filled with the drawn IDs."""
-    pack = more_packs("swe/pooled", readme="Pooled.\n\nKinds: pool, pointer.\n",
-                      yaml_text="kinds: [pool, pointer]\nrows: [flipt-02e2]\n",
+    pack = more_packs("swe/pooled", readme="Pooled.\n\nKinds: pressure, pointer.\n",
+                      yaml_text="kinds: [pressure, pointer]\nrows: [flipt-02e2]\n",
                       posts={"01.md": "---\nauthor: 1\n---\nI pooled mine\n",
                              "02.md": "---\nauthor: 2\n---\n{author1}: so did I\n",
                              "03.md": "---\nauthor: 1\n---\nthanks {author2}\n"},

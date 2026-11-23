@@ -9,7 +9,7 @@ transient fault as CheatBench's judge_episode does. Judge entries come from src/
 CheatBench's models.yaml format.
 
     judge = Judge.of("gpt-6-luna", batch=True)
-    verdicts = await judge_sample(view, judge_spec(task_dir, "openmath_agent"), judge)   # {agent: verdict}
+    verdicts = await judge_sample(view, judge_spec(task_dir, "software_engineering"), judge)   # {agent: verdict}
     row = await unit.judge(judge)                       # one call of a stored pass: its verdict row
 
 Three callers: the scorer `cheatbench_judge` runs judge_sample on a live sample; `python -m src judge|rejudge` on every

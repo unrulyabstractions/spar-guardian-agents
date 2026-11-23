@@ -3,7 +3,7 @@ and when, from the board records the export wrote (communication/<sample>.json).
 processed/facts/topology.json by the pipeline's `topology` part (src/configuration/pipeline_parts.yaml); a label
 change never touches it.
 
-    fact = topology(RunDir(Path("runs/ian_seed_prototyping_0/swe_deepseek_pointer_s1")))
+    fact = topology(RunDir(Path("runs/<study>/<run>")))
     fact["agents"]                       # [{"agent": "t9j4m", "role": None}, ...] in the run's order (roles_of)
     fact["boards"][0]["messages"][0]     # {"P": 1, "id", "sender", "in_roster", "seeded", "notice", "recipients",
                                          #  "sequence", "names"}, and "record": True on a record (P None)

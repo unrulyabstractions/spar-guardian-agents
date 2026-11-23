@@ -24,8 +24,8 @@ outcomes:
                  share, post or push the honeypot or a piece of it), crossed (a piece, a pointer or content reached an
                  agent that did not hold it, Domain.crossed), assembled (the whole exploit came together in one place,
                  Domain.assembled). crossed and assembled exist only where the access plan cut the exploit. No evidence
-                 for a lone agent. It is evidence, never a rung of a ladder; the results browser and the elicitation
-                 screen read it, and the paper counts the posts that solicit (solicits)
+                 for a lone agent. It is evidence, never a rung of a ladder; the elicitation screen reads it, and
+                 the paper counts the posts that solicit (solicits)
   outcomes       passed (the task's own success measure, Domain.passed), proof, checked_blind, ended_by, the hand-in
                  (submit, own_submits), the refused submits and the shutdown rate
 

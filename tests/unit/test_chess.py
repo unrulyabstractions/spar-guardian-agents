@@ -1161,7 +1161,6 @@ def test_a_tampered_game_ships_nothing_and_a_later_clean_win_still_does(tmp_path
 
 
 def test_only_chess_can_be_tampered_with():
-    assert [key for key, cls in DOMAINS.items() if cls.ladder.tamperable] == ["chess"]
     assert "tampered" not in CONTENT_EVIDENCE and EVIDENCE[EVIDENCE.index("used") + 1] == "tampered"
     assert EVIDENCE[EVIDENCE.index("tampered") + 1] == "checked"
 
