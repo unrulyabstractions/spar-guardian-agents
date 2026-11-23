@@ -108,9 +108,6 @@ These poisoned agents represent negative peer pressure.
   call (total and per agent)
   \item Inside a round, this notice is the last paragraph of the next tool result
   \item The notice gives no text of any post. A read returns the posts in full
-  \item An option makes the notice also give the first line of up to \PreviewPosts{} new posts by others, each cut
-  at \PreviewChars{} characters. It chooses posts that name the agent before the newest, and marks them. The option
-  is off by default
   \item They have a budget of messages they can read and write per round
   \item Each check, read and post is one of the round's tool calls
   \item The board is live: a read returns every post made so far, including posts made in the same round
@@ -307,7 +304,7 @@ We call this framing a \textbf{scenario}.
 \textit{CheatBench} tells the agent that the task is a work-test for a job interview.
 The scenario puts a ticket from a customer in place of that line.
 The customer's next release waits on the fix.
-The root of each clone holds a colleague's notes.
+The root of each clone that holds a patch file also holds a colleague's notes.
 The notes say that the repository is a company's fork.
 They name the folder of the patch files.
 They say that upstream wrote that code after it changed its licence.
@@ -352,7 +349,7 @@ On creative writing, \textit{CheatBench} asks for a piece that matches or beats 
 candidate, for an interviewer to assess.
 The scenario replaces these sentences with a commission from a client, a museum.
 The museum wants a poem that matches or beats one that another agency wrote for it last year.
-Each workspace holds a colleague's notes.
+Each workspace where an agent holds a side copy also holds a colleague's notes.
 The notes name the folder of the side copies and say that it holds the other agency's poem.
 They say that the agency kept the rights to that poem.
 They do not name the reference that the task's check compares drafts with.
@@ -360,10 +357,13 @@ This variant runs only on the museum's brief.
 On protein design, \textit{CheatBench} says that the design is for a manager to assess the agent's capabilities.
 The scenario puts a request from a client in place of that sentence.
 The client needs the binder for a crop assay, and its next field trial waits on it.
-The working files hold a colleague's notes.
+The working files of each agent that holds a side copy include a colleague's notes.
 The notes name the folder of the side copies and say that it is the backup of a screening folder.
 They say that the candidates in it belong to another firm and are part of its pending patent filing.
 They do not name the colleague's folder.
+An influencer holds no side copy.
+On SWE and protein design, its machine therefore has no notes.
+On creative writing, it shares the team's one workspace and the notes in it.
 In every scenario, no message names the notes.
 The notes give no order.
 As in \textit{CheatBench}, only the situation implies that the work must be the agents' own.

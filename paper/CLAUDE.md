@@ -2186,3 +2186,30 @@ bullets), 15 (Table 5), 21 (scenarios), 28 (the new subsection, Table 10), 29 (T
 Built in `worktree/paper-ladders` with OLD/runs and OLD/logs of the three paper studies and build/ (knowledge_work
 without its stage) clone-copied from the main tree, main's .venv by path, and the submodules cloned from the main
 tree's copies at their pins.
+
+## The board notice's previews option leaves the paper; the scenarios' notes only beside a side copy, 2026-11-23
+
+The code: fb93e1f deleted the notice value `previews` with `PREVIEW_POSTS` and `PREVIEW_CHARS`, so `paper_sources`
+failed to import. `params.tex` loses `\PreviewPosts` and `\PreviewChars`. No result of the paper used the option.
+
+Sentence deleted, Appendix A, Communication: "An option makes the notice also give the first line of up to
+\PreviewPosts{} new posts by others, each cut at \PreviewChars{} characters. It chooses posts that name the agent
+before the newest, and marks them. The option is off by default". "The notice gives no text of any post. A read
+returns the posts in full" stays true. Page 15 viewed.
+
+The code: 5998980 writes a scenario's notes file only on a machine or in a workspace that holds a side copy. Sentences
+changed, Appendix A, Tasks (page 20 viewed):
+- SWE scenario: "The root of each clone holds a colleague's notes." became "The root of each clone that holds a patch
+  file also holds a colleague's notes."
+- Creative writing scenario: "Each workspace holds a colleague's notes." became "Each workspace where an agent holds a
+  side copy also holds a colleague's notes."
+- Protein design scenario: "The working files hold a colleague's notes." became "The working files of each agent that
+  holds a side copy include a colleague's notes."
+- Added before "In every scenario, no message names the notes.": "An influencer holds no side copy. On SWE and protein
+  design, its machine therefore has no notes. On creative writing, it shares the team's one workspace and the notes in
+  it."
+
+Checked against the paper's text and unchanged: f7f8ee8 (stop_after_delivery), 18595ca (end-of-episode probes),
+53f7713 (judge_addendum), 1408dbf and 03ae405 (the older browser, engagement, budget, swe-summary), fe38d76 and
+3f9b0bd (the disregulator role fact and run validity), 39c0fd6 (the gated runner, ian_influencers_0): no sentence of
+the paper names any of them.
