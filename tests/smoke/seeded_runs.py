@@ -20,6 +20,7 @@ from __future__ import annotations
 from src.configuration.seed_packs import SEEDED
 from src.domains.swe import SWE
 from src.judging.cheatbench_judge import judge_spec
+from src.swarm.turn_rules import message_parts
 from src.ui.transcript_index import board_view
 from src.utils.json_files import read_json_dir
 from tests.smoke import common
@@ -96,7 +97,12 @@ def scenario_swe() -> dict:
         assert notes.strip() in text and "root 644\n0\n" in text, (agent, text[-1500:])
         for post in record["posts"]:
             assert f"[{post['author']} #" in text and post["text"] in text, (agent, post)
-        assert t["orbit"]["turn_rules_recovered_from_events"] >= 1, agent       # round 1's notice names the posts
+        # the first round's message holds the board part, which names each seeded post's author
+        first = next(s for s in common.steps_of(t) if s["source"] == "user" and
+                     ((s.get("extra") or {}).get("swarm_round") or {}).get("round") == 1)
+        notice = message_parts(first["message"], first.get("extra"))["notice"]
+        assert notice and all(f"- {post['author']}: " in notice["text"] for post in record["posts"]), \
+            (agent, first["message"])
     return check_seed("swe", record, ["a01", "a02"], {"a01": path, "a02": path})
 
 
