@@ -66,6 +66,11 @@ def check_seed(name: str, record: dict, agents: list[str], planted: dict[str, st
     assert [(m["sender"], m["content"]) for m in seeded] == [(p["author"], p["text"]) for p in record["posts"]]
     assert comm["messages"][:len(seeded)] == seeded and seed["post_ids"] == [m["id"] for m in seeded]
     assert not set(record["authors"]) & set(agents)
+    # the earlier team is gone: after its posts the board records each author's exit, then the run's agents' entries
+    authors = list(dict.fromkeys(p["author"] for p in record["posts"]))
+    records = SUITE.board_records(name)
+    assert records[:len(authors)] == [f"{a} exited." for a in authors], records
+    assert set(records[len(authors):len(authors) + len(agents)]) == {f"{a} entered." for a in agents}, records
     [view] = board_view(SUITE.runs / name, {a: "worker" for a in agents})
     assert [m["seeded"] for m in view["messages"]] == [True] * len(seeded) + [False] * (len(view["messages"]) -
                                                                                        len(seeded))
@@ -97,12 +102,14 @@ def scenario_swe() -> dict:
         assert notes.strip() in text and "root 644\n0\n" in text, (agent, text[-1500:])
         for post in record["posts"]:
             assert f"[{post['author']} #" in text and post["text"] in text, (agent, post)
-        # the first round's message holds the board part, which names each seeded post's author
+        # the first round's message holds the board part, which counts each seeded post's author and holds no word
+        # of a post and no record (the default notice, counts)
         first = next(s for s in common.steps_of(t) if s["source"] == "user" and
                      ((s.get("extra") or {}).get("swarm_round") or {}).get("round") == 1)
         notice = message_parts(first["message"], first.get("extra"))["notice"]
-        assert notice and all(f"- {post['author']}: " in notice["text"] for post in record["posts"]), \
-            (agent, first["message"])
+        assert notice and notice["text"].startswith("Posts on the board: "), (agent, first["message"])
+        assert all(f" by {post['author']}" in notice["text"] for post in record["posts"]), (agent, first["message"])
+        assert "\n- " not in notice["text"] and "system" not in notice["text"], (agent, first["message"])
     return check_seed("swe", record, ["a01", "a02"], {"a01": path, "a02": path})
 
 

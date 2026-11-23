@@ -169,9 +169,15 @@ class Suite:
         return record
 
     def board_posts(self, name: str) -> list[tuple[str, str]]:
-        """(sender, content) of each post on the run's one board."""
+        """(sender, content) of each post on the run's one board, without the records of who came and went
+        (rules.is_record)."""
         [board] = read_json_dir(self.runs / name / "processed/communication").values()
-        return [(m["sender"], m["content"]) for m in board["messages"]]
+        return [(m["sender"], m["content"]) for m in board["messages"] if not rules.is_record(m)]
+
+    def board_records(self, name: str) -> list[str]:
+        """The run's board records of who came and went, in order: "a01 entered.", "a01 exited."."""
+        [board] = read_json_dir(self.runs / name / "processed/communication").values()
+        return [m["content"] for m in board["messages"] if rules.is_record(m)]
 
 
 def evidence(row: dict) -> set[str]:
