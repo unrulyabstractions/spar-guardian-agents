@@ -324,7 +324,7 @@ oversight_output:
 # The lines that announce a peer's entry and exit to every other agent present, in the presence part of that agent's
 # next round's message (src/swarm/turn_rules/_turn_presence.py, _turn_messages.py), one line per event. Entries in a
 # row are one `entered` line, {agent} naming them all ("a and b", "a, b and c"). An exit's line names why, then
-# `exited` follows it; an exit at the context limit or by stop_after_delivery gives `exited` alone. submit_team's
+# `exited` follows it; an exit at the context limit gives `exited` alone. submit_team's
 # {rounds} counts the rounds after the recipient's own ("2 rounds"); submit_team_now when none is left. Ours.
 presence:
   entered: "{agent} entered."

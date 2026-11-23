@@ -38,8 +38,8 @@ are the benchmark's, then on a board board_status, board_read and board_post and
 ORBIT's tool_bindings next to the benchmark's own bindings. No agent gets ORBIT's own submit (AgentSpec.submit=False).
 
 The plan's rounds, the scheduler's turn bound and Inspect's message limit follow SwarmConfig.rounds, max_turns and
-sample_message_limit. The turn rules' setup gets the agents' time limit, after which a round ends at its next batch,
-and under stop_after_delivery the benchmark's delivery predicate (Benchmark.delivered).
+sample_message_limit. The turn rules' setup gets the agents' time limit, after which a round ends at its next
+batch.
 
 The run's facts go into the sample metadata: metadata["cheatbench"] gains the config dump, each agent's role and the
 team's composition, each role's model (role_models), the plan's access (the applied policy, each agent's items and
@@ -285,7 +285,7 @@ def setup_solvers(benchmark: Benchmark, plan: Plan, tools: AgentTools | None = N
     seeded = [seed_setup(benchmark, record, config.names)] if record else []
     tmp = [tmp_capture_setup(*machines_of(tools.seats, config.names))] \
         if config.tmp_snapshots and benchmark.commands and tools is not None else []
-    return [rules_setup(config, config.names, plan.roles, **delivery(benchmark, plan),
+    return [rules_setup(config, config.names, plan.roles,
                         time_limit_s=config.time_limit_s or benchmark.time_limit_s(),
                         round_end=benchmark.round_end(plan), **team_head(benchmark, plan)), *hidden, benchmark.setup(),
             *seeded, *shell, *monitor, *network, *tmp]
@@ -335,14 +335,6 @@ def team_head(benchmark: Benchmark, plan: Plan) -> dict:
     if reader is None:
         return {}
     return {"team_head": reader, "push_read": settings.load_prompts()["presence"]["push_read"][benchmark.key]}
-
-
-def delivery(benchmark: Benchmark, plan: Plan) -> dict:
-    """rules_setup's delivery predicate under stop_after_delivery ({"delivered": Benchmark.delivered}); nothing
-    without the rule, so the eval log's plan records no predicate."""
-    if plan.config.stop_after_delivery is None:
-        return {}
-    return {"delivered": benchmark.delivered(plan)}
 
 
 # --------------------------------------------------------------------------

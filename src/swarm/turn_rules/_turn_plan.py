@@ -5,10 +5,10 @@ SwarmConfig.call_budget, head_start_rounds) over
 the agents whose window holds each round. A round is one concurrent
 step or one single-agent step per agent, and an agent's part of it one ORBIT activation of up to calls_per_round tool
 calls, which turn_activation.ends_round ends. The rules_setup solver writes the initial TurnState, sets the sample's
-Live record and, under stop_after_delivery, writes the Delivered record and sets the sample's delivery predicate.
+Live record.
 
     execute = board_execution(plan=schedule(config, names, roles))
-    setup = rules_setup(config, names, roles, delivered=benchmark.delivered(plan), time_limit_s=3600)
+    setup = rules_setup(config, names, roles, time_limit_s=3600)
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from src.configuration.swarm_config import SwarmConfig, Window, role_of
 from src.swarm.turn_rules import turn_activation
 from src.swarm.turn_rules._turn_presence import entry_rounds
 from src.swarm.turn_rules._turn_pushes import TEAM_HEAD, Pushes
-from src.swarm.turn_rules._turn_state import LIVE, PREDICATE, ROUND_END, Delivered, Live, SubmitHolds, TurnState
+from src.swarm.turn_rules._turn_state import LIVE, ROUND_END, Live, SubmitHolds, TurnState
 from src.swarm.turn_rules._turn_steps import concurrent_step, round_order, single_step, step_id
 
 
@@ -87,27 +87,18 @@ def initial_state(config: SwarmConfig, agents: list[str], roles: dict[str, str] 
             "entry_rounds": planned_entries(config, agents, roles)}
 
 
-def team_delivery(config: SwarmConfig, agents: list[str]) -> bool:
-    """Whether stop_after_delivery reads one deliverable for the team: two or more agents outside solo_task.
-    Otherwise each agent has its own."""
-    return len(agents) > 1 and config.mode != "solo_task"
-
-
 @solver
 def rules_setup(config: SwarmConfig | dict, agents: list[str], roles: dict[str, str] | None = None,
-                delivered: Callable[[], Awaitable[set[str]]] | None = None, time_limit_s: int | None = None,
+                time_limit_s: int | None = None,
                 round_end: Callable[[str, int, list[dict]], Awaitable[None]] | None = None,
                 team_head: Callable[[], Awaitable[dict | None]] | None = None, push_read: str = "") -> Solver:
     """Task setup: write the initial TurnState into the sample's store and set the sample's Live record, which every
     member's task shares, with the written plan under submit_hold, which a hold puts back (turn_activation), and the
-    SubmitHolds record. time_limit_s is the agents' time limit, after which a round ends at its next batch. Under
-    stop_after_delivery it also writes the Delivered record and sets the sample's delivery predicate, `delivered`
-    (Benchmark.delivered), which the rule needs. round_end is the benchmark's callback after each agent's round
+    SubmitHolds record. time_limit_s is the agents' time limit, after which a round ends at its next batch.
+    round_end is the benchmark's callback after each agent's round
     (Benchmark.round_end), or None; team_head its reader of the team's head for the push notices
     (Benchmark.team_head, _turn_pushes), with push_read, how its notice says to read the head."""
     rules = SwarmConfig.model_validate(config)
-    if rules.stop_after_delivery is not None and delivered is None:
-        raise ValueError("stop_after_delivery needs the benchmark's delivery predicate (Benchmark.delivered)")
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         st = store_as(TurnState)
@@ -116,14 +107,10 @@ def rules_setup(config: SwarmConfig | dict, agents: list[str], roles: dict[str, 
         LIVE.set(Live(plan=plan_steps(rules, agents, roles) if rules.submit_hold else []))
         if rules.submit_hold:
             store_as(SubmitHolds).on = True
-        PREDICATE.set(None if rules.stop_after_delivery is None else delivered)
         ROUND_END.set(round_end)
         TEAM_HEAD.set(team_head)
         if team_head is not None:
             store_as(Pushes).read = push_read
-        if rules.stop_after_delivery is not None:
-            record = store_as(Delivered)
-            record.after, record.team = rules.stop_after_delivery, team_delivery(rules, agents)
         return state
 
     return solve

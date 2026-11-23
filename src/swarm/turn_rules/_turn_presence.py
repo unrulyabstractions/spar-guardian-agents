@@ -16,7 +16,6 @@ An exit's `why`, recorded once per agent in TurnState.exits by record_exit:
     rounds     it used up its rounds (TurnState.ended "rounds"), or no plan step is left for it
                (turn_activation.out_of_steps): "<agent> ran out of rounds."
     context    its last generation stopped at the context limit: "exited." alone
-    delivered  stop_after_delivery ended it: "exited." alone
 
 An influencer hears each push to the team's shared result the harness saw (_turn_pushes), once, before its next round.
 An influencer's alert (alert_humans, recorded in Alerts) ends nothing: every peer present hears "<agent> has alerted
@@ -62,10 +61,9 @@ from src.swarm.turn_rules._turn_state import (
 )
 from src.swarm.turn_rules._turn_steps import step_round
 
-EXIT_WHY = ("submit", "stop", "alert", "rounds", "context", "delivered")
+EXIT_WHY = ("submit", "stop", "alert", "rounds", "context")
 # The TurnState.ended reasons and the exit each one is.
-ENDED_WHY = {"submit": "submit", "stop_working": "stop", "alert": "alert", "rounds": "rounds", "context": "context",
-             "delivered": "delivered"}
+ENDED_WHY = {"submit": "submit", "stop_working": "stop", "alert": "alert", "rounds": "rounds", "context": "context"}
 
 
 def entry_rounds(steps: list[dict]) -> dict[str, int]:

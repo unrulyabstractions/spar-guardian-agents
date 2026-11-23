@@ -248,18 +248,8 @@ class SwarmConfig(BaseModel):
     worker that submitted takes turns again, and any worker may submit again; release_submit lets the hand-in stand,
     and a hand-in neither held nor released stands. Every hold and release is recorded (store SubmitHolds, run.json
     submit_holds). Only a regulator's prompts describe it, and only when it is on. A run arm of its own: it makes a
-    regulator much stronger. Needs a shared_task team with a regulator, submit and submit_delay_rounds of 1 or more,
-    and no stop_after_delivery."""
-    stop_after_delivery: int | None = None
-    """Ends an episode soon after its deliverable exists, so an agent that keeps working after it registered, sent
-    its work for review or merged does not run to its last round. None turns the rule off. At the end of every round
-    turn_activation.after_activation awaits the benchmark's delivery predicate (Benchmark.delivered) while some
-    deliverable is unseen. N for a lone agent and in solo_task: an agent's episode ends after N more of its rounds
-    used up once its own deliverable is first seen. N in shared_task: every agent's episode ends N rounds after the
-    round that first shows the team's deliverable, as the team's submit ends the run after a set round; 0 ends it
-    after that round. An episode the rule ends is ended "delivered" (TurnState.ended, an episode's ended_by) and its
-    rounds go to nobody. The store Delivered, and run.json "delivery", hold the round and the rounds used up at which
-    each deliverable was first seen."""
+    regulator much stronger. Needs a shared_task team with a regulator, submit and submit_delay_rounds of 1 or
+    more."""
     regulator_window: Window = Window()
     """The rounds in which regulators hold steps. A regulator enters the swarm at its start round: ORBIT inserts its
     system prompt at its first activation. It leaves after its end round. Workers always hold every round."""
@@ -443,17 +433,15 @@ class SwarmConfig(BaseModel):
         for name in ("reads_per_turn", "posts_per_turn", "message_limit"):
             if getattr(self, name) is not None and getattr(self, name) < 1:
                 raise ValueError(f"{name} must be at least 1, or None")
-        if self.stop_after_delivery is not None and self.stop_after_delivery < 0:
-            raise ValueError("stop_after_delivery cannot be negative; stop_after_delivery=none turns the rule off")
         if self.submit_delay_rounds < 0:
             raise ValueError("submit_delay_rounds cannot be negative; 0 ends the run after the round of the submit")
         self._check_head_start()
         if self.seed_pack is not None and seed_packs.pack_of(self.seed_pack).get("posts") and not self.board:
             raise ValueError(f"seed_pack {self.seed_pack} holds board posts, and a lone agent has no board")
         if self.submit_hold and not (self.submit_kind == "team" and self.gives_submit and self.regulator_count
-                                     and self.submit_delay_rounds >= 1 and self.stop_after_delivery is None):
-            raise ValueError("submit_hold needs a shared_task team with a regulator, submit, submit_delay_rounds of 1 "
-                             "or more and no stop_after_delivery")
+                                     and self.submit_delay_rounds >= 1):
+            raise ValueError("submit_hold needs a shared_task team with a regulator, submit and submit_delay_rounds of "
+                             "1 or more")
         rounds = self.plan_rounds
         for name in ("regulator_window", "disregulator_window"):
             window = getattr(self, name)

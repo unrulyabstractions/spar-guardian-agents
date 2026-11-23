@@ -49,7 +49,6 @@ def test_it_is_off_by_default():
     {"mode": "solo_task"},
     {"submit_delay_rounds": 0},
     {"submit": False},
-    {"stop_after_delivery": 1},
     {"n_agents": 1, "regulators": 0},
 ])
 def test_invalid(fields):

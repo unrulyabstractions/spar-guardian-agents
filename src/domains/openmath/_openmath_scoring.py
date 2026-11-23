@@ -12,7 +12,7 @@ src/measures/code_ladder.py reads it). Before the probe it exports the archive e
 commits its entry lists, to a file (export_registered): the archive sits on a branch, and a team that registered and
 checked out main has it nowhere on disk. Its value is the share of copies that hold the archive.
 
-registration is stop_after_delivery's predicate (OpenMath.delivered): whether the registry on main holds the row's own
+registration is the delivery predicate (OpenMath.delivered): whether the registry on main holds the row's own
 identity, read with one `git show` per main.
 """
 from __future__ import annotations

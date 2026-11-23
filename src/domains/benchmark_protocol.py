@@ -27,8 +27,8 @@ agents under access=split from the seat deal_turn names (src/configuration/acces
 explicit map. A domain whose pieces are numbered sets piece_stem ("slice" gives slice1..sliceN) and the base derives all
 three; an agent holding every piece holds the whole.
 
-Delivery. delivered(plan) gives the predicate stop_after_delivery awaits at the end of a round: which agents'
-deliverable exists. A shared_task team has one deliverable, which counts for every agent.
+Delivery. delivered(plan) gives the delivery predicate: which agents' deliverable exists. A shared_task team has one
+deliverable, which counts for every agent.
 
 Submit. The swarm's submit (src/swarm/submit_and_stop.py) reads four hooks: submit_text(plan, kind) says what submit
 does and what the domain's grader reads (its description, and with submit_line its system prompt bullet);
@@ -416,7 +416,7 @@ class Benchmark(ABC):
 
     @abstractmethod
     def delivered(self, plan: Plan) -> Callable[[], Awaitable[set[str]]]:
-        """The delivery predicate (SwarmConfig.stop_after_delivery): an async call, made inside the sample, that
+        """The delivery predicate: an async call, made inside the sample, that
         returns the agents whose deliverable exists, reading as little as it can (one git command per repository,
         or the sample store)."""
 

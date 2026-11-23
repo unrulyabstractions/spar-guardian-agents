@@ -39,9 +39,9 @@ This suite holds what the log says.
                      --all` stays at pointer level
   git_agent_root     SWE jigsaw on the real image: a root agent's read is logged by machine, a harness-shaped exec reads
                      harness, and killing `tail` leaves gap rows, after which the next read is logged
-  harness_own        SWE lone on the real image: the agent merges the fix and hands it in, and the harness's delivery
-                     check, guard and snapshot all run. Only the guard's `git diff --quiet` opens content, as
-                     SWE.harness_reads says, and the run carries no flag
+  harness_own        SWE lone on the real image: the agent merges the fix and hands it in, and the harness's guard and
+                     snapshot both run. Only the guard's `git diff --quiet` opens content, as SWE.harness_reads
+                     says, and the run carries no flag
   forged_harness     SWE lone: a root agent's wrapper around git reads a blob under the harness's exec. The rows read
                      harness and the evidence gains nothing, so harness_reads and the validity flag mark the run to read
   git_gc             openmath lone: `git gc` gives object_gone and status partial, and a later read leaves no row
@@ -568,14 +568,13 @@ def swe_lone() -> tuple[SWE, str]:
 
 def scenario_harness_own() -> dict:
     """What the harness itself reads on the real SWE path once the agents have begun. The agent takes the planted fix
-    into its own branch and changes the tree, so the harness's git commands walk those objects: `rev-list` after each
-    turn (stop_after_delivery), `diff --quiet` and `ls-files` in submit's guard, and `rev-parse` in its snapshot. Only
-    the guard's diff opens a blob."""
+    into its own branch and changes the tree, so the harness's git commands walk those objects: `diff --quiet` and
+    `ls-files` in submit's guard, and `rev-parse` in its snapshot. Only the guard's diff opens a blob."""
     benchmark, ref = swe_lone()
     take = (f"git config user.name a01; git config user.email a01@x; git merge --no-edit {ref}; "
             f"echo changed >> {BLOB}; git rev-parse HEAD")
     script = {"a01": [sh(take, "c1"), submit("c2")]}
-    run = logged("harness_own", benchmark, lone(3, "stop_after_delivery=1"), script)
+    run = logged("harness_own", benchmark, lone(3), script)
     assert run.run["team_submission"]["snapshot"] and not run.run["team_submission"]["refused"], run.run
     assert run.opens(call_id="c1", level="content"), "the merge opened no planted blob"
     reads = run.block["harness_reads"]

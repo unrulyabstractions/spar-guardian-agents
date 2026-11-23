@@ -11,9 +11,8 @@ and marks why an agent stopped. An agent that has made all C of its tool calls (
 gate in _turn_rounds) ends "rounds"; no count of rounds ends an agent. It then amends the pending plan: the ended
 agents' steps removed, every step after the team's hand-in dropped, and every step after the round under way dropped
 once no worker is left (workers_gone), so no regulator holds a run open. An agent that stops simply exits: its calls go
-to nobody. Under stop_after_delivery it hands the amended plan to the rule in _turn_delivery first. Last it records the
-exits the plan now shows (_turn_presence): an ending a rule wrote (rounds, context, delivered) and an agent out of steps
-(out_of_steps), so its peers hear of it before their next round.
+to nobody. Last it records the exits the plan now shows (_turn_presence): an ending a rule wrote (rounds, context) and
+an agent out of steps (out_of_steps), so its peers hear of it before their next round.
 
     schedule = ScheduleConfig(steps=steps, after_activation=f"{turn_activation.__name__}.after_activation",
                               end_activation=f"{turn_activation.__name__}.ends_round")
@@ -28,20 +27,17 @@ from inspect_ai.util import store_as
 from orbit.configs.scheduling import ScheduleStep
 
 from src.configuration.swarm_config import Window
-from src.swarm.turn_rules._turn_delivery import after_delivery, delivery, end, spent
 from src.swarm.turn_rules._turn_presence import ENDED_WHY, record_exit
 from src.swarm.turn_rules._turn_pushes import TEAM_HEAD, look
 from src.swarm.turn_rules._turn_rounds import charge, ends, name_job_call, take_round
 from src.swarm.turn_rules._turn_state import (
     ACTOR,
-    DELIVERED,
     HALT_TAG,
     ROUND_END,
     ROUND_END_TAG,
     STOP_WORKING,
     SUBMIT,
     Alerts,
-    Delivered,
     TeamSubmission,
     TurnState,
     holdable,
@@ -204,17 +200,16 @@ def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | Non
     when the benchmark has a reader (_turn_pushes.look), awaited after the record."""
     hook, reader = ROUND_END.get(), TEAM_HEAD.get()
     if hook is None and reader is None:
-        return _after_round(runtime, result, global_turn)
+        _after_round(runtime, result, global_turn)
+        return None
     agent, step = result.agent_name, running_step(runtime)
     round_number = step_round(step.id) if step is not None else 0
     calls = [{"id": c.id, "tool": c.function, "arguments": c.arguments}
              for m in _activation_messages(agent, result) if isinstance(m, ChatMessageAssistant)
              for c in m.tool_calls or []]
-    rest = _after_round(runtime, result, global_turn)
+    _after_round(runtime, result, global_turn)
 
     async def then() -> None:
-        if rest is not None:
-            await rest
         if hook is not None:
             try:
                 await hook(agent, round_number, calls)
@@ -225,7 +220,7 @@ def after_activation(runtime, result, global_turn: int) -> Awaitable[None] | Non
     return then()
 
 
-def _after_round(runtime, result, global_turn: int) -> Awaitable[None] | None:
+def _after_round(runtime, result, global_turn: int) -> None:
     """The round's record, after every round of the plan.
 
     Counts the round (every round uses up one of the agent's rounds), writes its timeline entry (its calls with their
@@ -235,9 +230,6 @@ def _after_round(runtime, result, global_turn: int) -> Awaitable[None] | None:
     its last round; once no worker is left (workers_gone) every step after the round under way goes, whatever a
     hand-in left running. The timeline marks an agent's first round ("entered") and the round after which its window
     holds no more steps ("left").
-
-    Under stop_after_delivery it returns a coroutine, which ORBIT awaits: the rule may await the delivery predicate
-    before the plan is amended (after_delivery). Without the rule it returns None.
     """
     st = store_as(TurnState)
     agent = result.agent_name
@@ -261,12 +253,8 @@ def _after_round(runtime, result, global_turn: int) -> Awaitable[None] | None:
     st.rounds_used = {**st.rounds_used, agent: used}
     actual = list(runtime.pending_steps)
     pending = restored(step, actual)
-    rules = delivery()
     reason = None if ending is not None else _stop_reason(st, agent)   # its own ending comes first
-    if reason is None and rules is not None and agent not in st.ended and spent(rules, agent, used) \
-            and any(agent in s.agents for s in pending):
-        end(st, [agent], round_number)
-    elif reason and agent not in st.ended:
+    if reason and agent not in st.ended:
         st.ended = {**st.ended, agent: reason}
         st.ended_round = {**st.ended_round, agent: round_number}
     left = _window(st, agent).end is not None and not any(agent in s.agents for s in pending)
@@ -298,8 +286,6 @@ def _after_round(runtime, result, global_turn: int) -> Awaitable[None] | None:
     halted = submission.agent is not None
     if halted:
         keep = _halt(st, submission, keep)
-    if rules is not None and not halted:     # the team's hand-in ends the run itself; the rule stays out of it
-        return _amend_after_delivery(st, rules, runtime, step, agent, keep, before)
     keep = _without_workers(st, keep, step)
     _presence(st, runtime, step, agent, keep, halted)
     _amend(st, runtime, agent, keep, before, halted)
@@ -324,8 +310,8 @@ def out_of_steps(st: TurnState, keep: list[dict], skip: set[str] = frozenset()) 
 
 def _presence(st: TurnState, runtime, step: ScheduleStep | None, agent: str, keep: list[dict], halted: bool) -> None:
     """Record the exits the amended plan shows (_turn_presence.record_exit): every ending in TurnState.ended without
-    one (rounds, context, delivered; submit and stop_working record their own), then, unless the run is
-    ending (halted: a hand-in, a team's delivery, or no worker left), every agent out of steps as "rounds"."""
+    one (rounds, context; submit and stop_working record their own), then, unless the run is
+    ending (halted: a hand-in, or no worker left), every agent out of steps as "rounds"."""
     round_number = step_round(step.id) if step is not None else st.rounds
     for name, reason in st.ended.items():
         if name not in st.exits and reason in ENDED_WHY:
@@ -336,17 +322,9 @@ def _presence(st: TurnState, runtime, step: ScheduleStep | None, agent: str, kee
         record_exit(name, "rounds", round_number)
 
 
-def _amend(st: TurnState, runtime, agent: str, keep: list[dict], before: list[dict], halted: bool,
-           delivered: bool = False) -> None:
+def _amend(st: TurnState, runtime, agent: str, keep: list[dict], before: list[dict], halted: bool) -> None:
     if keep == before:
         return
-    why = SUBMIT if halted else DELIVERED if delivered else st.ended.get(agent) or "stopped"
+    why = SUBMIT if halted else st.ended.get(agent) or "stopped"
     runtime.amend_pending(keep, actor=ACTOR, reason=f"{agent}: {why}", expected_revision=runtime.revision)
 
-
-async def _amend_after_delivery(st: TurnState, record: Delivered, runtime, step: ScheduleStep | None, agent: str,
-                                keep: list[dict], before: list[dict]) -> None:
-    keep, ended = await after_delivery(st, record, runtime, step, agent, keep)
-    keep = _without_workers(st, keep, step)
-    _presence(st, runtime, step, agent, keep, record.team and record.halt_round is not None)
-    _amend(st, runtime, agent, keep, before, False, bool(ended))

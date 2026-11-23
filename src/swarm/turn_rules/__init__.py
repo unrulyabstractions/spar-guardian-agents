@@ -10,8 +10,8 @@ turn_activation.ends_round ends it (ScheduleConfig.end_activation, our fork's: e
 time limit, the round's own time T, or a reply with no tool call; _turn_rounds). A command call still running at T is
 kept as a job (src/sandbox/command_jobs.py), so a round ends on time but for the model call under way. After every round
 ORBIT calls turn_activation.after_activation, which counts the round (every round uses up one of the agent's R rounds,
-whatever it held), writes its timeline entry with each call's time, marks why an agent stopped, cuts the plan after the
-team's hand-in or once no worker is left and, under stop_after_delivery, applies _turn_delivery's rule. A model filter
+whatever it held), writes its timeline entry with each call's time, marks why an agent stopped and cuts the plan
+after the team's hand-in or once no worker is left. A model filter
 on every agent (_turn_rules_filter.TurnRulesFilter, carried by a passive defense) removes the agent loop's assistant
 paragraph from the system message (provider_system_text), withholds ORBIT's channel tools, adds the board notice inside
 a round and appends the continue prompt; it changes what the provider receives and never the durable conversation, and

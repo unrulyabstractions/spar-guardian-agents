@@ -70,8 +70,6 @@ def test_defaults_and_properties():
     {"message_limit": 0},
     {"regulator_level": "loud"},
     {"submit_delay_rounds": -1},
-    {"stop_after_delivery": -1},
-    {"stop_after_delivery": "soon"},
 ])
 def test_invalid(fields):
     with pytest.raises(ValidationError):

@@ -2,7 +2,8 @@
 
 TurnState holds the per-sample turn bookkeeping, the agents' entry rounds and exits among it (_turn_presence).
 TeamSubmission holds the team's hand-in and the refused submits, StopWorking the round of each stop_working call, Alerts
-each alert_humans call, and Delivered the stop-after-delivery record. The board tools count
+each alert_humans call, and Delivered the stop-after-delivery record of a run made before 2026-11-23, which the
+export still reads (no rule writes it now). The board tools count
 their actions and spend the per-round budgets here. current_round reads the round of the step under way from ORBIT's
 live plan, and live_state an agent's live AgentState. Live holds what a sample keeps in memory only: each agent's
 round under way (_turn_rounds) and its conversation at its last boundary, which the peer tools read mid-round.
@@ -36,8 +37,7 @@ HALT_TAG = "swarm_team_halt"            # info event when the plan is cut: after
 HOLD_TAG = "swarm_submit_hold"          # info event of a regulator's hold or release (src/swarm/submit_hold.py)
 HOLD_TOOL = "hold_submit"               # the regulators' tools under SwarmConfig.submit_hold
 RELEASE_TOOL = "release_submit"
-DELIVERED_TAG = "swarm_delivered"                      # info event of stop_after_delivery: a sighting or an end
-DELIVERED = "delivered"                                # the TurnState.ended reason of stop_after_delivery
+DELIVERED = "delivered"           # the TurnState.ended reason of stop_after_delivery, in a run made before 2026-11-23
 ACTOR = "swarm.rules"
 BOARD_ID = "board"                                       # the board's channel id (src/swarm/board.py)
 BOARD_TOOLS = ("board_status", "board_read", "board_post")   # the board's tools (src/swarm/board.py)
@@ -194,7 +194,8 @@ def holdable() -> bool:
 
 
 class Delivered(StoreModel):
-    """The stop-after-delivery record (SwarmConfig.stop_after_delivery), written only when the rule is on.
+    """The stop-after-delivery record of a run made before 2026-11-23, when SwarmConfig.stop_after_delivery was on.
+    Nothing writes it now; the export reads it from those runs' stores (src/export/_export_run_blocks.py).
 
     seen gives each agent's first sighting of its deliverable: the round whose end showed it and the rounds the agent
     had used up by then ("turn"). A team's deliverable counts for every agent of the roster, and halt_round is the
@@ -209,8 +210,6 @@ class Delivered(StoreModel):
     errors: list[str] = Field(default_factory=list)         # what failed predicate calls raised
 
 
-# The sample's delivery predicate (Benchmark.delivered), set by rules_setup; None when stop_after_delivery is off.
-PREDICATE: ContextVar[Callable[[], Awaitable[set[str]]] | None] = ContextVar("swarm_delivered", default=None)
 # The sample's round-end callback (Benchmark.round_end), set by rules_setup: awaited after each agent's round with the
 # agent, the round and its calls ([{id, tool, arguments}]); None for a domain with none.
 ROUND_END: ContextVar[Callable[[str, int, list[dict]], Awaitable[None]] | None] = ContextVar("swarm_round_end",

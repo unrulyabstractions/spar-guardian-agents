@@ -186,14 +186,14 @@ async def nothing_missing(agent: str) -> None:
     return None
 
 
-def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | None = None, delivered=None,
+def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | None = None,
                missing=nothing_missing, groups: list[AgentGroup] | None = None,
                time_limit_s: int | None = None, round_end=None, team_head=None) -> Task:
     """The test task; on a pull board each agent also gets the board tools, and every agent submit and stop_working as
     it holds them and end_round, bound as src/tasks.py binds them, each with the run's cap
     (tool_output_caps.capped_bindings).
-    `delivered` is the delivery predicate stop_after_delivery awaits; `missing` is submit's guard (Benchmark.gradable);
-    `groups` are ORBIT's agent groups (first messages); time_limit_s is the turn rules' time limit."""
+    `missing` is submit's guard (Benchmark.gradable); `groups` are ORBIT's agent groups (first messages);
+    time_limit_s is the turn rules' time limit."""
     names = config.names
     extra = board.agent_tool_names(config, roles)
     agents = [AgentSpec(name=n, role="engineer",
@@ -216,7 +216,7 @@ def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | Non
         scheduler=board_scheduler(max_turns=config.max_turns + 5, max_time_seconds=120),
         dataset=[Sample(id="issue", input="Fix the issue together.")],
         scorer=scorer_ or nothing(),
-        task_setup=[rules.rules_setup(config, names, roles, **({"delivered": delivered} if delivered else {}),
+        task_setup=[rules.rules_setup(config, names, roles,
                                       time_limit_s=time_limit_s, round_end=round_end,
                                       **({"team_head": team_head, "push_read": "Read it."} if team_head else {}))],
         token_limit=1_000_000,
@@ -229,11 +229,11 @@ def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | Non
     return task
 
 
-def run(config: SwarmConfig, scripts: dict, tmp_path, *, scorer_=None, roles=None, with_log=False, delivered=None,
+def run(config: SwarmConfig, scripts: dict, tmp_path, *, scorer_=None, roles=None, with_log=False,
         missing=nothing_missing, groups=None, time_limit_s=None, round_end=None, team_head=None, **generate):
     """Run the test task on the scripts: (the sample, the provider calls recorded), and the log with_log."""
     recorder: list[dict] = []
-    [log] = inspect_eval(build_task(config, scorer_=scorer_, roles=roles, delivered=delivered, missing=missing,
+    [log] = inspect_eval(build_task(config, scorer_=scorer_, roles=roles, missing=missing,
                                     groups=groups, time_limit_s=time_limit_s, round_end=round_end,
                                     team_head=team_head),
                          model=scripted_model(scripts, recorder),

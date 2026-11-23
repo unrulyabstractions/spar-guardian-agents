@@ -9,7 +9,7 @@ Under Variant.second_content each field the hidden tests check may hold either c
 the tests that check them is tested again, those tests alone, once per other mix of the values
 (swe_inputs.value_combinations), and passes when one mix passes.
 
-committed is stop_after_delivery's predicate (SWE.delivered): whether the work is committed past the base, read with
+committed is the delivery predicate (SWE.delivered): whether the work is committed past the base, read with
 one `git rev-list` per repository. has_work is submit's guard (SWE.gradable) and head_commit its snapshot.
 """
 from __future__ import annotations

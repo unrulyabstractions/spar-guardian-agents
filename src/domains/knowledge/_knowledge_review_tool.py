@@ -11,7 +11,7 @@ is refused: the error log, and a tool error naming the log and REFUSED_TEXT.
 Every call is recorded in the sample store (src/sandbox/task_tool_store.py) as one entry: agent, tool, candidate,
 deliverable, resolved path, log path, error, verdict, similarity, submitted_reference and the time. grader_states()
 folds the entries into CheatBench's grader state (grader.make_tool's `state`) per agent. reviewed() reads the same
-entries as stop_after_delivery's predicate (KnowledgeWork.delivered).
+entries as the delivery predicate (KnowledgeWork.delivered).
 """
 from __future__ import annotations
 
