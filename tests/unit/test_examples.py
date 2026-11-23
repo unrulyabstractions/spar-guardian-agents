@@ -40,8 +40,8 @@ EVERY_SCRIPT = [f"examples.{path.parent.name}.{path.stem}" for path in sorted(EX
                 if path.stem != "__init__"]
 # A variant of an SWE issue (swe_settings.VARIANTS; ian_swe0's scripts are named ianswe0_<cell>) has its example, its
 # team told to cheat and its regulated cell, and no solo cell.
-VARIANTS = ["examples.swe.ianswe0_minimal"]
-VARIANT_CELLS = ["examples.swe.ianswe0_minimal_cheat"]
+VARIANTS = ["examples.swe.ian0flipt_minimal", "examples.swe.ianswe0_minimal"]
+VARIANT_CELLS = ["examples.swe.ian0flipt_minimal_cheat", "examples.swe.ianswe0_minimal_cheat"]
 
 
 def test_every_domain_has_its_example_and_cells():
@@ -49,7 +49,8 @@ def test_every_domain_has_its_example_and_cells():
     assert sorted({name.split(".")[1] for name in EXAMPLES}) == sorted(DOMAINS)
     assert set(VARIANTS) <= set(EXAMPLES)
     assert len(EXAMPLES) - len(VARIANTS) == len(DOMAINS) + swe_issues - 1
-    assert set(VARIANT_CELLS) <= set(CELL_SCRIPTS) and "examples.swe.ianswe0_minimal_regulated" in REGULATED
+    assert set(VARIANT_CELLS) <= set(CELL_SCRIPTS)
+    assert {"examples.swe.ianswe0_minimal_regulated", "examples.swe.ian0flipt_minimal_regulated"} <= set(REGULATED)
     assert len(CELL_SCRIPTS) == len(CELLS) * (len(EXAMPLES) - len(VARIANTS)) + len(VARIANT_CELLS)
     assert {*EXAMPLES, *CELL_SCRIPTS, *REGULATED, *NO_SPLIT} <= set(EVERY_SCRIPT)
 

@@ -21,9 +21,9 @@ from inspect_ai.util import sandbox
 
 from src.configuration import settings
 from src.domains.swe import _swe_team_remote as team_remote
-from src.domains.swe.swe_inputs import load_lines, load_split, owns, piece_patch
+from src.domains.swe.swe_inputs import load_lines, load_split, owns, piece_patch, scenario
 from src.domains.swe.swe_sandbox import SetupFailed, must, run
-from src.domains.swe.swe_settings import PIECES, SIDE_PATCH_DIR, TEAM_REPO, TEAM_VIEW, WORKDIR
+from src.domains.swe.swe_settings import PIECES, SIDE_PATCH_DIR, SIDE_PATCH_VARIANTS, TEAM_REPO, TEAM_VIEW, WORKDIR
 
 PAYLOADS = Path(__file__).parent / "sandbox"
 # Lucy's prune: delete every ref that contains a commit after the base whose diff on the fix's paths matches the
@@ -182,6 +182,20 @@ async def _side_patch(agent: str, swe: dict) -> dict[str, str]:
     return paths
 
 
+async def _notice(agent: str, swe: dict, split: dict) -> str:
+    """Write the scenario's notice file in the root of the agent's clone (prompts.yaml swe.scenarios), root's and
+    readable by all, and exclude it from git there (.git/info/exclude), so it enters no diff, no `git add -A` and
+    never reaches the team remote. Returns its path."""
+    told = scenario(swe["scenario"])
+    path = f"{WORKDIR}/{told['notice_file']}"
+    box = sandbox(agent)
+    await box.write_file(path, told["notice"].format(repo=split["repo"]))
+    await must(box, f"chown root:root {shlex.quote(path)} && chmod 0644 {shlex.quote(path)} && "
+                    f"echo {shlex.quote(told['notice_file'])} >> {WORKDIR}/.git/info/exclude && "
+                    f"test -z \"$(git -C {WORKDIR} status --porcelain)\"", f"the notice file in {agent}")
+    return path
+
+
 def view_script(remote: str, view: str) -> str:
     """The commands that give the grader a git directory of its own over the remote's refs and objects. The agents are
     root in their machines; the lock keeps them from the remote's config and hooks (_swe_team_remote.LOCK), and git
@@ -271,8 +285,10 @@ async def prepare(state: TaskState) -> None:
         for a, p in zip(agents, pruned):
             evidence["agents"][a]["pruned"] = p
             evidence["agents"][a]["planted"] = await _plant(a, swe, split, base_time)
-            if swe.get("variant") == "ian_swe0":
+            if swe.get("variant") in SIDE_PATCH_VARIANTS:
                 evidence["agents"][a]["side_patch"] = await _side_patch(a, swe)
+            if swe.get("scenario"):
+                evidence["agents"][a]["notice"] = await _notice(a, swe, split)
     if has_team_remote(swe):
         evidence["team_main"] = await _team_repo(agents)
         evidence["team_remote_lock"] = await team_remote.lock()

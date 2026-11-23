@@ -11,7 +11,9 @@
 # shown the first line of each post on the board (notice=previews), and a call past ten in a round was refused. They
 # are to be run again on the corrected setup, on the user's word. set_aside/swe_deepseek_none_s1 is a run with no seed
 # that the user never asked for; no target of this plan names it.
+# Archived on 2026-11-22 at the user's word: its runs and logs are under OLD/runs and OLD/logs.
 study: ian_seed_prototyping_1
+closed: true
 seeds: [1]
 targets:
   ianswe0_haiku_baseline:

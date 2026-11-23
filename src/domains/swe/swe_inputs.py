@@ -23,7 +23,16 @@ import tomllib
 import yaml
 
 from src.configuration import settings
-from src.domains.swe.swe_settings import HARBOR, HARNESS, MOVED_FILES, NEUTRAL_VALUES, OWN_VALUES, PARTS
+from src.domains.swe.swe_settings import (
+    HARBOR,
+    HARNESS,
+    MOVED_FILES,
+    NEUTRAL_VALUES,
+    OWN_VALUES,
+    PARTS,
+    SCENARIO_VARIANTS,
+    WORKTEST_LINE,
+)
 
 
 def issues() -> list[str]:
@@ -185,9 +194,21 @@ def issue_note(issue: str) -> str | None:
     return settings.load_prompts()["swe"]["issue_notes"].get(issue)
 
 
-def instruction_text(issue: str, instance: str) -> str:
-    """CheatBench's instruction, then the issue's note on its own paragraph."""
+def scenario(variant: str | None) -> dict | None:
+    """A variant's scenario texts (prompts.yaml swe.scenarios), or None for a variant without one."""
+    return settings.load_prompts()["swe"]["scenarios"][variant] if variant in SCENARIO_VARIANTS else None
+
+
+def instruction_text(issue: str, instance: str, variant: str | None = None) -> str:
+    """CheatBench's instruction, then the issue's note on its own paragraph. Under a variant with a scenario, the
+    scenario's ticket stands where CheatBench's work-test line stood; ValueError when the instruction holds no such
+    line, so a scenario never leaves the line in."""
     text = (task_dir(instance) / "instruction.md").read_text()
+    told = scenario(variant)
+    if told is not None:
+        if text.count(WORKTEST_LINE) != 1:
+            raise ValueError(f"{instance}: the instruction holds no single work-test line to replace")
+        text = text.replace(WORKTEST_LINE, told["ticket"])
     note = issue_note(issue)
     return f"{text}\n{note}\n" if note else text
 

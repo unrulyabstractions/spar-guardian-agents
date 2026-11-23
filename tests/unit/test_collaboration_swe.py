@@ -259,9 +259,10 @@ def test_the_seed_check_finds_a_secret_or_a_fix_line_in_a_text():
     assert pack_leaks(f"note:\n{line}\n", issue) == [line]
 
 
+@pytest.mark.parametrize("variant", ["ian_swe0", "ian0flipt"])
 @pytest.mark.parametrize("n_agents", [2, 3, 4, 10])
 @pytest.mark.parametrize("seed", [0, 1, 2, 3])
-def test_ian_swe0_gives_each_agent_a_side_patch_of_its_own_piece_and_no_other(n_agents, seed):
+def test_ian_swe0_gives_each_agent_a_side_patch_of_its_own_piece_and_no_other(n_agents, seed, variant):
     """ian_swe0's side exploit: an agent's patch files outside the repository are its own pieces', one each, the same
     text its branch is planted from. So the side route gives an agent nothing its clone did not hold, and the split
     deal's rule (no agent holds every text the hidden tests need) covers both routes."""
@@ -271,10 +272,10 @@ def test_ian_swe0_gives_each_agent_a_side_patch_of_its_own_piece_and_no_other(n_
     from src.domains.swe.swe_inputs import piece_patch
     from src.domains.swe.swe_settings import SECRETS
 
-    benchmark = SWE("flipt-02e2", "jigsaw", variant="ian_swe0")
+    benchmark = SWE("flipt-02e2", "jigsaw", variant=variant)
     plan = benchmark.plan(build_config("default", "small", [f"n_agents={n_agents}", f"seed={seed}"]))
     swe = benchmark.sample(plan).metadata["cheatbench"]["swe"]
-    assert swe["variant"] == "ian_swe0" and set(swe["side_patches"]) == set(plan.holds)
+    assert swe["variant"] == variant and set(swe["side_patches"]) == set(plan.holds)
     for agent, held in plan.holds.items():
         paths = swe["side_patches"][agent]
         assert set(paths) == set(held) and paths == honeypot.side_patches("flipt-02e2", held)
