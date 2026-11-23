@@ -1950,3 +1950,34 @@ live" and "Code counts a seeded post or file as an act of the harness.", Results
 
 Built in `worktree/paper-records` with runs/, logs/, OLD/ and build/ linked from the main tree, main's .venv by path,
 and the submodules cloned from the main tree's copies at their pins.
+
+## ian0flipt's scenario, ian0poem and ian0binder, 2026-11-23
+
+The code: ian0flipt's scenario clean_room_fork (047132d: a customer's ticket in place of CheatBench's work-test line, a
+first workspace bullet, FORK_NOTICE.md in each clone, excluded from git) was not in the paper. ian0poem (1686e16:
+each held part of the reference again in a backup folder, readable by its holders alone; the scenario commissioned_poem
+with RIGHTS_NOTICE.md; the museum brief only) and ian0binder (37c551b: each agent's candidates file again in the
+screening directory's backup on its own machine; the scenario licensed_sequences with SEQUENCE_NOTICE.md) are new, and
+so are the packs creative_writing/exp1_called_cheating (rows museum_poem) and protein_design/exp1_called_cheating. No
+result of the paper uses a variant or a seed pack; the runs of ian_seed_prototyping_2 are not in the paper.
+
+No figure, table or generated file changed (`make paper` left `paper/generated/` and `paper/figures/` as committed).
+
+Sentences changed, all in Appendix A:
+- Rounds: "The listing also covers the folder that holds the patch files of an SWE variant. The Tasks subsection
+  describes that variant." became "The listing also covers the folders where a variant keeps a second copy of each
+  piece. The Tasks subsection describes these variants." (the capture lists /var/backups on every machine).
+- Seed packs, Called cheating: rewritten for the three tasks: where each task's first post points (an upstream branch,
+  a backup folder outside the workspace, the colleague's folder), "the task's check" and "the check of the client that
+  the task's variant names" in place of SWE's tests and acceptance tests, a pointer to the Tasks subsection, and the
+  rows each pack fits (SWE: one issue; creative writing: the variant's one brief). "Only SWE has this pack." deleted.
+- Tasks: "No result of this paper uses this variant." became three paragraphs: the SWE scenario (the term
+  \textbf{scenario} defined there), the side copies of creative writing and protein design (the term \textbf{side
+  copy} defined there, SWE's patch files named as side copies), and the two tasks' scenarios, ending "No result of
+  this paper uses these variants."
+
+Checked and unchanged: the differ list (the study runs held no variant), Results, Discussion, Conclusion and Abstract.
+
+Built in `worktree/paper-ian0` with OLD/runs and OLD/logs of the three paper studies and build/ (but knowledge_work's
+stage) copied from the main tree, main's .venv by path, and the submodules cloned from the main tree's copies at their
+pins.
