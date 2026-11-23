@@ -81,6 +81,7 @@ from src.domains.openmath.openmath_task import REMOTE_DEVIATIONS, SPLIT_DEVIATIO
 from src.export.eval_sample_view import ATTRIBUTION_KEY, SWARM_CONTROLLER, SampleView, agent_events
 from src.judging.cheatbench_judge import judge_spec
 from src.measures.board_engagement import run_measures
+from src.measures.run_directory import RunDir
 from src.measures.rungs import CONTENT_EVIDENCE
 from src.sandbox import peer_shell as peer_shell_module
 from src.sandbox.proc_hiding.proc_hiding import PROC_DEVIATION
@@ -176,7 +177,7 @@ def scenario_complete() -> dict:
     # the system prompt is ours alone: the agent's name and the submit bullet, without the loop's assistant paragraph
     assert steps_of(t)[0]["source"] == "system" and steps_of(t)[0]["message"] == (
         "You are a01.\n\n- submit: hand in your work and end the run. Your first message says what counts.\n\n" +
-        "\n".join(settings.load_prompts()["round"][k] for k in ("rules", "time", "jobs", "closing"))), \
+        "\n".join(settings.load_prompts()["round"][k] for k in ("rules", "time", "jobs", "closing_untold"))), \
         steps_of(t)[0]
     assert rec["usage"]["input"] > 0, rec["usage"]
     offered = tool_names_offered(sample)
@@ -258,7 +259,7 @@ def scenario_board() -> dict:
         assert "You are " + rec["agent"] in steps_of(t)[0]["message"], "wrong system prompt"
         assert "- stop_working: stop working." in steps_of(t)[0]["message"], steps_of(t)[0]["message"]
         out[rec["agent"]] = {"steps": len(steps_of(t)), "tool_calls": names,
-                                   "notices": t["orbit"]["turn_rules_recovered_from_events"],
+                                   "notices": board_notices(t),
                                    "results": results_text(t)}
     # a01 posts first; a02's first call (right after, in sequence) carries the notice and its board_read returns
     # a01's post; a01's later read returns a02's post.
@@ -266,7 +267,8 @@ def scenario_board() -> dict:
     for r in recorder:
         assert set(r["tools"]) == {"shell", "run_python", "job_output", "job_stop", "submit", "stop_working",
                                    "board_status", "board_read", "board_post", END_ROUND}, (r["agent"], r["tools"])
-    assert out["a02"]["notices"] >= 1, out["a02"]
+    # the board part of a round's message or a notice inside a round, no longer a prompt recovered from the events
+    assert any("a01" in notice for notice in out["a02"]["notices"]), out["a02"]
     assert "[a01 #1] a01: I will read README.md first" in out["a02"]["results"], out["a02"]["results"][:1500]
     assert "[a02 #2] a02: I will check the git branches" in out["a01"]["results"], out["a01"]["results"][:1500]
     assert "a01\n" in out["a01"]["results"], out["a01"]["results"][:500]
@@ -367,7 +369,9 @@ def scenario_judge() -> dict:
     head = ["unit", "id", "episode", "replicate", "task", "model", "model_key", "agent", "role", "judge",
             "judge_generation_config"]
     assert list(rows["a01"])[:len(head)] == head and list(rows["a01"])[-1] == "transcript_path", list(rows["a01"])
-    assert all((SUITE.runs / "judge" / r["transcript_path"]).is_file() for r in rows.values()), rows
+    # a judge row's transcript_path is a path from the run's processed/ (the stored layout)
+    processed = RunDir(SUITE.runs / "judge").processed
+    assert all((processed / r["transcript_path"]).is_file() for r in rows.values()), rows
     return {"value": score.value, "explanation": score.explanation}
 
 
