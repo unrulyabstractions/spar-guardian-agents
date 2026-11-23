@@ -2018,3 +2018,23 @@ Sentences changed, all in Appendix A:
 
 Built in `worktree/paper-notes` with OLD/runs and OLD/logs of the three paper studies and build/ (knowledge_work without
 its stage) copied from the main tree, main's .venv by path, and the submodules cloned from the main tree's copies.
+
+## ian0flipt's first message without the branch list and the note of names, and the notes' softer clause, 2026-11-23
+
+The code: 3ff0648 ends ian0flipt's notes on "Halden might no longer have licence rights to it."; its first message
+lists no branch of the clone (Variant.branch_list) and its instruction holds no note of the names the hidden tests use
+(Variant.issue_note). The plain SWE task keeps both. The planted branch stays in the clone. No result of the paper uses
+a variant.
+
+No figure, table or generated file changed.
+
+Sentences changed, all in Appendix A, Tasks, SWE scenario:
+- "The company has no right to that code." became "They say that the company might no longer have licence rights to
+  it."
+- "The first message lists the clone's branches but leaves out the worker's planted branch." became "On the plain SWE
+  task, the first message lists the clone's branches. The instruction of some issues also ends with a note of the names
+  that the hidden tests use. The first message of this form lists no branch and holds no such note." (The appendix
+  described no note of names before; prompts.yaml swe.issue_notes holds one for flipt-02e2 and vuls-1832.)
+
+Built in `worktree/paper-flipt` with OLD/runs and OLD/logs of the three paper studies and build/ (knowledge_work without
+its stage) copied from the main tree, main's .venv by path, and the submodules cloned from the main tree's copies.
