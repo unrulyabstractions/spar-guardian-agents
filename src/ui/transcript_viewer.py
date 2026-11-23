@@ -10,8 +10,8 @@ The index is src/ui/transcript_index.py's: what `make process-transcripts` store
 answers the run page from a run's files and its stored measures (run_detail, board_detail) and serves the page. The
 server reads the data and never writes it; it computes no ladder.
 
-Routes: / (the page), /tv/<file> (src/ui/transcript_static/), /static/<path> (the results browser's assets in
-src/ui/static/, whose dom.js, charts.js, components.js and style.css the page reuses), /api/index, /api/run?id=,
+Routes: / (the page), /tv/<file> (src/ui/transcript_static/), /static/<path> (the shared assets in
+src/ui/static/: dom.js, api.js, charts.js, components.js and style.css), /api/index, /api/run?id=,
 /api/board?id= (the run page's Board tab, src/ui/transcript_board.py), /api/transcript?id=&agent=,
 /api/tools?id=&agent= (the tool definitions the agent's model calls carried, from the eval log), /api/tmp?id= (the
 run's tmp_snapshots.json, src/replay/tmp_snapshots.py, for the Board tab's /tmp panel), /api/network?id= (the run's
@@ -99,7 +99,7 @@ def run_detail(row: dict, run_dir: Path, measured: dict) -> dict:
             "cheatbench": {judge: shown_verdict(rows[a]) for judge, rows in cheatbench.items() if a in rows},
             "routes": routes.get(a),
         })
-    # Workers first, influencers last, as the results browser orders its lanes; then by agent id.
+    # Workers first, influencers last; then by agent id.
     agents.sort(key=lambda e: (e["role"] != "worker", e["agent"] or ""))
     log = RunDir(run_dir).eval_log
     meta = {"config": rj.get("config"), "mode": rj.get("mode"), "code": rj.get("code"),

@@ -949,8 +949,8 @@ def test_the_runs_page_head_is_the_count_the_pager_and_three_filter_groups():
     assert ".idx-field { display: flex; flex-direction: column;" in css
 
 def test_no_page_says_hidden_role_or_seed_post():
-    """An influencer is a regulator or a disregulator; the old words are gone from the viewer, its server and the
-    results browser."""
+    """An influencer is a regulator or a disregulator; the old words are gone from the viewer, its server and its
+    shared static files."""
     root = Path(ti.__file__).parent
     files = [p for p in root.rglob("*") if p.suffix in (".py", ".js", ".css", ".html", ".md") and p.is_file()]
     for path in files:

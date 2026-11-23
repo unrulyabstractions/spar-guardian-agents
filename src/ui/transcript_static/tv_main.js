@@ -1,6 +1,6 @@
 /* Boot and hash router of the transcript viewer (src/ui/transcript_viewer.py). Ported from collusion-hermaneutics'
  * viewer (viewer/static/app/main.js); our edits: the names, and the index loads before the first page so every page
- * knows the collections. The security rule is the results browser's (src/ui/static/app/main.js): every piece of run
+ * knows the collections. The security rule: every piece of run
  * data goes in through textContent or text nodes, never innerHTML.
  *
  *   #/                                every run, with filters (tv_view_index.js)

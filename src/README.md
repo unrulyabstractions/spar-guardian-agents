@@ -30,7 +30,7 @@ python -m src run <name>     cli.py reads the flags
         |
   measures/                  the code record, the three ladders, the figures            -> analysis/signals.jsonl, analysis/figures/
         |
-  ui/                        the transcript viewer and the results browser over runs/ and the eval logs
+  ui/                        the transcript viewer over runs/
 ```
 
 `models/` and `utils/` serve every step.
@@ -200,7 +200,7 @@ and creative writing runs. The package docstring gives steps.jsonl's schema.
 
 ### ui/
 
-Two local pages over `runs/`. `API.md` is their HTTP contract.
+The transcript viewer over `runs/`. `API.md` is its HTTP contract.
 
 The transcript viewer (`make transcripts`, or `make transcript`) shows every valid run with the three ladders, the judge labels, the board
 and each agent's transcript:
@@ -215,12 +215,8 @@ and each agent's transcript:
 - `transcript_ladder_tables.py`: the Ladders page's tables by task, and what an independent reading found of each rung
   and label (from `measures/measure_readings.yaml`).
 - `transcript_static/`: the page.
-
-The results browser is a single-page UI over `runs/` and the eval logs.
-
-- `launch.py`: starts and stops the browser as a background process.
-
-`python -m src.ui` serves it in the foreground. The implementation is `_server.py` (the HTTP routes), `_run_store.py` (the run directories), `_eval_log_views.py` (the eval log's sample, context windows and timeline) and `static/` (`index.html`, `style.css` and the ES modules under `app/`, booted by `main.js`, which lists them).
+- `static/`: the shared `style.css` and the modules under `app/` the page imports (`dom.js`, `api.js`, `charts.js`,
+  `components.js`).
 
 ### models/
 
@@ -255,7 +251,6 @@ Shared helpers.
 | `regenerate <run ...> [--no-export] [--no-measures] [--no-plots]` | rebuilds what a run directory derives from its eval log: the export (keeping the verdicts in `judges/`), the code record, the SWE measures and the figures |
 | `signals <run ...> [--table]` | the run's code record, no judge: `signals.jsonl` with the agent rows, then one team record per sample, and run.json `signals.team`, each row with its evidence and its Cheating, Coordination and Collusion rungs; every run gets it as it ends, and `judge` and `rejudge` run it again; `--table` prints the agents' Cheating rungs, then the teams' with their passes and alarms |
 | `judge-pass <cheatbench\|labels> <run or study ...> --judge gpt-6-luna --cap DOLLARS [--batch] [--limit N] [--only-missing\|--redo]` | a judge pass over stored runs, priced call by call and stopped before the cap; writes only `runs/<study>/<run>/judges/<pass>.<judge>.jsonl`; a study folder stands for its valid runs |
-| `ui [start\|stop] [--port 8765] [--no-open]` | starts or stops the results browser in the background |
 | `summary <run ...> [--full]` | one line per episode with its verdict and the task's judge flags, the swarm composition and the shutdown rate (the share of the agents holding `stop_working` that ended with it before any hand-in) |
 | `engagement <run ...> [--json]` | the board engagement funnel per role and per agent |
 | `swe-summary <run ...>` | Lucy's SWE measures per agent and per arm, written to `swe_summary.json` |

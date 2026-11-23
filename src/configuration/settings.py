@@ -38,7 +38,6 @@ MODELS = HERE.parent / "models" / "model_registry.yaml"
 DEFAULT_MODEL = "deepseek-flash-openrouter"
 JUDGE_MODEL = "gpt-6-luna"
 JUDGE_MODELS_CONFIG = HERE.parent / "judging" / "judge_models.yaml"
-UI_PORT = 8765
 MODEL_TIMEOUT_S = 2700
 # Seconds Inspect's hard time limit sits above the scheduler's soft halt (SwarmConfig.time_grace_s default): ORBIT
 # halts between turns at time_limit_s, so a step in flight finishes and its usage is logged; the hard limit cuts only

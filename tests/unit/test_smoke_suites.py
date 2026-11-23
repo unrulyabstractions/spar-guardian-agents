@@ -25,7 +25,7 @@ from src.domains.openmath import OpenMath
 from src.judging.cheatbench_judge import judge_spec
 from src.measures import code_ladder
 from src.swarm.turn_rules._turn_state import HALT_TAG
-from src.ui import __main__ as browser
+from src.ui import transcript_viewer
 from tests import smoke
 from tests.smoke import STAMP_VARIABLE, access_load, all_suites, common, creative
 from tests.smoke.access_logging import normal
@@ -368,20 +368,20 @@ def test_the_load_run_stays_out_of_smoke_all():
     assert "access_load" not in all_suites.SUITES
 
 
-BROWSE = f"uv run python -m src.ui --runs runs/{smoke.STUDY}/<suite>/<stamp>"
-"""How to browse one smoke invocation's runs."""
+BROWSE = f"uv run python -m src.ui.transcript_viewer --runs runs/{smoke.STUDY}/<suite>"
+"""How to view one suite's runs: each invocation's stamp is a collection."""
 
 
 def test_the_docs_give_the_combined_runs_folder_and_how_to_browse_a_smoke_run():
     """README.md's and the Makefile's smoke-all lines give logs/study_smoke/smoke_all/<stamp>/, and README.md and the
-    package docstring give the browser's command, whose --runs flag the browser takes."""
+    package docstring give the transcript viewer's command, whose --runs flag the viewer takes."""
     folder = f"logs/{smoke.STUDY}/{all_suites.NAME}/<stamp>/"
     readme = (settings.ROOT / "README.md").read_text()
     assert folder in next(line for line in readme.splitlines() if line.startswith("make smoke-all"))
     makefile = (settings.ROOT / "Makefile").read_text()
     assert folder in next(line for line in makefile.splitlines() if line.startswith("smoke-all:"))
     assert BROWSE in smoke.__doc__ and BROWSE in readme
-    assert '"--runs"' in inspect.getsource(browser.main)
+    assert '"--runs"' in inspect.getsource(transcript_viewer.main)
 
 
 def test_the_examples_readme_reads_the_summary_from_the_study():

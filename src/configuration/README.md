@@ -2,7 +2,7 @@
 
 Every setting of the experiment and every piece of model-facing text we add to CheatBench and ORBIT lives here. Code in `src/domains/`, `src/swarm/` and `src/` reads these files and holds no texts of its own.
 
-**`settings.py`** holds the fixed values: the repository paths, the default agent and judge models, the browser's port, the model timeout, the failure labels of an incomplete run and the submodule commits the code was written against. `load_yaml` reads each YAML file once.
+**`settings.py`** holds the fixed values: the repository paths, the default agent and judge models, the model timeout, the failure labels of an incomplete run and the submodule commits the code was written against. `load_yaml` reads each YAML file once.
 
 Each task domain's fixed settings (its CheatBench paths, the sandbox users and limits, the honeypot's names) live in its own package under `src/domains/`, since none of them is a knob of a run. The module is `_<domain>_settings.py`, or `<domain>_settings.py` where another package imports it.
 

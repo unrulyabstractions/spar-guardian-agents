@@ -1,6 +1,5 @@
 """The task names (src/configuration/task_names.py): one table of each task's CheatBench name, domain key and display
-name, the same as the domain classes carry, read by the registry, the analysis tools, the results browser and the
-fleet."""
+name, the same as the domain classes carry, read by the registry, the analysis tools and the fleet."""
 from __future__ import annotations
 
 import json
@@ -13,16 +12,11 @@ from scripts.box import fleet_layout
 from src.configuration import settings
 from src.configuration.task_names import NAMES, display_name, domain_of, names_of, task_of
 from src.domains import BY_TASK, DOMAINS
-from src.ui._run_store import SETTING_KEYS, TASK_SETTINGS, setting_of
 from tests.support.run_files import write_text
 from tools import run_reader
 
 
-def test_the_browser_and_the_fleet_read_the_table_and_keep_their_names():
-    assert TASK_SETTINGS == {"knowledge_work": ("kw", "knowledge work", 4), "subset_sum": ("subset", "subset sum", 5),
-                             "prime_factorization": ("factor", "prime factorization", 6),
-                             "protein_design": ("protein", "protein design", 7),
-                             "creative_writings": ("creative", "creative writing", 8), "chess": ("chess", "chess", 9)}
+def test_the_fleet_reads_the_table_and_keeps_its_names():
     assert fleet_layout.TASKS == {"knowledge_work": "knowledge_work", "creative_writing": "creative_writing",
                                   "protein_design": "protein_design", "chess": "chess", "software_engineering": "swe"}
 
@@ -67,14 +61,6 @@ def test_each_task_has_its_own_display_name():
     assert len(set(displays)) == len(NAMES) and all(displays)
     assert display_name("creative_writings") == display_name("creative_writing") == "creative writing"
     assert display_name("software_engineering") == "SWE" and display_name("openmath") == "openmath"
-
-
-def test_the_browser_labels_a_task_by_its_display_name():
-    """The browser keys its own settings by domain key and finds a run by its CheatBench name."""
-    assert set(TASK_SETTINGS) == {task_of(domain) for domain in SETTING_KEYS}
-    assert all(label == display_name(task) for task, (_, label, _) in TASK_SETTINGS.items())
-    run = {"task": "creative_writings", "topology": "board"}
-    assert setting_of(run, 3) == {"key": "creative-board-3", "order": 8, "n": 3, "label": "creative writing board of 3"}
 
 
 def test_the_analysis_tools_read_the_domain_key_from_the_table(tmp_path):

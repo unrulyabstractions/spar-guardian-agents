@@ -1,4 +1,4 @@
-/* DOM helpers and formatting for the results browser.
+/* DOM helpers and formatting the transcript viewer's page imports.
  * h() builds an element and puts every string in a text node. The fmt functions turn numbers, times and
  * scores into short labels.
  *

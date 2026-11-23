@@ -1,4 +1,4 @@
-/* Chart helpers of the results browser.
+/* Chart helpers the transcript viewer's page imports.
  * They hold the SVG builder, the role glyphs, the shared tooltip, the colour ramp, the axis ticks, the legend
  * glyphs and a small job queue.
  *

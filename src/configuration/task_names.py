@@ -9,8 +9,8 @@ name.
 CheatBench names a task by its folder under submodules/cheatbench/tasks/. run.json "task" and Benchmark.name record that
 name. The code keys a task by its domain key: src/domains DOMAINS, `--benchmark`, the @task entry points,
 examples/<domain>/ and the vars of instruction_levels.yaml. The two names differ for three tasks: openmath_agent,
-software_engineering and creative_writings. A page or a figure names a task by its display name in running text, as
-the results browser does. A heading capitalises its first letter.
+software_engineering and creative_writings. A page or a figure names a task by its display name in running text. A
+heading capitalises its first letter.
 
 This module uses the standard library alone. The analysis tools' environment lacks ORBIT, so it cannot import
 src.domains, and it reads the names here; so does the box's scripts/box/fleet_layout.py.

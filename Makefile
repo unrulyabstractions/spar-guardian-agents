@@ -9,19 +9,13 @@ STEPS := python3 -m src.utils.progress
 RUN ?= riemann_minimal
 SAMPLES ?= 15
 
-.PHONY: help ui ui-stop transcripts transcript process-transcripts smoke smoke-swe smoke-kw smoke-interview smoke-protein smoke-creative smoke-chess smoke-seeds seeds-check \
+.PHONY: help transcripts transcript process-transcripts smoke smoke-swe smoke-kw smoke-interview smoke-protein smoke-creative smoke-chess smoke-seeds seeds-check \
 	smoke-access smoke-network smoke-load smoke-all smoke-replay test test-tools lint \
 	tools-setup scout docent graph transect contagion failures hawk analyse figures tables \
 	results-tables paper-figures paper-sources paper-check paper
 
 help:  ## list the targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/\t/' | column -t -s "$$(printf '\t')"
-
-ui:  ## open the results browser (starts the server when needed)
-	@$(PY) -m src ui
-
-ui-stop:  ## stop the results browser started by make ui
-	@$(PY) -m src ui stop
 
 transcripts:  ## serve the transcript viewer on port 8770 in the foreground: what process-transcripts stored, current study
 	@$(PY) -m src.ui.transcript_viewer

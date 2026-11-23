@@ -1,7 +1,3 @@
-"""The results browser: a local single-page UI over runs/ and the eval logs the runs point at.
-
-API modules:
-- launch.py: starts and stops the browser as a background process, as `python -m src ui` does.
-
-`python -m src.ui` serves it in the foreground.
+"""The transcript viewer: a local page over the runs under runs/ (`python -m src.ui.transcript_viewer`, `make
+transcripts`). API.md is its HTTP contract.
 """

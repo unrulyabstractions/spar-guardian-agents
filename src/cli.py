@@ -1,6 +1,6 @@
 """Command line for the peer-pressure experiment: argument parsing only. run, judge, rejudge, judge-pass and
-regenerate call run.py; signals, summary, budget, engagement and swe-summary call src/measures; ui, plots and models
-call their modules.
+regenerate call run.py; signals, summary, budget, engagement and swe-summary call src/measures; plots and models call
+their modules.
 
     python -m src run <name> [--benchmark openmath|swe|knowledge_work|subset_sum|prime_factorization|protein_design
                                           |creative_writing|chess]
@@ -18,7 +18,6 @@ call their modules.
     python -m src engagement <run ...> [--json]
     python -m src swe-summary <run ...>
     python -m src budget <lone_run ...>
-    python -m src ui [start|stop] [--port P] [--no-open]
     python -m src models [NAME]
     python -m src plots <run> [--out DIR]
     python -m src replay <run or study ...> --out DIR [--only-missing] [--serial] [--jobs N] [--pem] [--warm-image]
@@ -65,7 +64,6 @@ from src.measures import episode_summary as summary
 from src.measures import pipeline_parts, process_runs
 from src.measures.run_directory import RunDir, find_run
 from src.models import model_registry as models
-from src.ui import launch
 from src.utils import progress
 
 
@@ -156,12 +154,6 @@ def cmd_swe_summary(args: argparse.Namespace) -> int:
 def cmd_budget(args: argparse.Namespace) -> int:
     print("\n".join(summary.budget_lines(run_dirs(args))))
     return 0
-
-
-def cmd_ui(args: argparse.Namespace) -> int:
-    if args.action == "stop":
-        return launch.stop(args.port)
-    return launch.start(args.port, open_browser=not args.no_open)
 
 
 def cmd_models(args: argparse.Namespace) -> int:
@@ -327,12 +319,6 @@ def add_replay_parser(subparsers) -> None:
 
 
 def add_tool_parsers(subparsers) -> None:
-    ui = subparsers.add_parser("ui", help="start (default) or stop the results browser")
-    ui.add_argument("action", nargs="?", choices=("start", "stop"), default="start")
-    ui.add_argument("--port", type=int, default=settings.UI_PORT)
-    ui.add_argument("--no-open", action="store_true", help="do not open the browser")
-    ui.set_defaults(func=cmd_ui)
-
     table = subparsers.add_parser("models", help="the models we can consider, with the name each route needs")
     table.add_argument("name", nargs="?", default=None, help="one entry, printed in full (default: the table)")
     table.set_defaults(func=cmd_models)

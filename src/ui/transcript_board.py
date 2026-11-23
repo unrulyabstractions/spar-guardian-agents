@@ -18,8 +18,8 @@ transcript viewer (src/ui/transcript_viewer.py, route /api/board).
                                             # None without network.jsonl; the viewer's /api/network
 
 The calls are run_calls.load_run's, numbered as the transcript scan numbers them (the agent tab's "Call k").
-The clock is the eval log's tool events where the run's log holds every call (load_run's times, the source the
-results browser's timeline reads): t and dur in seconds from the first call's start. Without them the clock is call
+The clock is the eval log's tool events where the run's log holds every call (load_run's times): t
+and dur in seconds from the first call's start. Without them the clock is call
 order: t is the call's place in Run.ordered (by turn, then agent and number) and every call lasts 1. The posts are
 numbered P1, P2, ... in board order as the agents and the judges number them (src/judging/judge_records.py posts),
 system notices included. A record of who came and went ("a01 entered.") stands in its place among them with no label,

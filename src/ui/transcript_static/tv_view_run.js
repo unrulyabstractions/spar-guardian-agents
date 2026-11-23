@@ -4,7 +4,7 @@
  * workers and one of its influencers, a Board tab and a Details tab; the selected agent's whole episode below it, each
  * step with its labels (tv_case_view.js). Details ends with the run record: the run's labels, the run settings, each
  * agent's record with its Cheating evidence, its judge labels and CheatBench's judge on it.
- * Our edits: the imports (dom.js, components.js and charts.js are the results browser's own); the judges are read
+ * Our edits: the imports (dom.js, components.js and charts.js are shared, in src/ui/static/app/); the judges are read
  * from the run's verdict files (judges/<pass>.<judge>.jsonl), shown where the run has them; the source's API judges,
  * second judge and sentence lens are gone; a regulator and a disregulator are influencers; the header names the
  * collection and the eval log; the Board tab (tv_view_board.js) holds the message board, two agents' calls on one

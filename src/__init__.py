@@ -1,4 +1,4 @@
-"""The peer-pressure experiment: CheatBench domains and the swarm on ORBIT's API, the CLI and the results browser.
+"""The peer-pressure experiment: CheatBench domains and the swarm on ORBIT's API, the CLI and the transcript viewer.
 src/README.md maps the packages in the order of a run.
 
 API modules:

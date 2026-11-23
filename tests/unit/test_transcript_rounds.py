@@ -73,7 +73,6 @@ def test_a_round_since_2026_11_22_keeps_its_ending_and_no_charge():
     first, second = r["agents"]["a01"]
     assert (first["ending"], first["n"], first["charge"], first["used"]) == (None, None, None, 1)
     assert (second["ending"], second["end"]) == ("stop", "ending") and first["calls"][0]["free"] is None
-    assert [x["ending"] for x in tr.from_start(r, 100.0)["a01"]] == [None, "stop"]
 
 
 def test_a_run_before_rounds_of_calls_has_none():
@@ -180,31 +179,6 @@ def test_the_rounds_smoke_reads_on_the_run_page_and_the_board():
 def test_a_run_before_rounds_of_calls_reads_with_no_rounds():
     from src.ui.transcript_index import RunFiles
     assert tr.rounds(RunFiles.read(OLD).run_json) is None
-
-
-def test_from_start_puts_each_round_in_seconds_from_the_samples_start():
-    got = tr.from_start(tr.rounds(RUN_JSON), 100.0)
-    assert [(x["round"], x["end"], x["charge"]) for x in got["a01"]] == [
-        (1, "calls", "work"), (2, "end_round", "board")]
-    assert (got["a01"][0]["t"], got["a01"][0]["t_end"]) == pytest.approx((0.0, 1.0))
-    assert (got["a02"][0]["t"], got["a02"][0]["t_end"]) == pytest.approx((1.1, 1.2))
-    assert tr.from_start(None, 0.0) is None
-    untimed = {"rules": {"calls_per_round": 2, "timeline": [entry(0, "a01", 1, 1, None, "idle", [], None, None)]}}
-    assert tr.from_start(tr.rounds(untimed), 5.0)["a01"][0] == {
-        "round": 1, "n": 1, "end": None, "ending": None, "charge": "idle", "t": None, "t_end": None}
-
-
-@pytest.mark.skipif(not SMOKE.is_dir(), reason="the rounds smoke's run is not in this checkout")
-def test_the_results_browsers_timeline_carries_the_rounds_and_an_old_run_none():
-    from src.ui._eval_log_views import LogViews
-    from src.ui._run_store import Store
-    tl = LogViews(Store(SMOKE.parent)).timeline(SMOKE.name)
-    assert [x["round"] for x in tl["rounds"]["a02"]] == [1, 2, 3, 4]
-    models = sorted(e["t"] for e in tl["events"] if e["kind"] == "model" and e["agent"] == "a01")
-    first = tl["rounds"]["a01"][0]
-    assert first["t"] <= models[0] <= first["t_end"]       # the round's first model call lies inside it
-    if OLD.is_dir():
-        assert LogViews(Store(OLD.parent)).timeline(OLD.name)["rounds"] is None
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node runs the page's own function")

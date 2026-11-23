@@ -1,5 +1,5 @@
 /* The transcript viewer's own rules, copied from collusion-hermaneutics' viewer (viewer/static/style.css, its
-   "viewer's own rules" from line 407 on). The page loads the results browser's src/ui/static/style.css first, which
+   "viewer's own rules" from line 407 on). The page loads the shared src/ui/static/style.css first, which
    the source copied its other rules from. */
 .page.wide { max-width: none; }
 /* Every cell of a viewer table's row on the row's middle; a table that needs another alignment says so below. */

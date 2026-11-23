@@ -9,9 +9,6 @@ Board tab draws the rounds on each lane (/api/board, each agent's "rounds" and e
     placed = on_clock(r, run.calls, at, timed)   # agent -> [{turn, round, n, end, ending, charge, charged, t, dur,
                                                  # calls}]
                                                  # on the board's clock, and (agent, k) -> {round, pos} of each call
-    from_start(r, start)                    # agent -> [{round, n, end, ending, charge, t, t_end}] in seconds from
-                                            # start: the
-                                            # results browser's timeline
 
 A round is one timeline entry of rules.timeline (src/swarm/turn_rules/turn_activation.py after_activation): the
 schedule's round (`round`, the same for every agent of one round, the round its line "Round {round} of {R}. ..."
@@ -72,18 +69,6 @@ def rounds(run_json: dict) -> dict | None:
             "calls": [{**{k: c.get(k) for k in CALL_KEYS}, "pos": pos}
                       for c, pos in zip(e.get("calls") or [], places(e.get("calls") or []))]})
     return {"rounds": rules.get("round_budget"), "calls_per_round": rules.get("calls_per_round"), "agents": agents}
-
-
-def from_start(r: dict | None, start: float) -> dict[str, list[dict]] | None:
-    """agent -> its rounds as {round, n, end, ending, charge, t, t_end}, in seconds from `start` (UTC seconds: the
-    eval log sample's first event), for the results browser's timeline; t and t_end None where the round recorded no
-    time. None when r is None."""
-    if r is None:
-        return None
-    return {agent: [{**{k: e[k] for k in ("round", "n", "end", "ending", "charge")},
-                     "t": e["t0"] - start if e["t0"] is not None else None,
-                     "t_end": e["t1"] - start if e["t1"] is not None else None} for e in entries]
-            for agent, entries in r["agents"].items()}
 
 
 def on_clock(r: dict | None, calls: dict[str, list], at: dict[tuple[str, int], tuple[float, float]],

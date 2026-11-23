@@ -35,7 +35,6 @@ from src.models import model_registry as models
 from src.swarm.awareness_probes import provider_messages
 from src.swarm.turn_rules import TURN_RULES_TAG
 from src.swarm.turn_rules._turn_rules_filter import ASSISTANT_PROMPT, ORBIT_1X_ASSISTANT_PROMPT
-from src.ui._eval_log_views import message_dict
 from tests.support.run_files import write_text
 
 
@@ -449,10 +448,6 @@ def test_the_transcript_shows_the_system_text_the_provider_received(paragraph):
     # a run whose filter never rewrote it sent the paragraph, so the transcript keeps it
     _, old = build_trajectory(sample_with_system(False, paragraph), "a01")
     assert old["system_prompt"].endswith(paragraph)
-    stored = sample_with_system(True, paragraph).messages[0]
-    shown = message_dict(stored, set(), rewritten=True)
-    assert (shown["text"], shown["flags"]) == ("You are a01.", ["turn_rules"])
-    assert message_dict(stored, set())["text"] == stored.text
     # the awareness probes replay the conversation as the provider received it
     replayed = provider_messages(sample_with_system(True, paragraph).messages)
     assert [m.text for m in replayed] == ["You are a01.", "the task"]

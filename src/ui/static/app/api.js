@@ -1,4 +1,4 @@
-/* API client for the results browser.
+/* API client; components.js imports its ApiError.
  * api() fetches one JSON endpoint and caches the answer in least-recently-used order. P names the API paths
  * and R the hash routes of the pages.
  *

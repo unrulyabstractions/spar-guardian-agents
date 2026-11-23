@@ -11,7 +11,8 @@ runs/study_smoke/<suite>/<stamp>/ and its eval logs under logs/study_smoke/<suit
 invocation. The suites are smoke_openmath, smoke_swe, smoke_kw, smoke_interview, smoke_protein, smoke_creative,
 smoke_chess, smoke_access and smoke_load. `make smoke-all` keeps each suite's output in
 logs/study_smoke/smoke_all/<stamp>/<module>.log. Every suite of that combined run writes under the same stamp. The
-browser shows one invocation's runs: `uv run python -m src.ui --runs runs/study_smoke/<suite>/<stamp>`.
+transcript viewer shows one suite's runs, each stamp a collection, once `python -m src process` has stored their parts:
+`uv run python -m src.ui.transcript_viewer --runs runs/study_smoke/<suite>`.
 
 A stamp is the UTC time, such as 20261101T014617Z: ASCII digits that make a real date and time. SMOKE_STAMP is for a
 parent to hand down; set by hand, it reuses a folder. smoke_load's launch refuses a stamp whose folder exists, and any

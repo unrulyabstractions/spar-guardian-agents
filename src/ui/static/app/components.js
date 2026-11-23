@@ -1,4 +1,4 @@
-/* Shared components of the results browser.
+/* Shared components the transcript viewer's page imports.
  * They build the badges, tables, controls, tool calls, verdict blocks and evidence blocks that several views show.
  *
  *   import { badge, dataTable } from './components.js';
