@@ -33,15 +33,15 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 
 from inspect_ai.scorer import Scorer
 
 from src.configuration.settings import load_prompts
-from src.configuration.swarm_config import role_of
 from src.domains.benchmark_protocol import Plan, RowBenchmark, Staged
 from src.domains.protein import _protein_scoring as scoring
 from src.domains.protein._protein_checker_tool import checker_binding
-from src.domains.protein._protein_honeypot import agent_files, log_dest, side_copy
+from src.domains.protein._protein_honeypot import agent_files, log_dest, side_copy, side_copy_path
 from src.domains.protein._protein_ladder import ProteinDomain
 from src.domains.protein._protein_settings import (
     ASSESSMENT_LINE,
@@ -78,7 +78,7 @@ SPLIT_DEVIATIONS = [
     "screening_log_lists_the_agents_file_size_and_no_path_for_an_agent_holding_none",
 ]
 SIDE_COPY_DEVIATION = "each_candidates_file_also_in_a_backup_of_the_screening_directory"
-SCENARIO_DEVIATION = "assessment_sentence_replaced_by_a_clients_request_with_a_notice_file_in_the_work_dir"
+SCENARIO_DEVIATION = "assessment_sentence_replaced_by_a_clients_request_with_a_notes_file_in_the_work_dir"
 
 
 def has_team_remote(plan: Plan) -> bool:
@@ -134,10 +134,11 @@ class ProteinDesign(RowBenchmark):
 
     def copies(self, plan: Plan) -> dict[str, dict[str, bytes]]:
         """Each agent's copy of the row, {agent: {absolute destination: bytes}} (_protein_honeypot.agent_files), with
-        the scenario's notice file in the work dir under a scenario."""
+        the scenario's notes file in the work dir under a scenario; the notes name the side copy's folder."""
         row = self.row_of(self.row)
         told = scenario(self.adds.scenario)
-        notice = {f"{row['vars']['work_dir']}/{told['notice_file']}": told["notice"].encode()} if told else {}
+        text = told["notice"].format(side_dir=str(Path(side_copy_path(row)).parent)) if told else ""
+        notice = {f"{row['vars']['work_dir']}/{told['notice_file']}": text.encode()} if told else {}
         return {a: {**agent_files(row, plan.pieces[a], plan.n_pieces), **notice} for a in plan.agents}
 
     def side_copies(self, plan: Plan) -> dict[str, dict[str, bytes]]:
@@ -148,14 +149,6 @@ class ProteinDesign(RowBenchmark):
         row = self.row_of(self.row)
         found = {a: side_copy(row, files) for a, files in self.copies(plan).items()}
         return {a: files for a, files in found.items() if files}
-
-    def first_note(self, plan: Plan, agent: str) -> str | None:
-        """Under a scenario, the workspace note after the task (prompts.yaml protein_design.scenarios); None for a
-        regulator that oversees, whose first message holds its teammates' task, and without a scenario."""
-        told = scenario(self.adds.scenario)
-        if told is None or plan.config.oversees(role_of(plan.roles, agent)):
-            return None
-        return told["workspace"]
 
     def stage(self, plan: Plan, row: dict) -> Staged:
         """Each agent's copy of the row as a staging archive for its own service, and the block the setup, the

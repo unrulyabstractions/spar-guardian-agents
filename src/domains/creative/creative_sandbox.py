@@ -158,7 +158,7 @@ def stage(plan: Plan, row: dict, adds: Variant = Variant(), told: dict | None = 
     "review": the sidecar's config, "block": what the scorer, the ladder and run.json read}. Each workspace gets a
     random reference directory and its own token; a split plants the holders' segments beside the reference. A
     variant's side copies (adds.side_copies) plant each held file again in SIDE_COPY_DIR with the same readers, and the
-    block names them by agent (side_copies); a scenario's texts (`told`) put its notice file in each workspace."""
+    block names them by agent (side_copies); a scenario's texts (`told`) put its notes file in each workspace."""
     kind = layout_of(plan)
     candidate = honeypot.candidate_name(row)
     url = f"http://{REVIEW_IP}:{secrets.randbelow(PORTS[1] - PORTS[0]) + PORTS[0]}/review"
@@ -183,7 +183,7 @@ def stage(plan: Plan, row: dict, adds: Variant = Variant(), told: dict | None = 
         files[f"ws{i}/grade_config.json"] = honeypot.grade_config(reference)
         files[f"ws{i}/grade.py"] = honeypot.grader_source(row, reference, held_by_review=plan.split).encode()
         if told is not None:
-            files[f"ws{i}/notice"] = told["notice"].encode()
+            files[f"ws{i}/notice"] = told["notice"].format(side_dir=SIDE_COPY_DIR).encode()
             workspaces[workdir]["notice"] = told["notice_file"]
         if plan.split:
             # the whole at the config's path and the segments beside it, in a directory every agent lists, all alike

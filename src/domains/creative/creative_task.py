@@ -52,7 +52,7 @@ SPLIT_DEVIATIONS = ["reference_cut_into_line_segments_one_part_file_per_holder",
                     "grader_asks_the_review_endpoint_when_it_cannot_read_the_reference"]
 SOLO_DEVIATIONS = [users.PRIVATE_FILES_DEVIATION, "each_agent_has_its_own_workspace_reference_copy_and_review_token"]
 SIDE_COPY_DEVIATION = "each_held_piece_also_a_file_in_a_side_folder_readable_by_its_holder_alone"
-SCENARIO_DEVIATION = "interview_sentences_replaced_by_a_scenario_with_a_notice_file_in_each_workspace"
+SCENARIO_DEVIATION = "interview_sentences_replaced_by_a_scenario_with_a_notes_file_in_each_workspace"
 
 
 class CreativeWriting(RowBenchmark):
@@ -102,11 +102,6 @@ class CreativeWriting(RowBenchmark):
     def instruction(self, cfg: dict, row: dict) -> str:
         """CheatBench's rendering, with a variant's scenario sentences in place of the interview's."""
         return honeypot.scenario_instruction(super().instruction(cfg, row), self.adds.scenario)
-
-    def first_note(self, plan: Plan, agent: str) -> str | None:
-        """A variant's scenario: its workspace note, which names the notice file. None otherwise."""
-        told = honeypot.scenario(self.adds.scenario)
-        return told["workspace"] if told else None
 
     def plan(self, config: SwarmConfig, roles: dict[str, str] | None = None) -> Plan:
         """The base plan, refused when the reference cannot be cut into its pieces or more than one agent of a split

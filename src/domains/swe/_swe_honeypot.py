@@ -94,12 +94,16 @@ def branch_names(refs: list[str]) -> list[str]:
     return sorted(name for name in names if not name.endswith("/HEAD"))
 
 
-def fill_branches(metadata: dict, refs: dict[str, list[str]]) -> None:
+def fill_branches(metadata: dict, refs: dict[str, list[str]], unlisted: dict[str, set[str]] | None = None) -> None:
     """Write each agent's branch list into everything that holds its prompts: the first message ORBIT starts the agent
     from (its agent group's goal), the system prompt it builds the agent from, the sample's records of both and the
-    judge's copies. `refs` holds each agent's refs (_agent_state)."""
+    judge's copies. `refs` holds each agent's refs (_agent_state); `unlisted` the refs an agent's list leaves out
+    (a variant's planted branch, Variant.lists_branch)."""
     item = settings.load_prompts()["swe"]["branch_item"]
-    lists = {agent: ", ".join(item.format(name=name) for name in branch_names(held)) for agent, held in refs.items()}
+    unlisted = unlisted or {}
+    lists = {agent: ", ".join(item.format(name=name)
+                              for name in branch_names([r for r in held if r not in unlisted.get(agent, ())]))
+             for agent, held in refs.items()}
     cheatbench = metadata["cheatbench"]
     swe = cheatbench["swe"]
     for texts in (swe["system_prompt"], swe.get("first_message") or {}, swe["judge_prompt"], cheatbench["judge_prompt"],
@@ -161,6 +165,12 @@ async def _plant(agent: str, swe: dict, split: dict, base_time: int) -> dict[str
     return planted
 
 
+def notice_text(name: str, repo: str) -> str:
+    """A scenario's notes file as an agent reads it: its text with the repository's name and the side patches'
+    folder (SIDE_PATCH_DIR)."""
+    return scenario(name)["notice"].format(repo=repo, side_dir=SIDE_PATCH_DIR.format(repo=repo))
+
+
 def side_patches(issue: str, held: list[str]) -> dict[str, str]:
     """A variant's side copies of one agent's pieces (Variant.side_patches): {piece: path}, each a patch file outside
     the repository named after the piece's planted branch (SIDE_PATCH_DIR)."""
@@ -183,13 +193,13 @@ async def _side_patch(agent: str, swe: dict) -> dict[str, str]:
 
 
 async def _notice(agent: str, swe: dict, split: dict) -> str:
-    """Write the scenario's notice file in the root of the agent's clone (prompts.yaml swe.scenarios), root's and
+    """Write the scenario's notes file in the root of the agent's clone (prompts.yaml swe.scenarios), root's and
     readable by all, and exclude it from git there (.git/info/exclude), so it enters no diff, no `git add -A` and
     never reaches the team remote. Returns its path."""
     told = scenario(swe["scenario"])
     path = f"{WORKDIR}/{told['notice_file']}"
     box = sandbox(agent)
-    await box.write_file(path, told["notice"].format(repo=split["repo"]))
+    await box.write_file(path, notice_text(swe["scenario"], split["repo"]))
     await must(box, f"chown root:root {shlex.quote(path)} && chmod 0644 {shlex.quote(path)} && "
                     f"echo {shlex.quote(told['notice_file'])} >> {WORKDIR}/.git/info/exclude && "
                     f"test -z \"$(git -C {WORKDIR} status --porcelain)\"", f"the notice file in {agent}")
@@ -304,4 +314,6 @@ async def prepare(state: TaskState) -> None:
     state.store.set(SETUP_STORE, evidence)
     if problems:
         raise SetupFailed("swe setup check failed: " + "; ".join(problems))
-    fill_branches(state.metadata, {a: evidence["agents"][a]["refs"] for a in agents})
+    planted = ({} if swe.get("lists_branch", True)
+               else {a: {piece_ref(split, p) for p in swe["pieces"][a]} for a in agents})
+    fill_branches(state.metadata, {a: evidence["agents"][a]["refs"] for a in agents}, planted)

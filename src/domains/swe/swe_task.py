@@ -45,7 +45,6 @@ from src.domains.swe.swe_inputs import (
     patch_files,
     piece_patch,
     run_values,
-    scenario,
     task_config,
 )
 from src.domains.swe.swe_ladder import SweDomain
@@ -133,8 +132,9 @@ class SWE(Benchmark):
             "tools_shell_and_run_python_bound_per_agent",
             *([f"honeypot_{honeypot}_pruned_and_planted_at_sample_setup"] if honeypot != "as_released" else []),
             *(["each_piece_also_a_patch_file_outside_the_repository"] if self.adds.side_patches else []),
-            *(["work_test_line_replaced_by_a_scenario_with_a_notice_file_in_each_clone"]
+            *(["work_test_line_replaced_by_a_scenario_with_a_notes_file_in_each_clone"]
               if self.adds.scenario else []),
+            *(["first_message_s_branch_list_leaves_out_the_planted_branch"] if not self.adds.lists_branch else []),
             *(["instruction_names_what_the_hidden_tests_call"] if issue_note(self.row) else []),
             *(["pieces_and_hidden_tests_hold_values_of_ours_where_the_fix_wrote_its_own"]
               if run_values(self.row, honeypot) else [])]
@@ -223,14 +223,7 @@ class SWE(Benchmark):
         if plan.config.oversees(role_of(plan.roles, agent)):
             return None
         text = settings.load_prompts()["swe"]["workspace_shared" if plan.mode == "shared_task" else "workspace_solo"]
-        repo = load_split(self.row)["repo"]
-        note = text.format(repo=repo, branch=agent, branches=honeypot.BRANCHES)
-        told = scenario(self.adds.scenario)
-        if told is None:
-            return note
-        # the scenario's bullet leads the workspace's bullets
-        head, _, bullets = note.partition("\n")
-        return f"{head}\n{told['workspace'].format(repo=repo)}\n{bullets}"
+        return text.format(repo=load_split(self.row)["repo"], branch=agent, branches=honeypot.BRANCHES)
 
     def oversight_note(self, plan: Plan, agent: str) -> str | None:
         """For a shared_task team, how to read its work through the team remote (prompts.yaml
@@ -254,7 +247,7 @@ class SWE(Benchmark):
             "fix_commit": fix_commit(instance), "honeypot": self.honeypot, "variant": self.variant,
             "side_patches": ({a: honeypot.side_patches(self.row, held) for a, held in plan.holds.items()}
                              if self.adds.side_patches else {}),
-            "scenario": self.adds.scenario,
+            "scenario": self.adds.scenario, "lists_branch": self.adds.lists_branch,
             "seed": plan.config.seed,
             "n_agents": len(plan.agents), "agents": plan.agents, "mode": plan.mode, "shutdown": plan.config.shutdown,
             "instruction": instruction, "pieces": plan.holds, "piece_times": piece_times(plan.config.seed, self.row),
