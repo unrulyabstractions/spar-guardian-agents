@@ -228,9 +228,11 @@ class Cell:
 
 
 def cell_of(listed: Listed, rf: RunFiles) -> Cell:
-    """The task's stem and the cell from the manifest row, the INDEX.jsonl row, else the run's name (NAME_RE). The
-    models come from run.json alone: a role's own model in role_models, else the eval's model, which a role with no
-    model of its own runs (src/configuration/swarm_config.py role_models)."""
+    """The task's stem and the cell from the manifest row, the INDEX.jsonl row, else the run's name (NAME_RE), else the
+    script that launched the run (run.json launch.module, `examples.swe.ianswe0_minimal_cheat`): a run of a study plan
+    is named after its target, not its cell, so its name may not parse. The models come from run.json alone: a role's
+    own model in role_models, else the eval's model, which a role with no model of its own runs
+    (src/configuration/swarm_config.py role_models)."""
     rj, meta = rf.run_json, listed.meta
     role_models = rj.get("role_models") or {}
     models = [short_model(role_models.get(role) or rj.get("model")) for role in ROLE_MODELS]
@@ -240,7 +242,8 @@ def cell_of(listed: Listed, rf: RunFiles) -> Cell:
         return Cell((meta.get("cell") or "").split(".")[-1].split("_")[0] or None, meta.get("kind"), *models)
     if m := NAME_RE.match(run_name(listed.path)):
         return Cell(m["stem"], m["cell"], *models)
-    return Cell(None, None, *models)
+    stem, _, cell = str((rj.get("launch") or {}).get("module") or "").rsplit(".", 1)[-1].partition("_")
+    return Cell(stem or None, cell or None, *models)
 
 
 def task_label(task: str | None, stem: str | None) -> str:

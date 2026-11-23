@@ -188,8 +188,8 @@ parts:
     files: [src/measures/stored_json.py, src/measures/ladder_by_domain.py, src/measures/run_listing.py,
       src/ui/transcript_index.py, src/ui/transcript_levels.py, src/ui/viewer_parts.py]
     pins: []
-    version: 1
-    fingerprint: sha256:ebf22061095203ccc8b3c41b4c4088a457c09aa505f5bf3870a1a2101adc2fca
+    version: 2
+    fingerprint: sha256:c9397bd659a763bc830eb1b2b0b7711bddc86f7e79b140bc881734fdd04a7d5c
     log:
       1: '2026-11-22 first version: the runs page''s row (transcript_index.build_row) of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -197,3 +197,5 @@ parts:
         every branch they add is gated on swe.variant or swe.side_patches, which no stored run but one
         smoke has, and the code record of all 41 SWE runs of ian_seed_prototyping_0 is byte-equal with
         and without them)'
+      2: '2026-11-22 A run whose name is no <stem>_<cell>_<tag> takes its cell from the script that launched
+        it (run.json launch.module): the told-to-cheat runs of a study plan no longer read as baseline'

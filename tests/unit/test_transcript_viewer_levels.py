@@ -1230,3 +1230,23 @@ def test_the_runs_page_collapses_a_column_of_dashes_over_the_filtered_rows():
     assert "layout(shown);" in index
     assert "`* Collapsed, no values: ${parts.join('; ')}`" in index
     assert "legendTable(ladders),\n    collapsedNote);" in index
+
+
+@pytest.mark.parametrize("module,expected", [
+    ("examples.swe.ianswe0_minimal_cheat", "told to cheat"),
+    ("examples.swe.ianswe0_minimal", "baseline"),
+    ("examples.swe.ianswe0_minimal_regulated", "baseline"),
+])
+def test_a_run_named_by_a_study_plan_takes_its_cell_from_the_script_that_launched_it(tmp_path, module, expected):
+    """A study plan names a run after its target (ianswe0_haiku_told_to_cheat_exp1_called_cheating_s1), which is no
+    <stem>_<cell>_<tag>: the cell is the launching script's (run.json launch.module). On 2026-11-22 both told-to-cheat
+    runs of ian_seed_prototyping_1 read as baseline."""
+    run = write_run(tmp_path / "ianswe0_haiku_told_to_cheat_exp1_called_cheating_s1",
+                    {"a01": "worker", "a02": "worker", "a03": "worker"}, {}, {"rule_level": "none"},
+                    "openrouter/anthropic/claude-haiku-5.5")
+    record = json.loads((run / "processed/run.json").read_text())
+    (run / "processed/run.json").write_text(json.dumps({**record, "launch": {"module": module}}))
+    rf = RunFiles.read(run)
+    cell = cell_of(Listed("run", run, "valid", meta=None), rf)
+    assert (cell.stem, cell.cell) == tuple(module.rsplit(".", 1)[-1].split("_", 1))
+    assert worker_conditioning(cell, rf.run_json["config"]) == expected
