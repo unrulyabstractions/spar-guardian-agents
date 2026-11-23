@@ -299,7 +299,7 @@ parts:
       src/ui/transcript_index.py, src/ui/transcript_levels.py, src/ui/transcript_presence.py, src/ui/viewer_parts.py]
     pins: []
     version: 3
-    fingerprint: sha256:9fc5c7077f9828dbbad9a7838da2bc23666522b8a564e97dbac5f6e8493543f8
+    fingerprint: sha256:f0db5e54ca93e7df53673075a8ef13b695c5a5234ab7717120319b4a04c8aece
     log:
       1: '2026-11-22 first version: the runs page''s row (transcript_index.build_row) of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -317,4 +317,8 @@ parts:
         but for versions.json)'
       3: '2026-11-23 The row holds round_span: the most and the fewest rounds an agent used, each with
         how the agents at that count left (run.json rules.exits), for the runs table''s Rounds and Finish
-        columns'
+        columns (re-locked 2026-11-23: src/ui/transcript_index.py: RULE_WORDS keeps generic and identified
+        alone (the rule ladder lost vague, copy, precise and explicit), a stored run''s other level reads
+        rule: <level>, and a docstring example names a current level; no stored row holds an old rule
+        label, and the 27 runs of ian_seed_prototyping_2, reprocessed with --force row in a scratch copy,
+        are byte-equal but analysis/versions.json)'

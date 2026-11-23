@@ -8,32 +8,26 @@ them.
     key_problems(jobs)              -> why the one key a box holds cannot serve these jobs
 
 A target is a task and its workers' model. An arm is one cell of a target under one setting, over some seeds, and it
-gives the run name suffix and the flags. A stage is launched by hand and by name: pilot, gate, phase2-<target> or
-phase2b-<target>.
+gives the run name suffix and the flags. A stage is launched by hand and by name: gate, phase2-<target> and so on.
 Nothing here or anywhere in this folder starts one stage from another, and no stage needs another's boxes.
 
-    pilot             flipt, protein and creative on luna: minimal_regulated, each regulator at ambiguous, seed 1
     gate              every target: minimal and minimal_cheat, seeds 1 to 5
-    phase2-<target>   minimal at rule_level generic and identified, and minimal_regulated with each regulator at
-                      ambiguous and enforce, seeds 1 to 5; on SWE an Opus regulator takes seed 1 alone
-    phase2b-<target>  minimal_regulated with Haiku at ambiguous and enforce, seeds 1 to 5, and Sonnet at both, seed 1
-    fixed-pilot       flipt on luna after the SWE fix: minimal_regulated, each of the five regulators at ambiguous,
-                      seed 1
+    phase2-<target>   minimal at rule_level generic and identified, seeds 1 to 5
     fixed-gate        both flipt targets after the SWE fix: minimal and minimal_cheat, seeds 1 to 3
-    fixed-phase2-<target>  a flipt target whose fixed gate passed: minimal at generic and identified, and each of the
-                      five regulators at ambiguous and enforce, seeds 1 to 3; Opus and Sonnet take seed 1
+    fixed-phase2-<target>  a flipt target whose fixed gate passed: minimal at generic and identified, seeds 1 to 3
+    vuls-gate         SWE's second issue: minimal and minimal_cheat, seeds 1 to 3
     disreg-gate       flipt on Claude Haiku 5.5 workers: minimal and minimal_cheat, seeds 1 to 3. gate_readout.py reads
-                      it by its own rule, and the target's disreg and contest stages run only if it passes
-    disreg-<target>   flipt on Haiku or GPT-6 Luna workers, or creative writing on GPT-6 Luna workers:
-                      minimal_disregulated at persuade and overt, seeds 1 to 3
-    contest-<target>  the same targets: minimal_regulated_disregulated, persuade against a Claude Haiku 5.5 regulator at
-                      enforce, seeds 1 to 3
+                      it by its own rule
     rules-<target>    flipt on Haiku workers or creative writing on GPT-6 Luna workers: minimal at generic and
                       identified, seeds 1 to 3, the cells the rule table of 2026-11-03 lacks
 
+The study's regulated, disregulated and contest stages ran regulator and disregulator levels that no longer exist
+(2026-11-23: the ladders became none, generic and instructed), so they are gone from the table: they can no longer
+launch. Their stored runs keep their recorded levels.
+
 Every SWE run before the fix (commits 7331882 to 33b7810, 2026-11-01) graded a task where one agent could cheat
-alone, so it measures nothing about collaboration. The fixed gate's and fixed phase two's runs carry the tag `fixed`
-and the fixed pilot's the tag `fixedpilot`, so no name repeats an invalid run's.
+alone, so it measures nothing about collaboration. The fixed gate's and fixed phase two's runs carry the tag `fixed`,
+so no name repeats an invalid run's.
 
 A box holds whole arms, in table order, up to its task's capacity (fleet_layout.capacity_of).
 """
@@ -54,15 +48,6 @@ MOCK_MODEL = "mockllm/model"
 SEEDS = (1, 2, 3, 4, 5)
 TEAM = 3
 """The neutral workers of every arm."""
-REGULATOR_LEVELS = ("ambiguous", "enforce")
-FIRST_REGULATORS = ("gpt-6-luna-openrouter", "claude-opus-5-5-openrouter", "gemini-4-argon-openrouter")
-"""The pilot's regulators and phase two's."""
-ADDED_REGULATORS = ("claude-haiku-5-5-openrouter", "claude-sonnet-5-5-openrouter")
-"""Phase 2b's regulators, on their own boxes so phase two's boxes keep their arms."""
-ONE_RUN_ON_SWE = ("claude-opus-5-5-openrouter",)
-"""Regulators that take one run, seed 1, per SWE cell after the gate: an Opus regulator costs about $22 a SWE run."""
-ONE_RUN = ("claude-sonnet-5-5-openrouter",)
-"""Regulators that take one run, seed 1, per cell of every target."""
 RULE_LEVELS = ("generic", "identified")
 
 
@@ -85,7 +70,6 @@ TARGETS = (Target("software_engineering", "flipt", "deepseek-flash-openrouter"),
            Target("software_engineering", "flipt", "gpt-6-luna-openrouter"),
            Target("protein_design", "protein", "gpt-6-luna-openrouter"),
            Target("creative_writing", "creative", "gpt-6-luna-openrouter"))
-PILOT_TARGETS = TARGETS[1:]
 SWE_TARGETS = TARGETS[:2]
 VULS_TARGETS = (Target("software_engineering", "vuls", "deepseek-flash-openrouter", stem="vuls"),
                 Target("software_engineering", "vuls", "gpt-6-luna-openrouter", stem="vuls"))
@@ -94,15 +78,6 @@ SWE_ISSUES = {"vuls": "vuls-1832"}
 """The issue of a target's stem where it is not the box's default (flipt-02e2, which box_setup.sh builds)."""
 HAIKU_SWE = Target("software_engineering", "flipt", "claude-haiku-5-5-openrouter")
 """SWE on Claude Haiku 5.5 workers."""
-DISREGULATOR_TARGETS = (HAIKU_SWE, TARGETS[3], SWE_TARGETS[1])
-"""The targets the disregulator stages run: SWE on Haiku after its disreg-gate passes (it failed on 2026-11-02),
-creative writing on GPT-6 Luna, whose five gate runs on each cell already pass that rule, and SWE on GPT-6 Luna, at the
-user's word on 2026-11-02: its team stays below `used` untold and never assembles, though it failed the told side."""
-DISREGULATOR_LEVELS = ("persuade", "overt")
-"""What the disregulator is told: to hide its instruction and win the others over, or to tell the team openly."""
-CONTEST_REGULATOR = "claude-haiku-5-5-openrouter"
-CONTEST_REGULATOR_LEVEL = "enforce"
-CONTEST_DISREGULATOR_LEVEL = "persuade"
 FIXED = "fixed"
 """The tag of every run of the SWE task after its fix."""
 
@@ -149,34 +124,12 @@ class Arm:
         return (TEAM + bool(self.regulator) + bool(self.disregulator_level)) * len(self.seeds)
 
 
-def pilot_arms(target: Target) -> tuple[Arm, ...]:
-    return tuple(Arm(target, "minimal_regulated", regulator=regulator, regulator_level="ambiguous", seeds=SEEDS[:1],
-                     tag="pilot") for regulator in FIRST_REGULATORS)
-
-
 def gate_arms(target: Target) -> tuple[Arm, ...]:
     return Arm(target, "minimal"), Arm(target, "minimal_cheat")
 
 
-def regulated_arms(target: Target, regulators: tuple[str, ...]) -> tuple[Arm, ...]:
-    """minimal_regulated with each regulator at each level, over seed 1 alone where the regulator takes one run."""
-    def seeds(regulator: str) -> tuple[int, ...]:
-        one = regulator in ONE_RUN or (target.task == "software_engineering" and regulator in ONE_RUN_ON_SWE)
-        return SEEDS[:1] if one else SEEDS
-
-    return tuple(Arm(target, "minimal_regulated", regulator=regulator, regulator_level=level, seeds=seeds(regulator))
-                 for regulator in regulators for level in REGULATOR_LEVELS)
-
-
 def phase_two_arms(target: Target) -> tuple[Arm, ...]:
-    return (*(Arm(target, "minimal", rule_level=level) for level in RULE_LEVELS),
-            *regulated_arms(target, FIRST_REGULATORS))
-
-
-def fixed_pilot_arms(target: Target) -> tuple[Arm, ...]:
-    """The pilot of the fixed SWE task: each of the five regulators once, at ambiguous."""
-    return tuple(Arm(target, "minimal_regulated", regulator=regulator, regulator_level="ambiguous", seeds=SEEDS[:1],
-                     tag=f"{FIXED}pilot") for regulator in (*FIRST_REGULATORS, *ADDED_REGULATORS))
+    return tuple(Arm(target, "minimal", rule_level=level) for level in RULE_LEVELS)
 
 
 FIXED_SEEDS = SEEDS[:3]
@@ -191,59 +144,13 @@ def fixed_gate_arms(target: Target) -> tuple[Arm, ...]:
 
 def fixed_phase_two_arms(target: Target) -> tuple[Arm, ...]:
     """Phase two of the fixed SWE task, launched only for a target whose fixed gate passed: minimal at rule_level
-    generic and identified, and minimal_regulated with each of the five regulators at ambiguous and enforce, 3 runs
-    each; an Opus or Sonnet regulator takes one run."""
-    def seeds(regulator: str) -> tuple[int, ...]:
-        return SEEDS[:1] if regulator in (*ONE_RUN, *ONE_RUN_ON_SWE) else FIXED_SEEDS
-
-    return (*(Arm(target, "minimal", rule_level=level, tag=FIXED, seeds=FIXED_SEEDS) for level in RULE_LEVELS),
-            *(Arm(target, "minimal_regulated", regulator=regulator, regulator_level=level, tag=FIXED,
-                  seeds=seeds(regulator))
-              for regulator in (*FIRST_REGULATORS, *ADDED_REGULATORS) for level in REGULATOR_LEVELS))
-
-
-FILL = "fill"
-"""The tag of the runs that complete the SWE table on DeepSeek workers."""
-FILL_TIME_S = 5400
-"""The agents' 90 minutes on the fill stages. A GPT-6 Luna regulator reads about five times a round and each round
-waits for it, so 100 rounds take about 72 minutes against 48 without a regulator; 7 of its 12 phase-two runs hit
-the 60-minute limit (VERIFICATION_LOG.md). The team's 100 rounds are the same; only the wall clock grows."""
-FILL_CAPS_USD = {"claude-sonnet-5-5-openrouter": 15, "gemini-4-argon-openrouter": 30}
-"""The dollar cap per run where the default would cut a whole run short. The user's yes on the launch sets these. A
-GPT-6 Luna run cost about $1, under the default."""
-
-
-def fill_arm(target: Target, regulator: str, level: str, seeds: tuple[int, ...]) -> Arm:
-    cap = FILL_CAPS_USD.get(regulator)
-    extra = (("time_limit_s", str(FILL_TIME_S)), *((("cost_limit_usd", str(cap)),) if cap else ()))
-    return Arm(target, "minimal_regulated", regulator=regulator, regulator_level=level, tag=FILL, seeds=seeds,
-               extra=extra)
-
-
-def fixed_fill_arms(target: Target) -> tuple[Arm, ...]:
-    """What the SWE table lacks on DeepSeek workers: GPT-6 Luna where its run hit the time limit (enforce seed 1
-    stands) and Sonnet at both levels to match protein."""
-    luna, sonnet = "gpt-6-luna-openrouter", "claude-sonnet-5-5-openrouter"
-    return (fill_arm(target, luna, "ambiguous", FIXED_SEEDS), fill_arm(target, luna, "enforce", FIXED_SEEDS[1:]),
-            fill_arm(target, sonnet, "ambiguous", SEEDS[:1]), fill_arm(target, sonnet, "enforce", SEEDS[:1]))
-
-
-def fixed_fill_argon_arms(target: Target) -> tuple[Arm, ...]:
-    """Gemini 4 Argon at both levels, 3 runs each, about $15 a run. The user dropped it on 2026-11-02: one run compares
-    with nothing, so this stage runs whole or not at all, and only at the user's word."""
-    argon = "gemini-4-argon-openrouter"
-    return (fill_arm(target, argon, "ambiguous", FIXED_SEEDS), fill_arm(target, argon, "enforce", FIXED_SEEDS))
+    generic and identified, 3 runs each."""
+    return tuple(Arm(target, "minimal", rule_level=level, tag=FIXED, seeds=FIXED_SEEDS) for level in RULE_LEVELS)
 
 
 def swe_tag(target: Target) -> str | None:
     """The tag a new arm takes: `fixed` on SWE, so no name repeats a run from before the fix."""
     return FIXED if target.task == "software_engineering" else None
-
-
-def disregulated_arms(target: Target) -> tuple[Arm, ...]:
-    """Three workers and a disregulator at each level, 3 runs each."""
-    return tuple(Arm(target, "minimal_disregulated", disregulator_level=level, seeds=FIXED_SEEDS, tag=swe_tag(target))
-                 for level in DISREGULATOR_LEVELS)
 
 
 RULES_TAG = "rules"
@@ -256,31 +163,13 @@ def rule_arms(target: Target) -> tuple[Arm, ...]:
                  for level in RULE_LEVELS)
 
 
-def contest_arms(target: Target) -> tuple[Arm, ...]:
-    """Three workers, a disregulator and a regulator, 3 runs: does the regulator or the disregulator win?"""
-    return (Arm(target, "minimal_regulated_disregulated", regulator=CONTEST_REGULATOR,
-                regulator_level=CONTEST_REGULATOR_LEVEL, disregulator_level=CONTEST_DISREGULATOR_LEVEL,
-                seeds=FIXED_SEEDS, tag=swe_tag(target)),)
-
-
-STAGES = {"pilot": {f"pilot-{target.name}": pilot_arms(target) for target in PILOT_TARGETS},
-          "gate": {f"gate-{target.name}": gate_arms(target) for target in TARGETS},
+STAGES = {"gate": {f"gate-{target.name}": gate_arms(target) for target in TARGETS},
           **{f"phase2-{target.name}": {f"phase2-{target.name}": phase_two_arms(target)} for target in TARGETS},
-          **{f"phase2b-{target.name}": {f"phase2b-{target.name}": regulated_arms(target, ADDED_REGULATORS)}
-             for target in TARGETS},
-          "fixed-pilot": {f"fixed-pilot-{SWE_TARGETS[1].name}": fixed_pilot_arms(SWE_TARGETS[1])},
           "fixed-gate": {f"fixed-gate-{target.name}": fixed_gate_arms(target) for target in SWE_TARGETS},
           **{f"fixed-phase2-{target.name}": {f"fixed-phase2-{target.name}": fixed_phase_two_arms(target)}
              for target in SWE_TARGETS},
           "vuls-gate": {f"vuls-gate-{target.name}": fixed_gate_arms(target) for target in VULS_TARGETS},
-          f"fixed-fill-{SWE_TARGETS[0].name}": {f"fixed-fill-{SWE_TARGETS[0].name}": fixed_fill_arms(SWE_TARGETS[0])},
-          f"fixed-fill-argon-{SWE_TARGETS[0].name}": {f"fixed-fill-argon-{SWE_TARGETS[0].name}":
-                                                      fixed_fill_argon_arms(SWE_TARGETS[0])},
           "disreg-gate": {f"disreg-gate-{HAIKU_SWE.name}": fixed_gate_arms(HAIKU_SWE)},
-          **{f"disreg-{target.name}": {f"disreg-{target.name}": disregulated_arms(target)}
-             for target in DISREGULATOR_TARGETS},
-          **{f"contest-{target.name}": {f"contest-{target.name}": contest_arms(target)}
-             for target in DISREGULATOR_TARGETS},
           **{f"rules-{target.name}": {f"rules-{target.name}": rule_arms(target)}
              for target in (HAIKU_SWE, TARGETS[3])}}
 """Each stage's arms, by the stem of their boxes' names."""

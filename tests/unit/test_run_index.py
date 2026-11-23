@@ -34,20 +34,26 @@ ROWS = {"protein_design": ("protein", {"row_id": "alfalfa_chi"}),
 
 
 def make_run(root: Path, name: str, task: str, *, study: str = STUDY, group: str | None = None, seed: int = 1,
-             model: str = LUNA, regulator: str | None = None, regulator_level: str = "ambiguous",
+             model: str = LUNA, regulator: str | None = None, regulator_level: str = "generic",
              rule_level: str = "none", commit: str = "0dda147", status: str = "success",
              regulator_says: str = "I read the board.", flags_ok: bool = True, folder_name: str | None = None,
              extra_pairs: tuple[str, ...] = (), posts: dict | None = None, row: str | None = None) -> Path:
     """A run folder and its eval log, run.json as today's plan deals it. folder_name is an earlier attempt's folder,
-    <name>.<n>."""
+    <name>.<n>. A regulator or disregulator level that no longer exists is recorded as a stored run of the study
+    holds it, over a plan dealt at today's generic level."""
     block, row = ROWS[task]
     pairs = [f"seed={seed}", f"id_salt={name}", f"rule_level={rule_level}", f"regulator_level={regulator_level}",
              *(["n_agents=4", "regulators=1"] if regulator else []), *extra_pairs]
-    config = build_config("default", "small", pairs)
+    levels = settings.load_instruction_levels()
+    stored = {key: value for key, _, value in (pair.partition("=") for pair in pairs)
+              if key in ("regulator_level", "disregulator_level") and value not in levels[key[:-6]]["order"]}
+    config = build_config("default", "small", [pair for pair in pairs if pair.partition("=")[0] not in stored]
+                          + [f"{key}=generic" for key in stored])
     roles = tasks.agent_roles(config) or {}
     plan = BY_TASK[task](row.get("row_id") or row["issue"]).plan(config, roles or None)
     mock = bool(run_validity.MOCK.search(name))
-    data = {"run_id": name, "task": task, block: row, "config": config.model_dump(mode="json"), "agents": plan.agents,
+    data = {"run_id": name, "task": task, block: row, "config": {**config.model_dump(mode="json"), **stored},
+            "agents": plan.agents,
             "access": {"policy": plan.access, "agents": {a: {"holds": items} for a, items in plan.holds.items()}},
             "code": {"commit": commit}, "model": "mockllm/model" if mock else resolve(model),
             "role_models": {"worker": None, "regulator": resolve(regulator) if regulator and not mock else None,
@@ -89,12 +95,30 @@ def capture(root: Path, instance: int, runs: list[Path], *, stale: bool = False)
         out.writelines(json.dumps(row) + "\n" for row in rows)
 
 
+HAIKU = "claude-haiku-5-5-openrouter"
+
+
+@pytest.fixture
+def old_arms(monkeypatch):
+    """Two arms of ian_baseline_explorations_1 at levels that no longer exist, as its stored runs name them. The table
+    lost them on 2026-11-23 because they can no longer launch; the index still joins a run to a table that holds
+    them."""
+    from scripts.box import study_table
+
+    protein = next(t for t in study_table.TARGETS if t.short == "protein")
+    monkeypatch.setitem(study_table.STAGES, "old-regulated", {"old-regulated-protein-luna": (
+        study_table.Arm(protein, "minimal_regulated", regulator=OPUS, regulator_level="ambiguous"),)})
+    monkeypatch.setitem(study_table.STAGES, "old-contest", {"old-contest-creative-luna": (
+        study_table.Arm(study_table.TARGETS[3], "minimal_regulated_disregulated", regulator=HAIKU,
+                        regulator_level="enforce", disregulator_level="persuade", seeds=(1, 2, 3)),)})
+
+
 def records_by_run(root: Path, study: str = STUDY) -> tuple[dict[str, dict], dict]:
     records, notes = build(root / "runs" / study, join_for(root / "runs" / study))
     return {rec["path"]: rec for rec in records}, notes
 
 
-def test_a_run_of_study_one_takes_its_place_and_arm_from_the_study_table(tmp_path):
+def test_a_run_of_study_one_takes_its_place_and_arm_from_the_study_table(tmp_path, old_arms):
     make_run(tmp_path, "binder_minimal_regulated_luna_opus_ambiguous1", "protein_design", regulator=OPUS,
              regulator_says=REFUSAL)
     rec = records_by_run(tmp_path)[0]["binder_minimal_regulated_luna_opus_ambiguous1"]
@@ -103,7 +127,7 @@ def test_a_run_of_study_one_takes_its_place_and_arm_from_the_study_table(tmp_pat
         "study": STUDY, "path": "binder_minimal_regulated_luna_opus_ambiguous1", "group": None,
         "cheatbench_task": "protein_design", "domain": "protein_design", "row": "alfalfa_chi"}
     assert {key: rec[key] for key in run_index.ARM_FIELDS} == {
-        "stage": "phase2-protein-luna", "box": "phase2-protein-luna-4",
+        "stage": "old-regulated", "box": "old-regulated-protein-luna-1",
         "cell": "protein_design.binder_minimal_regulated", "kind": "minimal_regulated", "target": "protein-luna",
         "worker": "luna", "worker_model": LUNA,
         "rule_level": None, "regulator": "opus", "regulator_model": OPUS, "regulator_level": "ambiguous",
@@ -198,7 +222,7 @@ ARM = "binder_minimal_regulated_luna_opus_ambiguous1"
     ({"regulator_inspect_model": resolve(LUNA)}, f"regulator model: table {OPUS}, run.json {resolve(LUNA)}"),
     ({"disregulators": 1}, "disregulators: table None, run.json 1"),
 ])
-def test_each_disagreement_of_the_table_and_run_json_is_named(change, problem):
+def test_each_disagreement_of_the_table_and_run_json_is_named(change, problem, old_arms):
     """Each of the eight checks finds its own field and nothing else."""
     arm = study_index.study_table_arms()[ARM]
     rec = {"seed": 1, "mock": False, "inspect_model": resolve(LUNA), "regulator_inspect_model": resolve(OPUS)}
@@ -371,7 +395,6 @@ def test_a_silent_regulator_reads_zero_posts_and_a_run_without_one_reads_none(tm
 
 
 CONTEST = "poem_minimal_regulated_disregulated_luna_haiku_enforce_persuade1"
-HAIKU = "claude-haiku-5-5-openrouter"
 BOTH_ROLES = ("n_agents=5", "regulators=1", "disregulators=1", "regulator_level=enforce",
               "disregulator_level=persuade")
 
@@ -381,17 +404,17 @@ def contested_run(root: Path, **kwargs) -> Path:
     return make_run(root, CONTEST, "creative_writings", regulator=HAIKU, extra_pairs=BOTH_ROLES, **kwargs)
 
 
-def test_a_run_with_both_roles_takes_its_arm_from_the_table_and_counts_each_role_s_posts(tmp_path):
+def test_a_run_with_both_roles_takes_its_arm_from_the_table_and_counts_each_role_s_posts(tmp_path, old_arms):
     contested_run(tmp_path)
     records, notes = records_by_run(tmp_path)
     rec = records[CONTEST]
     assert notes["table_disagrees"] == [] and rec["valid"] and rec["reason"] == "valid"
     assert (rec["stage"], rec["kind"], rec["regulator"], rec["regulator_level"], rec["disregulator_level"]) == (
-        "contest-creative-luna", "minimal_regulated_disregulated", "haiku", "enforce", "persuade")
+        "old-contest", "minimal_regulated_disregulated", "haiku", "enforce", "persuade")
     assert (rec["regulator_posts"], rec["disregulator_posts"]) == (2, 3)
 
 
-def test_a_disregulator_that_never_posted_leaves_its_run_invalid_in_the_index(tmp_path):
+def test_a_disregulator_that_never_posted_leaves_its_run_invalid_in_the_index(tmp_path, old_arms):
     contested_run(tmp_path, posts={"regulator": 2})
     rec = records_by_run(tmp_path)[0][CONTEST]
     assert not rec["valid"] and rec["reason"] == "disregulator_no_post" and rec["disregulator_posts"] == 0
@@ -403,7 +426,7 @@ def test_a_disregulator_that_never_posted_leaves_its_run_invalid_in_the_index(tm
     ({"role_models": {"disregulator": "openrouter/other"}}, "disregulator model: table the workers', run.json "
                                                             "openrouter/other"),
 ])
-def test_the_table_names_a_disregulator_that_differs_from_its_arm(change, problem):
+def test_the_table_names_a_disregulator_that_differs_from_its_arm(change, problem, old_arms):
     arm = study_index.study_table_arms()[CONTEST]
     rec = {"seed": 1, "mock": False, "inspect_model": resolve(LUNA), "regulator_inspect_model": resolve(HAIKU)}
     config = {"regulators": 1, "rule_level": "none", "regulator_level": "enforce", "disregulators": 1,

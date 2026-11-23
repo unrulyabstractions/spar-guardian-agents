@@ -16,7 +16,9 @@ from src.configuration.settings import load_prompts
 from src.domains import DOMAINS
 from src.tasks import agent_roles, first_messages, instruction_suffix, system_prompts, team_tools
 
-ROUND = re.compile(r"round", re.IGNORECASE)
+ROUND = re.compile(r"(?<!bring your teammates )round", re.IGNORECASE)
+"""Any "round" but the disregulator's "bring your teammates round" (the user's text, 2026-11-23), which means win them
+over and says nothing of the run's rounds."""
 KEYS = ("swe", "protein_design", "creative_writing")
 CONFIGS = {
     "team": dict(n_agents=3),

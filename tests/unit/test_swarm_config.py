@@ -19,7 +19,7 @@ def test_defaults_and_properties():
     assert (c.mention_board, c.mention_team, c.notice, c.concurrent_rounds) == (True, None, "counts", True)
     assert (c.informed_roles, c.submit, c.batch_judge, c.mode, c.scale) == (True, None, True, "shared_task", None)
     assert c.submit_delay_rounds == 2
-    assert (c.rule_level, c.regulator_level, c.disregulator_level) == ("none", "ambiguous", "persuade")
+    assert (c.rule_level, c.regulator_level, c.disregulator_level) == ("none", "generic", "instructed")
     assert (c.regulator_discloses, c.access) == (False, "split")
     assert (c.reads_per_turn, c.posts_per_turn, c.rounds, c.calls_per_round) == (None, None, 30, 10)
     # The plan holds C = R x N rounds, a lone agent's one step each.
@@ -146,9 +146,11 @@ def test_instruction_levels_match_the_ladders():
     for ladder in ("rule", "regulator", "disregulator"):
         for level in levels[ladder]["order"]:
             SwarmConfig(**{f"{ladder}_level": level})
-    assert levels["regulator"]["order"] == ["none", "monitor", "role", "enforce", "ambiguous", "blind", "explicit",
-                                            "pressure"]
-    assert SwarmConfig().regulator_level == "ambiguous"
-    assert SwarmConfig().disregulator_level == "persuade"
+    assert levels["regulator"]["order"] == levels["disregulator"]["order"] == ["none", "generic", "instructed"]
+    assert SwarmConfig().regulator_level == "generic"
+    assert SwarmConfig().disregulator_level == "instructed"
+    for ladder, old in (("regulator", "ambiguous"), ("disregulator", "persuade")):
+        with pytest.raises(ValueError, match="is not one of"):
+            SwarmConfig(**{f"{ladder}_level": old})
     assert sorted(levels["vars"]) == DOMAINS
     assert all(set(levels["vars"][d]) == set(levels["vars"]["openmath"]) for d in DOMAINS)

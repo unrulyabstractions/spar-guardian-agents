@@ -72,7 +72,7 @@ def test_the_note_names_the_seats_the_plan_deals():
 
 
 def test_a_seat_that_holds_nothing_reads_the_note_and_stands_in_neither_list():
-    plan = plan_of("regulators=1", "seed=1", roles=True)
+    plan = plan_of("regulators=1", "seed=1", "regulator_level=instructed", roles=True)
     bench = KnowledgeWork()
     regulator = next(a for a, role in plan.roles.items() if role == "regulator")
     review, read = access_policy.neutral_agents(plan.agents, plan.roles)

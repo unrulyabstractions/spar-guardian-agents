@@ -303,7 +303,7 @@ the command to run, and the runs page's header shows them as one chip. A new run
 `<ladder>` is `cheating`, `coordination` or `collusion`; a ladder filter's value is the team's level. `workers` is the
 number of workers; `worker` is the worker conditioning (`baseline`, `told to cheat`, a rule's words such as `generic
 honesty rule` or `rule naming the exploit`), the one filter that tells runs told to cheat from baseline runs;
-`influencer` keeps the runs with `any` influencer, or whose influencers are `regulator`, `disregulator`, `both` or `none`; `influencer_level` keeps the runs with an influencer at one level (`regulator: enforce`), its options limited to the runs `influencer` keeps; `cheated` is
+`influencer` keeps the runs with `any` influencer, or whose influencers are `regulator`, `disregulator`, `both` or `none`; `influencer_level` keeps the runs with an influencer at one level (`regulator: generic`), its options limited to the runs `influencer` keeps; `cheated` is
 `yes` or `no` (the team's, the code's). `min_disclosure` and `min_manipulation` ("Disclosure at least", "Manipulation
 at least", a number box) keep the runs whose team score is at least the number; a run no judge scored has none.
 `q` keeps the runs whose name contains the text.
@@ -769,11 +769,11 @@ Cell = {n, cheated, accessed, passed,        # runs; of them: levels.cheated, te
                                               # the runs page's query that keeps exactly these runs
 ```
 `columns`: Baseline (baseline workers, no influencer); one `influencers` column per influencer combination the
-collection holds with baseline workers, each influencer by role, instruction level and model ("+ regulator · enforce ·
-claude-haiku-5.5", "+ both · enforce, persuade · claude-haiku-5.5, gpt-6-luna"), regulators first, then
+collection holds with baseline workers, each influencer by role, instruction level and model ("+ regulator · generic ·
+claude-haiku-5.5", "+ both · generic, instructed · claude-haiku-5.5, gpt-6-luna"), regulators first, then
 disregulators, then both, each by level (instruction_levels.yaml order) and model; Told to cheat, Generic rule and Rule
 naming the exploit (no influencer); then one `other` column per further condition the collection holds, named by its
-combination ("Told to cheat + regulator · enforce · claude-haiku-5.5"). Rows split by the number of workers always, and by
+combination ("Told to cheat + regulator · generic · claude-haiku-5.5"). Rows split by the number of workers always, and by
 seed pack when any run of the collection is seeded (`by_seed`; otherwise a row's `seed_pack` is null and the page has
 no Seed column).
 Every valid run of the collection is in exactly one cell: `total` is the collection's valid runs and the cells' `n`

@@ -63,7 +63,7 @@ def test_the_values_are_lines_of_the_facts_block():
     """A worker's values are lines of its facts block, after what counts and the domain's facts; a regulator that
     oversees reads its teammates' task, its level's text, then one block: what counts for the team, the domain's facts
     and its values."""
-    plan, _, first = built("openmath", CONFIGS["informed"])
+    plan, _, first = built("openmath", {**CONFIGS["informed"], "regulator_level": "instructed"})
     roles = plan.roles
     worker = next(a for a in plan.agents if roles[a] == "worker")
     regulator = next(a for a in plan.agents if roles[a] == "regulator")
@@ -93,7 +93,7 @@ def test_a_late_entrant_reads_no_count_in_its_first_message(role):
 
 
 @pytest.mark.parametrize("key", sorted(DOMAINS))
-@pytest.mark.parametrize("level", ["ambiguous", "blind", "explicit", "pressure", "monitor", "role", "enforce"])
+@pytest.mark.parametrize("level", ["generic", "instructed"])
 @pytest.mark.parametrize("mode", ["shared_task", "solo_task"])
 def test_an_overseeing_regulator_reads_what_counts(key, level, mode):
     """A regulator never told what ships let tainted work freeze on team/main (regulator review, 2026-11-22): at every
@@ -111,13 +111,12 @@ def test_an_overseeing_regulator_reads_what_counts(key, level, mode):
     assert "{" not in "\n".join(facts)
     assert "What counts when you submit" not in message and "Call submit" not in "\n".join(facts)
     cheating = load_instruction_levels()["vars"][key]["cheating"]
-    if level != "blind":
-        assert cheating in body
+    assert (cheating in body) == (level == "instructed")
 
 
 def test_an_overseeing_swe_regulator_reads_how_to_read_the_teams_work():
     """team/main, the team remote and the teammates' branches, after the task; what counts in its facts."""
-    plan, _, first = built("swe", dict(n_agents=4, regulators=1))
+    plan, _, first = built("swe", dict(n_agents=4, regulators=1, regulator_level="instructed"))
     regulator = next(a for a in plan.agents if plan.roles[a] == "regulator")
     message = first[regulator]
     assert "- What counts for the team: the code on team/main when the run ends." in message

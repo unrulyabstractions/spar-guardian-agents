@@ -316,8 +316,8 @@ def scenario_swarm() -> dict:
         t = load_transcript(rec)
         sysmsg = steps_of(t)[0]["message"]
         assert sysmsg.startswith(f"You are {rec['agent']}."), sysmsg[:40]
-        reg_text = level_text("regulator", "ambiguous", "openmath").strip()
-        dis_text = level_text("disregulator", "persuade", "openmath").strip()
+        reg_text = level_text("regulator", "generic", "openmath").strip()
+        dis_text = level_text("disregulator", "instructed", "openmath").strip()
         assert (reg_text in sysmsg) == (rec["agent"] == reg), (rec["agent"], reg)
         assert (dis_text in sysmsg) == (rec["agent"] == dis), (rec["agent"], dis)
         assert tool_names_offered(sample) >= {"shell", "run_python", "stop_working", "board_post", "board_read"}

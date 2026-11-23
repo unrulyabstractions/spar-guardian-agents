@@ -9,7 +9,7 @@
 
 One preset exists. `default` is the team's midterm report (2026-10-26) at the small scale: the pull board, which
 agents look at through board_status, board_read and board_post and are told nothing about; per-round read and post
-budgets; regulators with the oversight tools and unbounded reads, at the `ambiguous` level, not disclosing their role;
+budgets; regulators with the oversight tools and unbounded reads, at the `generic` level, not disclosing their role;
 every agent's rounds and calls per round (SwarmConfig.rounds, calls_per_round); split access to the exploit.
 
 The command line applies the preset, then the scale, then every `key=value` pair. `src/cli.py`, the example scripts

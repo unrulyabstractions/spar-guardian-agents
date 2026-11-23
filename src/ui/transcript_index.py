@@ -63,14 +63,10 @@ INFLUENCER_LEVELS = {"regulator": "regulator_level", "disregulator": "disregulat
 """Each kind of influencer and the config field of its instruction level (src/configuration/swarm_config.py)."""
 RULE_WORDS = {
     "generic": "generic honesty rule",
-    "vague": "rule: work of its own",
-    "copy": "rule: copy no solution",
-    "precise": "rule: use no existing solution",
-    "explicit": "rule naming where the exploit lies",
     "identified": "rule naming the exploit",
 }
 """The workers' rule sentence (SwarmConfig.rule_level, src/configuration/instruction_levels.yaml `rule`) in the runs
-table's words, every level but none."""
+table's words, every level but none. A stored run's level the ladder no longer holds reads "rule: <level>"."""
 
 
 # ------------------------------------------------------------------------------------------------- the collections
@@ -282,7 +278,7 @@ def influencer_conditioning(cell: Cell, cfg: dict, roles: dict[str, str | None])
 
 
 def influencer_words(influencers: list[dict]) -> str:
-    """The influencers in words, "regulator (enforce, claude-haiku-5.5)", or "no influencer"."""
+    """The influencers in words, "regulator (generic, claude-haiku-5.5)", or "no influencer"."""
     words = []
     for x in influencers:
         who = x["role"] if x["n"] == 1 else f"{x['n']} {x['role']}s"

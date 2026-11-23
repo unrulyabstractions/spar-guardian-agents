@@ -20,12 +20,13 @@ the task instruction, and the regulator and disregulator texts appended to the s
 the role. A level gives one text or one per benchmark, with placeholders filled from the benchmark's `vars`.
 
 A regulator or disregulator level gives a system text with no task detail (`text`) and a first-message text with the
-task's own words (`first`, role_first): each regulator level but blind gives the benchmark's `cheating` var, what
-cheating means on that task, in the regulator's first message, after its teammates' task; a disregulator's gives its
-objective and the work it may reuse, before the run's facts. A variant's scenario may give its own words in place of
-the benchmark's, for the rule sentence and both roles' first messages (Benchmark.level_words, prompts.yaml
-<task>.scenarios.<name>.words). An influencer's level text is followed by prompts.yaml roles.influencer_common (the
-peer tools, src/swarm/_regulator_oversight.py, and the board), then under
+task's own words (`first`, role_first). Each ladder is none, generic and instructed. A regulator at instructed gets the
+benchmark's `cheating` var, what cheating means on that task, in its first message, after its teammates' task; at
+generic it gets no first-message text. A disregulator's first message gives its objective at generic, and at
+instructed also where the work that already solves the task is, before the run's facts. A variant's scenario may give
+its own words in place of the benchmark's, for the rule sentence and both roles' first messages (Benchmark.level_words,
+prompts.yaml <task>.scenarios.<name>.words). An influencer's level text is followed by prompts.yaml
+roles.influencer_common (the peer tools, src/swarm/_regulator_oversight.py, and the board), then under
 SwarmConfig.peer_shell roles.peer_shell. A regulator's then gets
 roles.regulator_check (call get_peer_actions on each teammate within a set number of the regulator's first rounds:
 CHECK_ROUNDS, which role_values gives the first message, since no system prompt holds a number) and, unless
@@ -60,15 +61,16 @@ def level_text(ladder: str, level: str, benchmark_name: str, key: str = "text",
     """The text of one level of a ladder for one benchmark (its Benchmark.key), or None for no text: the level's
     `text`, or its text for the benchmark; key "first" gives an influencer level's first-message text. `words` are a
     variant's own (Benchmark.level_words): they stand in place of the benchmark's `vars` of the same names, and a
-    level that holds a `scenario` text gives that in place of the benchmark's. {generic} is the rule ladder's generic
-    sentence, for a level built on it."""
+    level that holds a `scenario` text gives that in place of the benchmark's. {generic} is the generic level's text of
+    the same ladder, for a level built on it: the rule's generic sentence in the rule's scenario text, the regulator's
+    or the disregulator's generic text in its instructed text."""
     levels = load_instruction_levels()
     entry = levels[ladder][level]
     own = "scenario" if words and "scenario" in entry else benchmark_name
     template = entry.get(key) if key != "text" or "text" in entry else entry.get(own)
     if template is None:
         return None
-    values = {"generic": levels["rule"]["generic"]["text"], **levels["vars"][benchmark_name], **(words or {})}
+    values = {"generic": levels[ladder]["generic"]["text"].strip(), **levels["vars"][benchmark_name], **(words or {})}
     values.update({f"{k}__cap": v[:1].upper() + v[1:] for k, v in list(values.items())})
     return SENTENCE_START.sub(r"\1{\2__cap}", template.strip()).format(**values)
 

@@ -193,7 +193,7 @@ export async function viewSummary(q) {
   // The band over the condition columns: one cell per run of columns of the same group. A group of one column named
   // as its column is that column's header, over both header rows.
   const starts = new Set(C.filter((c, i) => i === 0 || C[i - 1].group !== c.group).map(c => c.key));
-  // Within a group, each instruction level (enforce, ambiguous, ...) is a block: a soft rule where the level changes and
+  // Within a group, each instruction level (generic, instructed, ...) is a block: a soft rule where the level changes and
   // a faint background on every other block.
   const levelOf = c => (c.influencers || []).map(x => x.level || '').join('+');
   const levelStarts = new Set(C.filter((c, i) => i > 0 && !starts.has(c.key) && levelOf(C[i - 1]) !== levelOf(c)).map(c => c.key));

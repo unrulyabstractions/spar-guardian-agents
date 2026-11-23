@@ -72,6 +72,20 @@ BOX = find_box("gate-protein-luna-1")
 LABEL = f"spar-screen-{BOX.name}-{LAUNCH}"
 TWO_RUNS = Box(BOX.name, BOX.stage, tuple(Arm(arm.target, arm.kind, seeds=(1,)) for arm in BOX.arms))
 """A box with one run of each of its arms."""
+PILOT_REGULATORS = ("gpt-6-luna-openrouter", "claude-opus-5-5-openrouter", "gemini-4-argon-openrouter")
+PILOT = {f"pilot-{target.name}": tuple(Arm(target, "minimal_regulated", regulator=regulator, regulator_level="generic",
+                                           seeds=(1,), tag="pilot") for regulator in PILOT_REGULATORS)
+         for target in study_table.TARGETS[1:]}
+"""A stage of three boxes, flipt, protein and creative on Luna, each with three regulated runs: the shape of
+ian_baseline_explorations_1's pilot at a level that exists. The table lost the pilot on 2026-11-23 (its level is
+gone); create and the runner are tested on this stand-in, which pilot_stage puts into the table."""
+
+
+@pytest.fixture(autouse=True)
+def pilot_stage(monkeypatch):
+    monkeypatch.setitem(study_table.STAGES, "pilot", PILOT)
+
+
 ONE_PILOT_BOX = ("--stage", "pilot", "--count", "1", "--only", "pilot-protein-luna-1")
 TWO_PILOT_BOXES = ("--stage", "pilot", "--count", "2", "--only", "pilot-protein-luna-1", "pilot-creative-luna-1")
 
@@ -210,8 +224,12 @@ def test_create_takes_no_offer_from_a_skipped_machine(registry, monkeypatch, cap
 
 
 def test_the_dry_run_names_the_boxes_no_offer_is_left_for(registry, monkeypatch, capsys):
+    """Six SWE boxes, each one arm of five runs, and four offers that hold one."""
     monkeypatch.setattr(vast_api, "http", FakeVast())
-    assert fleet.main(["create", "--stage", "phase2-flipt-luna", "--count", "6", "--dry-run"]) == 1
+    flipt = study_table.SWE_TARGETS[1]
+    monkeypatch.setitem(study_table.STAGES, "six", {"six-flipt-luna": tuple(
+        Arm(flipt, "minimal", tag=f"six{k}") for k in range(6))})
+    assert fleet.main(["create", "--stage", "six", "--count", "6", "--dry-run"]) == 1
     out = capsys.readouterr().out
     assert out.count("would send: PUT") == 4 and "4 of 6 requests printed" in out
 
@@ -1202,7 +1220,7 @@ def test_the_runner_refuses_a_clone_away_from_the_pinned_commit(runner_dirs, mon
     assert "the fleet pinned 0000" in capsys.readouterr().out and not (runner_dirs / "screen.pid").exists()
 
 
-REGULATED = find_box("pilot-protein-luna-1")
+REGULATED = study_table.pack("pilot-protein-luna", "pilot", PILOT["pilot-protein-luna"])[0]
 
 
 def test_the_runner_gives_each_run_its_flags_and_the_plan_records_them(runner_dirs, monkeypatch, capsys):
@@ -1218,10 +1236,10 @@ def test_the_runner_gives_each_run_its_flags_and_the_plan_records_them(runner_di
     monkeypatch.setattr(box_runner.subprocess, "Popen", popen)
     assert run_box(monkeypatch, box=REGULATED) == 1
     regulators = [command[command.index("--regulator-model") + 1] for command in commands]
-    assert regulators == list(study_table.FIRST_REGULATORS)
+    assert regulators == list(PILOT_REGULATORS)
     assert all(command[command.index("--name") + 2:command.index("--name") + 4] == ["--set", "seed=1"]
                for command in commands)
-    assert all("regulator_level=ambiguous" in command for command in commands)
+    assert all("regulator_level=generic" in command for command in commands)
     plan = json.loads((runner_dirs / "logs" / "screen" / f"box_{REGULATED.name}.json").read_text())
     assert plan["box"] == REGULATED.name and plan["stage"] == "pilot" and plan["task"] == "protein_design"
     for job, command in zip(box_jobs(REGULATED), commands):
@@ -1308,7 +1326,7 @@ def test_a_mock_run_needs_no_key_and_a_real_run_sets_its_plan_aside(runner_dirs,
 def other_key_box(monkeypatch):
     """A study whose gate-protein-luna-1 has a regulator on OPENAI_API_KEY."""
     monkeypatch.setitem(fleet_layout.REGULATORS, "gpt-6-luna", "direct")
-    arm = Arm(BOX.arms[0].target, "minimal_regulated", regulator="gpt-6-luna", regulator_level="ambiguous", seeds=(1,))
+    arm = Arm(BOX.arms[0].target, "minimal_regulated", regulator="gpt-6-luna", regulator_level="generic", seeds=(1,))
     monkeypatch.setitem(study_table.STAGES["gate"], "gate-protein-luna", (arm,))
     return find_box(BOX.name)
 

@@ -221,7 +221,7 @@ def test_an_issue_without_a_note_keeps_cheatbenchs_text():
 
 
 def test_a_rule_and_a_control_follow_the_note():
-    config = build_config("default", "small", ["rule_level=vague"])
+    config = build_config("default", "small", ["rule_level=identified"])
     text = swarm_task(SWE(ISSUE), config, extra_instruction="CONTROL").dataset[0].input
     assert text.index(issue_note(ISSUE)) < text.index("CONTROL")
     assert text.endswith("\nCONTROL\n")

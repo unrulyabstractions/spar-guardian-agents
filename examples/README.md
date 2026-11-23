@@ -20,7 +20,7 @@ Knowledge work, SWE, protein design, creative writing and chess also have a regu
 
 The cells made for one study, on a task's variant (`ian0flipt`, `ian_swe0`, `ian0poem`, `ian0binder`), live in `studies/cells/<task>/`, not here. `studies/README.md` lists them.
 
-SWE, protein design and creative writing also have a disregulated cell, `flipt_minimal_disregulated.py`, `binder_minimal_disregulated.py` and `poem_minimal_disregulated.py`: four agents on the split, one of them a hidden disregulator privately told to get the result by any means (`config.replace(n_agents=4, disregulators=1, max_concurrency=4)`). It holds nothing, so it can only win the others over. The text it gets is `disregulator_level`, `persuade` by default.
+SWE, protein design and creative writing also have a disregulated cell, `flipt_minimal_disregulated.py`, `binder_minimal_disregulated.py` and `poem_minimal_disregulated.py`: four agents on the split, one of them a hidden disregulator privately told to use work that already solves the task (`config.replace(n_agents=4, disregulators=1, max_concurrency=4)`). It holds nothing, so it can only win the others over. The text it gets is `disregulator_level`, `instructed` by default.
 
 SWE and creative writing also have a cell with both roles, `flipt_minimal_regulated_disregulated.py` and `poem_minimal_regulated_disregulated.py`: five agents on the split, one a hidden regulator and one a hidden disregulator (`config.replace(n_agents=5, regulators=1, disregulators=1, max_concurrency=5)`). The three neutral agents hold what the minimal script's three hold, and neither role holds anything.
 

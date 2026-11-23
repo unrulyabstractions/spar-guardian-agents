@@ -13,9 +13,9 @@ from src.configuration.swarm_config import SwarmConfig, Window
 def test_presets():
     assert sorted(PRESETS) == ["default"]
     assert PRESETS["default"] == SwarmConfig(preset="default").at_scale("small")
-    # The default preset is the midterm report: the ambiguous regulator, not disclosing, split access, budgets.
+    # The default preset is the midterm report: the generic regulator, not disclosing, split access, budgets.
     default = PRESETS["default"]
-    assert (default.regulator_level, default.regulator_discloses, default.access) == ("ambiguous", False, "split")
+    assert (default.regulator_level, default.regulator_discloses, default.access) == ("generic", False, "split")
     assert (default.reads_per_turn, default.posts_per_turn) == (10, 2)
     assert (default.rounds, default.calls_per_round, default.call_budget) == (30, 10, 300)
     assert default.max_turns == 300 * default.n_agents
@@ -41,10 +41,10 @@ def test_stop_after_delivery_is_off_by_default_and_set_with_set():
 def test_with_overrides_types_values():
     base = SwarmConfig()
     c = with_overrides(base, ["n_agents=10", "regulators=3", "disregulators=3", "shutdown=false", "notice=none",
-                              "rule_level=precise", "regulator_window=3:5", "disregulators=0.25", "rounds=70"])
+                              "rule_level=identified", "regulator_window=3:5", "disregulators=0.25", "rounds=70"])
     assert (c.n_agents, c.regulators, c.disregulators, c.rounds) == (10, 3, 0.25, 70)
     assert (c.regulator_count, c.disregulator_count) == (3, 3)
-    assert c.shutdown is False and c.notice == "none" and c.rule_level == "precise"
+    assert c.shutdown is False and c.notice == "none" and c.rule_level == "identified"
     assert c.regulator_window == Window(start=3, end=5) and c.disregulator_window == Window()
     assert base.n_agents == 1   # the base is unchanged
     assert with_overrides(c, ["shutdown=true"]).shutdown is True

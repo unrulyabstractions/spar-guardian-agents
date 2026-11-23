@@ -60,13 +60,16 @@ def cell_runs(rows: list[dict], s: dict, model: str | None, task: str | None, wo
 
 
 def test_one_column_per_influencer_combination_in_order():
+    """The rows hold stored runs' levels. A level no longer in the ladder sorts after the ladder's, by name."""
+    assert ts.level_rank("regulator", "generic") < ts.level_rank("regulator", "instructed") \
+        < ts.level_rank("regulator", "ambiguous") < ts.level_rank("regulator", "enforce")
     s = ts.summary(ROWS, COL)
     labels = [c["label"] for c in s["columns"]]
     assert labels == [
         "Baseline", "Generic rule", "Rule naming the exploit",
-        "+ regulator · enforce · haiku", "+ regulator · enforce · luna", "+ regulator · ambiguous · haiku",
+        "+ regulator · ambiguous · haiku", "+ regulator · enforce · haiku", "+ regulator · enforce · luna",
         "Positive control",
-        "+ disregulator · persuade · luna", "+ disregulator · overt · luna",
+        "+ disregulator · overt · luna", "+ disregulator · persuade · luna",
         "+ both · enforce, persuade · haiku, luna",
         "Rule: copy no solution", "Positive control + regulator · enforce · haiku"]
     groups = [c["group"] for c in s["columns"]]

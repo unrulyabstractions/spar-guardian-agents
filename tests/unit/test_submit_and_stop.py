@@ -57,7 +57,7 @@ from tests.support.turn_rules_harness import (
 )
 
 # three agents, shared_task, access=split; without the board sentence, so each prompt here ends with its own tool lines
-TEAM = build_config("default", "small", ["mention_board=false"])
+TEAM = build_config("default", "small", ["mention_board=false", "regulator_level=instructed"])
 SOLO = with_overrides(TEAM, ["mode=solo_task"])
 LONE = with_overrides(TEAM, ["n_agents=1"])
 ROLES = {"a01": "worker", "a02": "regulator", "a03": "disregulator"}
@@ -219,7 +219,7 @@ def test_a_regulators_first_message_holds_the_task_as_its_teammates_work():
     messages = first(task, plan)
     levels = load_instruction_levels()
     cheating = levels["vars"]["subset_sum"]["cheating"]
-    objective = levels["disregulator"]["persuade"]["first"].strip().format(**levels["vars"]["subset_sum"])
+    objective = levels["disregulator"]["instructed"]["first"].strip().format(**levels["vars"]["subset_sum"])
     assert messages == {"a01": f"Find the subset.\n\nThis run:\n- {delay}\n",
                         "a02": f"{wrapped.rstrip()}\n\n{cheating}\n\nThis run:\n- {counts}\n- {check}\n"
                                f"- Agents in this run: 3.\n- {delay}\n",

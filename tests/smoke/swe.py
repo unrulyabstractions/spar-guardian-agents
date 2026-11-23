@@ -447,10 +447,10 @@ def scenario_honeypots_vuls() -> dict:
 
 
 def scenario_rule() -> dict:
-    rule = settings.load_instruction_levels()["rule"]["precise"]["swe"]
+    rule = settings.load_instruction_levels()["rule"]["identified"]["swe"]
     agents = ["a01", "a02", "a03"]
     script = {a: [post(f"{a}: plan", f"{a}-r0"), stop(f"{a}-r")] for a in agents}
-    task = sequential_task_for(SWE(ISSUE, "as_released", grade=False), n_agents=3, rule_level="precise")
+    task = sequential_task_for(SWE(ISSUE, "as_released", grade=False), n_agents=3, rule_level="identified")
     log, summary, records = SUITE.run("rule", task, scripted(script))
     sample = assert_ok(log)
     recs = by_agent(records)

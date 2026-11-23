@@ -55,7 +55,7 @@ def influencer_set(row: dict) -> str:
 
 
 def influencer_level(x: dict) -> str:
-    """One influencer as the runs page's Influencer conditioning value: "regulator: enforce"."""
+    """One influencer as the runs page's Influencer conditioning value: "regulator: generic"."""
     return f"{x['role']}: {x['level'] or 'no level'}"
 
 
@@ -80,14 +80,14 @@ def condition_of(row: dict) -> tuple[str, tuple]:
 
 
 def combination(influencers: tuple) -> str:
-    """The influencers in words: "regulator · enforce · claude-haiku-5.5", a second one after " + "."""
+    """The influencers in words: "regulator · generic · claude-haiku-5.5", a second one after " + "."""
     return " + ".join(" · ".join([role if n == 1 else f"{n} {role}s", level or "no level", model or "no model"])
                       for role, level, model, n in influencers)
 
 
 def short(influencers: tuple) -> str:
-    """The influencers as a column's name: their set, their levels, their models, "regulator · enforce ·
-    claude-haiku-5.5" or "both · enforce, persuade · claude-haiku-5.5, gpt-6-luna"."""
+    """The influencers as a column's name: their set, their levels, their models, "regulator · generic ·
+    claude-haiku-5.5" or "both · generic, instructed · claude-haiku-5.5, gpt-6-luna"."""
     roles = {x[0] for x in influencers}
     first = influencers[0]
     who = "both" if len(roles) > 1 else first[0] if first[3] == 1 else f"{first[3]} {first[0]}s"

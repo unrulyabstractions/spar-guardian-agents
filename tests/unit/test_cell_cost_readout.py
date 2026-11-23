@@ -283,8 +283,8 @@ def test_a_box_belongs_to_the_study_by_the_runs_it_names_not_by_its_stage_name(t
 
 
 def test_a_live_box_bills_to_now_and_holds_the_runs_its_own_plans_started(tmp_path):
-    first, second = names("minimal_regulated", "ambiguous", "luna")[:2]
-    box = f"{STAGE}-3"
+    first, second = names("minimal", "identified")[:2]
+    box = f"{STAGE}-1"
     write_registry(tmp_path, [entry(200, box, "2026-11-01T08:00:00Z", "2026-11-01T09:00:00Z", 1.0),
                               entry(201, box, "2026-11-01T10:00:00Z", None, 0.6)])
     write_plan(tmp_path, f"attempts/box_{box}.1.json", box, "2026-11-01T08:30:00Z", [first])
@@ -295,7 +295,7 @@ def test_a_live_box_bills_to_now_and_holds_the_runs_its_own_plans_started(tmp_pa
     assert boxes[201]["live"] and boxes[201]["hours"] == pytest.approx(2.0) and boxes[201]["usd"] == pytest.approx(1.2)
     assert boxes[200]["held"] == [first] and boxes[201]["held"] == [first, second]
     assert boxes[201]["rehearsals"] == [f"{first[:-1]}mock1"]
-    cell = row(result, "minimal_regulated", "ambiguous")
+    cell = row(result, "minimal", "identified")
     assert [r["boxes_usd"] for r in cell["runs"]] == pytest.approx([1.6, 0.6])
     assert cell["live"] == 2 and cell["partial"] and result["totals"]["live_boxes"] == [201]
 

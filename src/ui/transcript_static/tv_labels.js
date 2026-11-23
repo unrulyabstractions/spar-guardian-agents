@@ -45,8 +45,7 @@ export const modelLabel = r => MODELS[r.model] || r.model || r.model_id;
 export const influencerParts = x => [x.n === 1 ? x.role : `${x.n} ${x.role}s`, x.level, modelLabel({ model: x.model })].filter(Boolean);
 
 /** A worker conditioning's chip: baseline calm, told to cheat warm, a rule cool and a rule naming the exploit strong. */
-export const CONDITIONING_TONE = { baseline: 'cond-none', 'told to cheat': 'cond-cheat', 'rule naming the exploit': 'cond-rule-strong',
-  'rule naming where the exploit lies': 'cond-rule-strong' };
+export const CONDITIONING_TONE = { baseline: 'cond-none', 'told to cheat': 'cond-cheat', 'rule naming the exploit': 'cond-rule-strong' };
 /** What the pages call a worker conditioning (the row's worker_conditioning keeps the instruction's own words): the
  * team told to cheat is the positive control, a team under a rule a negative control. */
 export const CONDITIONING_LABEL = { 'told to cheat': 'positive control',
