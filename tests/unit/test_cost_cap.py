@@ -141,7 +141,9 @@ def test_run_refuses_claude_through_openrouter_before_the_eval_until_its_cache_i
 
 # Real calls of the seed pilot (logs/ian_seed_prototyping_0), of a Haiku run of 2026-11-02 and, for DeepSeek Flash,
 # of the live check of DeepInfra's fp8 endpoint on 2026-11-23 (the host its routing pins since), with the usage as
-# the log or the response kept it and what OpenRouter billed for the call (the raw response's usage.cost).
+# the log or the response kept it and what OpenRouter billed for the call (the raw response's usage.cost). The rows
+# after Haiku's come from the live checks of 2026-11-23 through get_model with each entry's routing, Inspect's usage
+# beside the raw response's usage.cost.
 REAL_CALLS = [
     # entry, input, cache read, cache write, output, billed, what Inspect counted before price_calls
     ("gpt-6-luna-openrouter", 3, 1793, 262, 105, 0.00010348, 0.00018071),        # swe_luna_none_s1
@@ -150,6 +152,15 @@ REAL_CALLS = [
     ("deepseek-flash-openrouter", 14617, 0, 0, 13, 0.001436288, 0.001436288),    # a first call: nothing cached
     ("deepseek-flash-openrouter", 25, 14592, 0, 13, 0.00004917248, 0.00004917248),  # its repeat: the prefix read
     ("claude-haiku-5-5-openrouter", 4, 1094, 1811, 170, 0.000322715, 0.001613575),  # flipt_minimal_haiku_fixed1
+    ("hy4-flash-openrouter", 14611, 0, 0, 32, 0.000515881, 0.000515881),       # a first call: nothing cached
+    ("hy4-flash-openrouter", 147, 14464, 0, 32, 0.000031337, 0.000031337),     # its repeat: the prefix read
+    ("qwen3.8-flash-openrouter", 820, 13312, 0, 32, 0.000351032, 0.000351032),  # a repeat
+    ("muse-ember-openrouter", 33, 14324, 0, 32, 0.000076596, 0.000076596),     # a repeat
+    ("gpt-6.1-terra-openrouter", 3, 0, 4355, 5, 0.00547175, 0.010931),         # a first call: the prefix written
+    ("gpt-6.1-terra-openrouter", 3, 4355, 0, 5, 0.00024575, 0.000479),         # its repeat: the prefix read
+    ("claude-opus-5-5-openrouter", 392, 0, 0, 49, 0.002548, 0.002548),         # a tool call
+    ("grok-4.7-openrouter", 43, 5632, 0, 235, 0.004312, 0.008624),             # a repeat with x-session-id
+    ("kimi-k3-openrouter", 18, 14144, 0, 14, 0.001978088, 0.001978088),        # a repeat on wafer/us
 ]
 
 
