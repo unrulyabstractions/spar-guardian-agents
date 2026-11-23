@@ -72,6 +72,7 @@ from src.swarm.turn_rules import (
     SYSTEM_SENDER,
     Refused,
     budget_used,
+    is_record,
     record_board_action,
     refuse,
     spend,
@@ -121,14 +122,18 @@ def _board(agent: str, board: str) -> list:
 
 
 def _numbers(board: str) -> dict[str, int]:
-    """Each post's position on the board, from ORBIT's canonical store."""
-    posts = [m for m in store_as(CommunicationState).messages if m.channel_id == board]
+    """Each post's position on the board, from ORBIT's canonical store. A record of who came or went has no number,
+    so a post's number is its place among the posts."""
+    posts = [m for m in store_as(CommunicationState).messages if m.channel_id == board and not is_record(m)]
     return {m.id: i for i, m in enumerate(posts, 1)}
 
 
-def _render(message, number: int) -> str:
-    return load_prompts()["board_output"]["post"].format(sender=message.sender, sequence=number,
-                                                         text=message.content)
+def _render(message, number: int | None) -> str:
+    """A post as board_read prints it; a record of who came or went, which has no number, as board_output.record."""
+    out = load_prompts()["board_output"]
+    if number is None:
+        return out["record"].format(sender=message.sender, text=message.content)
+    return out["post"].format(sender=message.sender, sequence=number, text=message.content)
 
 
 def board_status(agent: str, board: str = BOARD_ID) -> ToolDef:
@@ -137,8 +142,8 @@ def board_status(agent: str, board: str = BOARD_ID) -> ToolDef:
     out = prompts["board_output"]
 
     async def execute() -> str:
-        posts = _board(agent, board)
-        new = [m for m in unread_messages(agent) if m.channel_id == board]
+        posts = [m for m in _board(agent, board) if not is_record(m)]
+        new = [m for m in unread_messages(agent) if m.channel_id == board and not is_record(m)]
         record_board_action(agent, "check")
         lines = []
         for sender in sorted({m.sender for m in posts}):
@@ -158,7 +163,8 @@ def _newest(posts: list, count: int | None) -> list:
 
 def board_read(agent: str, read_page: int | None, board: str = BOARD_ID, reads_per_turn: int | None = None) -> ToolDef:
     """The selected posts, oldest first, at most read_page in all and at most what is left of the agent's read
-    budget for the round; marks them read. read_page None (a regulator) selects without a cap, and a call with no
+    budget for the round, with the records of who came and went since the oldest of them (is_record) in their places;
+    marks them read. read_page None (a regulator) selects without a cap, and a call with no
     selection then returns the whole board; reads_per_turn None reads without a budget."""
     prompts = load_prompts()
     args = prompts["tool_args"]["board_read"]
@@ -178,7 +184,8 @@ def board_read(agent: str, read_page: int | None, board: str = BOARD_ID, reads_p
             if left <= 0:
                 refuse(agent, "read")
                 raise Refused(budget["read_refused"].format(used=used))
-        posts = _board(agent, board)
+        everything = _board(agent, board)
+        posts = [m for m in everything if not is_record(m)]
         chosen: dict[str, object] = {}
         if latest is None and from_agent is None:
             chosen.update({m.id: m for m in _newest(posts, read_page)})
@@ -191,8 +198,15 @@ def board_read(agent: str, read_page: int | None, board: str = BOARD_ID, reads_p
         cut = 0
         if left is not None and len(selected) > left:
             cut, selected = len(selected) - left, selected[-left:]
+        # the records of who came and went since the post before the oldest one returned (every record for a call
+        # with no post to return): they take no slot of the page and none of the read budget; a call for one sender's
+        # posts has none
+        oldest = min((m.sequence for m in selected), default=0)
+        since = max((m.sequence for m in posts if m.sequence < oldest), default=0)
+        records = [m for m in everything if is_record(m) and m.sequence > since] if from_agent is None else []
         numbers = _numbers(board)
-        rendered = {m.id: _render(m, numbers[m.id]) for m in selected}
+        rendered = {m.id: _render(m, numbers.get(m.id))
+                    for m in sorted([*selected, *records], key=lambda m: m.sequence)}
         if rendered:
             record_read(board, agent_id=agent, rendered_messages=rendered)
         if reads_per_turn is not None:

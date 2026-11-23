@@ -24,6 +24,7 @@ from tests.support.turn_rules_harness import (
     do,
     out_of_context,
     outcomes,
+    posts_of,
     pull,
     read,
     run,
@@ -229,10 +230,10 @@ def test_board_rounds_and_engagement(tmp_path):
     assert store(sample, "read_senders") == {"a01": {"a02": 1}}
     results = [(f, r) for f, r in tool_results(sample) if f.startswith("board_")]
     assert ("board_post", "posted #1") in results and ("board_post", "posted #2") in results
-    assert ("board_read", "[a02 #1] hello") in results
+    assert ("board_read", "[system] a01 entered.\n[system] a02 entered.\n[system] a03 entered.\n[a02 #1] hello") \
+        in results
     # The post went through ORBIT's store, as channel_post's do.
-    assert [(m["sender"], m["content"]) for m in sample.store.get("CommunicationState:messages")] == [
-        ("a02", "hello"), ("a01", "I saw your post")]
+    assert [(m["sender"], m["content"]) for m in posts_of(sample)] == [("a02", "hello"), ("a01", "I saw your post")]
     # The board tools and wait are offered, ORBIT's channel tools are withheld, and the default shared_task gives
     # neutral agents submit and every agent stop_working.
     for r in rec:

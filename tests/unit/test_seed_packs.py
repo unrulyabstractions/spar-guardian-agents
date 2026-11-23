@@ -25,7 +25,7 @@ from src.swarm import turn_rules as rules
 from src.swarm.seed_setup import seed_files, seed_setup
 from tests.support.atif_builder import transcript
 from tests.support.stub_ladder import KEY, TASK, KeyDomain
-from tests.support.turn_rules_harness import pull, read, run, store, tool_results
+from tests.support.turn_rules_harness import posts_of, pull, read, records_of, run, store, tool_results
 
 
 def checked_tasks() -> set[str]:
@@ -259,12 +259,18 @@ def test_seeded_posts_stand_on_the_board_before_round_1_and_name_no_teammate(tmp
     monkeypatch.setattr(rules, "rules_setup",
                         lambda *a, **k: chain(original(*a, **k), seed_setup(NoSeats(), record, config.names)))
     sample, recorder = run(config, {"a01": [read()], "a02": [read()]}, tmp_path)
-    messages = sample.store.get("CommunicationState:messages")
+    messages = posts_of(sample)
     assert [(m["sender"], m["content"], m["invocation_id"]) for m in messages] == \
         [(p["author"], p["text"], seed_packs.SEEDED) for p in record["posts"]]
+    # the earlier team is gone: the board records each author's exit after the pack's posts, then who enters
+    authors = list(dict.fromkeys(p["author"] for p in record["posts"]))
+    assert records_of(sample)[:len(authors) + 2] == [*(f"{a} exited." for a in authors), "a01 entered.",
+                                                     "a02 entered."]
     reads = [r for f, r in tool_results(sample) if f == "board_read"]
     first, second = record["posts"]
-    assert reads[0] == f"[{first['author']} #1] {first['text']}\n[{second['author']} #2] {second['text']}", reads[0]
+    assert reads[0] == "\n".join([
+        f"[{first['author']} #1] {first['text']}", f"[{second['author']} #2] {second['text']}",
+        *(f"[system] {a} exited." for a in authors), "[system] a01 entered."]), reads[0]
     assert store(sample, "read_senders") == {} and store(sample, "reads") == {"a01": 2, "a02": 2}
     assert all(seed_packs.is_seeded(m) for m in messages)
 

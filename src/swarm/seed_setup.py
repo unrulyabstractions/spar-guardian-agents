@@ -23,7 +23,7 @@ from orbit.communication.runtime import initialize_communication
 from orbit.communication.state import CommunicationMessage
 
 from src.configuration.seed_packs import SEEDED, file_path
-from src.swarm.turn_rules import BOARD_ID
+from src.swarm.turn_rules import BOARD_ID, board_record
 
 SEED_STORE = "seed_planted"     # sample store: [{agent, service, path, owner, name}] of each planted file
 
@@ -39,6 +39,9 @@ def seed_posts(record: dict, agents: list[str], board: str = BOARD_ID) -> list[s
         state.sequence += 1
         state.messages.append(message)
         ids.append(message.id)
+    # the earlier team is gone: each author's exit, in the order of its first post, as the board records any exit
+    for author in dict.fromkeys(post["author"] for post in record["posts"]):
+        board_record("exited", author, agents, seeded=True)
     return ids
 
 

@@ -15,15 +15,19 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from uuid import uuid4
 
 from inspect_ai.agent import AgentState
 from inspect_ai.tool import ToolError
 from inspect_ai.util import StoreModel, store, store_as
+from orbit.communication.runtime import initialize_communication
+from orbit.communication.state import CommunicationMessage
 from orbit.configs.scheduling import ScheduleStep
 from orbit.execution.plans import current_schedule
 from orbit.execution.sessions import current_session_registry
 from pydantic import Field
 
+from src.configuration.settings import load_prompts
 from src.swarm.turn_rules._turn_steps import step_round
 
 TURN_RULES_TAG = "swarm_turn_rules"
@@ -53,6 +57,7 @@ END_ROUND = "wait"                    # ends the caller's round; never counts to
 JOBS_STORE = "command_jobs"           # sample store: {job id: record} of the command jobs (src/sandbox/command_jobs.py)
 TMP_CALLS_STORE = "tmp_capture_calls"  # sample store: {snapshot seq: tool call id} (src/sandbox/live_tmp_capture.py)
 SYSTEM_SENDER = "system"                  # the sender of the board's notice of the team's hand-in
+RECORD = "presence_record"                # CommunicationMessage.invocation_id of a board record (board_record)
 ORBIT_SUBMITTED = "submitted"   # TurnState.ended of ORBIT's own submit, in logs made before submit and stop_working
 ACTIONS_TOOL = "get_peer_actions"                       # the influencers' tools (src/swarm/_regulator_oversight.py)
 OBSERVATIONS_TOOL = "get_peer_observations"
@@ -126,6 +131,7 @@ class TurnState(StoreModel):
     ended_round: dict[str, int] = Field(default_factory=dict)  # the round of a limit's ending (rounds, context)
     entry_rounds: dict[str, int] = Field(default_factory=dict)  # the first round of a plan step holding the agent
     exits: dict[str, dict] = Field(default_factory=dict)    # agent -> {why, round, seq, ...} (_turn_presence)
+    board_entered: list[str] = Field(default_factory=list)  # the agents whose entry the board records (board_record)
     timeline: list[dict] = Field(default_factory=list)          # one entry per round (turn_activation)
 
 
@@ -363,3 +369,36 @@ def refuse(agent: str, kind: str) -> None:
     st = store_as(TurnState)
     field = BUDGET_FIELDS[kind][1]
     setattr(st, field, bump(getattr(st, field), agent))
+
+
+def is_record(message) -> bool:
+    """Whether a board post (a CommunicationMessage or its exported dict) is a record of an entry or an exit."""
+    value = message.get("invocation_id") if isinstance(message, dict) else getattr(message, "invocation_id", None)
+    return value == RECORD
+
+
+def board_record(kind: str, agent: str, recipients: list[str], *, seeded: bool = False) -> None:
+    """Put "<agent> entered." or "<agent> exited." on the board as the system (prompts.yaml board_records), for the
+    roster, when the run has a board: straight into ORBIT's communication store with the next sequence number, as the
+    system's notice of a hand-in goes (board.system_post), marked RECORD. No count and no notice holds a record
+    (board_status, the notice), and board_read shows it between the posts it returns. seeded: a seed pack's record,
+    written at setup before ORBIT opens the board's channel (a seed pack needs a board: SwarmConfig)."""
+    state = initialize_communication()
+    if not seeded and BOARD_ID not in state.channels:
+        return
+    text = load_prompts()["board_records"][kind].format(agent=agent)
+    state.messages.append(CommunicationMessage(id=f"message-{uuid4().hex}", channel_id=BOARD_ID, sender=SYSTEM_SENDER,
+                                               recipients=tuple(recipients), content=text,
+                                               sequence=state.sequence + 1, invocation_id=RECORD))
+    state.sequence += 1
+
+
+def record_entry(agent: str) -> None:
+    """Put the agent's entry on the board, once (TurnState.board_entered): at the start of its first round
+    (_turn_rounds.open_round). A lone agent has no record."""
+    st = store_as(TurnState)
+    if agent in st.board_entered or len(st.agents) < 2:
+        return
+    st.board_entered = [*st.board_entered, agent]
+    board_record("entered", agent, st.agents)
+

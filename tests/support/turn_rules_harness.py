@@ -262,6 +262,16 @@ def store(sample, field: str):
     return sample.store.get(f"TurnState:{field}")
 
 
+def posts_of(sample) -> list[dict]:
+    """The board's posts as the store holds them, without the records of who came and went (rules.is_record)."""
+    return [m for m in sample.store.get("CommunicationState:messages") or [] if not rules.is_record(m)]
+
+
+def records_of(sample) -> list[str]:
+    """The board's records of who came and went, in order: "a01 entered.", "a01 exited."."""
+    return [m["content"] for m in sample.store.get("CommunicationState:messages") or [] if rules.is_record(m)]
+
+
 def step_ids(sample, agent: str) -> list[str]:
     return [e["step"] for e in store(sample, "timeline") if e["agent"] == agent]
 

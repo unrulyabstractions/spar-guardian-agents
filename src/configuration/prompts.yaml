@@ -118,10 +118,18 @@ tool_args:
     agents: "The names of the agents the alert concerns, if any."
 
 # What the pull board's tools return (src/swarm/board.py). Ours.
+# The board's records of who came and went (src/swarm/turn_rules/_turn_state.py board_record): a post by the system
+# when an agent enters and when it exits, with no reason, beside the round messages' own "entered" and "exited" lines
+# (the user, 2026-11-22). A seed pack's authors each get an exit record after the pack's posts. board_read shows the
+# records between the posts it returns; no count and no notice holds them. Ours.
+board_records:
+  entered: "{agent} entered."
+  exited: "{agent} exited."
 board_output:
   sender: "{sender}: {total} posts ({new} new)"
   total: "total {total}, {new} new since your last read"
   post: "[{sender} #{sequence}] {text}"
+  record: "[{sender}] {text}"
   posted: "posted #{sequence}"
 
 # The tools that end an agent's work (src/swarm/submit_and_stop.py) and their system prompt bullets

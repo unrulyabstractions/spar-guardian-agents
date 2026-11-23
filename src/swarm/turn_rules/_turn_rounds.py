@@ -65,6 +65,7 @@ from src.swarm.turn_rules._turn_state import (
     current_round,
     live_record,
     out_of_calls,
+    record_entry,
 )
 
 END_REASONS = ("end_round", "calls", "ending", "time", "round_time", "no_tool_call", "context")
@@ -184,6 +185,7 @@ def open_round(agent: str, state: AgentState) -> Part | None:
     if st.started_at is None:
         st.started_at = now()
     round_record(agent, round_number)
+    record_entry(agent)
     if any((message_round(m.metadata) or {}).get("round") == round_number for m in state.messages
            if isinstance(m, ChatMessageUser)):
         return None

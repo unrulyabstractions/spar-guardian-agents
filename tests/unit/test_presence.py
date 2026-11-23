@@ -30,6 +30,7 @@ from tests.support.turn_rules_harness import (
     out_of_context,
     outcomes,
     peer_actions,
+    posts_of,
     pull,
     read,
     run,
@@ -149,8 +150,9 @@ def test_the_transcript_holds_the_round_message_once_with_its_board_part(tmp_pat
         f"{rules.round_line(1)}\n\na01 ran out of tool calls.\na01 exited.\na02 ran out of tool calls.\n"
         "a02 exited."]
     assert set(users[1]["extra"]) == {rules.ROUND_TAG, rules.PRESENCE_TAG, rules.NOTICE_TAG}
-    assert users[1]["extra"][rules.NOTICE_TAG] == {"kind": "notice", "activation": 1, "call": 1, "round": 1, "seen": 1,
-                                                 "first": True}
+    [post] = posts_of(sample)
+    assert users[1]["extra"][rules.NOTICE_TAG] == {"kind": "notice", "activation": 1, "call": 1, "round": 1,
+                                                 "seen": post["sequence"], "first": True}
     assert not any((s.get("extra") or {}).get(rules.TURN_RULES_TAG) for s in steps)
 
 

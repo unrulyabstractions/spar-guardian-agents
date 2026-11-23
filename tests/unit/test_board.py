@@ -9,6 +9,7 @@ from tests.support.turn_rules_harness import (
     do,
     end_round,
     outcomes,
+    posts_of,
     pull,
     read,
     run,
@@ -40,7 +41,7 @@ def test_the_systems_notice_names_no_sender_in_the_read_records(tmp_path):
     name agents only."""
     config = pull(rounds=3, mode="shared_task", concurrent_rounds=False, turn_order="round_robin")
     sample, _ = run(config, {"a01": [submit("ready")], "a02": [read()], "a03": [do("C")]}, tmp_path)
-    assert [m["sender"] for m in sample.store.get("CommunicationState:messages")] == ["system"]
+    assert [m["sender"] for m in posts_of(sample)] == ["system"]
     assert store(sample, "reads")["a02"] >= 1 and store(sample, "read_senders") == {}
 
 
@@ -57,14 +58,15 @@ def test_board_read_selection(tmp_path):
     sample, _ = run(config, scripts, tmp_path)
     results = [(f, r) for f, r in tool_results(sample) if f in ("board_read", "board_status")]
     assert results == [
-        # a03, round 2, no arguments: the newest read_page posts.
-        ("board_read", "[a02 #2] p2\n[a01 #3] p3\n[a02 #4] p4"),
+        # a03, round 2, no arguments: the newest read_page posts, with the records of who came since the post before
+        # the oldest of them, in their places and without a number.
+        ("board_read", "[system] a02 entered.\n[a02 #2] p2\n[system] a03 entered.\n[a01 #3] p3\n[a02 #4] p4"),
         # a02, round 3: a01's newest two.
         ("board_read", "[a01 #3] p3\n[a01 #5] p5"),
         # a03, round 3: counts by sender; "new" is above its read cursor (it read up to #4), own posts never count.
         ("board_status", "a01: 3 posts (1 new)\na02: 2 posts (0 new)\ntotal 5, 1 new since your last read"),
-        # a01, round 4: latest=10 is capped at read_page.
-        ("board_read", "[a01 #3] p3\n[a02 #4] p4\n[a01 #5] p5"),
+        # a01, round 4: latest=10 is capped at read_page; a03 entered between p2 and p3.
+        ("board_read", "[system] a03 entered.\n[a01 #3] p3\n[a02 #4] p4\n[a01 #5] p5"),
         # a02, round 4: the union of the newest post and a01's newest, deduplicated.
         ("board_read", "[a01 #5] p5"),
     ]
@@ -87,23 +89,27 @@ def test_regulators_read_without_a_cap_and_the_budgets_refuse_and_reset(tmp_path
     }
     sample, _ = run(config, scripts, tmp_path, roles=roles)
     budget = PROMPTS["budget"]
+    WHOLE = ("[system] a01 entered.\n[a01 #1] p1\n[a01 #2] p2\n[system] a02 entered.\n[system] a03 entered.\n"
+             "[a01 #3] p4\n[system] a01 exited.\n[system] a02 exited.")
     assert outcomes(sample, "board_post", "board_read") == [
         # round 1: a01 posts twice; the third post is refused.
         ("board_post", "posted #1", None), ("board_post", "posted #2", None),
         ("board_post", "", budget["post_refused"].format(used=2)),
         # a02 receives two posts, then one of the two it selected (the budget of three is spent), then nothing.
-        ("board_read", "[a01 #1] p1\n[a01 #2] p2", None),
-        ("board_read", "[a01 #2] p2\n" + budget["read_cut"].format(cut=1), None),
+        # a record takes no slot of the page and none of the read budget
+        ("board_read", "[system] a01 entered.\n[a01 #1] p1\n[a01 #2] p2\n[system] a02 entered.", None),
+        ("board_read", "[a01 #2] p2\n[system] a02 entered.\n" + budget["read_cut"].format(cut=1), None),
         ("board_read", "", budget["read_refused"].format(used=3)),
         # round 2: the budgets reset.
         ("board_post", "posted #3", None),
-        ("board_read", "[a01 #3] p4", None),
-        # the regulator: every post with no selection, past read_page 2, and again past the read budget of 3.
-        ("board_read", "[a01 #1] p1\n[a01 #2] p2\n[a01 #3] p4", None),
-        ("board_read", "[a01 #1] p1\n[a01 #2] p2\n[a01 #3] p4", None),
+        # a01 used its last call in this round and exited before a02 read
+        ("board_read", "[system] a02 entered.\n[system] a03 entered.\n[a01 #3] p4\n[system] a01 exited.", None),
+        # the regulator: every post with no selection, past read_page 2, and again past the read budget of 3, with
+        # every record; the two workers had used their calls and exited by then.
+        ("board_read", WHOLE, None),
+        ("board_read", WHOLE, None),
     ]
-    assert [(m["sender"], m["content"]) for m in sample.store.get("CommunicationState:messages")] == [
-        ("a01", "p1"), ("a01", "p2"), ("a01", "p4")]
+    assert [(m["sender"], m["content"]) for m in posts_of(sample)] == [("a01", "p1"), ("a01", "p2"), ("a01", "p4")]
     assert store(sample, "posts_refused") == {"a01": 1} and store(sample, "reads_refused") == {"a02": 1}
     assert store(sample, "posts") == {"a01": 3} and store(sample, "reads") == {"a02": 3, "a03": 2}
     assert store(sample, "turn_posts") == {"a01": [2, 1]} and store(sample, "turn_reads") == {"a02": [2, 1]}

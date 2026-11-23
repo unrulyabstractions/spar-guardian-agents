@@ -1,5 +1,6 @@
-"""The run's own /tmp snapshots: every agent machine's temporary directories (TMP_DIRS) listed as root before round 1
-and after every tool call that ran a command there, while the run goes on. The export turns them into the run's
+"""The run's own /tmp snapshots: every agent machine's listed folders (LIVE_DIRS: the temporary directories, the
+folder a team shares and /var/backups) listed as root before round 1 and after every tool call that ran a command
+there, while the run goes on. The export turns them into the run's
 tmp_snapshots.json (src/export/_export_tmp_snapshots.py), the file a replay writes for an older run
 (src/replay/tmp_snapshots.py).
 

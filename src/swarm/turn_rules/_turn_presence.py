@@ -52,7 +52,14 @@ from src.configuration.prompt_texts import joined, rounds_text
 from src.configuration.settings import load_prompts
 from src.swarm.turn_rules._turn_messages import Part, presence_events
 from src.swarm.turn_rules._turn_pushes import push_events
-from src.swarm.turn_rules._turn_state import PRESENCE_TAG, Alerts, TurnState, current_round, submit_holds
+from src.swarm.turn_rules._turn_state import (
+    PRESENCE_TAG,
+    Alerts,
+    TurnState,
+    board_record,
+    current_round,
+    submit_holds,
+)
 from src.swarm.turn_rules._turn_steps import step_round
 
 EXIT_WHY = ("submit", "stop", "alert", "rounds", "context", "delivered")
@@ -94,6 +101,7 @@ def record_exit(agent: str, why: str, round_number: int | None, **extra) -> None
              **({"life": life} if life else {})}
     st.exits = {**st.exits, agent: event}
     transcript().info({PRESENCE_TAG: {"event": "exit", "agent": agent, **event}})
+    board_record("exited", agent, st.agents)
 
 
 def _returns() -> dict[str, int]:

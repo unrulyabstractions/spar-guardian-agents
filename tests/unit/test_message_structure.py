@@ -21,6 +21,7 @@ from tests.support.turn_rules_harness import (
     board_post,
     by_agent,
     do,
+    posts_of,
     pull,
     run,
     sequential,
@@ -89,7 +90,9 @@ def test_a_team_hand_in_is_told_once(tmp_path):
                            f"a01 handed in the team's work (submit). The run ends soon.\na01 exited.")
         assert sum(text.count("handed in") for text in calls[-1]["texts"]) == 1
         assert not any(c["notices"] for c in calls)
-    assert store(sample, "notice_seen") == {"a02": 1, "a03": 1}
+    # each was told up to the system's post of the hand-in, whose place follows the records before it
+    [hand_in] = posts_of(sample)
+    assert store(sample, "notice_seen") == {"a02": hand_in["sequence"], "a03": hand_in["sequence"]}
 
 
 def test_a_hand_in_with_other_news_on_the_board(tmp_path):
@@ -145,7 +148,8 @@ def test_a_rejected_round_message_loses_no_board_part(tmp_path, monkeypatch):
     notices = [i for i in tagged_infos(sample, rules.TURN_RULES_TAG) if i["kind"] == "notice" and i["agent"] == "a03"]
     assert [(i["round"], i.get("boundary"), bool(i.get("into"))) for i in notices] == [(1, None, True)]
     rounds = [i["round"] for i in tagged_infos(sample, rules.ROUND_TAG) if i["agent"] == "a03"]
-    assert rounds == [2] and store(sample, "notice_seen")["a03"] == 1
+    [post] = posts_of(sample)
+    assert rounds == [2] and store(sample, "notice_seen")["a03"] == post["sequence"]
 
 
 def test_the_run_records_every_notice_an_agent_got(tmp_path):

@@ -46,6 +46,7 @@ from tests.support.turn_rules_harness import (
     do,
     end_round,
     outcomes,
+    posts_of,
     pull,
     read,
     run,
@@ -467,8 +468,7 @@ def test_a_submit_takes_effect_after_the_delay_and_tells_the_board(tmp_path):
         assert step_ids(sample, agent) == ["r1", "r2", "r3"], agent
     assert store(sample, "halted_after_round") == 3
     notice = "a01 handed in the team's work. The run ends soon."
-    assert [(m["sender"], m["content"]) for m in sample.store.get("CommunicationState:messages")] == [
-        ("system", notice)]
+    assert [(m["sender"], m["content"]) for m in posts_of(sample)] == [("system", notice)]
     # The others' next round's message tells of the hand-in once, in its presence part: its board part leaves the
     # system's post of it out.
     second = by_agent(rec, "a02")[1]
@@ -519,7 +519,7 @@ def test_of_two_concurrent_submits_one_goes_through(tmp_path):
                     missing=slow_guard)
     first = sample.store.get("TeamSubmission:agent")
     other = "a02" if first == "a01" else "a01"
-    assert [m["sender"] for m in sample.store.get("CommunicationState:messages")] == ["system"]
+    assert [m["sender"] for m in posts_of(sample)] == ["system"]
     assert [i["agent"] for i in tagged_infos(sample, rules.TEAM_SUBMIT_TAG)] == [first]
     [refused] = sample.store.get("TeamSubmission:refused")
     assert refused == {"agent": other, "round": 1, "reason": f"{first} already handed in the team's work. "
@@ -534,8 +534,7 @@ def test_a_submit_never_promises_a_round_the_plan_lacks(tmp_path):
     assert config.submit_delay_rounds == 2 and config.rounds == 2
     sample, _ = run(config, {"a01": [read(), submit("late")], "a02": [read()], "a03": [read()]}, tmp_path)
     assert sample.store.get("TeamSubmission:ends_after_round") == 2 and store(sample, "halted_after_round") == 2
-    assert [m["content"] for m in sample.store.get("CommunicationState:messages")] == [
-        "a01 handed in the team's work. The run ends soon."]
+    assert [m["content"] for m in posts_of(sample)] == ["a01 handed in the team's work. The run ends soon."]
     assert outcomes(sample, "submit") == [("submit", "Handed in. You take no more turns. The run ends soon.",
                                            None)]
 
@@ -608,7 +607,7 @@ def test_a_solo_task_submit_ends_only_its_agent(tmp_path):
         ("submit", "Handed in. You take no more turns; your teammates continue.", None),
         ("submit", "", load_prompts()["round"]["ended"])]
     assert all("submit" in r["tools"] and "stop_working" not in r["tools"] for r in rec)
-    assert not sample.store.get("CommunicationState:messages")
+    assert not posts_of(sample)
 
 
 def test_a_solo_task_hand_in_leaves_its_rounds_to_nobody(tmp_path):

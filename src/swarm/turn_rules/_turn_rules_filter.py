@@ -61,6 +61,7 @@ from src.swarm.turn_rules._turn_state import (
     TurnState,
     bump,
     current_round,
+    is_record,
     live_record,
 )
 
@@ -166,7 +167,8 @@ def board_news(config: SwarmConfig, agent: str, team: bool, seen: int,
     if config.notice == "none" or not team:
         return None
     try:
-        posts = [m for m in read_messages(BOARD_ID, agent_id=agent) if m.sender != agent]
+        # a record of who came or went is no post to the notice: it neither counts nor moves what the agent was told
+        posts = [m for m in read_messages(BOARD_ID, agent_id=agent) if m.sender != agent and not is_record(m)]
     except (PermissionError, RuntimeError, ValueError):
         return None
     top = max((m.sequence for m in posts), default=0)
