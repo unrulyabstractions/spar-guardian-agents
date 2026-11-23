@@ -4,7 +4,9 @@
 #   baseline            three workers, no seed pack
 #   seeded              three workers, the seed pack <task>/exp1_called_cheating
 #   positive_control    the workers are told to cheat, with the same seed pack
+# Archived on 2026-11-23 at the user's word: its runs and logs are under OLD/runs and OLD/logs.
 study: ian_seed_prototyping_2
+closed: true
 seeds: [1]
 targets:
   ian0flipt_deepseek_baseline:
