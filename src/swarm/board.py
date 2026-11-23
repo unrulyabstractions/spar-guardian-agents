@@ -2,8 +2,8 @@
 
 A board is one shared channel that every agent on the roster can read and write. There are no invocation edges: no
 agent calls, hands off to, or waits on another. Nothing is pushed: ORBIT's delivery is "poll", and posts are visible
-as soon as they are sent ("live"); a concurrent round runs on a snapshot of the board as of its start
-(turn_rules.schedule). Turns follow a written plan, so ORBIT's scheduling_mode does not apply.
+as soon as they are sent ("live"), within a concurrent round too: a read sees every post made so far, this round's
+included. Rounds follow a written plan (turn_rules.schedule), so ORBIT's scheduling_mode does not apply.
 
     comm    = board_communication(names, max_message_chars=2000)
     execute = board_execution(plan=turn_rules.schedule(config, names))
@@ -15,25 +15,30 @@ channel_post, channel_read and channel_list to every agent as soon as a Communic
 turn_rules/_turn_rules_filter.py withholds them from the provider.
 
 The tools keep no store of their own. They read and write ORBIT's communication store (orbit/communication/):
-    board_post    send_message, as channel_post does, so exports, the transcript and the browser see a normal post
+    board_post    async_send_message, as channel_post does, so exports, the transcript and the browser see a normal
+                  post; in a run it travels ORBIT 2.0's swarm bus
     board_read    read_messages for the selection, record_read for the read event and its receipt, which calls
                   delivery.acknowledge_read and advances the agent's read cursor to the newest post returned
     board_status  read_messages for the counts and delivery.unread_messages for "new": posts by others above the
                   agent's read cursor
-read_messages honours a concurrent round's snapshot, so an agent sees the board as of its step's start. A post's
-number (#17) is its position on the board, oldest first; it does not change when later posts arrive.
+A post's number (#17) is its position on the board, oldest first; it does not change when later posts arrive.
 
-agent_actions (src/swarm/_regulator_oversight.py) is bound to regulators only, over every teammate. submit and
-stop_working are not board tools (src/swarm/submit_and_stop.py); a submit that hands in the team's work posts a notice
-as the system (system_post).
+get_peer_actions and get_peer_observations (src/swarm/_regulator_oversight.py) are bound to the influencers, regulators
+and disregulators, over every teammate. submit and stop_working are not board tools (src/swarm/submit_and_stop.py);
+a submit that hands in the team's work posts a notice as the system (system_post).
 
 Budgets per round (SwarmConfig.reads_per_turn, posts_per_turn; turn_rules.spend). board_read returns at most the posts
 left in the agent's read budget for the round, the newest of its selection, and says how many it left out; with none
-left it raises a ToolError and counts the refusal (TurnState.reads_refused). board_post past the post budget raises a
-ToolError, sends nothing and counts the refusal (posts_refused). The counts reset at each round. Regulators read
-without a budget and without the read_page cap: a board_read with no selection returns the whole board.
+left it refuses the call (turn_rules.Refused) and counts the refusal (TurnState.reads_refused). board_post past the
+post budget refuses the call, sends nothing and counts the refusal (posts_refused). The counts reset at each round.
+Regulators read without a budget and without the read_page cap: a board_read with no selection returns the whole board.
 
-Each tool also counts the action in turn_rules.TurnState (checks, reads, posts, read_senders, discovery_round).
+A seed pack's posts (SwarmConfig.seed_pack, src/swarm/seed_setup.py) stand on the board before round 1 under a previous
+team's IDs and read like any post; read_senders leaves them out, so it names teammates only.
+
+Each tool also counts the action in turn_rules.TurnState (checks, reads, posts, read_senders, discovery_round). Like
+every tool call, a board call counts toward the round's calls. round_rules states the rounds' rules in each system
+prompt.
 Descriptions come from src/configuration/prompts.yaml `tools`, argument descriptions from `tool_args`, the result
 lines from `board_output` and the budget texts from `budget`.
 """
@@ -45,7 +50,7 @@ from inspect_ai.tool import ToolDef, ToolError
 from inspect_ai.util import store_as
 from orbit.communication.delivery import unread_messages
 from orbit.communication.errors import ChannelCapacityError
-from orbit.communication.runtime import initialize_communication, read_messages, record_read, send_message
+from orbit.communication.runtime import async_send_message, initialize_communication, read_messages, record_read
 from orbit.communication.state import CommunicationMessage, CommunicationState
 from orbit.configs.communication import ChannelConfig, CommunicationConfig
 from orbit.configs.execution import AgentGroup, ExecutionConfig
@@ -53,15 +58,21 @@ from orbit.configs.scheduler import SchedulerConfig
 from orbit.configs.scheduling import ScheduleConfig
 from orbit.tools import ToolFactory
 
+from src.configuration.seed_packs import is_seeded
 from src.configuration.settings import load_prompts
-from src.configuration.swarm_config import SwarmConfig, role_of
-from src.swarm._regulator_oversight import agent_actions
+from src.configuration.swarm_config import INFLUENCERS, SwarmConfig, role_of
+from src.swarm._regulator_oversight import get_peer_actions, get_peer_observations
+from src.swarm.tool_output_caps import cap_of
 from src.swarm.turn_rules import (
+    ACTIONS_TOOL,
     BOARD_ID,
     BOARD_TOOLS,
-    OVERSIGHT_TOOL,
+    OBSERVATIONS_TOOL,
+    OVERSIGHT_TOOLS,
     SYSTEM_SENDER,
+    Refused,
     budget_used,
+    is_record,
     record_board_action,
     refuse,
     spend,
@@ -84,13 +95,14 @@ def board_communication(agents: list[str], *, max_message_chars: int) -> Communi
 
 def board_execution(*, plan: ScheduleConfig | None = None, agent_groups: list[AgentGroup] | None = None,
                     initial_context: str = "auto") -> ExecutionConfig:
-    """Scheduled execution under a written plan, one generation and every call in it per step (quantum
-    model_step).
+    """ORBIT 2.0's execution (executor "swarm": each agent is Inspect's react(), held between its rounds) under a
+    written plan. An agent's round is one activation under quantum completion: model calls one after another until
+    the plan's end_activation callback ends it (turn_rules.turn_activation.ends_round) or a reply calls no tool.
 
     history_projection="all" projects every agent's conversation into the sample with
     EnvironmentState:message_attribution, even after a hit limit.
     """
-    return ExecutionConfig(executor="scheduled", quantum="model_step", plan=plan, history_projection="all",
+    return ExecutionConfig(executor="swarm", quantum="completion", plan=plan, history_projection="all",
                            agent_groups=list(agent_groups or []), initial_context=initial_context)
 
 
@@ -102,7 +114,7 @@ def board_scheduler(*, max_turns: int, max_time_seconds: int) -> SchedulerConfig
 # ------------------------------------------------------------------------------------------------ the tools
 
 def _board(agent: str, board: str) -> list:
-    """Every post on the board the agent may see, oldest first (ORBIT read_messages, snapshot included)."""
+    """Every post on the board the agent may see, oldest first (ORBIT read_messages)."""
     try:
         return read_messages(board, agent_id=agent)
     except PermissionError as error:
@@ -110,14 +122,18 @@ def _board(agent: str, board: str) -> list:
 
 
 def _numbers(board: str) -> dict[str, int]:
-    """Each post's position on the board, from ORBIT's canonical store."""
-    posts = [m for m in store_as(CommunicationState).messages if m.channel_id == board]
+    """Each post's position on the board, from ORBIT's canonical store. A record of who came or went has no number,
+    so a post's number is its place among the posts."""
+    posts = [m for m in store_as(CommunicationState).messages if m.channel_id == board and not is_record(m)]
     return {m.id: i for i, m in enumerate(posts, 1)}
 
 
-def _render(message, number: int) -> str:
-    return load_prompts()["board_output"]["post"].format(sender=message.sender, sequence=number,
-                                                         text=message.content)
+def _render(message, number: int | None) -> str:
+    """A post as board_read prints it; a record of who came or went, which has no number, as board_output.record."""
+    out = load_prompts()["board_output"]
+    if number is None:
+        return out["record"].format(sender=message.sender, text=message.content)
+    return out["post"].format(sender=message.sender, sequence=number, text=message.content)
 
 
 def board_status(agent: str, board: str = BOARD_ID) -> ToolDef:
@@ -126,8 +142,8 @@ def board_status(agent: str, board: str = BOARD_ID) -> ToolDef:
     out = prompts["board_output"]
 
     async def execute() -> str:
-        posts = _board(agent, board)
-        new = [m for m in unread_messages(agent) if m.channel_id == board]
+        posts = [m for m in _board(agent, board) if not is_record(m)]
+        new = [m for m in unread_messages(agent) if m.channel_id == board and not is_record(m)]
         record_board_action(agent, "check")
         lines = []
         for sender in sorted({m.sender for m in posts}):
@@ -147,7 +163,8 @@ def _newest(posts: list, count: int | None) -> list:
 
 def board_read(agent: str, read_page: int | None, board: str = BOARD_ID, reads_per_turn: int | None = None) -> ToolDef:
     """The selected posts, oldest first, at most read_page in all and at most what is left of the agent's read
-    budget for the round; marks them read. read_page None (a regulator) selects without a cap, and a call with no
+    budget for the round, with the records of who came and went since the oldest of them (is_record) in their places;
+    marks them read. read_page None (a regulator) selects without a cap, and a call with no
     selection then returns the whole board; reads_per_turn None reads without a budget."""
     prompts = load_prompts()
     args = prompts["tool_args"]["board_read"]
@@ -166,8 +183,9 @@ def board_read(agent: str, read_page: int | None, board: str = BOARD_ID, reads_p
             left = reads_per_turn - used
             if left <= 0:
                 refuse(agent, "read")
-                raise ToolError(budget["read_refused"].format(used=used))
-        posts = _board(agent, board)
+                raise Refused(budget["read_refused"].format(used=used))
+        everything = _board(agent, board)
+        posts = [m for m in everything if not is_record(m)]
         chosen: dict[str, object] = {}
         if latest is None and from_agent is None:
             chosen.update({m.id: m for m in _newest(posts, read_page)})
@@ -180,13 +198,20 @@ def board_read(agent: str, read_page: int | None, board: str = BOARD_ID, reads_p
         cut = 0
         if left is not None and len(selected) > left:
             cut, selected = len(selected) - left, selected[-left:]
+        # the records of who came and went since the post before the oldest one returned (every record for a call
+        # with no post to return): they take no slot of the page and none of the read budget; a call for one sender's
+        # posts has none
+        oldest = min((m.sequence for m in selected), default=0)
+        since = max((m.sequence for m in posts if m.sequence < oldest), default=0)
+        records = [m for m in everything if is_record(m) and m.sequence > since] if from_agent is None else []
         numbers = _numbers(board)
-        rendered = {m.id: _render(m, numbers[m.id]) for m in selected}
+        rendered = {m.id: _render(m, numbers.get(m.id))
+                    for m in sorted([*selected, *records], key=lambda m: m.sequence)}
         if rendered:
             record_read(board, agent_id=agent, rendered_messages=rendered)
         if reads_per_turn is not None:
             spend(agent, "read", len(selected))
-        record_board_action(agent, "read", [m.sender for m in selected])
+        record_board_action(agent, "read", [m.sender for m in selected if not is_seeded(m)])
         lines = list(rendered.values()) + ([budget["read_cut"].format(cut=cut)] if cut else [])
         return "\n".join(lines)
 
@@ -196,7 +221,9 @@ def board_read(agent: str, read_page: int | None, board: str = BOARD_ID, reads_p
 
 
 def board_post(agent: str, board: str = BOARD_ID, posts_per_turn: int | None = None) -> ToolDef:
-    """Post through ORBIT's send_message, as channel_post does, within the agent's post budget for the round."""
+    """Post through ORBIT's async_send_message, as channel_post does, within the agent's post budget for the round.
+    During a run the send goes through ORBIT 2.0's swarm bus, which refuses an over-long post or a sender without
+    write access with a ToolError of its own; outside a run it goes to ORBIT's store directly."""
     prompts = load_prompts()
 
     async def execute(message: str) -> str:
@@ -206,9 +233,9 @@ def board_post(agent: str, board: str = BOARD_ID, posts_per_turn: int | None = N
             used = budget_used(agent, "post")
             if used >= posts_per_turn:
                 refuse(agent, "post")
-                raise ToolError(prompts["budget"]["post_refused"].format(used=used))
+                raise Refused(prompts["budget"]["post_refused"].format(used=used))
         try:
-            sent = send_message(board, agent_id=agent, content=message)
+            sent = await async_send_message(board, agent_id=agent, content=message)
         except (ChannelCapacityError, PermissionError) as error:
             raise ToolError(str(error)) from None
         if posts_per_turn is not None:
@@ -221,9 +248,9 @@ def board_post(agent: str, board: str = BOARD_ID, posts_per_turn: int | None = N
 
 
 def system_post(text: str, agents: list[str], board: str = BOARD_ID) -> None:
-    """Post on the board as the system (SYSTEM_SENDER), for every agent of the roster. ORBIT's send_message takes only
-    a configured agent as its sender, so the post goes into ORBIT's communication store the way send_message puts
-    one there, with the next sequence number and without a "sent" event."""
+    """Post on the board as the system (SYSTEM_SENDER), for every agent of the roster. ORBIT's send takes only a
+    configured agent as its sender, and its swarm bus only the running member, so the post goes straight into ORBIT's
+    communication store with the next sequence number, without a "sent" event and without a bus record."""
     state = initialize_communication()
     message = CommunicationMessage(id=f"message-{uuid4().hex}", channel_id=board, sender=SYSTEM_SENDER,
                                    recipients=tuple(agents), content=text, sequence=state.sequence + 1)
@@ -235,28 +262,45 @@ def system_post(text: str, agents: list[str], board: str = BOARD_ID) -> None:
 
 def board_bindings(config: SwarmConfig, board: str = BOARD_ID,
                    roles: dict[str, str] | None = None) -> dict[str, ToolFactory]:
-    """ORBIT tool_bindings for the board tools and agent_actions, built per agent. Empty without a board.
+    """ORBIT tool_bindings for the board tools and the oversight tools, built per agent. Empty without a board.
 
     A binding is built only for the agents whose AgentSpec.tools names it (agent_tool_names). A regulator (roles)
-    reads without the read_page cap and without a read budget; agent_actions covers every teammate on the roster
-    (config.names), so a refusal never tells roles apart."""
+    reads without the read_page cap and without a read budget; the oversight tools cover every teammate on the roster
+    (config.names), so a refusal never tells roles apart, and fit their answer under the run's cap
+    (tool_output_caps.cap_of)."""
     if not config.board:
         return {}
 
     def regulator(ctx) -> bool:
         return role_of(roles, ctx.agent_name) == "regulator"
 
+    def cap(ctx):
+        return lambda: cap_of(config)
+
     return {"board_status": ToolFactory(lambda ctx: board_status(ctx.agent_name, board)),
             "board_read": ToolFactory(lambda ctx: board_read(
                 ctx.agent_name, None if regulator(ctx) else config.read_page, board,
                 None if regulator(ctx) else config.reads_per_turn)),
             "board_post": ToolFactory(lambda ctx: board_post(ctx.agent_name, board, config.posts_per_turn)),
-            OVERSIGHT_TOOL: ToolFactory(lambda ctx: agent_actions(ctx.agent_name, config.names))}
+            ACTIONS_TOOL: ToolFactory(lambda ctx: get_peer_actions(ctx.agent_name, config.names, cap(ctx))),
+            OBSERVATIONS_TOOL: ToolFactory(lambda ctx: get_peer_observations(ctx.agent_name, config.names, cap(ctx)))}
 
 
 def agent_tool_names(config: SwarmConfig, roles: dict[str, str] | None = None) -> dict[str, list[str]]:
-    """The board tool names each agent of the roster gets: the three board tools, and agent_actions for a
-    regulator. None without a board."""
+    """The board tool names each agent of the roster gets: the three board tools, and the oversight tools for an
+    influencer (a regulator or a disregulator). None without a board."""
     if not config.board:
         return {n: [] for n in config.names}
-    return {n: [*BOARD_TOOLS, *([OVERSIGHT_TOOL] if role_of(roles, n) == "regulator" else [])] for n in config.names}
+    return {n: [*BOARD_TOOLS, *(OVERSIGHT_TOOLS if role_of(roles, n) in INFLUENCERS else ())] for n in config.names}
+
+
+def round_rules(config: SwarmConfig, agent: str, roles: dict[str, str] | None = None, *,
+                commands: bool = True) -> str:
+    """The rounds' rules in the agent's system prompt as bullet lines, with no number (prompts.yaml round.rules; each
+    round's line gives the calls left, turn_rules.round_line); with a round clock
+    (round_time_s) the time limit (round.time) and, for an agent with a command tool (`commands`), its jobs
+    (round.jobs); then wait (round.closing, or closing_untold for an agent not told of its team, which names no
+    teammate). The same for every role; agent and roles are kept for the callers."""
+    texts = load_prompts()["round"]
+    timed = [texts["time"], *([texts["jobs"]] if commands else [])] if config.round_time_s else []
+    return "\n".join([texts["rules"], *timed, texts["closing" if config.knows_team else "closing_untold"]])

@@ -11,7 +11,7 @@ Three layouts, by the roster and the mode:
   shared  a shared_task team: one Linux user per agent (src/sandbox/agent_users/), all in the group `team`, which owns
           the one contract directory /workspace (setgid, group-writable). /external/contract_<id> points at it.
   solo    a solo_task team: one Linux user per agent, each with its own contract copy /workspace/<name> (700), its own
-          candidate id, its own /external/contract_<id> and private temporary directories.
+          candidate id, its own /external/contract_<id> and private files.
 
 Access: the items are `review` (the review tool, and membership of the group `review`, which reads the review logs
 and evaluation.json, the two places that name the artifact) and `read` (membership of the group `pipeline`, which
@@ -19,7 +19,7 @@ reads the artifact). When some seat lacks one (the plan is split), the artifact 
 traverse-only directory, so a reader without the name cannot list it: the holders of `review` learn the name and
 cannot read, the holders of `read` can read and are not told the name, and the exploit needs the board. Under
 access=split the first half of the neutral agents (rounded up) hold `review` and the rest `read`. holders() lists an
-item's agents for the note that tells every seat who holds what (KnowledgeWork.access_note).
+item's agents for the first message that tells every seat who holds what (KnowledgeWork.first_note).
 
 The README: every seat of a shared_task team reads the one README.md of the contract directory, so its sentence on the
 review tool would promise the tool to the seats without it. When some seat lacks the tool the staged README adds one
@@ -190,7 +190,7 @@ def stage_tar(row: dict, layout: dict, out_path: Path, readme: str | None) -> Pa
 
 def setup_script(plan: Plan) -> str:
     """The sample's setup: unpack the staging tarball and stage the row (sandbox/knowledge_setup.py); a solo team
-    then gets private temporary directories (agent_users.private_temp)."""
+    then gets private files (agent_users.private_files)."""
     if layout_of(plan) != "solo":
         return SETUP_SCRIPT
-    return SETUP_SCRIPT + users.private_temp(plan.agents) + "\n"
+    return SETUP_SCRIPT + users.private_files(plan.agents) + "\n"

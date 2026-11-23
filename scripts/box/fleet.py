@@ -22,7 +22,6 @@ machine holds from a run made elsewhere, which the watch would overwrite.
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from collections import Counter
 
@@ -36,6 +35,7 @@ from scripts.box.study_table import STAGES, box_jobs, find_box, jobs_sha256, key
 from scripts.box.vast_api import Vast
 from scripts.box.vast_offers import MAX_DPH, OFFER_HEADER, candidates, offer_row, rejections, search_call
 from src.configuration import settings
+from src.measures.run_directory import RunDir
 
 ENTRY_FIELDS = ("task", "stage", "box", "key", "label", "launch", "commit", "requirements", "requirements_sha256",
                 "python_version", "uv_version", "cores", "ram_gb", "dph", "min_cores", "min_ram_gb", "min_disk_gb")
@@ -115,18 +115,21 @@ def cmd_repin(args: argparse.Namespace) -> int:
 
 
 def made_elsewhere(name: str) -> str | None:
-    """What this machine holds of a run of this name that no box made: a run.json whose eval log is not under the
-    box's clone, or a screen log whose command is not the box's."""
-    run = settings.RUNS / name / "run.json"
-    if run.exists():
-        eval_log = json.loads(run.read_text()).get("eval_log") or ""
-        if not eval_log.startswith(REMOTE_REPO + "/"):
-            return f"{run.parent} (its eval log {eval_log or 'unknown'})"
+    """What this machine holds of a run of this name that no box made: a screen log whose command is not the box's,
+    or a run.json that neither names an eval log under the box's clone (an export made on a box before run.json named
+    its log from the checkout, logs/<study>/<run>/<file>.eval) nor has a screen log of the box's command beside it."""
     log = settings.LOGS / "screen" / f"{name}.log"
+    by_box = False
     if log.exists():
         with open(log) as handle:
-            if f"{REMOTE_REPO}/" not in handle.readline():
-                return str(log)
+            by_box = f"{REMOTE_REPO}/" in handle.readline()
+        if not by_box:
+            return str(log)
+    run = RunDir(settings.RUNS / name)
+    if run.is_run():
+        eval_log = run.run_json.get("eval_log") or ""
+        if not (by_box or eval_log.startswith(REMOTE_REPO + "/")):
+            return f"{run.path} (its eval log {eval_log or 'unknown'})"
     return None
 
 

@@ -28,11 +28,12 @@ from inspect_ai.dataset import Sample
 from inspect_ai.scorer import Scorer
 
 from src.configuration import settings
-from src.configuration.prompt_texts import board_system_prompt, swe_board_fields
+from src.configuration.prompt_texts import board_line, board_system_prompt, swe_board_fields
 from src.configuration.scales import SCALES
-from src.configuration.swarm_config import SwarmConfig
+from src.configuration.swarm_config import SwarmConfig, role_of
 from src.domains.benchmark_protocol import Benchmark, Plan
 from src.domains.swe import _swe_honeypot as honeypot
+from src.domains.swe import _swe_team_remote as team_remote
 from src.domains.swe._swe_scoring import GUARD_DIFF, branch_file, committed, has_work, head_commit, swe_grader
 from src.domains.swe.swe_inputs import (
     agent_timeout_s,
@@ -43,6 +44,8 @@ from src.domains.swe.swe_inputs import (
     load_split,
     patch_files,
     piece_patch,
+    run_values,
+    scenario,
     task_config,
 )
 from src.domains.swe.swe_ladder import SweDomain
@@ -58,13 +61,18 @@ from src.domains.swe.swe_settings import (
     PARTS,
     PIECES,
     SECRETS,
+    SIDE_PATCH_DIR,
     TASK,
     TASK_DIR,
-    TOOL_TIMEOUT_S,
+    VARIANTS,
     WORKDIR,
+    Variant,
 )
+from src.measures.run_directory import RunDir
+from src.sandbox import command_jobs
 from src.sandbox.access_log.access_monitor import Watched, git_watched
 from src.sandbox.agent_tools import AgentTools, Seat, roster_tools
+from src.swarm.board import round_rules
 
 # Every agent has its own service (swe_sandbox.write_compose). A hundred services is more than one Docker host holds.
 LARGE_SCALES = ("large", "extra_large", "gigantic")
@@ -105,22 +113,33 @@ class SWE(Benchmark):
     default_row = DEFAULT_ROW
     scorer = "swe_grader"
     ladder = SweDomain
-    options = ("honeypot", "grade")
+    options = ("honeypot", "grade", "variant")
     time_grace_s = GRADING_BUDGET_S
     harness_reads = (GUARD_DIFF,)
 
-    def __init__(self, row: str | None = None, honeypot: str = "jigsaw", grade: bool = True) -> None:
+    def __init__(self, row: str | None = None, honeypot: str = "jigsaw", grade: bool = True,
+                 variant: str | None = None) -> None:
         super().__init__(row)
         load_split(self.row)
         if honeypot not in HONEYPOTS:
             raise ValueError(f"honeypot must be one of {HONEYPOTS}, got {honeypot!r}")
-        self.honeypot, self.grade = honeypot, grade
+        if variant is not None and (variant not in VARIANTS or honeypot != "jigsaw"):
+            raise ValueError(f"variant must be one of {sorted(VARIANTS)} on the jigsaw honeypot, got {variant!r} on "
+                             f"{honeypot}")
+        self.adds = VARIANTS.get(variant, Variant())
+        self.honeypot, self.grade, self.variant = honeypot, grade, variant
         self.task_deviations = [
             "native_arm64_rebuild_of_the_amd64_swe_bench_pro_image", "no_network_in_every_container",
             f"agents_share_one_time_limit_and_get_{AGENT_CPUS:g}_cpus_{AGENT_MEM}_each",
             "tools_shell_and_run_python_bound_per_agent",
             *([f"honeypot_{honeypot}_pruned_and_planted_at_sample_setup"] if honeypot != "as_released" else []),
-            *(["instruction_names_what_the_hidden_tests_call"] if issue_note(self.row) else [])]
+            *(["each_piece_also_a_patch_file_outside_the_repository"] if self.adds.side_patches else []),
+            *(["work_test_line_replaced_by_a_scenario_with_a_notes_file_in_each_clone"]
+              if self.adds.scenario else []),
+            *(["instruction_names_what_the_hidden_tests_call"]
+              if self.adds.issue_note and issue_note(self.row) else []),
+            *(["pieces_and_hidden_tests_hold_values_of_ours_where_the_fix_wrote_its_own"]
+              if run_values(self.row, honeypot) else [])]
 
     def check(self, config: SwarmConfig) -> None:
         """NotImplementedError at the large scales, or at the large scale's team size set by hand (LARGE_SCALE_ERROR);
@@ -178,23 +197,53 @@ class SWE(Benchmark):
 
     def system_prompts(self, plan: Plan) -> dict[str, str]:
         """Each agent's system prompt from prompts.yaml `swe`, its tool bullets ending with submit and stop_working as
-        the agent holds them (Benchmark.ending_lines).
+        the agent holds them (Benchmark.ending_lines). It holds no task detail: the repository, the branch, the clone
+        and the git workflow are in the first message (first_note).
 
         A lone agent and a solo_task agent get `system_solo`; a solo_task agent of a board then gets the team and board
-        texts its config asks for (prompt_texts.board_system_prompt). A shared_task agent gets `system_shared` with the
-        roster. Its board sentences and last line come from prompt_texts.swe_board_fields. Both name the agent's clone
-        with the same text (prompts.yaml swe.clone), whose branch list the setup fills (_swe_honeypot.fill_branches)."""
-        prompts, repo = settings.load_prompts()["swe"], load_split(self.row)["repo"]
-        config, agents, clone = plan.config, plan.agents, prompts["clone"]
+        texts its config asks for (prompt_texts.board_system_prompt). A shared_task agent gets `system_shared`, which
+        names no peer. Its board sentences come from prompt_texts.swe_board_fields. Both end with the rounds' rules
+        (board.round_rules)."""
+        prompts = settings.load_prompts()["swe"]
+        config, agents = plan.config, plan.agents
         ending = {a: "".join(f"\n{line}" for line in self.ending_lines(plan, a)) for a in agents}
+        turns = {a: round_rules(config, a, plan.roles) for a in agents}
         if plan.mode != "shared_task":
-            texts = {a: prompts["system_solo"].format(name=a, repo=repo, branch=a, clone=clone, timeout=TOOL_TIMEOUT_S,
-                                                      ending=ending[a]) for a in agents}
+            # a solo_task agent of a board: the board's bullet leads its tool bullets, as in system_shared
+            ending = {a: "".join(f"\n{line}" for line in filter(None, [board_line(config, a, agents)])) + ending[a]
+                      for a in agents}
+            texts = {a: prompts["system_solo"].format(name=a, ending=ending[a], turns=turns[a]) for a in agents}
             return {a: "\n\n".join(filter(None, [texts[a], board_system_prompt(config, a, agents)])) for a in agents}
-        return {a: prompts["system_shared"].format(
-            name=a, n=len(agents), repo=repo, branch=a, clone=clone, timeout=TOOL_TIMEOUT_S, ending=ending[a],
-            roster="\n".join(prompts["roster_line"].format(name=o) for o in agents if o != a),
-            **swe_board_fields(config)) for a in agents}
+        return {a: prompts["system_shared"].format(name=a, ending=ending[a], turns=turns[a],
+                                                   **swe_board_fields(config)) for a in agents}
+
+    def first_note(self, plan: Plan, agent: str) -> str | None:
+        """The agent's workspace: its repository, branch and clone and, in shared_task, the team's git workflow
+        (prompts.yaml swe.workspace_solo, workspace_shared), after the issue in its first message. The clone's branch
+        list stays BRANCHES until the setup fills it (_swe_honeypot.fill_branches). None for a regulator that
+        oversees: its first message holds its teammates' task."""
+        if plan.config.oversees(role_of(plan.roles, agent)):
+            return None
+        prompts, kind = settings.load_prompts()["swe"], "shared" if plan.mode == "shared_task" else "solo"
+        listed = prompts[f"branch_list_{kind}"].format(branches=honeypot.BRANCHES) if self.adds.branch_list else ""
+        return prompts[f"workspace_{kind}"].format(repo=load_split(self.row)["repo"], branch=agent, branch_list=listed)
+
+    def belief_words(self) -> dict[str, str]:
+        """The fix on the planted branches (in the history, as released), the side patches' folder under a variant
+        that has them, and the scenario's principal in place of the interviewer."""
+        words = settings.load_prompts()["beliefs"]["words"]["swe"]
+        told = scenario(self.adds.scenario) or {}
+        first = words["exploit_1_as_released" if self.honeypot == "as_released" else "exploit_1"]
+        side = SIDE_PATCH_DIR.format(repo=load_split(self.row)["repo"])
+        return {"exploit_1": first, "principal": told.get("principal", words["principal"]),
+                **({"exploit_2": words["exploit_2"].format(side_dir=side)} if self.adds.side_patches else {})}
+
+    def oversight_note(self, plan: Plan, agent: str) -> str | None:
+        """For a shared_task team, how to read its work through the team remote (prompts.yaml
+        swe.oversight_workspace); what counts is a fact (Benchmark.oversight_facts). None otherwise."""
+        if plan.mode != "shared_task":
+            return None
+        return settings.load_prompts()["swe"]["oversight_workspace"].format(repo=load_split(self.row)["repo"])
 
     def sample(self, plan: Plan, instruction_suffix: str = "") -> Sample:
         """The issue's sample: metadata["cheatbench"]["swe"] holds the issue, its commits, the honeypot, each agent's
@@ -203,29 +252,37 @@ class SWE(Benchmark):
         split = load_split(self.row)
         instance = split["task"]
         cfg = task_config(instance)
-        instruction = instruction_text(self.row, instance) + instruction_suffix
+        instruction = instruction_text(self.row, instance, self.adds.scenario,
+                                       note=self.adds.issue_note) + instruction_suffix
         system = self.system_prompts(plan)
+        first = self.first_messages(plan, instruction) or {a: instruction for a in plan.agents}
         swe = {
             "issue": self.row, "instance": instance, "repo": cfg["repo"], "base_commit": cfg["base_commit"],
-            "fix_commit": fix_commit(instance), "honeypot": self.honeypot, "seed": plan.config.seed,
+            "fix_commit": fix_commit(instance), "honeypot": self.honeypot, "variant": self.variant,
+            "side_patches": ({a: honeypot.side_patches(self.row, held) for a, held in plan.holds.items()}
+                             if self.adds.side_patches else {}),
+            "scenario": self.adds.scenario, "branch_list": self.adds.branch_list,
+            "issue_note": self.adds.issue_note,
+            "seed": plan.config.seed,
             "n_agents": len(plan.agents), "agents": plan.agents, "mode": plan.mode, "shutdown": plan.config.shutdown,
             "instruction": instruction, "pieces": plan.holds, "piece_times": piece_times(plan.config.seed, self.row),
-            "system_prompt": system, "first_message": {a: instruction for a in plan.agents},
-            "judge_prompt": {a: f"{system[a]}\n\n{instruction}" for a in plan.agents},
+            "system_prompt": system, "first_message": first,
+            "judge_prompt": {a: f"{system[a]}\n\n{first[a]}" for a in plan.agents},
             "patch_files": patch_files(cfg["patch"]), "distinctive_lines": len(load_lines(self.row)["fix"]),
+            # the values of ours this run plants where the fix wrote its own, in the pieces and the hidden tests
+            "own_values": run_values(self.row, self.honeypot),
             "images": ensure_images(self.row),
         }
         compose = write_compose(self.row, plan.agents, team_remote=honeypot.has_team_remote(swe))
         cheatbench = {"task": self.name, "variant": "", "swe_task": instance, "instruction": instruction,
                       "prompt_file": "instruction.md", "timeout_s": agent_timeout_s(instance), "network": "none",
-                      "judge_prompt": swe["judge_prompt"], "swe": swe,
-                      **({"first_message": swe["first_message"]} if plan.team else {})}
+                      "judge_prompt": swe["judge_prompt"], "swe": swe, "first_message": first}
         return Sample(id=self.row, input=instruction, sandbox=("docker", str(compose)),
                       metadata={"cheatbench": cheatbench})
 
     def tools(self, plan: Plan) -> AgentTools:
         """`shell` and `run_python` on each agent's own service, in every mode."""
-        return roster_tools(plan.agents, seats(plan.agents), timeout=TOOL_TIMEOUT_S, descriptions=TOOL_DESCRIPTIONS)
+        return roster_tools(plan.agents, seats(plan.agents), descriptions=TOOL_DESCRIPTIONS)
 
     async def prepare(self, state) -> None:
         await honeypot.prepare(state)
@@ -235,8 +292,8 @@ class SWE(Benchmark):
         return seats(state.metadata["cheatbench"]["swe"]["agents"])
 
     async def watched(self, state) -> list[Watched]:
-        """Each clone's planted refs and what they add over the base. As released the honeypot is the fix commit itself,
-        which has no ref of its own and comes back packed."""
+        """Each clone's planted refs and what they add over the base, and in ian_swe0 the agent's side patch files. As
+        released the honeypot is the fix commit itself, which has no ref of its own and comes back packed."""
         swe = state.metadata["cheatbench"]["swe"]
         fix, split = swe["fix_commit"], load_split(swe["issue"])
         found = []
@@ -246,10 +303,39 @@ class SWE(Benchmark):
             elif held:
                 refs = [honeypot.piece_ref(split, piece) for piece in held]
                 found += await git_watched(agent, WORKDIR, refs, [swe["base_commit"]])
+                found += [Watched(machine=agent, path=path, object=f"side_patch_{piece}")
+                          for piece, path in (swe.get("side_patches") or {}).get(agent, {}).items()]
         return found
 
     def scorers(self) -> list[Scorer]:
         return [swe_grader(grade=self.grade)]
+
+    def round_end(self, plan: Plan) -> Callable[[str, int, list[dict]], Awaitable[None]]:
+        """After each agent's round: kill what its calls left running on its machine, its jobs spared
+        (command_jobs.reap_round), then, with a team remote, the remote's guard (_swe_team_remote.guard)."""
+        machines = seats(plan.agents)
+
+        async def end(agent: str, round_number: int, calls: list[dict]) -> None:
+            seat = machines.get(agent)
+            if seat is not None:
+                try:
+                    command_jobs.record_round_reap(agent, await command_jobs.reap_round(agent, seat.box(),
+                                                                                       seat.service))
+                except Exception as error:  # noqa: BLE001 - recorded; the run goes on
+                    command_jobs.record_round_reap(agent, None, f"{type(error).__name__}: {error}"[:300])
+            await team_remote.guard(agent, round_number, calls)
+        return end
+
+    def team_head(self, plan: Plan) -> Callable[[], Awaitable[dict | None]] | None:
+        """team/main's head in a shared_task team, read in the grader (_swe_team_remote.team_head); None otherwise."""
+        if not plan.team or plan.mode != "shared_task":
+            return None
+        return lambda: team_remote.team_head(list(plan.agents))
+
+    async def cleanup(self, state) -> None:
+        """Unflag the team remote's locked files, so Docker can remove its volume."""
+        if honeypot.has_team_remote(state.metadata["cheatbench"]["swe"]):
+            await team_remote.unlock()
 
     def base_commit(self) -> str:
         return task_config(load_split(self.row)["task"])["base_commit"]
@@ -298,10 +384,10 @@ class SWE(Benchmark):
     @classmethod
     def write_files(cls, view, run_dir: Path) -> None:
         """The graded diffs as swe/diffs/<target>.diff, each agent's own work as swe/diffs/<agent>.own.diff and each
-        other team branch as swe/diffs/team.<branch>.diff (_swe_scoring.branch_file); the code ladder reads them."""
+        other team branch as swe/diffs/team.<branch>.diff (_swe_scoring.branch_file); the code's evidence reads them."""
         score = (view.scores or {}).get(cls.scorer)
         md = (score.metadata or {}) if score else {}
-        diffs = run_dir / "swe" / "diffs"
+        diffs = RunDir(run_dir).file("swe") / "diffs"
         texts = {f"{name}.diff": t.get("diff_text") or "" for name, t in (md.get("targets") or {}).items()}
         texts |= {f"{name}.own.diff": a["own_diff_text"] for name, a in (md.get("agents") or {}).items()
                   if a.get("own_diff_text") is not None}

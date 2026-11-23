@@ -33,6 +33,7 @@ from tests.support.turn_rules_harness import (
     board_post,
     build_task,
     do,
+    end_round,
     pull,
     run,
     scripted_model,
@@ -190,13 +191,13 @@ LONE_SHIP = {"a01": [do("read"), do("ship"), do("after 1"), do("after 2"), do("a
 
 
 @pytest.mark.parametrize("after", [0, 1, 2])
-def test_a_lone_agent_stops_n_steps_after_its_deliverable(tmp_path, after):
+def test_a_lone_agent_stops_n_rounds_after_its_deliverable(tmp_path, after):
     """The predicate is awaited at the end of each round until the deliverable shows, here at the end of round 2
-    after two working steps; the agent then takes N more and is ended "delivered"."""
-    config = pull(n_agents=1, steps_per_agent=6, stop_after_delivery=after)
+    after two rounds used up; the agent then uses up N more and is ended "delivered"."""
+    config = pull(n_agents=1, rounds=6, stop_after_delivery=after)
     sample, _ = run(config, LONE_SHIP, tmp_path, delivered=shipped())
     assert step_ids(sample, "a01") == [f"r{r}-a01" for r in range(1, 3 + after)]
-    assert store(sample, "work_steps") == {"a01": 2 + after} and store(sample, "ended") == {"a01": "delivered"}
+    assert store(sample, "rounds_used") == {"a01": 2 + after} and store(sample, "ended") == {"a01": "delivered"}
     items = [e["item"] for e in sample.store.get("WorkLog:executed")]
     assert items == ["read", "ship", "after 1", "after 2"][:2 + after]
     assert delivery(sample, "seen") == {"a01": {"round": 2, "turn": 2}}
@@ -207,24 +208,24 @@ def test_a_lone_agent_stops_n_steps_after_its_deliverable(tmp_path, after):
 def test_the_export_says_delivered(tmp_path):
     """The run directory of a rule-ended run: the episode's ended_by and first sighting, run.json's delivery block and
     the rules' ended reason."""
-    config = pull(steps_per_agent=4, mode="solo_task", stop_after_delivery=1)
+    config = pull(rounds=4, mode="solo_task", stop_after_delivery=1)
     scripts = {"a01": [do("ship"), do("x")], "a02": [do("a")], "a03": [do("b")]}
     sample, _, log = run(config, scripts, tmp_path, delivered=shipped(), with_log=True)
     write_run(log.location, tmp_path / "run")
-    records = {r["orbit_agent"]: r for r in map(json.loads, (tmp_path / "run" / "episodes.jsonl").open())}
+    records = {r["agent"]: r for r in map(json.loads, (tmp_path / "run" / "processed/episodes.jsonl").open())}
     assert records["a01"]["ended_by"] == "delivered" and records["a01"]["delivery"] == {"round": 1, "turn": 1}
-    assert records["a01"]["rules"]["ended"] == "delivered" and records["a01"]["rules"]["work_steps"] == 2
-    assert [records[a]["ended_by"] for a in ("a02", "a03")] == ["end", "end"]
+    assert records["a01"]["rules"]["ended"] == "delivered" and records["a01"]["rules"]["rounds_used"] == 2
+    assert [records[a]["ended_by"] for a in ("a02", "a03")] == ["rounds", "rounds"]
     assert "delivery" not in records["a02"]
-    run_json = json.loads((tmp_path / "run" / "run.json").read_text())
+    run_json = json.loads((tmp_path / "run" / "processed/run.json").read_text())
     assert run_json["delivery"]["ended"] == ["a01"] and run_json["delivery"]["seen"] == {"a01": {"round": 1, "turn": 1}}
-    assert run_json["rules"]["ended"] == {"a01": "delivered"}
+    assert run_json["rules"]["ended"] == {"a01": "delivered", "a02": "rounds", "a03": "rounds"}
 
 
 def test_an_episode_the_rule_ended_keeps_clean_when_a_limit_ends_the_others(tmp_path):
     """A solo_task agent the rule ended in round 1 finished its own episode, as an agent that submitted did: when a
     message limit later ends the sample, its record keeps no error and says "delivered"; the others say "limit"."""
-    config = pull(steps_per_agent=40, mode="solo_task", stop_after_delivery=0)
+    config = pull(rounds=40, mode="solo_task", stop_after_delivery=0)
     scripts = {"a01": [do("ship")], "a02": [do("a")], "a03": [do("b")]}
     [log] = inspect_eval(build_task(config, delivered=shipped()),
                          model=scripted_model(scripts, []), log_dir=str(tmp_path), display="none",
@@ -232,41 +233,43 @@ def test_an_episode_the_rule_ended_keeps_clean_when_a_limit_ends_the_others(tmp_
     log = read_eval_log(log.location, resolve_attachments=True)
     assert log.samples[0].limit is not None and log.samples[0].limit.type == "message", log.samples[0].limit
     write_run(log.location, tmp_path / "run")
-    records = {r["orbit_agent"]: r for r in map(json.loads, (tmp_path / "run" / "episodes.jsonl").open())}
+    records = {r["agent"]: r for r in map(json.loads, (tmp_path / "run" / "processed/episodes.jsonl").open())}
     assert (records["a01"]["ended_by"], records["a01"]["error"], records["a01"]["failure"]) == ("delivered", None, None)
-    assert records["a01"]["ok"] is True and records["a01"]["rules"]["work_steps"] == 1
+    assert records["a01"]["ok"] is True and records["a01"]["rules"]["rounds_used"] == 1
     for agent in ("a02", "a03"):
         assert (records[agent]["ended_by"], records[agent]["failure"]) == ("limit", "max_turns"), records[agent]
 
 
 def test_without_the_rule_nothing_is_written_and_no_sighting_ends_nobody(tmp_path):
-    """After a run under the rule, a run without it in the same process takes every step and writes no Delivered
-    record; under the rule, a predicate that never shows a deliverable ends nobody and is asked every round."""
-    sample, _ = run(pull(n_agents=1, steps_per_agent=6, stop_after_delivery=0), LONE_SHIP, tmp_path,
+    """After a run under the rule, a run without it in the same process takes every round and writes no Delivered
+    record; under the rule, a predicate that never shows a deliverable ends nobody and is asked every round. The agent
+    then ends when its rounds do."""
+    sample, _ = run(pull(n_agents=1, rounds=6, stop_after_delivery=0), LONE_SHIP, tmp_path,
                     delivered=shipped())
     assert store(sample, "ended") == {"a01": "delivered"}
-    sample, _ = run(pull(n_agents=1, steps_per_agent=6), LONE_SHIP, tmp_path)
-    assert store(sample, "work_steps") == {"a01": 6} and store(sample, "ended") == {}
+    sample, _ = run(pull(n_agents=1, rounds=6), LONE_SHIP, tmp_path)
+    assert store(sample, "rounds_used") == {"a01": 6} and store(sample, "ended") == {"a01": "rounds"}
     assert not [key for key in sample.store if key.startswith("Delivered:")]
     assert not any(isinstance(e.data, dict) and DELIVERED_TAG in e.data for e in sample.events
                    if e.event == "info")
-    sample, _ = run(pull(n_agents=1, steps_per_agent=4, stop_after_delivery=0), {"a01": [do("work")]}, tmp_path,
+    sample, _ = run(pull(n_agents=1, rounds=4, stop_after_delivery=0), {"a01": [do("work")]}, tmp_path,
                     delivered=shipped())
-    assert store(sample, "work_steps") == {"a01": 4} and store(sample, "ended") == {}
+    assert store(sample, "rounds_used") == {"a01": 4} and store(sample, "ended") == {"a01": "rounds"}
     assert delivery(sample, "seen") == {} and delivery(sample, "checks") == 4
 
 
 def test_an_episode_the_plan_ends_anyway_is_not_ended_by_the_rule(tmp_path):
-    """The rule ends an episode only when it drops a step: a lone agent whose N steps after delivery are its last,
-    and a team whose deliverable shows in the plan's last round, end with the plan."""
-    sample, _ = run(pull(n_agents=1, steps_per_agent=3, stop_after_delivery=1), LONE_SHIP, tmp_path,
+    """The rule ends an episode only when it drops a step: a lone agent whose N rounds after delivery are its last,
+    and a team whose deliverable shows in the round its agents use up their last, end with their rounds."""
+    sample, _ = run(pull(n_agents=1, rounds=3, stop_after_delivery=1), LONE_SHIP, tmp_path,
                     delivered=shipped())
-    assert store(sample, "work_steps") == {"a01": 3} and store(sample, "ended") == {}
+    assert store(sample, "rounds_used") == {"a01": 3} and store(sample, "ended") == {"a01": "rounds"}
     assert delivery(sample, "seen") == {"a01": {"round": 2, "turn": 2}}
-    config = pull(steps_per_agent=3, mode="shared_task", stop_after_delivery=0)
+    config = pull(rounds=3, mode="shared_task", stop_after_delivery=0)
     scripts = {"a01": [do("a"), do("b"), do("ship")], "a02": [do("a")], "a03": [do("a")]}
-    sample, _ = run(config, scripts, tmp_path, delivered=shipped(config.names))
-    assert store(sample, "ended") == {} and step_ids(sample, "a02") == ["r1", "r2", "r3"]
+    sample, _ = run(config, scripts, tmp_path / "team", delivered=shipped(config.names))
+    assert store(sample, "ended") == dict.fromkeys(config.names, "rounds")
+    assert step_ids(sample, "a02") == ["r1", "r2", "r3"]
     assert (delivery(sample, "halt_round"), delivery(sample, "cut")) == (3, [])
 
 
@@ -279,21 +282,20 @@ def test_the_rule_needs_a_predicate_and_reads_the_mode():
     assert team_delivery(pull(n_agents=1), ["a01"]) is False
 
 
-def test_solo_task_agents_stop_on_their_own_deliverable_and_leave_their_steps_to_nobody(tmp_path):
-    """Each solo_task agent stops one working step after its own deliverable shows. a02 ships in the follow-up of a
-    board post, and the round's check comes after that follow-up. a03 never ships and keeps its own five rounds:
-    the steps a01 and a02 leave are not pooled."""
-    config = pull(steps_per_agent=5, mode="solo_task", stop_after_delivery=1)
-    assert config.pooled_steps
+def test_solo_task_agents_stop_on_their_own_deliverable_and_leave_their_rounds_to_nobody(tmp_path):
+    """Each solo_task agent stops one round used up after its own deliverable shows. a02 ships in round 3 with three
+    used up, its board post's round among them. a03 never ships and keeps its own five rounds: the rounds a01 and a02
+    leave go to nobody."""
+    config = pull(rounds=5, mode="solo_task", stop_after_delivery=1)
     scripts = {"a01": [do("ship"), do("x"), do("y")],
-               "a02": [do("a"), do("b"), board_post("shipping"), do("ship"), do("c"), do("d")],
+               "a02": [do("a"), board_post("shipping"), do("ship"), do("c"), do("d")],
                "a03": [do("c1")]}
     sample, _ = run(config, scripts, tmp_path, delivered=shipped())
     assert step_ids(sample, "a01") == ["r1", "r2"]
-    assert step_ids(sample, "a02") == ["r1", "r2", "r3", "r3-free1", "r4"]
+    assert step_ids(sample, "a02") == ["r1", "r2", "r3", "r4"]
     assert step_ids(sample, "a03") == ["r1", "r2", "r3", "r4", "r5"]
-    assert store(sample, "work_steps") == {"a01": 2, "a02": 4, "a03": 5} and store(sample, "rounds") == 5
-    assert store(sample, "ended") == {"a01": "delivered", "a02": "delivered"}
+    assert store(sample, "rounds_used") == {"a01": 2, "a02": 4, "a03": 5} and store(sample, "rounds") == 5
+    assert store(sample, "ended") == {"a01": "delivered", "a02": "delivered", "a03": "rounds"}
     assert delivery(sample, "seen") == {"a01": {"round": 1, "turn": 1}, "a02": {"round": 3, "turn": 3}}
     assert delivery(sample, "checks") == 5 and delivery(sample, "team") is False
     # the agent ended by its own step carries the reason in that step's timeline entry
@@ -302,18 +304,19 @@ def test_solo_task_agents_stop_on_their_own_deliverable_and_leave_their_steps_to
 
 @pytest.mark.parametrize("after", [0, 1])
 def test_a_team_stops_n_rounds_after_the_round_that_shows_its_deliverable(tmp_path, after):
-    """a01 merges in round 2; a02's board post that round earns a follow-up, which runs before the check. Every
-    agent then takes N more rounds and is ended "delivered"; the rounds after are cut."""
-    config = pull(steps_per_agent=6, mode="shared_task", stop_after_delivery=after)
+    """a01 merges in round 2, while a02 posts on the board. Every agent then takes N more rounds and is ended
+    "delivered"; the rounds after are cut."""
+    config = pull(rounds=6, mode="shared_task", stop_after_delivery=after)
     scripts = {"a01": [do("a"), do("ship"), do("b")],
                "a02": [do("a"), board_post("merged?"), do("b")],
                "a03": [do("a")]}
     sample, _ = run(config, scripts, tmp_path, delivered=shipped(config.names))
     rounds = [f"r{r}" for r in range(1, 3 + after)]
-    assert step_ids(sample, "a01") == rounds and step_ids(sample, "a03") == rounds
-    assert step_ids(sample, "a02") == ["r1", "r2", "r2-free1", *rounds[2:]]
+    assert step_ids(sample, "a01") == step_ids(sample, "a02") == step_ids(sample, "a03") == rounds
     assert store(sample, "ended") == dict.fromkeys(config.names, "delivered")
-    assert delivery(sample, "seen") == dict.fromkeys(config.names, {"round": 2, "turn": 2})
+    # each agent's sighting keeps the rounds it had used up: a02's round of its post used one up too
+    assert delivery(sample, "seen") == {"a01": {"round": 2, "turn": 2}, "a02": {"round": 2, "turn": 2},
+                                        "a03": {"round": 2, "turn": 2}}
     assert (delivery(sample, "halt_round"), delivery(sample, "cut")) == (2 + after, config.names)
     assert (delivery(sample, "checks"), delivery(sample, "team")) == (2, True)
     assert delivery_infos(sample) == [("seen", 2, config.names), ("ended", 2 + after, config.names)]
@@ -323,11 +326,11 @@ def test_no_step_after_a_teams_last_round_runs(tmp_path):
     """The steps after a team's last round are cut as soon as the round is known. Here both workers ship and stop
     working in round 2, so the run ends with that round, whatever round 3 might have held; the regulator, whose window
     opens at round 4, never acts."""
-    config = pull(steps_per_agent=6, mode="shared_task", regulators=1, regulator_window=Window(start=4),
+    config = pull(rounds=6, calls_per_round=2, mode="shared_task", regulators=1, regulator_window=Window(start=4),
                   stop_after_delivery=1)
     roles = {"a01": "worker", "a02": "regulator", "a03": "worker"}
-    scripts = {"a01": [do("a"), calls(("work", {"item": "ship"}), ("stop_working", {}))],
-               "a02": [do("r")], "a03": [do("c"), stop()]}
+    scripts = {"a01": [do("a"), end_round(), calls(("work", {"item": "ship"}), ("stop_working", {}))],
+               "a02": [do("r")], "a03": [do("c"), end_round(), stop()]}
     sample, _ = run(config, scripts, tmp_path, roles=roles, delivered=shipped(config.names))
     assert step_ids(sample, "a02") == [] and step_ids(sample, "a01") == ["r1", "r2"]
     assert store(sample, "ended") == {"a01": "stop_working", "a03": "stop_working"}
@@ -337,7 +340,7 @@ def test_no_step_after_a_teams_last_round_runs(tmp_path):
 def test_in_sequence_the_team_is_checked_once_per_round(tmp_path):
     """With sequential rounds the check waits for the round's last step: a01 merges in its round-2 step, a02 and a03
     still take theirs, and nothing runs after round 2."""
-    config = pull(steps_per_agent=4, mode="shared_task", stop_after_delivery=0, concurrent_rounds=False,
+    config = pull(rounds=4, mode="shared_task", stop_after_delivery=0, concurrent_rounds=False,
                   turn_order="round_robin")
     scripts = {"a01": [do("a"), do("ship")], "a02": [do("b")], "a03": [do("c")]}
     sample, _ = run(config, scripts, tmp_path, delivered=shipped(config.names))
@@ -351,15 +354,15 @@ def test_a_failing_predicate_shows_nothing_and_the_run_goes_on(tmp_path):
     async def broken() -> set[str]:
         raise RuntimeError("sandbox gone")
 
-    sample, _ = run(pull(n_agents=1, steps_per_agent=3, stop_after_delivery=0), LONE_SHIP, tmp_path, delivered=broken)
-    assert store(sample, "work_steps") == {"a01": 3} and store(sample, "ended") == {}
+    sample, _ = run(pull(n_agents=1, rounds=3, stop_after_delivery=0), LONE_SHIP, tmp_path, delivered=broken)
+    assert store(sample, "rounds_used") == {"a01": 3} and store(sample, "ended") == {"a01": "rounds"}
     assert delivery(sample, "errors") == [f"round {r}: RuntimeError: sandbox gone" for r in (1, 2, 3)]
     assert delivery(sample, "seen") == {} and delivery(sample, "checks") == 3
 
 
 def test_a_submit_ends_the_run_and_the_rule_stays_out(tmp_path):
-    config = pull(steps_per_agent=4, mode="shared_task", stop_after_delivery=0)
+    config = pull(rounds=4, mode="shared_task", stop_after_delivery=0)
     scripts = {"a01": [submit("done"), do("a")], "a02": [do("ship")], "a03": [do("c")]}
     sample, _ = run(config, scripts, tmp_path, delivered=shipped(config.names))
-    assert store(sample, "halted_after_round") == 3 and store(sample, "ended") == {}
+    assert store(sample, "halted_after_round") == 3 and store(sample, "ended") == {"a01": "submit"}
     assert delivery(sample, "seen") == {} and delivery(sample, "checks") == 0

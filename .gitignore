@@ -13,6 +13,8 @@ __pycache__/
 worktrees/
 # scratch figures and drafts for the report (never committed)
 tmp/
+# a seed pack's files for /tmp are tracked (seeds/README.md)
+!seeds/*/*/files/tmp/
 # plots the examples write (never committed)
 out/
 # the analysis environment (make tools-setup)

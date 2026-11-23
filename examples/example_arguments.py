@@ -9,22 +9,25 @@ The model and config flags are the command line's (presets.add_config_arguments)
 come back as Inspect strings, and args.settings holds the run's name as `id_salt`, DEFAULT_SETTINGS, every --set, then
 each role model as `<role>_model=<Inspect string>`. --judge and --no-judge say whether the run is judged as it finishes
 (USE_JUDGE_AS_DEFAULT otherwise); a run that is not adds `judge=none` last, and `python -m src rejudge <name>` judges
-it later. --name is the run's name and --timeout bounds one model request. A run refuses a name whose folder already
-holds a run, before it starts, so a script run twice needs another --name or --replace. --replace sets the earlier run
-aside into runs/<study>/attempts/<name>.<n>/, with its eval log and its figures, and then runs. A wrong model or field
-is an argument error (exit 2). finish() ends every script: after a run that succeeded it draws the run's figures under
+it later. The command line itself (the module and its arguments, no key) goes to run.json "launch"
+(src/configuration/launch_command.py), so the run can be launched again as it was. --name is the run's name and
+--timeout bounds one model request. A run refuses a name whose folder already holds a run, before it starts, so a
+script run twice needs another --name or --replace. --replace sets the earlier run aside into
+runs/<study>/attempts/<name>.<n>/, with its eval log and its figures, and then runs. A wrong model or field is an
+argument error (exit 2). finish() ends every script: after a run that succeeded it draws the run's figures under
 out/<study>/<name>/ and returns the exit code either way.
 """
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
-from src.configuration import settings
+from src.configuration import launch_command, settings
 from src.configuration.presets import add_config_arguments, config_pairs
 from src.configuration.swarm_config import SwarmConfig
 from src.measures import run_figures as plots
-from src.measures.run_directory import figures_dir
+from src.measures.run_directory import RunDir
 
 USE_JUDGE_AS_DEFAULT = False
 """Whether an example judges its run as it finishes; --judge and --no-judge override it for one run."""
@@ -64,6 +67,8 @@ def parse_example_arguments(script: Path, description: str | None, argv: list[st
     if default_row is not None:
         parser.add_argument("--row", default=default_row, help=f"the benchmark row to run (default {default_row})")
     args = parser.parse_args(argv)
+    if argv is None:        # the process's own command line: run.json "launch" (src/configuration/launch_command.py)
+        launch_command.record(".".join(module), sys.argv[1:])
     for pair in args.settings:
         key, sep, _ = pair.partition("=")
         if not sep or key.strip() not in SwarmConfig.model_fields:
@@ -74,8 +79,8 @@ def parse_example_arguments(script: Path, description: str | None, argv: list[st
 
 
 def finish(args: argparse.Namespace, exit_code: int) -> int:
-    """The end of every example: the run's figures into out/<study>/<name>/ when the run succeeded
-    (src/measures/run_figures.py plot_run, run_directory.figures_dir), and the run's exit code either way."""
+    """The end of every example: the run's figures into its analysis/figures/ when the run succeeded
+    (src/measures/run_figures.py plot_run), and the run's exit code either way."""
     if exit_code == 0:
-        plots.plot_run(settings.RUNS / args.name, figures_dir(settings.RUNS / args.name))
+        plots.plot_run(settings.RUNS / args.name, RunDir(settings.RUNS / args.name).file("figures"))
     return exit_code

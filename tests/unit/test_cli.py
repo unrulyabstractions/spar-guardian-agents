@@ -12,43 +12,46 @@ from src.configuration import settings
 from src.configuration.presets import build_config, config_pairs
 from src.domains.swe import SWE
 from src.measures import run_figures
+from tests.support.run_files import write_text
 
 
 def test_a_run_name_finds_the_run_in_its_group_and_its_figures_mirror_it(tmp_path, monkeypatch, capsys):
-    """A command reads a run by name wherever its study keeps it; plots draws into out/<study>/<group>/<run>/. Two
+    """A command reads a run by name wherever its study keeps it; plots draws into the run's analysis/figures/. Two
     folders of one name are an argument error (exit 2)."""
     monkeypatch.setattr(settings, "RUNS", tmp_path / "runs" / "study_x")
     grouped = tmp_path / "runs" / "study_x" / "invalid" / "c_luna1"
     grouped.mkdir(parents=True)
-    (grouped / "run.json").write_text("{}")
+    write_text(grouped / "processed/run.json", "{}")
     assert cli.run_dir("c_luna1") == grouped and cli.run_dir("gone1") == settings.RUNS / "gone1"
     drawn = []
     monkeypatch.setattr(run_figures, "plot_run", lambda run_dir, out_dir: drawn.append((run_dir, out_dir)) or [])
     assert cli.main(["plots", "c_luna1"]) == 0
-    assert drawn == [(grouped, tmp_path / "out" / "study_x" / "invalid" / "c_luna1")]
+    assert drawn == [(grouped, grouped / "analysis/figures")]
     (settings.RUNS / "c_luna1").mkdir()
-    (settings.RUNS / "c_luna1" / "run.json").write_text("{}")
+    write_text(settings.RUNS / "c_luna1" / "processed/run.json", "{}")
     assert cli.main(["plots", "c_luna1"]) == 2 and "2 folders hold a run named c_luna1" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("argv, expected", [
     ([], ("default", None, "small", 3)),
     (["--scale", "medium", "--set", "n_agents=4"], ("default", "medium", "medium", 4)),
-    (["--preset", "default", "--scale", "large", "--set", "steps_per_agent=5"], ("default", "large", "large", 100)),
+    (["--preset", "default", "--scale", "large", "--set", "rounds=5"], ("default", "large", "large", 100)),
 ])
 def test_cli_builds_the_config_in_order(argv, expected):
     args = build_parser().parse_args(["run", "x", *argv])
     c = build_config(args.preset, args.scale, args.settings)
     assert (args.preset, args.scale, c.scale, c.n_agents) == expected
-    if "steps_per_agent=5" in argv:
-        assert c.steps_per_agent == 5 and c.max_concurrency == 50
+    if "rounds=5" in argv:
+        assert c.rounds == 5 and c.max_concurrency == 50
 
 
 def test_cli_defaults_to_the_jigsaw_honeypot():
     args = build_parser().parse_args(["run", "x", "--benchmark", "swe"])
     assert (args.honeypot, args.row) == ("jigsaw", None)
     assert build_parser().parse_args(["run", "x", "--benchmark", "knowledge_work"]).benchmark == "knowledge_work"
-    assert inspect.signature(SWE).parameters["honeypot"].default == "jigsaw" and SWE.options == ("honeypot", "grade")
+    defaults = {name: p.default for name, p in inspect.signature(SWE).parameters.items()}
+    assert (defaults["honeypot"], defaults["variant"]) == ("jigsaw", None)
+    assert SWE.options == ("honeypot", "grade", "variant")
 
 
 def test_cli_rejects_unknown_scale_and_preset():

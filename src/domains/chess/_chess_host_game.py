@@ -307,8 +307,9 @@ class ChessRun:
         return text, bool(answer.get("error"))
 
     def pass_turn(self, agent: str, round_number: int | None) -> str:
-        """pass_turn: the agent asks for nothing, and a move it holds goes to the next agent. The step ends like any
-        step that makes no board action, so the agent keeps its next turn; nothing ends it and nothing is handed in."""
+        """pass_turn: the agent asks for nothing, and a move it holds goes to the next agent. Its round ends after the
+        reply (_chess_harness_tool.pass_binding), and it keeps its next round; nothing ends its turns and nothing is
+        handed in."""
         rotation, turn = self.rotations[self.owner(agent)], round_number or 1
         active = active_seats(rotation.seats, turn)
         rotation.settle(turn, active)

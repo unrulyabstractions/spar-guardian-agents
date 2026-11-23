@@ -46,7 +46,7 @@ def team_plans(n: int, beside: tuple[str, ...]):
     bench = KnowledgeWork(DEFAULT_ROW)
     for seed in SEEDS:
         config = build_config("default", "small", [f"n_agents={n + len(beside)}", f"seed={seed}", *beside])
-        yield seed, bench.plan(config, tasks.hidden_roles(config))
+        yield seed, bench.plan(config, tasks.agent_roles(config))
 
 
 def neutral(plan) -> list[str]:
@@ -110,3 +110,4 @@ def test_a_layout_without_a_split_gives_every_agent_both(pairs):
     assert not plan.split and all(seat["review"] and seat["read"] for seat in seats.values()), seats
     layout = sandbox.stage_layout(ROW, sandbox.layout_of(plan), plan.split, seats)
     assert layout["comparator"] == ROW["reference_destination"] and not layout["split"], layout["comparator"]
+

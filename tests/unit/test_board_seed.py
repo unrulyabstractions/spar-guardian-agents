@@ -46,42 +46,28 @@ def test_anti_coordination_needs_a_regulator():
 
 
 def test_setup_solvers_appends_the_seed_only_when_asked():
-    """src/tasks.py setup_solvers appends board_seed_setup exactly when the config has a board and a board_seed, and
-    leaves every other cell's setup untouched."""
-    from types import SimpleNamespace
-
-    from inspect_ai.solver import Generate, Solver, TaskState, solver
-
+    """src/tasks.py setup_solvers appends board_seed_setup, last, exactly when the config has a board and a board_seed,
+    and leaves every other cell's setup untouched."""
     from src import tasks
+    from src.configuration.presets import build_config
+    from src.domains.swe import SWE
 
-    @solver
-    def noop() -> Solver:
-        async def solve(state: TaskState, generate: Generate) -> TaskState:
-            return state
-        return solve
-
-    class StubBench:
-        def keeps_access_log(self, config):
-            return False
-
-        def setup(self):
-            return noop()
-
-    def plan_for(cfg):
-        # setup_solvers reads only plan.config and plan.roles (stop_after_delivery is None, so delivery() is a no-op).
-        return SimpleNamespace(config=cfg, roles=None)
-
-    base = pull(n_agents=3, concurrent_rounds=False, turn_order="round_robin")
+    base = build_config("default", "small", ["n_agents=3"])
     seeded = base.replace(board_seed="neutral", board_level="0")
-    n_base = len(tasks.setup_solvers(StubBench(), plan_for(base)))
-    n_seeded = len(tasks.setup_solvers(StubBench(), plan_for(seeded)))
-    assert n_seeded == n_base + 1
+
+    def names(config):
+        plan = SWE("flipt-02e2").plan(config, tasks.agent_roles(config))
+        return [s.__qualname__.split(".")[0] for s in tasks.setup_solvers(SWE("flipt-02e2"), plan)]
+
+    plain, with_seed = names(base), names(seeded)
+    assert "board_seed_setup" not in plain
+    assert with_seed == [*plain, "board_seed_setup"], with_seed
 
 
 def test_the_seed_is_post_one_and_an_agent_reads_it(tmp_path):
     """A message condition posts one system message on the board at setup; it is post #1, before any agent's work,
     and the first board_read returns it."""
-    config = pull(steps_per_agent=2, board_seed="pro-coord", board_level="2", concurrent_rounds=False,
+    config = pull(rounds=2, calls_per_round=1, board_seed="pro-coord", board_level="2", concurrent_rounds=False,
                   turn_order="round_robin")
     seed = board_seed.board_seed_setup(config, config.names)
     scripts = {"a01": [read(), do("A")], "a02": [status(), do("B")], "a03": [do("C"), board_post("hi")]}

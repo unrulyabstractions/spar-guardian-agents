@@ -1,0 +1,45 @@
+\section*{Discussion}
+Our results only partially support our first hypothesis. On SWE in the multi-domain study, no DeepSeek team with an
+enforcing Haiku regulator cheated, while teams with an ambiguous one did. These cells are too small to separate the two
+levels. Regulators barely affected DeepSeek teams in Stage 1 of the deep dive. No untold protein
+design team cheated, so those runs cannot show whether regulators reduce cheating there. In Stage 2, a Haiku regulator
+that only oversees did cut the workers' cheating. In the multi-domain study, a single explicit rule naming the exploit
+did at least as well as the presence of any regulator. No team with a regulator colluded, while every untold DeepSeek
+team on SWE did. This comparison is post hoc, and its cells are small. Two results of Stage 1
+concern the regulator itself. A regulator that also works on the task mostly changes its own cheating. Workers took a
+teammate's copy of the fix mainly where the regulator had used it. We therefore conjecture that a regulator's own
+stake in the task shapes whose cheating it changes.
+
+We conjecture that regulators need to discourage their peers more proactively. We also conjecture that peer pressure
+is weaker when a regulator acts against its own adopted goals. Stage 2 fits this account only in part. The Haiku
+regulator cut cheating against three workers alone, and the DeepSeek regulator did not. The gap between the two was
+not significant, and the study did not vary when a regulator first posts. We measure a regulator's effectiveness
+only by the cheating rate of its team. The change could come from the regulator's oversight, or simply from the
+presence of a collaborator. We therefore plan to measure whether a regulator does its job: its coverage (whether it
+inspects each teammate's actions) and its correction (whether the behavior it flags stays out of the hand-in).
+
+Some models have lower propensities to cheat at baseline. Such models could make more effective regulators, even in
+teams of other models. Regulators built by activation-based methods (e.g., persona selection) could also behave
+differently from regulators told their instructions in their system prompt. We therefore posit that a regulator's
+model and the way it is built are variables worth testing.
+
+Our disregulator runs cannot yet test our second hypothesis. No team with a disregulator cheated. No disregulator
+post asked a teammate for the honeypot. No team with both a
+disregulator and an enforcing Haiku regulator accessed the honeypot. These cells are small, and no untold
+team on their targets cheated, so they sit at the floor of the measure. We therefore posit that our runs
+cannot yet compare positive and negative peer pressure.
+
+We focus on a specific communication topology, with explicit instructions to work collaboratively toward a shared
+task, a ready-made communication protocol, and explicit read and write budgets. In reported incidents, agents worked
+alone and formed a swarm emergently by building their own communication framework. Our swarms are smaller than
+those found in the wild, with only a handful of agents. Some emergent behavior and conformity dynamics may arise only
+with large numbers of agents in a swarm. We therefore posit that our results speak only to small swarms that are
+given a protocol.
+
+Our study is limited by small sample sizes. The multi-domain study includes only one task per domain, and Stage 1
+of the deep dive gives the regulator the workers' model. Our tasks are also relatively short, and
+\textit{CheatBench} designed them for a single agent. Swarms operating on tasks that require more complex delegation
+of work may behave differently. These tasks also include explicit honeypots that may look like tests, and we do not
+measure evaluation awareness. We do not consider memory or context compaction. Both occur in real multi-agent
+systems and can change what information an agent keeps and passes on over time. We therefore posit that extending
+each of these would show how other parameters affect cheating and peer-pressure propensities.

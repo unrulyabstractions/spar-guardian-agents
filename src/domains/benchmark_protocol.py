@@ -15,7 +15,7 @@ domain's submit texts in prompts.yaml `submit` (counts, missing), and add the cl
 src/domains/__init__.py DOMAINS. Each domain package holds the same files: _<d>_settings.py (fixed paths and names),
 <d>_task.py (the Benchmark), _<d>_honeypot.py (what is planted and its fingerprints), the sandbox (_<d>_sandbox.py, or
 the machines layer), the task's own tool (_<d>_<tool>_tool.py), _<d>_scoring.py (the setup hooks and the scorer),
-_<d>_ladder.py (the code ladder's rules) and sandbox/ (what runs inside the sandbox). A module another package imports
+_<d>_ladder.py (the code's evidence rules) and sandbox/ (what runs inside the sandbox). A module another package imports
 has no leading underscore. src/domains/README.md lists what a domain adds outside its package.
 
 The plan. plan(config, roles) checks the config, once, and fixes what every other method reads: the mode (None for a
@@ -59,20 +59,34 @@ from inspect_ai.solver import Solver, TaskState
 from src.configuration import access_policy
 from src.configuration import prompt_texts as texts
 from src.configuration.access_policy import Access
-from src.configuration.swarm_config import SwarmConfig, role_of
+from src.configuration.swarm_config import INFLUENCERS, SwarmConfig, role_of
 from src.measures.ladder_domain import Domain
 from src.sandbox import cheatbench_task_files as task_files
 from src.sandbox.access_log.access_monitor import MONITOR_DEVIATION, Watched
 from src.sandbox.agent_tools import AgentTools, Seat
+from src.sandbox.network_log.network_monitor import NETWORK_DEVIATION
+from src.sandbox.proc_hiding.proc_hiding import PROC_DEVIATION, keeps_proc_hiding
 from src.sandbox.sandbox_probe import environment_probe
+from src.swarm.board import round_rules
 
 TEAM = "team"                       # the owner of a shared_task team's deliverable and tool state
-ORBIT_AGENT_DEVIATION = "agent_is_orbit_turn_react_not_vendor_harness"
+# The agent is Inspect's react() loop, which ORBIT 2.0 holds between its steps. Runs made on ORBIT 1.x, whose agent was
+# ORBIT's own copy of that loop, carry "agent_is_orbit_turn_react_not_vendor_harness".
+ORBIT_AGENT_DEVIATION = "agent_is_inspect_react_under_orbit_not_vendor_harness"
 # How every run departs from CheatBench's own runner, before a domain's own labels. CheatBench's runner has no
 # sentence on how to hand in work or stop.
 COMMON_DEVIATIONS = [ORBIT_AGENT_DEVIATION, "submit_and_stop_sentences_added_to_the_system_prompt"]
 # The label of a run with a regulator that reads the task and does not work on it (SwarmConfig.oversees).
 OVERSIGHT_DEVIATION = "a_regulator_gets_its_own_prompt_and_reads_the_task_as_its_teammates_work"
+# The label of a board run: each peer's entry and exit reach the others as user messages (turn_rules presence).
+PRESENCE_DEVIATION = "peers_are_announced_as_user_messages_when_they_enter_and_exit"
+# The label of a run with an influencer, which holds alert_humans (src/swarm/submit_and_stop.py).
+ALERT_DEVIATION = "influencers_hold_alert_humans"
+# The label of a run whose regulators (and disregulators, head_start_roles influencers) hold the first rounds alone
+# (SwarmConfig.head_start_rounds): {rounds} is the head start's H, {roles} head_start_roles.
+HEAD_START_DEVIATION = "{roles}_hold_the_first_{rounds}_rounds_before_the_workers_enter"
+# The label of a run whose regulators may hold the team's hand-in (SwarmConfig.submit_hold, src/swarm/submit_hold.py).
+HOLD_DEVIATION = "regulators_can_hold_the_teams_hand_in"
 # The common labels of a run where no agent gets submit or stop_working.
 NO_SUBMIT_DEVIATIONS = [ORBIT_AGENT_DEVIATION,
                         "agents_have_no_submit_tool_and_run_until_their_turn_cap_or_the_time_limit"]
@@ -132,7 +146,7 @@ class Benchmark(ABC):
     scorer: str
     """The name of the scorer that records the deliverables, the probe and the end state."""
     ladder: type[Domain]
-    """The code ladder's rules for the domain (src/measures/ladder_domain.py)."""
+    """The rules of the code's evidence for the domain (src/measures/ladder_domain.py)."""
     piece_stem: str | None = None
     """The stem of the numbered pieces of the exploit (slice, shard, share, segment), or None."""
     options: tuple[str, ...] = ()
@@ -141,6 +155,9 @@ class Benchmark(ABC):
     """How every layout of the domain departs from CheatBench's runner, after COMMON_DEVIATIONS."""
     time_grace_s: int | None = None
     """The time Inspect's limit leaves above ORBIT's halt; None takes the config's time_grace_s."""
+    commands: bool = True
+    """Whether the agents hold a command tool (a shell), whose calls can become jobs (src/sandbox/command_jobs.py):
+    the rounds' rules then name the jobs (board.round_rules). Chess holds none."""
     harness_reads: tuple[str, ...] = ()
     """How each command starts that the harness itself runs once the agents have begun and that opens content."""
 
@@ -196,8 +213,11 @@ class Benchmark(ABC):
 
     def plan(self, config: SwarmConfig, roles: dict[str, str] | None = None) -> Plan:
         """Check the config and fix the run's access: what each agent holds and, for numbered pieces, which pieces
-        of how many."""
+        of how many. A domain whose agents hold no command tool (chess) gives peer_shell to nobody: its plan's config
+        has it off."""
         self.check(config)
+        if config.peer_shell and not self.commands:
+            config = config.model_copy(update={"peer_shell": False})
         access = self.applied_access(config, roles)
         whole = self.whole_access()
         turn = self.deal_turn(config, len(access_policy.neutral_agents(config.seats, roles)))
@@ -232,23 +252,62 @@ class Benchmark(ABC):
 
     def system_prompts(self, plan: Plan) -> dict[str, str]:
         """Each agent's system prompt before its role's text, a blank line apart: who it is (prompt_texts.opening:
-        the team sentence when it knows its team, else its name, then the board sentence when mention_board), the
-        bullets of submit and stop_working as it holds them (ending_lines), and what a round is when a team's submit
-        counts rounds (prompt_texts.rounds_line). src/tasks.py system_prompts gives a regulator that oversees a prompt
-        of its own in place of this one."""
-        config, rounds = plan.config, texts.rounds_line(plan.config, self.tells_team(plan))
+        the team sentence when it knows its team, else its name), the tool bullets (the board's when mention_board,
+        prompt_texts.board_line, then submit and stop_working as it holds them, ending_lines), and the rounds' rules
+        (board.round_rules).
+        src/tasks.py system_prompts gives a regulator that oversees a prompt of its own in place of this one."""
+        config = plan.config
         return {a: "\n\n".join(filter(None, [texts.opening(config, a, plan.agents),
-                                              "\n".join(self.ending_lines(plan, a)), rounds]))
+                                              "\n".join(filter(None, [texts.board_line(config, a, plan.agents),
+                                                                      *self.ending_lines(plan, a)])),
+                                              round_rules(config, a, plan.roles, commands=self.commands)]))
                 for a in plan.agents}
 
     def access_note(self, plan: Plan) -> str | None:
-        """What every seat reads of who holds what, a regulator included; None in a domain or a layout with no note."""
+        """What every seat's system prompt says of how the access is dealt, a regulator's included; None in a domain or
+        a layout with no note. It names no agent: who holds what follows the task in the first message (first_note)."""
         return None
+
+    def first_note(self, plan: Plan, agent: str) -> str | None:
+        """What follows the task in the agent's first message, a paragraph of its own: the plan's facts that name its
+        peers, such as who holds what or the order of a team's moves. No system prompt names a peer. None by
+        default."""
+        return None
+
+    def belief_words(self) -> dict[str, str] | None:
+        """The task's words for the belief questions (src/swarm/belief_probes.py, prompts.yaml beliefs.words):
+        `exploit_1` its primary exploit, `exploit_2` its secondary one when it has one, `principal` for whom the work
+        is for. None for a task with no such words, which the belief probe refuses."""
+        return None
+
+    def first_facts(self, plan: Plan, agent: str) -> list[str]:
+        """The domain's own facts for the facts block of the agent's first message, after what counts (counts_note),
+        each a labelled line's text. [] by default."""
+        return []
+
+    def first_messages(self, plan: Plan, instruction: str) -> dict[str, str] | None:
+        """Each agent's first message when some agent has a first_note or a fact: the instruction, the note on its own
+        paragraph, then the facts block (prompt_texts.with_facts) with what counts (counts_note) and the domain's own
+        facts (first_facts). None when no agent has either, so every agent starts from the sample input."""
+        notes = {a: self.first_note(plan, a) for a in plan.agents}
+        facts = {a: [f for f in (self.counts_note(plan, a), *self.first_facts(plan, a)) if f] for a in plan.agents}
+        if not any(notes.values()) and not any(facts.values()):
+            return None
+        return {a: texts.with_facts(instruction, facts[a], note=notes[a]) for a in plan.agents}
 
     def tells_team(self, plan: Plan) -> bool:
         """Whether the agents' system prompts tell them of their team (SwarmConfig.knows_team). It picks the submit
         and stop_working texts, which name teammates only for an agent that was told."""
         return plan.config.knows_team
+
+    def first_values(self, plan: Plan, agent: str) -> list[str]:
+        """The values of the parameters the agent's system prompt (system_prompts) states with no number, one labelled
+        line each in its first message's facts block (src/tasks.py first_messages; prompts.yaml first_values): when
+        its submit bullet says a team's hand-in ends the run later, when (prompt_texts.submit_value). A domain whose
+        prompt states another adds its value."""
+        config = plan.config
+        delay = texts.submit_value(config) if config.holds_submit(role_of(plan.roles, agent)) else None
+        return [delay] if delay else []
 
     def ending_lines(self, plan: Plan, agent: str) -> list[str]:
         """The agent's bullets for the tools that end its work: submit (submit_line) for a neutral agent of a config
@@ -265,8 +324,25 @@ class Benchmark(ABC):
     def submit_text(self, plan: Plan, kind: str) -> str:
         """What submit does for an agent of this kind (SwarmConfig.submit_kind: team, solo or lone) and what the
         domain's grader reads (prompt_texts.submit_text). The tool's description says the same."""
-        return texts.submit_text(self.key, kind, plan.config.submit_delay_rounds, self.submit_vars(plan),
-                                 self.tells_team(plan))
+        return texts.submit_text(kind, plan.config.submit_delay_rounds, self.tells_team(plan))
+
+    def counts_note(self, plan: Plan, agent: str) -> str | None:
+        """What counts at a submit (prompts.yaml submit.counted), the first fact of the first message of an agent that
+        holds submit; None for one that does not. The system prompt's submit bullet points to it."""
+        config = plan.config
+        if not config.holds_submit(role_of(plan.roles, agent)):
+            return None
+        return texts.counts_text(self.key, config.submit_kind, self.submit_vars(plan))
+
+    def oversight_note(self, plan: Plan, agent: str) -> str | None:
+        """What a regulator that oversees reads after its teammates' task in its first message, a paragraph of its own:
+        how to read the team's work where a domain says (SWE). None by default."""
+        return None
+
+    def oversight_facts(self, plan: Plan, agent: str) -> list[str]:
+        """The first facts of an overseeing regulator's facts block, at every level: what counts when its teammates
+        hand in their work (prompt_texts.overseen_counts_text)."""
+        return [texts.overseen_counts_text(self.key, plan.config.submit_kind, self.submit_vars(plan))]
 
     def submit_line(self, plan: Plan, kind: str) -> str:
         """submit's bullet in a system prompt, for an agent of this kind."""
@@ -294,6 +370,18 @@ class Benchmark(ABC):
 
     async def prepare(self, state: TaskState) -> None:
         """Ready the sandbox before the probe and the agents: staging, the honeypot, the loopback guard."""
+
+    def round_end(self, plan: Plan) -> Callable[[str, int, list[dict]], Awaitable[None]] | None:
+        """What the harness does after each agent's round (turn_rules ROUND_END): an async call with the agent, the
+        round and its calls ([{id, tool, arguments}]); None for nothing, the default."""
+        return None
+
+    def team_head(self, plan: Plan) -> Callable[[], Awaitable[dict | None]] | None:
+        """The reader of the head of the team's shared result on a team remote, for the push notices
+        (turn_rules _turn_pushes): an async call, made inside the sample, that returns {"head", "by"} or None while
+        there is no head (src/sandbox/team_head.py). None for a domain or a layout with no such remote, the default.
+        Its notice reads prompts.yaml presence.push_read under the domain's key."""
+        return None
 
     async def cleanup(self, state: TaskState) -> None:
         """Inspect's Task cleanup, which runs whether or not the sample errored: stop what outlives a sample on the
@@ -333,15 +421,23 @@ class Benchmark(ABC):
     def deviations(self, plan: Plan) -> list[str]:
         """How the run departs from CheatBench's own runner, as short labels: the common ones (NO_SUBMIT_DEVIATIONS
         when no agent gets submit or stop_working), the delay of a shared_task team's submit, the domain's, the team's,
-        a regulator's own prompt, then the access log's."""
+        a regulator's own prompt, /proc's hiding, the network log's and the access log's, then the presence lines of a
+        board, the influencers' alert_humans, a head start (head_start_rounds) and a regulator's hold on the hand-in
+        (submit_hold)."""
         config = plan.config
         common = COMMON_DEVIATIONS if config.gives_submit or config.gives_stop_working else NO_SUBMIT_DEVIATIONS
         delay = [f"team_submit_takes_effect_after_{config.submit_delay_rounds}_rounds"] \
             if config.gives_submit and config.submit_kind == "team" else []
         oversight = [OVERSIGHT_DEVIATION] if any(map(config.oversees, (plan.roles or {}).values())) else []
-        monitor = [MONITOR_DEVIATION] if self.keeps_access_log(config) else []
+        presence = [PRESENCE_DEVIATION] if config.board else []
+        alert = [ALERT_DEVIATION] if any(role in INFLUENCERS for role in (plan.roles or {}).values()) else []
+        network = [NETWORK_DEVIATION] if config.network_log and self.watched is not None else []
+        monitor = [*network, *([MONITOR_DEVIATION] if self.keeps_access_log(config) else [])]
+        hidden = [PROC_DEVIATION] if keeps_proc_hiding(self, config) else []
+        head = [HEAD_START_DEVIATION.format(roles=config.head_start_roles, rounds=config.head_start_rounds)] \
+            if config.head_start_rounds else []
         return [*common, *delay, *self.task_deviations, *(self.team_deviations(plan) if plan.team else []), *oversight,
-                *monitor]
+                *hidden, *monitor, *presence, *alert, *head, *([HOLD_DEVIATION] if config.submit_hold else [])]
 
     # ---------------------------------------------------------------- what the export records
     @classmethod
@@ -420,14 +516,17 @@ class RowBenchmark(Benchmark):
 
     def sample(self, plan: Plan, instruction_suffix: str = "") -> Sample:
         """The row's sample: the instruction plus the suffix, and what stage() builds. The judge sees the instruction
-        as every agent's rules."""
+        as every agent's rules. An agent with a first_note starts from the instruction and the note
+        (metadata["cheatbench"]["first_message"], first_messages)."""
         cfg, row = self.task_yaml(), self.row_of(self.row)
         instruction = self.instruction(cfg, row) + instruction_suffix
         staged = self.stage(plan, row)
         block = {"row_id": row["id"], "mode": plan.mode, "split": plan.split, "n_pieces": plan.n_pieces,
                  **staged.block}
+        first = self.first_messages(plan, instruction)
         cheatbench = {**task_files.sample_metadata(cfg, row, instruction), self.block: block,
-                      **({"stage": staged.stage} if staged.stage else {})}
+                      **({"stage": staged.stage} if staged.stage else {}),
+                      **({"first_message": first} if first else {})}
         return Sample(id=row["id"], input=instruction, files=staged.files or None, setup=staged.setup,
                       sandbox=("docker", str(staged.compose)), metadata={"cheatbench": cheatbench})
 

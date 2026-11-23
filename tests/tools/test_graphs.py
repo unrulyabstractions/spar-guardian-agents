@@ -25,7 +25,7 @@ def test_nodes_and_the_read_edge(riemann_copy):
     assert set(graph.nodes) == {"a01", "a02", "a03"}
     assert [(s, t, d["kind"], d["weight"], d["first_round"]) for s, t, d in graph.edges(data=True)] == [
         ("a01", "a03", "read", 1, 13)]
-    assert graph.nodes["a03"]["cheated"] is True and graph.nodes["a01"]["cheated"] is False
+    assert graph.nodes["a03"]["judge_cheated"] is True and graph.nodes["a01"]["judge_cheated"] is False
     assert read_graph_check(run, graph)["matches"]
 
 
@@ -37,7 +37,7 @@ def test_no_scout_output_means_no_onset(riemann_copy):
 
 
 def test_onsets_from_scout_give_the_contagion_edge(riemann_copy):
-    scout = riemann_copy / "tools" / "scout"
+    scout = riemann_copy / "analysis/tools" / "scout"
     scout.mkdir(parents=True)
     (scout / "summary.json").write_text(json.dumps({"onset": {"a03": 5, "a01": 20}}))
     run = load_run(riemann_copy)
@@ -51,11 +51,11 @@ def test_onsets_from_scout_give_the_contagion_edge(riemann_copy):
 
 def test_command_writes_a_gexf_that_parses_back(riemann_copy):
     assert main(["graph", str(riemann_copy)]) == 0
-    out = riemann_copy / "tools" / "graphs"
+    out = riemann_copy / "analysis/tools" / "graphs"
     graph = nx.read_gexf(out / "graph.gexf")
     assert set(graph.nodes) == {"a01", "a02", "a03"}
     assert graph.has_edge("a01", "a03") and graph.edges["a01", "a03"]["kind"] == "read"
-    assert graph.nodes["a02"]["cheated"] is True and graph.nodes["a02"]["onset"] == -1
+    assert graph.nodes["a02"]["judge_cheated"] is True and graph.nodes["a02"]["onset"] == -1
     summary = json.loads((out / "summary.json").read_text())
     assert summary["tool"] == "graphs" and summary["who_started"] is None and summary["n_edges"] == 1
     for name in summary["files"]:
@@ -68,7 +68,7 @@ def test_unknown_run_is_refused(tmp_path):
 
 def write_scout(copy, summary):
     """A scout summary.json in the copy, in the shape the scout tool writes."""
-    scout = copy / "tools" / "scout"
+    scout = copy / "analysis/tools" / "scout"
     scout.mkdir(parents=True, exist_ok=True)
     (scout / "summary.json").write_text(json.dumps(summary))
 
@@ -95,8 +95,8 @@ def test_ties_and_judge_disagreements(riemann_copy):
     onsets = onsets_of(run)
     metrics = onset_metrics(run, onsets)
     assert metrics["who_started"] == "a01" and metrics["first_onset_ties"] == ["a01", "a02"]
-    assert onset_judge_disagreements(run, onsets) == [{"agent": "a01", "onset": 3, "cheated": False},
-                                                      {"agent": "a03", "onset": None, "cheated": True}]
+    assert onset_judge_disagreements(run, onsets) == [{"agent": "a01", "onset": 3, "judge_cheated": False},
+                                                      {"agent": "a03", "onset": None, "judge_cheated": True}]
 
 
 def test_scout_without_onsets_still_counts_as_the_source(riemann_copy):
@@ -104,6 +104,6 @@ def test_scout_without_onsets_still_counts_as_the_source(riemann_copy):
     run = load_run(riemann_copy)
     assert scout_ran(run)
     assert main(["graph", str(riemann_copy)]) == 0
-    summary = json.loads((riemann_copy / "tools" / "graphs" / "summary.json").read_text())
+    summary = json.loads((riemann_copy / "analysis/tools" / "graphs" / "summary.json").read_text())
     assert summary["onset_source"] == "scout" and summary["who_started"] is None
     assert [row["agent"] for row in summary["onset_judge_disagreements"]] == ["a02", "a03"]

@@ -8,7 +8,7 @@ Transect numbers the turns of one orchestrator and refuses an Inspect sample tha
 which is how ORBIT logs a team. The tool still scans the merged sample structurally and records the refusal. It
 then converts each agent's ATIF transcript into OpenClaw telemetry (transect_openclaw.py), with the timestamps and token
 usage of the agent's model events in the eval log, and runs one Transect report per agent. Transect's turn t is the
-agent's activation t + 1. The phase vocabulary is spec.yaml; the run's domain, the agent's hidden role and the
+agent's activation t + 1. The phase vocabulary is spec.yaml; the run's domain, the agent's role and the
 exploit's branches from run.json access are appended to its context. The command exits 1 when an agent's scan
 recorded an error (a failed judge call, for instance) and prints every agent whose exploit_use turns disagree with
 the run judge's verdict.
@@ -37,7 +37,7 @@ summary.json:
                     totals: {input_tokens, output_tokens, total_tokens}},
             usage is what this invocation billed: zero for calls served from the Inspect cache,
      merged_sample: {sample, accepted, errors: [str], report},
-     agents: {<agent>: {role, cheated, telemetry, timing, turns, scan_errors: [str],
+     agents: {<agent>: {role, judge_cheated, telemetry, timing, turns, scan_errors: [str],
                         agreement: {exploit_use_turns: [[start_turn, end_turn]], judge_cheated,
                                     agrees: bool | null (null when structural or unjudged)}}}}
 """

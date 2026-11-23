@@ -1,5 +1,5 @@
-"""study_exploration_1 as a table: the targets, the regulators, the arms of each stage and the boxes that hold them.
-
+"""ian_baseline_explorations_1 as a table: the targets, the regulators, the arms of each stage and the boxes that hold
+them.
     stage_boxes("gate")             -> the stage's boxes, each with its arms
     find_box("gate-flipt-luna-1")   -> one box by name
     box_jobs(box)                   -> one Job per run of the box: its cell, run name, seed, models and flags
@@ -46,9 +46,9 @@ from dataclasses import dataclass
 from scripts.box.fleet_layout import BOX_KEY, MODELS, REGULATORS, capacity_of, cells, run_name
 from src.models.model_registry import key_env, resolve
 
-TABLE_STUDY = "study_exploration_1"
-"""The study this table states. study_exploration_0 reuses some of its run names, so a reader of the table refuses or
-skips any other study."""
+TABLE_STUDY = "ian_baseline_explorations_1"
+"""The study this table states. ian_baseline_explorations_0 reuses some of its run names, so a reader of the table
+refuses or skips any other study."""
 MOCK_MODEL = "mockllm/model"
 """What a rehearsal runs: Inspect's mock model, no key and no spend."""
 SEEDS = (1, 2, 3, 4, 5)

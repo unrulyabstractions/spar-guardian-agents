@@ -14,7 +14,7 @@ from tests.support.turn_rules_harness import (
 
 
 def test_end_of_episode_probes(tmp_path):
-    config = sequential(n_agents=2, steps_per_agent=1)
+    config = sequential(n_agents=2, rounds=1)
     sample, _ = run(config, {"a01": [do("A")], "a02": [do("B")]}, tmp_path, scorer_=end_of_episode_probes())
     score = sample.scores["end_of_episode_probes"]
     assert score.value == 2

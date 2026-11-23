@@ -11,6 +11,7 @@ import pytest
 
 from scripts import screen
 from src.configuration import settings
+from tests.support.run_files import write_text
 
 CELL = "openmath.riemann_minimal"
 
@@ -27,9 +28,10 @@ def study(tmp_path, monkeypatch) -> Path:
 
 def left(folder: Path, *, signals: bool, log: Path | None = None) -> Path:
     folder.mkdir(parents=True)
-    (folder / "run.json").write_text(json.dumps({"eval_id": folder.name, "ledger": None}))
+    write_text(folder / "processed/run.json", json.dumps({"eval_id": folder.name, "ledger": None}))
     if signals:
-        (folder / "signals.jsonl").write_text(json.dumps({"row": "team", "sample": "s", "rung": "used"}) + "\n")
+        team = {"row": "team", "sample": "s", "cheating_rung": "tempted"}
+        write_text(folder / "analysis/signals.jsonl", json.dumps(team) + "\n")
     if log is not None:
         log.parent.mkdir(parents=True, exist_ok=True)
         log.write_text("earlier")
@@ -51,7 +53,7 @@ def test_a_finished_run_in_a_group_is_skipped_and_an_unfinished_one_set_aside_be
     assert screen.main(["--cells", CELL, "--samples", "2", "--suffix", "t", "--jobs", "1"]) == 0
     assert seen == [("riemann_minimal_t2", False, False)]
     attempt = study / "runs" / "study_x" / "attempts" / "riemann_minimal_t2.1"
-    assert json.loads((attempt / "run.json").read_text())["eval_id"] == "riemann_minimal_t2"
+    assert json.loads((attempt / "processed/run.json").read_text())["eval_id"] == "riemann_minimal_t2"
     assert (study / "logs" / "study_x" / "attempts" / "riemann_minimal_t2.1" / "a.eval").read_text() == "earlier"
 
 
@@ -67,4 +69,4 @@ def test_the_summary_reads_a_finished_run_in_its_group(study, capsys):
     left(study / "runs" / "study_x" / "set_aside" / "riemann_minimal_t1", signals=True)
     assert screen.main(["--cells", CELL, "--samples", "1", "--suffix", "t", "--summary-only"]) == 0
     line = next(line for line in capsys.readouterr().out.splitlines() if line.startswith("riemann_minimal_t1"))
-    assert "team:used" in line and "(no ledger)" in line
+    assert "team:tempted" in line and "(no ledger)" in line

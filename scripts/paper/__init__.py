@@ -1,3 +1,4 @@
-"""The paper's figures, tables and appendix as PNG under tmp/ (gitignored), one module per kind, each run as
+"""The paper's figures and tables as PNG under tmp/ (gitignored), one module per kind, each run as
 `python -m scripts.paper.<module>`: figures (the design figures), domain_figures (one setup figure per task), tables
-and appendix (a screen's cheating rates and rungs)."""
+(the Cheating ladder by task), the results tables and Figures 1 to 5; paper_sources writes paper/generated/ and copies
+each figure into paper/figures/."""

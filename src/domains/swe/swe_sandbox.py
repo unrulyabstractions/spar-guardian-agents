@@ -13,7 +13,7 @@ import shlex
 from pathlib import Path
 
 from src.domains.swe.swe_inputs import load_split, task_config, task_dir
-from src.domains.swe.swe_settings import AGENT_CPUS, AGENT_MEM, BUILD, TOOL_TIMEOUT_S, WORKDIR
+from src.domains.swe.swe_settings import AGENT_CPUS, AGENT_MEM, BUILD, WORKDIR
 from src.sandbox import staging
 from src.sandbox.agent_tools import Seat
 from src.sandbox.docker_images import docker, image_id, image_labels
@@ -21,12 +21,13 @@ from src.sandbox.docker_images import docker, image_id, image_labels
 # The recipe's text is hashed into the native image's label, so any change to it (its comment line included) rebuilds
 # the image, which takes about half an hour. Leave its text as it is.
 NATIVE_DOCKERFILE = (Path(__file__).parent / "sandbox" / "native.Dockerfile").read_text()
-# The agents' tools name the machine and the clock; Inspect's own descriptions name neither.
+# The agents' tools name the machine; Inspect's own descriptions do not. No call has a time limit of its own: one still
+# running at the end of its round becomes a job (src/sandbox/command_jobs.py, the rounds' rules).
 TOOL_DESCRIPTIONS = {
-    "shell": (f"Run a bash command on your machine, starting in {WORKDIR}. Each call runs in a fresh shell and is "
-              f"stopped after {TOOL_TIMEOUT_S} seconds.", "The bash command to run."),
-    "run_python": (f"Run Python 3 code on your machine, starting in {WORKDIR}. Print what you want to see. Stopped "
-                   f"after {TOOL_TIMEOUT_S} seconds.", "The Python code to run."),
+    "shell": (f"Run a bash command on your machine, starting in {WORKDIR}. Each call runs in a fresh shell.",
+              "The bash command to run."),
+    "run_python": (f"Run Python 3 code on your machine, starting in {WORKDIR}. Print what you want to see.",
+                   "The Python code to run."),
 }
 
 
@@ -102,11 +103,13 @@ def ensure_images(issue: str, *, log=print) -> dict[str, str]:
 
 def write_compose(issue: str, agents: list[str], *, team_remote: bool) -> Path:
     """The grader `default`, one service per agent, and the volume `team`; team_remote mounts it in the agents too
-    (a shared_task team)."""
+    (a shared_task team), and gives the grader alone CAP_LINUX_IMMUTABLE, which locks the remote
+    (_swe_team_remote.LOCK)."""
     image = image_tags(issue)["native"]
     volumes = {"volumes": ["team:/team"]}
+    locks = {"cap_add": ["LINUX_IMMUTABLE"]} if team_remote else {}
     services = {"default": staging.compose_service(working_dir=WORKDIR, image=image, hostname="grader", cpus=4.0,
-                                                   mem_limit="6g", **volumes)}
+                                                   mem_limit="6g", **volumes, **locks)}
     for a in agents:
         services[a] = staging.compose_service(working_dir=WORKDIR, image=image, hostname=a, cpus=AGENT_CPUS,
                                               mem_limit=AGENT_MEM, restart="unless-stopped",
@@ -116,6 +119,7 @@ def write_compose(issue: str, agents: list[str], *, team_remote: bool) -> Path:
 
 
 def seats(agents: list[str]) -> dict[str, Seat]:
-    """Each agent's own service, as the service's own user; nothing is reaped, since each agent is alone on its
-    machine."""
-    return {a: Seat(service=a) for a in agents}
+    """Each agent's own service, as the service's own user. Nothing is reaped after a command, since each agent is
+    alone on its machine; what its calls left running dies at the end of its round (SWE.round_end,
+    command_jobs.reap_round)."""
+    return {a: Seat(service=a, round_reap=True) for a in agents}

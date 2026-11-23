@@ -1,0 +1,50 @@
+/* Entries, exits and alerts (tv_presence.js): the transcript's chips, the bar's badge, the Details tab's cards and the
+   Board tab's lane marks. */
+
+/* a round's message's chips, in its header: the round, each presence event, the board */
+.pr-chip { display: inline-flex; align-items: center; gap: 5px; margin-left: 6px; padding: 0 6px; border-radius: 4px;
+  font-size: 11.5px; font-weight: 600; line-height: 1.6; border: 1px solid var(--border-strong);
+  background: var(--panel-2); color: var(--text); }
+.pr-chip-in { border-color: var(--good); color: var(--good); background: var(--good-bg); }
+.pr-chip-out { border-color: var(--border-strong); color: var(--muted); }
+.pr-chip-event { border-color: var(--border-strong); }
+.pr-chip-alert { border-color: var(--bad); color: var(--on-bad); background: var(--bad); }
+.pr-chip-round { font-family: var(--mono); font-weight: 500; }
+.pr-chip-board { border-style: dashed; }
+.pr-round { font-weight: 500; opacity: .8; font-family: var(--mono); font-size: 10.5px; }
+
+/* the bar's badge and the alerts card */
+.pr-alert-badge { cursor: pointer; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;
+  border: 1px solid var(--bad); }
+.pr-bang { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px;
+  border-radius: 3px; background: var(--bad); color: var(--on-bad); font-weight: 800; font-size: 11px; line-height: 1; }
+.pr-alerts { border-left: 4px solid var(--bad); }
+.pr-table td { vertical-align: top; }
+.pr-reason { white-space: pre-wrap; }
+.pr-why-alert { color: var(--bad); font-weight: 600; }
+
+/* the Board tab's lanes: the stretch an agent was absent, its entry and exit ticks */
+.pr-hatch-line { stroke: var(--border-strong); stroke-width: 1.5; }
+.pr-absent { opacity: .55; pointer-events: none; }
+.pr-tick line { stroke: var(--text); stroke-width: 1.5; }
+.pr-tick path { fill: var(--text); }
+.pr-in line { stroke: var(--good); }
+.pr-in path { fill: var(--good); }
+.pr-out line, .pr-out path { stroke: var(--muted); }
+.pr-out path { fill: var(--muted); }
+.pr-out-alert line { stroke: var(--bad); }
+.pr-out-alert path { fill: var(--bad); stroke: var(--bad); }
+.pr-tick text { font: 600 10px var(--sans); fill: var(--muted); }
+.pr-in text { fill: var(--good); }
+.pr-out-alert text { fill: var(--bad); }
+.pr-hit { fill: transparent; cursor: pointer; }
+
+/* an alert: a line across the timeline and a flag with "!" */
+.pr-alert-line { stroke: var(--bad); stroke-width: 2; stroke-dasharray: 5 3; pointer-events: none; }
+.pr-flag path { fill: var(--bad); stroke: var(--bg); stroke-width: 1.2; }
+.pr-flag text { font: 800 10px var(--sans); fill: var(--on-bad); pointer-events: none; }
+.pr-flag-big text { font-size: 12px; }
+/* a flag on a lane's top edge may stand past the SVG's top */
+.bd-svg { overflow: visible; }
+.pr-alert:hover .pr-alert-line { stroke-width: 3; }
+.pr-sw-absent { background: repeating-linear-gradient(45deg, var(--border-strong) 0 1.5px, transparent 1.5px 4px); }

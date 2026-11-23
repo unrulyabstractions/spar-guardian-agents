@@ -1,20 +1,21 @@
-"""The run, judge, ladder, rejudge and regenerate commands: run a task in process, judge a finished eval log again,
-place a run's agents on the cheating ladder, do both for finished runs, or rebuild what a run directory derives from
+"""The run, judge, rejudge, judge-pass and regenerate commands: run a task in process, judge a finished eval log again
+and re-export the run from it, run a judge pass over runs' stored records, or rebuild what a run directory derives from
 its eval log.
 
     run("swarm_R3D3_s1", OpenMath(), config, model="google/gemini-3.8-flash", timeout=2700)
     run("riemann_cheat", benchmark, config, model, timeout, task=swarm_task(benchmark, config, extra_instruction=CHEAT))
     judge(Path("logs/swarm_R3D3/<log>.eval"), "swarm_R3D3", "gpt-6-luna", batch=True)
-    ladder_runs([Path("runs/swarm_R3D3")], "gpt-6-luna", view="full", batch=True)
     rejudge([Path("runs/swarm_R3D3")], "gpt-6-luna", batch=True)
+    judge_pass("collusion", [Path("runs/ian_baseline_explorations_1")], "gpt-6-luna", cap=2.0, limit=5)
     regenerate([Path("runs/swarm_R3D3")])
 
 A run calls inspect_ai.eval with the task (the default task of tasks.swarm_task, or one the caller built), writes its
 log under logs/<study>/<name>/, exports it to runs/<study>/<name>/ with src/export/run_export.py, prints one line per
-episode (src/measures/episode_summary.py) and places every agent and the team on the code ladder
-(src/measures/code_ladder.py). The code ladder runs again after every export, which rewrites run.json, and after the
-judged ladder, whose team rows it merges into its own. A run directory holds one eval's run: run and judge refuse a
-directory that holds another eval's run before the eval or the judge spends anything. With replace (the command line's
+episode (src/measures/episode_summary.py) and records every agent's and the team's evidence and ladders
+(src/measures/code_ladder.py), again after every export, which rewrites run.json, and one line on the run's own /tmp
+snapshots (tmp_snapshots.json, src/export/_export_tmp_snapshots.py). A run
+directory holds one eval's run: run and judge refuse a directory that holds another eval's run before the eval or the
+judge spends anything. With replace (the command line's
 --replace) they set that earlier run aside into runs/<study>/attempts/<name>.<n>/ instead, with its eval log and its
 figures, so nothing of it is lost and no file of it stays beside the new run. rejudge refuses a run whose log holds
 another eval than its folder before it judges that run.
@@ -23,10 +24,13 @@ calls use the provider's batch API, and with batch_agents so do the agents' call
 role with a model of its own (worker_model, regulator_model, disregulator_model) runs it through the swarm model
 provider (src/models/swarm_model_provider.py), which carries the agents' generate config to that model's calls. Each
 role model is built once before the eval, so a provider name Inspect does not know is refused before the sandbox
-starts. Re-judging reads a finished log, judges every agent again with src/judging/cheatbench_judge.py and exports the
-log with the new verdicts: rejudge into each run's own directory, wherever it lives, and judge into
-runs/<study>/<run_name>/. A refused precondition prints its reason to stderr, and the command returns the exit code
-the command line passes on.
+starts. judge and rejudge read a finished log, judge every agent again with src/judging/cheatbench_judge.py and
+RE-EXPORT the run from the log with the current code and the new verdicts (judges/cheatbench.<judge>.jsonl, where they
+replace that judge's rows of the same episodes): rejudge into each run's own
+directory, wherever it lives, and judge into runs/<study>/<run_name>/. They are how a run made without a judge gets
+its own verdicts; a run made on older code is rewritten by them. judge_pass (src/judging/judge_pass.py) reads a run's
+stored record instead and writes only judges/<pass>.<judge>.jsonl. A refused precondition prints its reason to
+stderr, and the command returns the exit code the command line passes on.
 """
 from __future__ import annotations
 
@@ -50,11 +54,12 @@ from src.export.eval_sample_view import SampleView, error_and_failure
 from src.export.export_episodes import episode_id
 from src.export.run_export import RunFolderTaken, refuse_replacing, write_run
 from src.judging import cheatbench_judge as judging
-from src.judging import judging_ladder as ladder
+from src.judging import judge_pass as passes
+from src.judging import verdict_files
 from src.measures import code_ladder as signals
 from src.measures import episode_summary as summary
-from src.measures import run_figures, swe_measures
-from src.measures.run_directory import RunDir, figures_dir, find_run, set_aside_attempt
+from src.measures import process_runs, run_figures, swe_measures
+from src.measures.run_directory import RunDir, find_run, set_aside_attempt
 from src.models import (
     cost_cap,
     gemini_402_retry,
@@ -133,7 +138,9 @@ def judge_role_model(config: SwarmConfig) -> Model | None:
     if config.judge is None:
         return None
     judge_model, _ = judging.judge_model_config(config.judge)
-    return get_model(judge_model, config=GenerateConfig(batch=config.batch_judge))
+    # each call priced at the rate it is billed, batch prices with batch_judge (cost_cap.price_calls)
+    return cost_cap.price_calls(get_model(judge_model, config=GenerateConfig(batch=config.batch_judge)),
+                                batch=bool(config.batch_judge))
 
 
 def agent_generate_config(config: SwarmConfig) -> dict:
@@ -225,7 +232,6 @@ def run(name: str, benchmark: Benchmark, config: SwarmConfig, model: str, timeou
     gemini_402_retry.install()
     openrouter_google_400_retry.install()
     openrouter_gemini_tool_ids.install()
-    openrouter_anthropic_cache.install()
     run_models = [model, *config.role_models().values(), str(judge_model) if judge_model is not None else None]
     try:
         openrouter_anthropic_cache.require_proven(run_models)
@@ -247,7 +253,9 @@ def run(name: str, benchmark: Benchmark, config: SwarmConfig, model: str, timeou
     generate = agent_generate_config(config)
     # Inspect merges the eval's generate config into the eval's model only; the role models get it from the provider
     provider.set_agent_config(GenerateConfig(**generate))
-    agents = get_model(model, memoize=False, **models.model_args(model))
+    # Inspect prices each call at the rate the provider bills it, so the cap counts what is billed (cost_cap)
+    agents = cost_cap.price_calls(get_model(model, memoize=False, **models.model_args(model)),
+                                  batch=bool(generate.get("batch")))
     # every raw model call is kept (Inspect keeps five per model by default): OpenRouter's billed cost per call
     # lives in the raw response, and the export sums it per episode
     [log] = inspect_ai.eval(task, model=agents, log_dir=str(log_dir), display="plain", timeout=timeout,
@@ -257,8 +265,29 @@ def run(name: str, benchmark: Benchmark, config: SwarmConfig, model: str, timeou
         raise Refusal("no eval log written", 3)
     run_dir = export(Path(log.location), run_dir, replace=replace)
     print("\n".join([summary.HEADER, *summary.summary_lines(run_dir)]), flush=True)
-    print(signals.run_report(run_dir), flush=True)
+    processed(run_dir)
+    print(tmp_line(RunDir(run_dir).run_json.get("tmp_snapshots")), flush=True)
     return 0 if log.status == "success" else 3
+
+
+def processed(run_dir: Path) -> None:
+    """Process the run at once (src/measures/process_runs.py), so the viewer serves it, and print its code record."""
+    report = process_runs.process_run(run_dir)
+    redone = ", ".join(name for name, state in report.done.items() if state == "redone") or "nothing"
+    failed = "".join(f"; {name} failed: {why}" for name, why in report.failed.items())
+    print(f"== processed {run_dir}: redone {redone}{failed}", flush=True)
+    print(signals.recorded_report(run_dir), flush=True)
+
+
+def tmp_line(block: dict | None) -> str:
+    """One line on the run's /tmp snapshots (run.json tmp_snapshots, src/export/_export_tmp_snapshots.py)."""
+    if not block:
+        return "== tmp snapshots: none recorded"
+    if block.get("status") != "written":
+        return f"== tmp snapshots: {block.get('status')}" + (f" ({block['error']})" if block.get("error") else "")
+    ms = block.get("ms") or {}
+    return (f"== tmp snapshots: written, {block['ran']} calls of {block['shots']} shots, {block['errors']} errors, "
+            f"listing median {ms.get('median')} ms, p90 {ms.get('p90')} ms, {block['bytes']} bytes")
 
 
 # --------------------------------------------------------------------------
@@ -302,20 +331,23 @@ def _write_verdicts(eval_log: Path, run_dir: Path, verdicts: dict[str, dict], *,
                     remedy: str = JUDGE_REMEDY) -> None:
     """Export the log to run_dir with its verdicts and print them. Refuses when no verdict reached the file."""
     run_dir = export(eval_log, run_dir, verdicts=verdicts, replace=replace, remedy=remedy)
-    written = RunDir(run_dir).verdicts()
+    judge = next(iter(verdicts.values()), {}).get("judge")
+    stored = verdict_files.cheatbench(run_dir).get(judge) or {}
+    written = {episode: row for episode, row in stored.items() if episode in verdicts}
     if not verdicts or not written:
         raise Refusal("the judge wrote no verdicts", 4)
     print("== verdicts")
     for verdict in written.values():
         print(json.dumps({key: verdict.get(key) for key in VERDICT_FIELDS}))
-    print(signals.run_report(run_dir), flush=True)
+    processed(run_dir)
 
 
 @command
 def judge(eval_log: Path, run_name: str, judge_name: str, *, batch: bool = True, judge_errors: bool = False,
           replace: bool = False) -> int:
-    """Judge a finished eval log (again, or for the first time after a run without a judge) and export it with the
-    verdicts into the run's own folder: runs/<study>/<run_name>/, or the group that holds the run. A folder that holds
+    """Judge a finished eval log (again, or for the first time after a run without a judge) and RE-EXPORT the run from
+    the log with the current code and the verdicts into the run's own folder: runs/<study>/<run_name>/, or the group
+    that holds the run. Every file the export owns is rewritten from the log. A folder that holds
     another eval's run is refused (2) before the judge starts. With replace, that earlier run moves to the attempts
     group once the verdicts are in, and the new run goes to runs/<study>/<run_name>/; the log judged stays where it
     is."""
@@ -340,74 +372,30 @@ def judge(eval_log: Path, run_name: str, judge_name: str, *, batch: bool = True,
 
 
 # --------------------------------------------------------------------------
-# the cheating ladder
+# finished runs: the judge again from their logs, or everything the log gives
 # --------------------------------------------------------------------------
 @command
-def ladder_runs(run_dirs: list[Path], judge_name: str, *, view: str = "full", agents: list[str] | None = None,
-                force: bool = False, batch: bool = True) -> int:
-    """Place every agent of each run on the cheating ladder (src/judging/judging_ladder.py):
-    runs/<study>/<name>/ladder.jsonl, one line per agent, then the table over the runs, then the code ladder again,
-    which merges the judged team rows into signals.jsonl and run.json. batch as in judge()."""
-    require_judge_key(judge_name, 2)
-    if view not in ladder.VIEWS:
-        raise Refusal(f"unknown view {view!r}; choose one of {ladder.VIEWS}", 2)
-    missing = [str(d) for d in run_dirs if not RunDir(d).is_run()]
-    if missing:
-        raise Refusal(f"not a run directory: {', '.join(missing)}", 2)
-    for run_dir in run_dirs:
-        if not RunDir(run_dir).team_signals():      # the team row says whether presentation is asked
-            signals.run_signals(Path(run_dir))
-    asyncio.run(_ladder_all(run_dirs, judge_name, view, agents, force, batch))
-    print(ladder.ladder_table(run_dirs, view), end="")
-    for run_dir in run_dirs:
-        print(signals.run_report(Path(run_dir)), flush=True)
-    return 0
-
-
-async def _ladder_all(run_dirs: list[Path], judge_name: str, view: str, agents: list[str] | None,
-                      force: bool, batch: bool) -> None:
-    """The runs together on one event loop and one client, so that a batch holds every run's episodes, each run's lines
-    printed when its verdicts are in."""
-    mode = "batch" if batch else "sync"
-    judge = judging.Judge.of(judge_name, batch=batch)
-    for run_dir in run_dirs:
-        print(f"== ladder ({judge_name}, {mode}, {view}) {run_dir}", flush=True)
-    results = await asyncio.gather(*(ladder.judge_run(Path(run_dir), judge, view=view, agents=agents, force=force)
-                                     for run_dir in run_dirs))
-    for run_dir, rows in zip(run_dirs, results):
-        print(f"== ladder {run_dir}", flush=True)
-        for row in rows:
-            print(ladder.agent_line(row), flush=True)
-
-
-# --------------------------------------------------------------------------
-# finished runs: both judges again, or everything the log gives
-# --------------------------------------------------------------------------
-@command
-def rejudge(run_dirs: list[Path], judge_name: str, *, with_judge: bool = True, with_ladder: bool = True,
-            view: str = "full", judge_errors: bool = False, batch: bool = True) -> int:
-    """CheatBench's judge over the runs' eval logs (RunDir.eval_log), each re-exported into the run's own directory,
-    wherever it lives, then the ladder over their transcripts, every episode again, all the runs in one batch. Runs are
-    told apart by their directory, since runs in different folders can share a name, and a run given twice is judged
-    once. A run whose log holds another eval than its folder is refused (2) before the judge spends anything on it. A
-    run whose log is gone gets the ladder only, which needs the transcripts alone. A run the judge refuses gets no
-    ladder. Returns the worst exit code."""
+def rejudge(run_dirs: list[Path], judge_name: str, *, judge_errors: bool = False, batch: bool = True) -> int:
+    """CheatBench's judge over the runs' eval logs (RunDir.eval_log), all the runs in one batch, each run then
+    RE-EXPORTED from its log into its own directory, wherever it lives, with the new verdicts. Runs are told apart by
+    their directory, since runs in different folders can share a name, and a run given twice is judged once. A run
+    whose log holds another eval than its folder is refused (2) before the judge spends anything on it, and so is a
+    run whose log is gone. Returns the worst exit code."""
     runs: dict[str, RunDir] = {}
     for run_dir in run_dirs:
         run = RunDir(run_dir).require()
         runs.setdefault(str(run.path.resolve()), run)
-    if with_judge:
-        require_judge_key(judge_name, 2)
-    codes, refused, views = [0], set(), {}
+    require_judge_key(judge_name, 2)
+    codes, views = [0], {}
 
     def refuse(key: str, refusal: Refusal) -> None:
         print(f"{runs[key].path}: {refusal}", file=sys.stderr)
         codes.append(refusal.code)
-        refused.add(key)
 
-    for key, run in runs.items() if with_judge else []:
+    for key, run in runs.items():
         if run.eval_log is None:
-            print(f"{run.path}: no eval log on disk, skipping CheatBench's judge", file=sys.stderr)
+            refuse(key, Refusal("no eval log on disk, so nothing to re-export; `python -m src judge-pass cheatbench` "
+                                "judges its stored transcripts", 2))
             continue
         try:
             found = _log_views(run.eval_log, judge_errors)
@@ -424,28 +412,44 @@ def rejudge(run_dirs: list[Path], judge_name: str, *, with_judge: bool = True, w
                 _write_verdicts(run.eval_log, run.path, verdicts[key], remedy=LOG_REMEDY)
             except Refusal as refusal:
                 refuse(key, refusal)
-    ladder_dirs = [run.path for key, run in runs.items() if key not in refused]
-    if with_ladder and ladder_dirs:
-        codes.append(ladder_runs(ladder_dirs, judge_name, view=view, force=True, batch=batch))
     return max(codes)
+
+
+# --------------------------------------------------------------------------
+# a judge pass over stored runs
+# --------------------------------------------------------------------------
+@command
+def judge_pass(pass_name: str, paths: list[Path], judge_name: str, *, cap: float | None, batch: bool = False,
+               limit: int | None = None, only_missing: bool = False, redo: bool = False) -> int:
+    """A judge pass (src/judging/judge_pass.py) over run directories or study folders under a dollar cap: refused (2)
+    without a cap, the judge's key, a price or a known pass. Writes only judges/<pass>.<judge>.jsonl in each run.
+    Returns 0, or 3 when the cap stopped the pass with units left."""
+    require_judge_key(judge_name, 2)
+    try:
+        tally = passes.run_pass(pass_name, paths, judging.Judge.of(judge_name, batch=batch), cap=cap, batch=batch,
+                                limit=limit, only_missing=only_missing, redo=redo)
+    except ValueError as error:
+        raise Refusal(str(error), 2) from error
+    return 3 if tally.stopped else 0
 
 
 @command
 def regenerate(run_dirs: list[Path], *, export_log: bool = True, measures: bool = True, plots: bool = True) -> int:
-    """Rebuild what each run directory derives from its eval log: the export, keeping the verdicts judge.jsonl holds
-    (a run whose log is gone keeps its export); the code ladder (signals.jsonl) and, on a SWE run, Lucy's measures
-    (swe_summary.json); the figures under out/<study>/[<group>/]<run>/ (run_directory.figures_dir). ladder.jsonl is
-    never cleared. A run whose log holds another eval than its folder is refused (2)."""
+    """Rebuild what each run directory derives from its eval log: the export (a run whose log is gone keeps its
+    export); the code record (signals.jsonl) and, on a SWE run, Lucy's measures (swe_summary.json); the figures under
+    the run's analysis/figures/. The verdicts in analysis/judges/ stay: the export only adds the
+    eval judge's verdicts on episodes its file lacks. A run whose log holds another eval than its folder is refused
+    (2)."""
     for run_dir in run_dirs:
         run = RunDir(run_dir).require()
         if export_log and run.eval_log:
-            export(run.eval_log, run.path, verdicts=run.verdicts() or None, remedy=LOG_REMEDY)
+            export(run.eval_log, run.path, remedy=LOG_REMEDY)
         elif export_log:
             print(f"{run.name}: no eval log on disk, keeping the export as it is", file=sys.stderr)
         if measures:
-            print(signals.run_report(run.path), flush=True)
+            processed(run.path)
             if run.run_json.get("swe"):
                 swe_measures.summarize(run.path)
         if plots:
-            run_figures.plot_run(run.path, figures_dir(run.path))
+            run_figures.plot_run(run.path, run.file("figures"))
     return 0

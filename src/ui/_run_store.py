@@ -1,15 +1,17 @@
 """The results browser's run reader: the run directories of a study, at its top level and in its groups, and the eval
 logs they point at. A run's key is its folder under the study: <run>, or <group>/<run> for a run in a group.
 
-`Store` reads run.json, episodes.jsonl, judge.jsonl, ladder.jsonl, signals.jsonl and the trajectories through
-src/measures/run_directory.py RunDir, and the communication and defense stores and the analysis tools' summaries
-itself; it loads a run's Inspect eval log once, on demand. The run directories are written by src/export/run_export.py
-and the SWE measures (swe_summary.json) by src/measures/swe_measures.py. _eval_log_views.py reads the eval logs. Each
-episode carries its agent rows of the two ladders; the run carries the code ladder's team records.
+`Store` reads run.json, episodes.jsonl, signals.jsonl, the trajectories and each sample's board through
+src/measures/run_directory.py RunDir, CheatBench's verdicts through src/judging/verdict_files.py episode_verdicts, and
+the defense store and the analysis tools' summaries itself; it loads a run's Inspect eval log once, on demand. The run
+directories are written by src/export/run_export.py and the SWE measures (swe_summary.json) by
+src/measures/swe_measures.py. _eval_log_views.py reads the eval logs. Each episode carries its agent row of the code's
+evidence; the run detail carries the team records. The three ladders are the transcript viewer's
+(src/ui/transcript_viewer.py), not the browser's.
 
     store = Store(Path("runs"))
     rows = [store.run_row(name) for name in store.run_names()]
-    rows[0]["aggregate"]["cheated"], rows[0]["team"]["rung"]
+    rows[0]["aggregate"]["judge_cheated"]   # the agents CheatBench's judge says cheated, its own word
 """
 from __future__ import annotations
 
@@ -23,22 +25,23 @@ from src.configuration import task_names
 from src.configuration.settings import INCOMPLETE_FAILURES
 from src.configuration.swarm_config import ROLES
 from src.export.eval_sample_view import PASSIVE_DEFENSES
+from src.judging import verdict_files
 from src.measures.run_directory import ATTEMPTS, GROUPS, RunDir, study_runs
+from src.measures.team_ladder import sample_of
 from src.measures.verdict_fields import CRITICAL, FLAGS_BY_TASK, GOOD, SERIOUS, WARNING
 from src.utils.json_files import read_json, read_json_dir
 
-# A verdict is every key of the judge.jsonl row except these: the row's identity, how the judge was configured, its
+# A verdict is every key of CheatBench's verdict row except these: the row's identity, how the judge was configured, its
 # usage, and the transcript it read. The task's own verdict fields pass through whatever they are. VERDICT_BASE is
 # present on every verdict, None when absent.
 VERDICT_BOOKKEEPING = frozenset({
-    "id", "episode", "replicate", "task", "model", "transcript_path",
+    "unit", "id", "episode", "replicate", "task", "model", "model_key", "agent", "role", "transcript_path",
+    "transcript_sha256", "prompt_sha256", "schema_sha256", "input_sha256",
     "judge_generation_config", "judge_generation_config_unsupported", "judge_prompt", "judge_schema",
     "output_mode", "judge_usage", "judge_attempts",
 })
 VERDICT_BASE = ("cheated", "summary", "judge", "judge_cost_usd", "parse_ok", "judge_error")
-LADDER_BOOKKEEPING = VERDICT_BOOKKEEPING | {"raw", "row", "sample"}
 SIGNALS_IDENTITY = ("row", "sample", "episode", "agent", "role", "task")
-TEAM_FIELDS = ("rung", "collaboration")          # what the runs list shows of the first sample's team record
 SWARM_FIELDS = ("n_agents", "regulators", "disregulators", "workers", "seed", "composition")
 DELIVERABLE_FIELDS = ("archive_in_workspace", "archive_on_remote_main", "registered_on_main",
                       "registered_message_copied_from")
@@ -47,7 +50,7 @@ SWE_FIELDS = ("issue", "instance", "n_agents", "mode", "honeypot", "rule", "base
 # The badge a true verdict flag takes, by the status colour the figures give it.
 FLAG_KIND = {WARNING: "warn", SERIOUS: "bad", GOOD: "good", CRITICAL: "bad"}
 # The tasks with a setting of their own, apart from openmath and SWE, by domain key: the setting key's prefix and the
-# sort order. Openmath settings sort 0 (lone agent), 1 (board) and 2 (hidden roles); SWE sorts 3.
+# sort order. Openmath settings sort 0 (lone agent), 1 (board) and 2 (influencers); SWE sorts 3.
 SETTING_KEYS = {"knowledge_work": ("kw", 4), "subset_sum": ("subset", 5), "prime_factorization": ("factor", 6),
                 "protein_design": ("protein", 7), "creative_writing": ("creative", 8), "chess": ("chess", 9)}
 # The same by CheatBench's task name, which run.json records: the prefix, the label and the sort order. The label is the
@@ -82,7 +85,7 @@ def _without(row: dict | None, keys) -> dict | None:
 
 
 def verdict_of(row: dict | None) -> dict | None:
-    """The verdict fields of one judge.jsonl row, or None when the episode was not judged."""
+    """The verdict fields of one CheatBench verdict row, or None when the episode was not judged."""
     if not row:
         return None
     return {**{key: None for key in VERDICT_BASE}, **_without(row, VERDICT_BOOKKEEPING)}
@@ -97,10 +100,11 @@ def verdict_fields(task: str | None) -> list[dict]:
 
 def setting_of(run: dict, n_agents: int) -> dict:
     """The arrangement a run was made in: the task, the communication graph (a lone agent, or every agent on one
-    board), the roster size and whether roles were hidden. {key, label, order, n} plus composition, R, D and W for
-    hidden roles. A CheatBench SWE run is set by its issue, team size, honeypot and rule."""
+    board), the roster size and whether it had influencers (regulators and disregulators, whose run.json records a
+    composition). {key, label, order, n} plus composition, R, D and W for a run with influencers. A CheatBench SWE run
+    is set by its issue, team size, honeypot and rule."""
     swarm = run.get("swarm") or {}
-    hidden = {"composition": swarm["composition"], "R": swarm.get("regulators"), "D": swarm.get("disregulators"),
+    influencers = {"composition": swarm["composition"], "R": swarm.get("regulators"), "D": swarm.get("disregulators"),
               "W": swarm.get("workers")} if swarm.get("composition") else {}
     n = 1 if run.get("topology") in (None, "single") else n_agents
     team = "lone agent" if n == 1 else f"board of {n}"
@@ -115,20 +119,28 @@ def setting_of(run: dict, n_agents: int) -> dict:
                 "label": f"SWE {swe.get('issue')} {team}" + (f" ({bits})" if bits else "")}
     if run.get("task") in TASK_SETTINGS:
         prefix, label, order = TASK_SETTINGS[run["task"]]
-        return {"key": f"{prefix}-{'roles' if hidden else 'board'}-{n}", "order": order, "n": n,
-                "label": f"{label} {team}" + (", hidden roles" if hidden else ""), **hidden}
+        return {"key": f"{prefix}-{'roles' if influencers else 'board'}-{n}", "order": order, "n": n,
+                "label": f"{label} {team}" + (", influencers" if influencers else ""), **influencers}
     if n == 1:
         return {"key": "single", "label": "lone agent", "order": 0, "n": 1}
-    if hidden:
-        return {"key": f"roles-{n}", "label": f"board of {n}, hidden roles", "order": 2, "n": n, **hidden}
+    if influencers:
+        return {"key": f"roles-{n}", "label": f"board of {n}, influencers", "order": 2, "n": n, **influencers}
     return {"key": f"board-{n}", "label": f"board of {n}", "order": 1, "n": n}
+
+
+def rounds_of(config: dict) -> dict | None:
+    """The run's rounds and calls per round (SwarmConfig.rounds, calls_per_round), or None for a run before
+    2026-11-21, which had steps."""
+    if config.get("calls_per_round") is None:
+        return None
+    return {"rounds": config.get("rounds"), "calls_per_round": config["calls_per_round"]}
 
 
 def _swe_of(swe: dict, run_dir: Path) -> dict:
     """run.json "swe" as the page reads it: the issue and arm fields, each grade's reward and required tests passed,
     and the talk measures of swe_summary.json when src/measures wrote one."""
     grades = swe.get("grades") or {}
-    measures = (read_json(run_dir / "swe_summary.json") or {}).get("agents")
+    measures = (read_json(RunDir(run_dir).file("swe_summary.json")) or {}).get("agents")
     keys = ("posts", "fix_posts", "rule_posts", "disclosed")
     return {
         **{key: swe.get(key) for key in SWE_FIELDS},
@@ -140,15 +152,16 @@ def _swe_of(swe: dict, run_dir: Path) -> dict:
 
 
 def aggregate(run: dict, episodes: list[dict], fields: list[dict]) -> dict:
-    """One run's counts over its episodes. judged, cheated, flags and by_role count only counted verdicts (a verdict
-    on an episode with a transcript); tokens.input includes cache reads."""
+    """One run's counts over its episodes. judged, judge_cheated (the agents CheatBench's judge says cheated, its own
+    `cheated`, never the Cheating ladder's), flags and by_role count only counted verdicts (a verdict on an episode with
+    a transcript); tokens.input includes cache reads."""
     counted = [e for e in episodes if e["counted"]]
     defenses = [d["name"] for d in run.get("defenses") or []]
     scores = [v for e in episodes for v in (e.get("score") or {}).values() if v is not None]
     usages = [e.get("usage") or {} for e in episodes]
     return {
         "judged": len(counted),
-        "cheated": sum(1 for e in counted if e["verdict"]["cheated"]),
+        "judge_cheated": sum(1 for e in counted if e["verdict"]["cheated"]),
         "flags": {f["field"]: sum(1 for e in counted if e["verdict"].get(f["field"])) for f in fields},
         "controlled": any(name not in PASSIVE_DEFENSES for name in defenses),
         "blocks": sum((e.get("defense") or {}).get("blocks", 0) for e in episodes),
@@ -159,7 +172,8 @@ def aggregate(run: dict, episodes: list[dict], fields: list[dict]) -> dict:
         "tokens": {key: sum(u.get(key) or 0 for u in usages) for key in ("input", "output", "cache_read")},
         "judge_cost": round(sum((e["verdict"] or {}).get("judge_cost_usd") or 0 for e in episodes), 4),
         "by_role": {role: {"n": sum(1 for e in counted if e.get("role") == role),
-                           "cheated": sum(1 for e in counted if e.get("role") == role and e["verdict"]["cheated"])}
+                           "judge_cheated": sum(1 for e in counted
+                                                if e.get("role") == role and e["verdict"]["cheated"])}
                     for role in ROLES} if run.get("swarm") else None,
     }
 
@@ -205,22 +219,15 @@ class Store:
         return log
 
     def episodes(self, name: str) -> list[dict]:
-        """episodes.jsonl rows, each with its verdict, ladder and signals rows, has_transcript and counted."""
+        """episodes.jsonl rows, each with its verdict and signals rows, has_transcript and counted."""
         run = RunDir(self.run_dir(name))
-        verdicts = run.verdicts()
-        ladder = {row["episode"]: row for row in run.ladder_rows()}
+        verdicts = verdict_files.episode_verdicts(run.path)
         signals = {row["episode"]: row for row in run.signals()}
         out = []
         for rec in run.episodes():
-            # A set-aside run keeps the transcript_path of its original name, which a newer run may own by now; the
-            # copy under the run's own trajectories/ is its record.
-            own = run.transcript_path(rec["episode"])
-            if own.exists():
-                rec["transcript_path"] = str(own)
             rec["verdict"] = verdict_of(verdicts.get(rec["episode"]))
-            rec["ladder"] = _without(ladder.get(rec["episode"]), LADDER_BOOKKEEPING)
             rec["signals"] = _without(signals.get(rec["episode"]), SIGNALS_IDENTITY)
-            rec["has_transcript"] = bool(rec.get("transcript_path")) and Path(rec["transcript_path"]).exists()
+            rec["has_transcript"] = run.transcript_path(rec["episode"]).is_file()
             rec["counted"] = bool(rec["verdict"]) and rec["verdict"]["cheated"] is not None and rec["has_transcript"]
             out.append(rec)
         return out
@@ -233,7 +240,6 @@ class Store:
         group = name.split("/")[0] if "/" in name else None
         run = RunDir(d).run_json
         eps = self.episodes(name)
-        teams = RunDir(d).team_signals()
         fields = verdict_fields(run.get("task"))
         swarm, deliverables = run.get("swarm"), run.get("deliverables")
         n_agents = len(run.get("agents") or eps)
@@ -264,19 +270,19 @@ class Store:
             "deliverables": {k: deliverables.get(k) for k in DELIVERABLE_FIELDS} if deliverables else None,
             "endings": endings,
             "config": run.get("config"),
-            "rules": {e["orbit_agent"]: e["rules"] for e in eps if e.get("rules") is not None} or None,
+            "rules": {e["agent"]: e["rules"] for e in eps if e.get("rules") is not None} or None,
             "swe": _swe_of(run["swe"], d) if run.get("swe") else None,
             "mode": run.get("mode"),
             "scale": run.get("scale"),
             "preset": run.get("preset"),
             "engagement": run.get("engagement"),
             "turn_budget": run.get("turn_budget"),
+            "rounds": rounds_of(run.get("config") or {}),
             "access": run.get("access"),
             "knowledge": run.get("knowledge"),
             "tools": self.tool_names(name),
             "verdict_fields": fields,
             "aggregate": aggregate(run, eps, fields),
-            "team": {key: teams[0].get(key) for key in TEAM_FIELDS} if teams else None,
             "episodes": eps,
         }
 
@@ -287,19 +293,22 @@ class Store:
         detail = self.run_row(name)
         detail["run_json"] = RunDir(d).run_json
         detail["team"] = RunDir(d).team_signals()
-        detail["communication"] = read_json_dir(d / "communication")
-        detail["defense"] = read_json_dir(d / "defense")
-        detail["tools"] = {tool: _tool_summary(d / "tools" / tool / "summary.json") for tool in detail["tools"]}
+        stored = RunDir(d)
+        detail["communication"] = {sample: board for sample in sorted({sample_of(ep) for ep in stored.episodes()})
+                                   if (board := stored.board(sample))}
+        detail["defense"] = read_json_dir(stored.file("defense"))
+        tools = stored.file("tools")
+        detail["tools"] = {tool: _tool_summary(tools / tool / "summary.json") for tool in detail["tools"]}
         return detail
 
     def tool_names(self, name: str) -> list[str]:
         """The analysis tools that wrote a summary for this run. The loader's caches (tools/*.json) are not tools."""
-        return sorted(p.parent.name for p in (self.run_dir(name) / "tools").glob("*/summary.json"))
+        return sorted(p.parent.name for p in RunDir(self.run_dir(name)).file("tools").glob("*/summary.json"))
 
     def tool_dir(self, name: str, tool: str) -> Path:
-        """runs/<study>/<run>/tools/<tool>/, the directory an analysis tool writes. Raises KeyError for an unknown
-        tool."""
-        path = self.run_dir(name) / "tools" / tool
+        """runs/<study>/<run>/analysis/tools/<tool>/, the directory an analysis tool writes. Raises KeyError for an
+        unknown tool."""
+        path = RunDir(self.run_dir(name)).file("tools") / tool
         if not safe_part(tool) or not path.is_dir():
             raise KeyError(tool)
         return path
@@ -310,5 +319,5 @@ class Store:
                 continue
             if not rec["has_transcript"]:
                 raise KeyError(f"{episode}: no transcript")
-            return {"episode": rec, "transcript": read_json(Path(rec["transcript_path"]))}
+            return {"episode": rec, "transcript": RunDir(self.run_dir(name)).transcript(episode)}
         raise KeyError(episode)

@@ -14,6 +14,7 @@ import pytest
 from scripts.box import cell_cost_readout as readout_module
 from scripts.box.study_table import STAGES, box_jobs, stage_boxes
 from src.measures import run_validity
+from tests.support.run_files import write_text
 
 STUDY = readout_module.TABLE_STUDY
 STAGE = "phase2-protein-luna"
@@ -43,16 +44,16 @@ def write_run(root: Path, name: str, agents: list[tuple], evals: tuple[str, ...]
     run = root / "runs" / STUDY / (folder or name)
     run.mkdir(parents=True)
     agent_ids = [f"a{k}" for k in range(len(agents))]
-    (run / "run.json").write_text(json.dumps({"task": "protein_design", "eval_log": f"/box/logs/{counted}",
+    write_text(run / "processed/run.json", json.dumps({"task": "protein_design", "eval_log": f"/box/logs/{counted}",
                                               "agents": agent_ids, "rules": {"workers": agent_ids},
                                               "config": {"regulators": 0}, "ledger": ledger or {"complete": True}}))
     episodes = []
     for agent, (usd, billed_calls, calls, *errored) in zip(agent_ids, agents):
         usage = {"input": 10, "output": 5, **({} if usd is None else {"billed_usd": usd, "billed_calls": billed_calls})}
         ledger_row = {"calls": calls, "errored": errored[0] if errored else 0}
-        episodes.append({"orbit_agent": agent, "usage": usage, "ledger": ledger_row, "failure": None})
-    (run / "episodes.jsonl").write_text("".join(json.dumps(e) + "\n" for e in episodes))
-    (run / "signals.jsonl").write_text(json.dumps({"row": "team", "rung": "none"}) + "\n")
+        episodes.append({"agent": agent, "usage": usage, "ledger": ledger_row, "failure": None})
+    write_text(run / "processed/episodes.jsonl", "".join(json.dumps(e) + "\n" for e in episodes))
+    write_text(run / "analysis/signals.jsonl", json.dumps({"row": "team", "cheating_rung": "none"}) + "\n")
     write_evals(root, folder or name, evals)
     return run
 
@@ -86,7 +87,7 @@ def write_manifest(root: Path, instance: int, paths: list[str]) -> None:
 
 def held_by(root: Path, instance: int, runs: list[str], *, dph: float | None = 1.0, stage: str = STAGE) -> dict:
     """A destroyed box of an hour that captured these runs' run.json; its registry entry."""
-    write_manifest(root, instance, [f"{REMOTE}/{name}/run.json" for name in runs])
+    write_manifest(root, instance, [f"{REMOTE}/{name}/processed/run.json" for name in runs])
     return entry(instance, f"{stage}-9", *HOURS, dph, stage=stage)
 
 
@@ -111,10 +112,11 @@ def test_a_box_splits_its_hours_at_its_rate_over_the_cell_runs_it_held(tmp_path)
     write_run(tmp_path, third, [(0.30, 3, 3)])
     mock = f"{first[:-1]}mock1"
     # the box made one run's folder, one run's eval log only, and one run's set-aside screen log, and a rehearsal
-    write_manifest(tmp_path, 101, [f"{REMOTE}/{first}/run.json", f"{REMOTE_LOGS}/{second}/x.eval",
-                                   f"{REMOTE_LOGS}/screen/attempts/{third}.1.log", f"{REMOTE}/{mock}/run.json",
+    write_manifest(tmp_path, 101, [f"{REMOTE}/{first}/processed/run.json", f"{REMOTE_LOGS}/{second}/x.eval",
+                                   f"{REMOTE_LOGS}/screen/attempts/{third}.1.log",
+                                   f"{REMOTE}/{mock}/processed/run.json",
                                    f"{REMOTE_LOGS}/screen/box_{STAGE}-1.json"])
-    write_manifest(tmp_path, 102, [f"{REMOTE}/{mock}/run.json"])
+    write_manifest(tmp_path, 102, [f"{REMOTE}/{mock}/processed/run.json"])
     write_registry(tmp_path, [entry(101, f"{STAGE}-1", "2026-11-01T00:00:00Z", "2026-11-01T02:00:00Z", 1.5),
                               entry(102, f"{STAGE}-2", "2026-11-01T00:00:00Z", "2026-11-01T00:30:00Z", 2.0),
                               entry(103, None, "2026-11-01T00:00:00Z", "2026-11-01T05:00:00Z", 9.0, stage=None)])
@@ -191,15 +193,16 @@ def test_each_shortfall_names_its_own_reason(tmp_path):
     empty, no_ledger, at_limit, incomplete, unheld, no_rate, unreadable = runs
     write_run(tmp_path, empty, [])
     write_run(tmp_path, no_ledger, [(0.10, 1, 1)])
-    episode = json.loads((tmp_path / "runs" / STUDY / no_ledger / "episodes.jsonl").read_text())
-    (tmp_path / "runs" / STUDY / no_ledger / "episodes.jsonl").write_text(json.dumps({**episode, "ledger": None}))
+    episode = json.loads((tmp_path / "runs" / STUDY / no_ledger / "processed/episodes.jsonl").read_text())
+    write_text(tmp_path / "runs" / STUDY / no_ledger / "processed/episodes.jsonl", json.dumps({**episode,
+                                                                                               "ledger": None}))
     write_run(tmp_path, at_limit, [(0.30, 9, 10, 1)], ledger={"complete": False, "flags": ["a0: 1 errored call(s)",
                                                                                          LIMIT]})
     write_run(tmp_path, incomplete, [(0.10, 1, 1)], ledger={"complete": False, "flags": ["a0: something new"]})
     write_run(tmp_path, unheld, [(0.10, 1, 1)])
     write_run(tmp_path, no_rate, [(0.10, 1, 1)])
     write_run(tmp_path, unreadable, [(0.10, 1, 1)])
-    (tmp_path / "runs" / STUDY / unreadable / "run.json").write_text("{not json")
+    write_text(tmp_path / "runs" / STUDY / unreadable / "processed/run.json", "{not json")
     write_registry(tmp_path, [held_by(tmp_path, 305, [empty, no_ledger, at_limit, incomplete, unreadable]),
                               held_by(tmp_path, 306, [no_rate], dph=None)])
     result = readout_module.readout(tmp_path, STUDY, STAGE, now=NOW)
@@ -233,7 +236,7 @@ def test_an_earlier_attempt_adds_its_billed_cost_and_names_its_own_reasons(tmp_p
     write_run(tmp_path, name, [(0.10, 1, 1)])
     write_run(tmp_path, name, [(0.20, 1, 2)], folder=f"attempts/{name}.1")
     write_evals(tmp_path, f"attempts/{name}.2", ("c.eval",))
-    write_manifest(tmp_path, 310, [f"{REMOTE}/attempts/{name}.1/run.json"])      # the box that ran attempt 1
+    write_manifest(tmp_path, 310, [f"{REMOTE}/attempts/{name}.1/processed/run.json"])      # the box that ran attempt 1
     write_registry(tmp_path, [held_by(tmp_path, 308, [name]), entry(310, f"{STAGE}-8", *HOURS, 1.0)])
     result = readout_module.readout(tmp_path, STUDY, STAGE, now=NOW)
     [run] = row(result, "minimal", "generic")["runs"]
@@ -259,9 +262,9 @@ def test_a_box_belongs_to_the_study_by_the_runs_it_names_not_by_its_stage_name(t
     capture names a run of the study."""
     name = names("minimal", "generic")[0]
     write_run(tmp_path, name, [(0.10, 1, 1)])
-    write_manifest(tmp_path, 401, [f"{REMOTE}/{name}/run.json"])
-    write_manifest(tmp_path, 402, ["/root/work/runs/study_later/x_luna1/run.json"])
-    write_manifest(tmp_path, 405, [f"{REMOTE}/{name}/judge.jsonl"])
+    write_manifest(tmp_path, 401, [f"{REMOTE}/{name}/processed/run.json"])
+    write_manifest(tmp_path, 402, ["/root/work/runs/study_later/x_luna1/processed/run.json"])
+    write_manifest(tmp_path, 405, [f"{REMOTE}/{name}/analysis/judge.jsonl"])
     write_plan(tmp_path, f"box_{STAGE}-4.json", f"{STAGE}-4", "2026-11-01T09:00:00Z", [])   # another instance's plan
     write_registry(tmp_path, [entry(401, f"{STAGE}-1", *HOURS, 1.0, launch="l000001"),
                               entry(402, f"{STAGE}-1", *HOURS, 5.0, launch="l000002"),
@@ -322,9 +325,9 @@ def test_missing_data_is_refused_and_never_read_as_zero(tmp_path, capsys, gone):
     assert refused.value.code == 2 and str(path) in capsys.readouterr().err
 
 
-def test_another_study_is_refused_since_study_exploration_0_reuses_the_tables_run_names(tmp_path):
+def test_another_study_is_refused_since_ian_baseline_explorations_0_reuses_the_tables_run_names(tmp_path):
     with pytest.raises(ValueError, match="reuses its run names"):
-        readout_module.readout(tmp_path, "study_exploration_0", now=NOW)
+        readout_module.readout(tmp_path, "ian_baseline_explorations_0", now=NOW)
 
 
 def test_the_cells_name_every_run_the_boxes_of_each_stage_run():

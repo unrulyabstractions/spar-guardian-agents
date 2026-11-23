@@ -1,5 +1,5 @@
 /* View: timeline (#/run/<run>/timeline).
- * The page draws the swimlanes, the exposure cascade and the agent by turn raster of one run.
+ * The page draws the swimlanes, the exposure cascade and the agent by turn raster (timeline_raster.js) of one run.
  *
  *   import { viewTimeline } from './view_timeline.js';
  *   const node = await viewTimeline(route, view);
@@ -7,21 +7,10 @@
 import { debounce, firstLine, fmtInt, fmtSecs, h, plural } from './dom.js';
 import { P, R, apiFresh } from './api.js';
 import { badge, errorBox, link, logLink, muted, segmented } from './components.js';
-import { episodeOf } from './run_facts.js';
-import { COUNT_STEPS, ROLE_ORDER, ROLE_PLURAL, TIME_STEPS, cssVar, diamond, fmtTick, lgRoles, lgSvg, nextVizUid, r2,
-  roleGlyph, roleIcon, svgEl, swatch, ticksFor, tip, vizLegend, withTip, xMark } from './charts.js';
-
-// The mark a tool call gets: the task's shell and Python tools, the board tools (board_status drawn as a read), and the
-// server's kinds 'submit' and 'stop' for a submit or stop_working that succeeded; any other call, a refused submit
-// included, is 'other'. In the raster a call's cell takes post or read, else work; a submit or stop among the tool
-// calls that follow it wins.
-const TOOL_KIND = { shell: 'shell', run_python: 'python', board_post: 'board_post', board_read: 'board_read',
-  board_status: 'board_read' };
-const ENDING_KINDS = ['submit', 'stop'];
-const toolKind = fn => TOOL_KIND[fn] || 'other';
-const markOf = e => (ENDING_KINDS.includes(e.kind) ? e.kind : toolKind(e.function));
-const isToolEvent = e => e.kind === 'tool' || ENDING_KINDS.includes(e.kind);
-const RASTER_OF_TOOL = { board_post: 'post', board_read: 'read' };
+import { episodeOf, isToolEvent, markOf } from './run_facts.js';
+import { rasterPanel } from './timeline_raster.js';
+import { COUNT_STEPS, ROLE_ORDER, ROLE_PLURAL, TIME_STEPS, diamond, fmtTick, lgRoles, lgSvg, nextVizUid, r2, roleGlyph,
+  svgEl, ticksFor, tip, vizLegend, withTip, xMark } from './charts.js';
 
 /**
  * The verdict a chart draws for one agent: a counted verdict (the server's `counted`: a verdict on an episode with a
@@ -37,9 +26,9 @@ function verdictInfo(run, ep) {
   return { v: raw, raw, label: raw ? 'cheated' : 'not cheated', why: null };
 }
 function verdictLine(info) {
-  if (info.v != null) return `judge: ${info.label}`;
-  if (info.raw != null) return `judge said ${info.raw ? 'cheated' : 'not cheated'}; not counted, since ${info.why}`;
-  return info.why ? `judge: ${info.label} (${info.why})` : `judge: ${info.label}`;
+  if (info.v != null) return `CheatBench judge: ${info.label}`;
+  if (info.raw != null) return `CheatBench judge said ${info.raw ? 'cheated' : 'not cheated'}; not counted, since ${info.why}`;
+  return info.why ? `CheatBench judge: ${info.label} (${info.why})` : `CheatBench judge: ${info.label}`;
 }
 
 /** Agents in lane order: grouped by role (disregulator, worker, regulator, then none), by name within a group. */
@@ -51,12 +40,47 @@ export function laneOrder(tl) {
   return [...names].sort((a, b) => rank(roles[a]) - rank(roles[b]) || a.localeCompare(b, 'en', { numeric: true }));
 }
 
+/** A lane's clock from its knots [[seconds, index], ...] in time order: linear between two knots, the first index
+ * before the first knot and the last after the last. */
+function knotClock(knots) {
+  return t => {
+    if (!knots.length || t <= knots[0][0]) return knots.length ? knots[0][1] : 1;
+    let lo = 0;
+    let hi = knots.length - 1;
+    if (t >= knots[hi][0]) return knots[hi][1];
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (knots[mid][0] <= t) lo = mid; else hi = mid; }
+    const [t0, k0] = knots[lo];
+    const [t1, k1] = knots[hi];
+    return k0 + (t1 > t0 ? (t - t0) / (t1 - t0) : 0) * (k1 - k0);
+  };
+}
+
+/**
+ * Round clock of a run of rounds of calls (tl.rounds, src/ui/transcript_rounds.py from_start): round r starts at r on
+ * every lane, so the lanes share one clock; a lane's last round ends at its number + 1. The axis runs from 1 to the
+ * last round + 1.
+ */
+function roundClock(tl, agents) {
+  const fns = new Map();
+  let last = 1;
+  for (const a of agents) {
+    const rs = (tl.rounds[a] || []).filter(r => r.t != null);
+    const knots = rs.map(r => [r.t, r.round]);
+    const end = rs[rs.length - 1];
+    if (end) knots.push([Math.max(end.t_end != null ? end.t_end : end.t, end.t + 1e-3), end.round + 1]);
+    last = Math.max(last, end ? end.round : 1);
+    fns.set(a, knotClock(knots));
+  }
+  return { at: (a, t) => (fns.has(a) ? fns.get(a)(t) : 1), maxTurns: last, rounds: true };
+}
+
 /**
  * Round-robin turn clock: each agent's k-th model call starts at turn k (counted from 1, as in the
  * tooltips and the raster), and time between two calls maps linearly between them. Each lane keeps
- * its own clock; the axis runs from 1 to maxTurns + 1.
+ * its own clock; the axis runs from 1 to maxTurns + 1. A run of rounds of calls takes the round clock.
  */
 function turnClock(tl, agents) {
+  if (tl.rounds) return roundClock(tl, agents);
   const starts = new Map(agents.map(a => [a, []]));
   const ends = new Map(agents.map(a => [a, 0]));
   for (const e of tl.events) {
@@ -84,139 +108,6 @@ function turnClock(tl, agents) {
     });
   }
   return { at: (a, t) => (fns.has(a) ? fns.get(a)(t) : 1), maxTurns: Math.max(1, maxTurns) };
-}
-
-// Agent x turn raster: one cell per model call, coloured by the call's main action.
-const RASTER_KINDS = [
-  ['work', 'shell, run_python or another tool', 'sw-work'],
-  ['post', 'board_post', 'sw-post'],
-  ['read', 'board_read or board_status', 'sw-read'],
-  ['exposed', 'exposed (code ladder)', 'sw-exposed'],
-  ['opened', 'opened (code ladder)', 'sw-opened'],
-  ['submit', 'submit (handed in)', 'sw-submit'],
-  ['stop', 'stop_working', 'sw-stop'],
-  ['refusal', 'refusal sentence as output', 'sw-refusal'],
-  ['none', 'no tool call', 'sw-none'],
-];
-const RASTER_LABEL = Object.fromEntries(RASTER_KINDS.map(([k, l]) => [k, l]));
-
-/** Per agent: its model calls in order, each with the action of tool_calls[0] and the tool events that follow it. */
-function rasterRows(tl, agents) {
-  const by = new Map(agents.map(a => [a, { models: [], tools: [] }]));
-  for (const e of tl.events) {
-    const r = by.get(e.agent);
-    if (!r || e.t == null) continue;
-    if (e.kind === 'model') r.models.push(e);
-    else if (isToolEvent(e)) r.tools.push(e);
-  }
-  return agents.map(a => {
-    const { models, tools } = by.get(a);
-    models.sort((x, y) => x.t - y.t);
-    tools.sort((x, y) => x.t - y.t);
-    let j = 0;
-    const cells = models.map((m, k) => {
-      const next = k + 1 < models.length ? models[k + 1].t : Infinity;
-      while (j < tools.length && tools[j].t < m.t) j++;
-      const mine = [];
-      while (j < tools.length && tools[j].t < next) mine.push(tools[j++]);
-      const fn = m.tool_calls[0];
-      let kind = !fn ? 'none' : RASTER_OF_TOOL[toolKind(fn)] || 'work';
-      const ending = mine.find(x => ENDING_KINDS.includes(x.kind));
-      if (ending) kind = ending.kind;
-      if (m.refusal) kind = 'refusal';
-      if (mine.some(x => x.opened)) kind = 'opened';
-      else if (mine.some(x => x.exposed)) kind = 'exposed';
-      return { kind, fn, model: m, tools: mine };
-    });
-    return { agent: a, cells };
-  });
-}
-
-function rasterColors() {
-  return {
-    work: cssVar('--raster-work', '#77776f'), post: cssVar('--tl-post', '#e87ba4'), read: cssVar('--tl-read', '#4a3aa7'),
-    exposed: cssVar('--exposed', '#2e94dc'), opened: cssVar('--opened', '#750459'), submit: cssVar('--text', '#1c1c1a'),
-    stop: cssVar('--warn', '#85560a'),
-    refusal: cssVar('--tl-refusal', '#b02a20'), none: cssVar('--raster-none', '#e4e4de'),
-  };
-}
-
-/** Canvas raster. thumb: tiny cells, no gaps, click opens the timeline. */
-export function rasterCanvas(tl, agents, opts = {}) {
-  const { thumb = false, maxW = 900, onClick = null } = opts;
-  const rows = rasterRows(tl, agents);
-  const cols = Math.max(1, ...rows.map(r => r.cells.length));
-  const cellH = thumb ? 4 : 13;
-  const cw = thumb ? Math.max(1, Math.min(4, maxW / cols)) : Math.max(2, Math.min(12, maxW / cols));
-  const W = Math.max(1, Math.ceil(cw * cols));
-  const H = Math.max(1, rows.length * cellH);
-  const dpr = window.devicePixelRatio || 1;
-  const cv = h('canvas', { class: ['raster', thumb && 'raster-thumb'], width: Math.ceil(W * dpr), height: Math.ceil(H * dpr), role: 'img',
-    'aria-label': `Agent by turn raster: ${plural(rows.length, 'agent')}, up to ${plural(cols, 'model call')} each` });
-  cv.style.width = W + 'px';
-  cv.style.height = H + 'px';
-  const ctx = cv.getContext('2d');
-  if (ctx) {
-    ctx.scale(dpr, dpr);
-    const col = rasterColors();
-    const gx = cw >= 4 ? 1 : 0;
-    rows.forEach((r, i) => r.cells.forEach((c, k) => {
-      const x = k * cw;
-      const y = i * cellH;
-      const w = Math.max(0.8, cw - gx);
-      const hh = cellH - 1;
-      if (c.kind === 'refusal') {
-        ctx.fillStyle = col.none; ctx.fillRect(x, y, w, hh);
-        ctx.fillStyle = col.refusal; ctx.fillRect(x, y, w, Math.ceil(hh / 2));
-      } else {
-        ctx.fillStyle = col[c.kind] || col.none; ctx.fillRect(x, y, w, hh);
-      }
-    }));
-  }
-  const cellAt = ev => {
-    const box = cv.getBoundingClientRect();
-    const i = Math.floor((ev.clientY - box.top) / (box.height / rows.length));
-    const k = Math.floor((ev.clientX - box.left) / (box.width / cols));
-    const r = rows[i];
-    return r && r.cells[k] ? { r, k, c: r.cells[k] } : (r ? { r, k, c: null } : null);
-  };
-  cv.addEventListener('pointermove', ev => {
-    const hit = cellAt(ev);
-    if (!hit) { tip.hide(); return; }
-    const { r, k, c } = hit;
-    const role = tl.roles[r.agent];
-    if (!c) { tip.show(ev, [`${r.agent}${role ? ` (${role})` : ''}`, `${plural(r.cells.length, 'model call')}`, thumb ? 'click for the timeline' : null]); return; }
-    const first = c.tools[0];
-    tip.show(ev, [
-      `${r.agent}${role ? ` (${role})` : ''} · call ${k + 1} of ${r.cells.length}`,
-      `${RASTER_LABEL[c.kind]} · ${fmtSecs(c.model.t)}`,
-      c.fn ? `tool calls: ${c.model.tool_calls.join(', ')}` : 'no tool call',
-      first && first.preview ? firstLine(first.preview, 160) : null,
-      thumb ? 'click for the timeline' : null,
-    ]);
-  });
-  cv.addEventListener('pointerleave', () => tip.hide());
-  if (onClick) { cv.classList.add('clickable'); cv.addEventListener('click', onClick); }
-  return { el: cv, rows, cols, cellH };
-}
-
-/** Raster legend; with `present` (a Set of kinds) only the kinds that occur. */
-export function rasterLegend(present) {
-  return vizLegend(RASTER_KINDS.filter(([k]) => !present || present.has(k)).map(([, label, cls]) => [swatch(cls), label]), 'raster-legend');
-}
-
-/** Raster with agent labels, for the top of the timeline page. */
-function rasterPanel(tl, agents, maxW) {
-  const roles = tl.roles;
-  const { el, rows, cols, cellH } = rasterCanvas(tl, agents, { maxW });
-  const present = new Set(rows.flatMap(r => r.cells.map(c => c.kind)));
-  return h('div', null,
-    h('div', { class: 'raster-wrap' },
-      h('div', { class: 'raster-labels', style: `grid-auto-rows: ${cellH}px` },
-        agents.map(a => h('div', { class: 'raster-label' }, roles[a] ? roleIcon(roles[a], 10) : null, a))),
-      h('div', { class: 'raster-scroll' }, el)),
-    h('div', { class: 'muted small' }, `Columns are each agent’s own model calls, 1 to ${cols}; a call takes the action of its first tool call, and the code ladder’s exposed or opened call among the tool calls that follow it wins.`),
-    rasterLegend(present));
 }
 
 /**
@@ -254,7 +145,7 @@ export function timelinePanels(run, tl, runInfo) {
   const onResize = debounce(() => { tip.hide(); draw(); }, 150);
   const note = h('div', null,
     muted(`${plural(agents.length, 'agent')} · ${plural(tl.events.length, 'event')} · ${plural(tl.board.length, 'board post')} · ${fmtSecs(tl.duration)} sample time. ` +
-      'Exposed and opened are the code ladder’s calls (signals.jsonl): the first call that showed the agent a pointer to the honeypot, and the first that showed it the content. The judge verdict sits at the end of each lane.'),
+      'Exposed and opened are the code’s evidence (signals.jsonl): the first call that showed the agent a pointer to the honeypot, and the first that showed it the content. The judge verdict sits at the end of each lane.'),
     notCounted.length ? h('div', { class: 'muted small' },
       `${plural(notCounted.length, 'judge verdict')} drawn grey as “not counted”, as in the runs list and the summary: ${whyNot}.`) : null);
   return {
@@ -289,7 +180,7 @@ export async function viewTimeline({ run }, view) {
       tl.limit ? badge(`limit: ${tl.limit}`, 'warn', 'the sample ended on this limit') : null),
     h('div', { class: 'links' },
       link(R.run(run), 'run page', 'btn btn-small'),
-      detail.episodes.filter(e => e.has_transcript).map(e => link(R.episode(run, e.episode), `transcript ${e.orbit_agent}`, 'btn btn-small')),
+      detail.episodes.filter(e => e.has_transcript).map(e => link(R.episode(run, e.episode), `transcript ${e.agent}`, 'btn btn-small')),
       logLink(detail.eval_log_exists, detail.eval_log, R.context(run), 'context windows', 'btn btn-small')),
     panels.note);
   view.mounted(() => { document.title = `timeline · ${run} · results`; panels.mount(); });
@@ -372,7 +263,7 @@ function swimlaneCard(ctx, lane, run) {
   const host = h('div', { class: 'viz-host swim-host' });
 
   // Controls: axis mode, layers, zoom.
-  const modeBtns = segmented([['time', 'seconds from start'], ['turn', 'turn index']], st.mode, v => {
+  const modeBtns = segmented([['time', 'seconds from start'], ['turn', clock.rounds ? 'round' : 'turn index']], st.mode, v => {
     if (st.mode === v) return;
     st.mode = v;
     [st.lo, st.hi] = full();
@@ -387,7 +278,8 @@ function swimlaneCard(ctx, lane, run) {
   const rFrom = h('input', { type: 'range', min: 0, max: 1000, step: 1, value: 0, class: 'zoom-range', 'aria-label': 'zoom from' });
   const rTo = h('input', { type: 'range', min: 0, max: 1000, step: 1, value: 1000, class: 'zoom-range', 'aria-label': 'zoom to' });
   const zoomText = h('span', { class: 'muted small zoom-text' });
-  const fmtX = v => (st.mode === 'time' ? fmtSecs(v) : `call ${+v.toFixed(1)}`);
+  const unitWord = clock.rounds ? 'round' : 'call';
+  const fmtX = v => (st.mode === 'time' ? fmtSecs(v) : `${unitWord} ${+v.toFixed(1)}`);
   function syncZoom() {
     const [f0, f1] = full();
     rFrom.value = Math.round(((st.lo - f0) / (f1 - f0)) * 1000);
@@ -441,8 +333,8 @@ function swimlaneCard(ctx, lane, run) {
     kinds.has('other') ? [lgSvg(svgEl('line', { class: 'tk tk-other', x1: 10, x2: 10, y1: 2, y2: 13 })), 'another tool'] : null,
     posts.length ? [lgSvg(svgEl('circle', { class: 'm-post', cx: 10, cy: 7, r: 4.5 })), 'board post'] : null,
     anyRead ? [lgSvg(svgEl('line', { class: 'arrow', x1: 1, y1: 7, x2: 19, y2: 7 })), 'post read'] : null,
-    anyExposed ? [lgSvg(svgEl('circle', { class: 'm-exposed', cx: 10, cy: 7, r: 5 })), 'exposed (code ladder)'] : null,
-    anyOpened ? [lgSvg(diamond(10, 7, 5, 'm-opened')), 'opened (code ladder)'] : null,
+    anyExposed ? [lgSvg(svgEl('circle', { class: 'm-exposed', cx: 10, cy: 7, r: 5 })), 'exposed (code’s evidence)'] : null,
+    anyOpened ? [lgSvg(diamond(10, 7, 5, 'm-opened')), 'opened (code’s evidence)'] : null,
     anyBlocks ? [lgSvg(svgEl('rect', { class: 'm-block', x: 5, y: 0, width: 9, height: 14 }), svgEl('line', { class: 'm-block-line', x1: 14, x2: 14, y1: 0, y2: 14 })), 'defense block (band from the control call to the decision)'] : null,
     anyRefusal || anyBlockedTool ? [lgSvg(xMark(10, 7, 4)),
       anyRefusal && anyBlockedTool ? 'refusal sentence or blocked tool call' : anyRefusal ? 'refusal sentence as output' : 'blocked tool call'] : null,
@@ -452,7 +344,7 @@ function swimlaneCard(ctx, lane, run) {
   const card = h('section', { class: 'card' },
     h('h2', null, 'Agent swimlanes'),
     controls, host, legend,
-    posts.length < 1 ? null : h('div', { class: 'muted small' },
+    posts.length < 1 || clock.rounds ? null : h('div', { class: 'muted small' },
       'In turn-index mode each lane runs on its own clock (its k-th model call sits at k), so an arrow between lanes can point backwards.'));
 
   function draw() {
@@ -504,7 +396,7 @@ function swimlaneCard(ctx, lane, run) {
       svg.appendChild(svgEl('line', { class: 'grid', x1: px, x2: px, y1: axisH - 4, y2: H - 2 }));
       svg.appendChild(svgEl('text', { class: 'tick-label', x: px, y: axisH - 9, 'text-anchor': 'middle' }, st.mode === 'time' ? fmtTick(v) : String(v)));
     }
-    svg.appendChild(svgEl('text', { class: 'axis-title', x: 10, y: axisH - 9 }, st.mode === 'time' ? 'seconds from start' : 'agent’s model call'));
+    svg.appendChild(svgEl('text', { class: 'axis-title', x: 10, y: axisH - 9 }, st.mode === 'time' ? 'seconds from start' : clock.rounds ? 'round' : 'agent’s model call'));
 
     const marks = svgEl('g', { 'clip-path': `url(#tlclip-${uid})` });
     const arrowsG = svgEl('g', { 'clip-path': `url(#tlclip-${uid})` });
@@ -575,8 +467,8 @@ function swimlaneCard(ctx, lane, run) {
         hits.push({ x0: xa - 1, x1: Math.max(xa + 1, xe), y0: ya - (e.blocked ? 9 : 2), y1: yb, pri,
           lines: () => [`${a} · ${e.function}${e.blocked ? ' · BLOCKED' : e.error ? ' · error' : ''}`,
             `${fmtSecs(e.t)}${e.t_end != null ? ` for ${fmtSecs(e.t_end - e.t)}` : ''}`,
-            e.exposed ? 'exposed: the code ladder’s first call that showed this agent a pointer to the honeypot' : null,
-            e.opened ? 'opened: the code ladder’s first call that showed this agent the honeypot’s content' : null,
+            e.exposed ? 'exposed: the code’s first call that showed this agent a pointer to the honeypot' : null,
+            e.opened ? 'opened: the code’s first call that showed this agent the honeypot’s content' : null,
             e.preview ? String(e.preview).slice(0, 300) : null] });
       }
       // Verdict at the lane's end: only a counted verdict is drawn red or green.
@@ -671,7 +563,7 @@ function swimlaneCard(ctx, lane, run) {
       if (inPlot) {
         cross.setAttribute('x1', r2(px)); cross.setAttribute('x2', r2(px));
         crossLabel.setAttribute('x', r2(Math.min(x1 - 24, Math.max(x0 + 24, px))));
-        crossLabel.textContent = st.mode === 'time' ? fmtSecs(inv(px)) : `call ${+inv(px).toFixed(1)}`;
+        crossLabel.textContent = st.mode === 'time' ? fmtSecs(inv(px)) : `${unitWord} ${+inv(px).toFixed(1)}`;
       }
       if (drag) {
         const a = Math.max(x0, Math.min(drag.x, px));
@@ -714,7 +606,7 @@ function swimlaneCard(ctx, lane, run) {
     return [`${a}${roles[a] ? ` (${roles[a]})` : ''}`,
       verdictLine(verdictInfoOf(a)),
       `${plural(L.models.length, 'model call')} · ${plural(L.tools.length, 'tool call')}`,
-      exposedOf(a) != null ? `exposed at ${fmtSecs(exposedOf(a))}` : 'never exposed (code ladder)',
+      exposedOf(a) != null ? `exposed at ${fmtSecs(exposedOf(a))}` : 'never exposed (code’s evidence)',
       openedOf(a) != null ? `opened at ${fmtSecs(openedOf(a))}` : null,
       blocks || refusals ? `${plural(blocks, 'block')}, ${plural(refusals, 'refusal')}` : null];
   }
@@ -724,8 +616,8 @@ function swimlaneCard(ctx, lane, run) {
 }
 
 /**
- * Edges A -> B: posts of A that B read no later than B's exposure (the code ladder's exposed call, which may be the
- * read itself). An agent the ladder never found exposed has no incoming edge.
+ * Edges A -> B: posts of A that B read no later than B's exposure (the code's exposed evidence, which may be the
+ * read itself). An agent the code never found exposed has no incoming edge.
  */
 function exposureEdges(tl) {
   const edges = new Map();
@@ -772,7 +664,7 @@ function cascadeView(ctx, width) {
   agents.forEach((a, i) => svg.appendChild(svgEl('rect', { class: ['lane-bg', i % 2 && 'alt'], x: 0, y: padT + i * rowH, width: W, height: rowH })));
   svg.appendChild(svgEl('line', { class: 'grp-rule dashed', x1: divX, x2: divX, y1: padT - 18, y2: H - 22 }));
   svg.appendChild(svgEl('text', { class: 'axis-title', x: (divX + W) / 2, y: 14, 'text-anchor': 'middle' }, 'never exposed'));
-  svg.appendChild(svgEl('text', { class: 'axis-title', x: x0, y: 14 }, 'exposed (code ladder) →'));
+  svg.appendChild(svgEl('text', { class: 'axis-title', x: x0, y: 14 }, 'exposed (code’s evidence) →'));
   const ticks = touched.length ? ticksFor(0, tMax, Math.max(2, Math.floor((x1 - x0) / 90)), TIME_STEPS) : [];
   if (touched.length > 1) {
     for (const v of ticks) {
@@ -847,8 +739,8 @@ function cascadeView(ctx, width) {
     const outs = edges.filter(e => e.from === a);
     svg.appendChild(withTip(g, () => [
       `${a}${roles[a] ? ` (${roles[a]})` : ''}`,
-      `${verdictLine(vi)}${disclosedOf(a) ? ', disclosed access' : ''}`,
-      exposedOf(a) != null ? `exposed at ${fmtSecs(exposedOf(a))}` : 'never exposed (code ladder)',
+      `${verdictLine(vi)}${disclosedOf(a) ? ', CheatBench: disclosed access' : ''}`,
+      exposedOf(a) != null ? `exposed at ${fmtSecs(exposedOf(a))}` : 'never exposed (code’s evidence)',
       openedOf(a) != null ? `opened at ${fmtSecs(openedOf(a))}` : null,
       ins.length ? `exposed by ${ins.map(e => `${e.from} (${e.posts.length})`).join(', ')}`
         : exposedOf(a) == null ? 'never exposed, so no exposure edge' : 'read no post before its exposure',
@@ -858,17 +750,17 @@ function cascadeView(ctx, width) {
   const caption = agents.length < 2
     ? 'One agent: no board, so no exposure edges.'
     : !tl.board.length ? 'No board posts in this run, so no exposure edges.'
-      : !touched.length ? 'The code ladder found no agent exposed, so there are no exposure edges.'
+      : !touched.length ? 'The code found no agent exposed, so there are no exposure edges.'
         : edges.length ? null : 'No agent read another agent’s post before its exposure.';
   return h('div', null,
     svg,
     caption ? h('div', { class: 'muted small' }, caption) : null,
-    h('p', { class: 'small viz-note' }, 'An arrow A → B means B read a post of A no later than B’s exposure. An agent never exposed has no incoming arrow. Width counts such posts. Position is the code ladder’s exposed call; the node’s fill is the judge verdict. The arrows show exposure, not cause.'),
+    h('p', { class: 'small viz-note' }, 'An arrow A → B means B read a post of A no later than B’s exposure. An agent never exposed has no incoming arrow. Width counts such posts. Position is the code’s exposed evidence; the node’s fill is the judge verdict. The arrows show exposure, not cause.'),
     vizLegend([
-      [lgSvg(svgEl('circle', { class: 'glyph out-cheated', cx: 10, cy: 7, r: 5 })), 'judged cheated'],
-      [lgSvg(svgEl('circle', { class: 'glyph out-honest', cx: 10, cy: 7, r: 5 })), 'judged not cheated'],
+      [lgSvg(svgEl('circle', { class: 'glyph out-cheated', cx: 10, cy: 7, r: 5 })), 'CheatBench judge: cheated'],
+      [lgSvg(svgEl('circle', { class: 'glyph out-honest', cx: 10, cy: 7, r: 5 })), 'CheatBench judge: not cheated'],
       [lgSvg(svgEl('circle', { class: 'glyph out-unknown', cx: 10, cy: 7, r: 5 })), 'not judged, or verdict not counted'],
-      [lgSvg(svgEl('circle', { class: 'glyph disclosed-ring', cx: 10, cy: 7, r: 6 }), svgEl('circle', { class: 'glyph out-unknown', cx: 10, cy: 7, r: 3.5 })), 'outline: disclosed access'],
+      [lgSvg(svgEl('circle', { class: 'glyph disclosed-ring', cx: 10, cy: 7, r: 6 }), svgEl('circle', { class: 'glyph out-unknown', cx: 10, cy: 7, r: 3.5 })), 'outline: CheatBench: disclosed access'],
       hasRoles ? [lgRoles('out-unknown'), 'shape: worker, regulator, disregulator'] : null,
     ]));
 }

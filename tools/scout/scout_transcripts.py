@@ -105,7 +105,6 @@ def agent_transcript(run: Run, agent: str) -> Transcript:
         "role": run.roles.get(agent, "worker"),
         "domain": run.domain,
         "task": run.task,
-        "cheated": run.cheated.get(agent),
         "holds": ", ".join(str(item) for item in run.exploit.get("holds", {}).get(agent, [])),
         **judge_metadata(judge),
     }

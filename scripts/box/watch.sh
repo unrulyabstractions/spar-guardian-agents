@@ -2,7 +2,7 @@
 # Watch the boxes: scripts/box/watch.sh [--once] [--every MINUTES] [<instance-id> ...]
 #
 # Every few minutes (3 by default), for each box (the given ids, else every registered box not destroyed): rsync its
-# runs/, logs/ and out/ down into this repository's with --update, and its /root/screen.log, /root/setup.log and
+# runs/ and logs/ down into this repository's with --update, and its /root/screen.log, /root/setup.log and
 # Inspect's data folder (traces, sample buffers) into logs/boxes/<id>/files/, then check that /root/box_id names the
 # box and print what box_runner.py status says there (runs finished, running, failed, incomplete, hung, lost),
 # prefixed with the time and the box. Each pass starts with what the watched boxes bill per hour. A box that cannot be
@@ -86,8 +86,8 @@ watch_box() {
     echo "!! $(date -u +%H:%M:%S) $id: no ssh config; run uv run python -m scripts.box.fleet status"
     return 1
   fi
-  # One rsync of the clone limited to runs/, logs/ and out/: a folder the box has not made yet is no error.
-  pull "$id" outputs --include='/runs/***' --include='/logs/***' --include='/out/***' --exclude='*' \
+  # One rsync of the clone limited to runs/ and logs/: a folder the box has not made yet is no error.
+  pull "$id" outputs --include='/runs/***' --include='/logs/***' --exclude='*' \
     box:/root/work/ "$root/" || trouble=1
   mkdir -p "$root/logs/boxes/$id/files"
   pull "$id" "the screen's logs" --relative --ignore-missing-args box:/root/screen.log box:/root/setup.log \

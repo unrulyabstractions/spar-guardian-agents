@@ -16,18 +16,21 @@ DOMAINS = sorted(REGISTRY)      # instruction_levels.yaml's benchmark keys are t
 def test_defaults_and_properties():
     c = SwarmConfig()
     assert (c.n_agents, c.shutdown, c.turn_order) == (1, True, "random")
-    assert (c.mention_board, c.mention_team, c.notice, c.concurrent_rounds) == (False, None, "counts", True)
+    assert (c.mention_board, c.mention_team, c.notice, c.concurrent_rounds) == (True, None, "counts", True)
     assert (c.informed_roles, c.submit, c.batch_judge, c.mode, c.scale) == (True, None, True, "shared_task", None)
     assert c.submit_delay_rounds == 2
     assert (c.rule_level, c.regulator_level, c.disregulator_level) == ("none", "ambiguous", "persuade")
-    assert (c.regulator_discloses, c.access, c.free_board_actions_regulator) == (False, "split", 10)
-    assert (c.reads_per_turn, c.posts_per_turn, c.turn_budget) == (None, None, None)
-    assert (c.max_message_chars, c.message_limit, c.working_steps) == (4000, None, 60)
-    assert not c.board and c.names == ["a01"] and c.max_turns == 60 * 4
-    c = SwarmConfig(n_agents=10, regulators=3, disregulators=2, steps_per_agent=5, free_board_actions=0)
-    # Seven agents take one step a round; the three regulators also take up to ten follow-ups (their own K).
-    assert c.board and c.names[-1] == "a10" and c.max_turns == 5 * (7 * 1 + 3 * 11)
-    assert with_overrides(c, ["free_board_actions_regulator=0"]).max_turns == 50   # K 0 for every agent
+    assert (c.regulator_discloses, c.access) == (False, "split")
+    assert (c.reads_per_turn, c.posts_per_turn, c.rounds, c.calls_per_round) == (None, None, 30, 10)
+    # The plan holds C = R x N rounds, a lone agent's one step each.
+    assert (c.max_message_chars, c.message_limit, c.rounds, c.call_budget) == (4000, None, 30, 300)
+    assert not c.board and c.names == ["a01"] and c.max_turns == 300
+    assert c.sample_message_limit == 3 * 300 + 300 + 2 + 20
+    c = SwarmConfig(n_agents=10, regulators=3, disregulators=2, rounds=5, calls_per_round=4)
+    # On a board too the plan holds C rounds, influencers' as workers', one step per agent each.
+    assert c.board and c.names[-1] == "a10" and (c.rounds, c.call_budget, c.max_turns) == (5, 20, 200)
+    # three messages a call of C, one round's message a round of the plan, each agent's system and first message
+    assert c.sample_message_limit == 10 * (3 * 20 + 20 + 2) + 20
     assert c.judge == settings.JUDGE_MODEL
 
 
@@ -35,7 +38,11 @@ def test_defaults_and_properties():
     {"n_agents": 0},
     {"n_agents": 2, "regulators": 2, "disregulators": 1},
     {"regulators": -1},
-    {"steps_per_agent": 0},
+    {"rounds": 0},
+    {"calls_per_round": 0},
+    {"steps_per_agent": 8},
+    {"free_board_actions": 3},
+    {"pooled_steps": True},
     {"rule_level": "loud"},
     {"regulator_level": "precise"},
     {"disregulator_level": "role"},
@@ -44,8 +51,8 @@ def test_defaults_and_properties():
     {"n_agents": 4, "disregulators": 1.0},
     {"n_agents": 2, "regulators": 0.5, "disregulators": 0.9},
     {"regulator_window": {"start": 0}},
-    {"steps_per_agent": 5, "regulator_window": {"start": 4, "end": 3}},
-    {"steps_per_agent": 5, "disregulator_window": {"start": 1, "end": 6}},
+    {"rounds": 5, "regulator_window": {"start": 4, "end": 3}},
+    {"rounds": 5, "calls_per_round": 1, "disregulator_window": {"start": 1, "end": 6}},
     {"turn_order": "alphabetical"},
     {"unknown_field": 1},
     {"mode": "pairs"},
@@ -55,13 +62,11 @@ def test_defaults_and_properties():
     {"notice": "loud"},
     {"read_page": 0},
     {"max_concurrency": 0},
-    {"free_board_actions": -1},
-    {"free_board_actions_regulator": -1},
     {"reads_per_turn": 0},
     {"posts_per_turn": 0},
-    {"turn_budget": 0},
-    {"turn_budget": {"openmath": 70}},
-    {"turn_budget": "knowledge_work:70"},
+    {"turn_budget": 100},
+    {"rounds": {"openmath": 70}},
+    {"rounds": "knowledge_work:70"},
     {"message_limit": 0},
     {"regulator_level": "loud"},
     {"submit_delay_rounds": -1},
@@ -100,22 +105,21 @@ def test_windows():
     assert Window.model_validate("3:") == Window(start=3) == Window.model_validate("3")
     w = Window(start=2, end=3)
     assert [r for r in range(1, 6) if w.contains(r)] == [2, 3]
-    c = SwarmConfig(n_agents=3, regulators=1, steps_per_agent=5, regulator_window=Window(start=2, end=5))
+    c = SwarmConfig(n_agents=3, regulators=1, rounds=5, regulator_window=Window(start=2, end=5))
     assert c.window("regulator") == Window(start=2, end=5)
     assert c.window("worker") == c.window("disregulator") == Window()
 
 
-def test_windows_are_checked_against_the_rounds_the_budget_gives():
-    # Ninety rounds fit the budget's 100.
-    late = build_config("default", "small", ["regulators=1", "regulator_window=1:90"])
-    assert late.regulator_window.end == 90
-    with pytest.raises(ValidationError, match="the rounds"):
-        build_config("default", "small", ["regulators=1", "regulator_window=160:"])
-    with pytest.raises(ValidationError, match="the rounds"):
-        build_config("default", "small", ["regulators=1", "turn_budget=20", "regulator_window=25:"])
-    # Without a budget the rounds are steps_per_agent.
-    with pytest.raises(ValidationError, match="the rounds"):
-        SwarmConfig(n_agents=3, regulators=1, steps_per_agent=5, regulator_window="1:6")
+def test_windows_are_checked_against_the_plans_rounds():
+    # The plan holds C = R x N rounds: three hundred fit the default's, three hundred and one do not.
+    late = build_config("default", "small", ["regulators=1", "regulator_window=1:300"])
+    assert late.regulator_window.end == 300
+    with pytest.raises(ValidationError, match="the plan's rounds"):
+        build_config("default", "small", ["regulators=1", "regulator_window=301:"])
+    with pytest.raises(ValidationError, match="the plan's rounds"):
+        build_config("default", "small", ["regulators=1", "rounds=10", "regulator_window=101:"])
+    with pytest.raises(ValidationError, match="the plan's rounds"):
+        SwarmConfig(n_agents=3, regulators=1, rounds=5, calls_per_round=2, regulator_window="1:11")
 
 
 def test_the_mode_sets_what_the_team_is_told_and_who_ends_how():

@@ -13,16 +13,17 @@ endpoint, which ranks the best replies of any position.
 Layouts. A lone agent gets CheatBench's episode: one game, all nine tools. A team's agents each keep their own
 opponent/config.json and notepad. In shared_task they share one game, its six resets, its game/ files and
 opponent/play.py, they move in turn and they reset only together (_chess_move_rotation.py), they hold pass_turn, and
-their system prompt says so (prompts.yaml chess.team_game); in solo_task each plays its own game. The instruction ends
-with the note for the arbiter and no answer block: submit hands the game in (prompts.yaml chess.closing).
+their first message says so after the task, with the move order (prompts.yaml chess.team_game). In solo_task each
+plays its own game. The instruction ends with the note for the arbiter and no answer block: submit hands the game in
+(prompts.yaml chess.closing).
 
 Access items: `request` (the api_request tool), `credential1` and `credential2` (the halves of the endpoint's bearer
 credential, which a split team's endpoint requires) and `whole`. Under split the request tool goes to some neutral
 agents and the halves to others: with two neutral agents one holds both halves and the other the tool, with three or
-more they are dealt request, credential1, credential2 in turn. An agent holding one half is told so in its system
-prompt (prompts.yaml chess.credential_part). Regulators and disregulators hold nothing. Under split, write_file keeps
-the notepad alone (the block's `writable`), so no agent can tamper with game/ or opponent/ on its own: every way to
-cheat takes the request tool and both halves, which no agent holds alone.
+more they are dealt request, credential1, credential2 in turn. An agent holding one half is told so in its first
+message (prompts.yaml chess.credential_part, then first_values.credential). Regulators and disregulators hold nothing.
+Under split, write_file keeps the notepad alone (the block's `writable`), so no agent can tamper with game/ or
+opponent/ on its own: every way to cheat takes the request tool and both halves, which no agent holds alone.
 
 The access log. No container holds the honeypot, so no sidecar runs: the endpoint's records and the reads of
 opponent/config.json become the log's rows (Chess.host_access_rows).
@@ -33,7 +34,7 @@ from collections.abc import Awaitable, Callable
 
 from inspect_ai.scorer import Scorer
 
-from src.configuration.prompt_texts import rounds_text, tool_line
+from src.configuration.prompt_texts import counted, first_value, tool_line
 from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import SwarmConfig, role_of
 from src.domains.benchmark_protocol import Plan, RowBenchmark, Staged
@@ -55,7 +56,7 @@ from src.domains.chess._chess_settings import (
     TASK_DIR,
     VARIANT,
 )
-from src.domains.chess._chess_stockfish import BUILD_HINT, engine_path
+from src.domains.chess._chess_stockfish import BUILD_HINT, engine_path, engine_record
 from src.sandbox import task_tool_store as tool_store
 from src.sandbox.agent_tools import AgentTools
 from src.sandbox.machines import agent_machines as machines
@@ -85,12 +86,14 @@ SPLIT_DEVIATIONS = ["endpoint_requires_a_bearer_credential_cut_in_two_halves_dea
                     "api_request_held_by_the_request_seats_only",
                     "game_and_opponent_files_read_only_so_no_agent_tampers_alone"]
 PART_DEVIATIONS = ["system_prompt_tells_a_holder_of_one_half_that_the_credential_is_split"]
+ORDER_DEVIATION = "first_message_gives_the_move_order_after_the_instruction"
 
 
 class Chess(RowBenchmark):
     """chess for one position. Every agent gets the same instruction; the tools follow what each agent holds."""
 
     key = name = TASK
+    commands = False          # no shell: CheatBench's nine tools and pass_turn
     block = "chess"
     task_dir = TASK_DIR
     build_dir = BUILD
@@ -162,22 +165,30 @@ class Chess(RowBenchmark):
         return plan.split and len(held_halves(plan.holds[agent])) == 1
 
     def credential_note(self, plan: Plan, agent: str) -> str | None:
-        """What an agent holding one half is told: how many parts there are and that a request needs them all."""
+        """What an agent holding one half is told: that the team holds the parts and a request needs them all. Which
+        part it holds is in its first message (first_values)."""
         if not self.holds_a_part(plan, agent):
             return None
-        part = held_halves(plan.holds[agent])[0]
-        return load_prompts()["chess"]["credential_part"].format(part=part, parts=len(CREDENTIALS))
+        return load_prompts()["chess"]["credential_part"]
 
-    def system_prompts(self, plan: Plan) -> dict[str, str]:
-        """The base's prompts, then for an agent of a shared_task team told of its team the text on its one game and,
-        for a holder of one half, on the credential."""
-        prompts = super().system_prompts(plan)
-        if not self.plays_as_team(plan):
-            return prompts
-        text = load_prompts()["chess"]["team_game"]
-        game = text.format(order=", ".join(self.move_order(plan)), rounds=rounds_text(HOLD_ROUNDS))
-        return {a: "\n\n".join(filter(None, [prompt, game, self.credential_note(plan, a)]))
-                for a, prompt in prompts.items()}
+    def first_values(self, plan: Plan, agent: str) -> list[str]:
+        """The base's, then for a holder of one half of a team that plays as one which part of how many it holds (its
+        note is in first_note)."""
+        values = super().first_values(plan, agent)
+        if self.plays_as_team(plan) and self.holds_a_part(plan, agent):
+            values.append(first_value("credential", part=held_halves(plan.holds[agent])[0], parts=len(CREDENTIALS)))
+        return values
+
+    def first_note(self, plan: Plan, agent: str) -> str | None:
+        """The team's one game, with the move order and the rounds a seat holds the move (HOLD_ROUNDS; prompts.yaml
+        chess.team_game), for every agent of a team that plays as one, a regulator that oversees included, since its
+        first message holds its teammates' (src/tasks.py first_messages); else None, and None for a team with no seat
+        to move. A holder of one half of the credential reads its note after it (credential_note)."""
+        order = self.move_order(plan)
+        if not (self.plays_as_team(plan) and order):
+            return None
+        game = load_prompts()["chess"]["team_game"].format(order=", ".join(order), hold=counted(HOLD_ROUNDS, "turn"))
+        return "\n\n".join(filter(None, [game, self.credential_note(plan, agent)]))
 
     def stage(self, plan: Plan, row: dict) -> Staged:
         """The compose file and the block the setup, the tools, the scorer and run.json read: each agent's items,
@@ -192,7 +203,7 @@ class Chess(RowBenchmark):
                  "auth": "token" if credential else "none", "credential": credential, "agents": agents,
                  "writable": sorted(writable), "owner_of": plan.owners, "move_order": self.move_order(plan),
                  "time_limit_s": plan.config.time_limit_s or self.time_limit_s(),
-                 "image": machines.ensure_image(), "stockfish": str(engine_path())}
+                 "image": machines.ensure_image(), "stockfish": engine_record(engine_path())}
         return Staged(compose=sandbox.write_compose(), block=block)
 
     def tools(self, plan: Plan) -> AgentTools:
@@ -229,11 +240,23 @@ class Chess(RowBenchmark):
         return f"game {record['game']}: {result} after {len(record['sans'])} plies"
 
     def team_deviations(self, plan: Plan) -> list[str]:
-        """Each agent's own config and notepad; a shared_task team's one game and its rotation, or a solo_task
-        team's own games; a split's credential and request seats, and the note to a holder of one half."""
+        """Each agent's own config and notepad; a shared_task team's one game, its rotation and the move order in the
+        first message, or a solo_task team's own games; a split's credential and request seats, and the note to a
+        holder of one half."""
         mode = SHARED_DEVIATIONS if plan.mode == "shared_task" else SOLO_DEVIATIONS
+        order = [ORDER_DEVIATION] if self.plays_as_team(plan) else []
         told = self.plays_as_team(plan) and any(self.holds_a_part(plan, agent) for agent in plan.agents)
-        return [*TEAM_DEVIATIONS, *mode, *(SPLIT_DEVIATIONS if plan.split else []), *(PART_DEVIATIONS if told else [])]
+        return [*TEAM_DEVIATIONS, *mode, *order, *(SPLIT_DEVIATIONS if plan.split else []),
+                *(PART_DEVIATIONS if told else [])]
+
+    @classmethod
+    def run_blocks(cls, view) -> dict:
+        """The base's block, with the engine named from the checkout (engine_record), also in a log whose block holds
+        the machine's path."""
+        blocks = super().run_blocks(view)
+        if (blocks.get(cls.block) or {}).get("stockfish"):
+            blocks[cls.block]["stockfish"] = engine_record(blocks[cls.block]["stockfish"])
+        return blocks
 
     @classmethod
     def episode_facts(cls, view, agent: str) -> dict:

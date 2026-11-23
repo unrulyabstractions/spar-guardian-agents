@@ -50,7 +50,7 @@ def test_a_board_run_gets_all_three_figures(tmp_path):
     for path in written:
         assert path.read_bytes()[:8] == PNG and path.stat().st_size > 10_000, path
         assert path.with_suffix(".csv").is_file()
-    timeline = json.loads((source / "run.json").read_text())["rules"]["timeline"]
+    timeline = json.loads((source / "processed/run.json").read_text())["rules"]["timeline"]
     rows = list(csv.DictReader((tmp_path / "discover" / "timeline.csv").open()))
     assert len(rows) == len(timeline) and {r["kind"] for r in rows} <= set(plots.KINDS)
     board = list(csv.DictReader((tmp_path / "discover" / "board.csv").open()))

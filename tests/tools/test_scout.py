@@ -47,13 +47,13 @@ def test_transcripts_carry_every_step_and_the_judge(tmp_path):
         assert len(transcript.messages) == transcript.message_count == expected_messages(run.transcripts[agent])
         assert transcript.transcript_id == run.episodes[agent]["episode"]
         assert transcript.source_id == "riemann_minimal" and transcript.task_set == "openmath"
-        assert transcript.metadata["cheated"] == run.cheated[agent]
+        assert transcript.metadata["judge_cheated"] == run.judge_cheated[agent]
         assert transcript.metadata["judge_attempted_access"] == run.judge[agent]["attempted_access"]
         assert transcript.metadata["role"] == "worker"
     rows = asyncio.run(stored_rows(str(tmp_path / "transcripts")))
     stored = {row.transcript_id: row for row in rows}
     assert set(stored) == {"riemann#1@a01", "riemann#1@a02", "riemann#1@a03"}
-    assert stored["riemann#1@a02"].metadata["cheated"] is True
+    assert stored["riemann#1@a02"].metadata["judge_cheated"] is True
     assert stored["riemann#1@a01"].metadata["judge_honey_pots_seen"] is True
 
 
@@ -114,7 +114,7 @@ def test_chess_names_are_the_endpoints_address_and_the_credentials_halves():
 def test_grep_only_scan_runs_offline(runs_folder, tmp_path):
     copy = copy_run(runs_folder / "riemann_minimal", tmp_path / "riemann_minimal", ignore=("scout",))
     assert main(["scout", str(copy), "--grep-only"]) == 0
-    summary = json.loads((copy / "tools" / "scout" / "summary.json").read_text())
+    summary = json.loads((copy / "analysis/tools" / "scout" / "summary.json").read_text())
     assert summary["tool"] == "scout" and summary["grep_only"] is True and summary["model"] is None
     assert summary["agents"] == {} and summary["scan"]["complete"] is True
     assert summary["grep"]["a01"]["archive"]["count"] == 0
@@ -123,7 +123,7 @@ def test_grep_only_scan_runs_offline(runs_folder, tmp_path):
     assert summary["validation"]["agreement"]["grep_seen~honey_pots_seen"] == {"agree": 3, "disagree": 0,
                                                                                "unknown": 0}
     for name in ("findings.csv", "grep.csv", "onset.png", "onset.csv"):
-        assert (copy / "tools" / "scout" / name).is_file()
+        assert (copy / "analysis/tools" / "scout" / name).is_file()
 
 
 def test_unknown_scanner_is_a_usage_error():

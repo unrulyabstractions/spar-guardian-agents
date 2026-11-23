@@ -1,0 +1,304 @@
+/* The run page's Board tab (tv_view_board.js). Colours come from the results browser's theme tokens
+   (src/ui/static/style.css) and the ladders' ramps and chips (tv_case_view.js RAMP, tv_levels.js levelChip, styled in
+   tv_style.css); the two lanes' colours are the tab's own. */
+.bd-tab { --bd-a: #1b7f8c; --bd-a-bg: #dff0f2; --bd-b: #c2700f; --bd-b-bg: #fbecd9; --bd-plain: #c9c9c1;
+  --bd-seed: #5f7a1f; --bd-seed-bg: #eef3df; }
+@media (prefers-color-scheme: dark) {
+  .bd-tab { --bd-a: #5cc3cf; --bd-a-bg: #173336; --bd-b: #f0a453; --bd-b-bg: #3a2a17; --bd-plain: #55575d;
+    --bd-seed: #a9c46a; --bd-seed-bg: #263018; }
+}
+.bd-tab .card { margin-bottom: 10px; }
+.bd-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 6px; }
+.bd-pick { display: inline-flex; align-items: center; gap: 5px; }
+.bd-sel { font-size: 12.5px; padding: 2px 6px; border: 2px solid; border-radius: 5px; background: var(--panel);
+  color: var(--text); }
+.bd-sel-a { border-color: var(--bd-a); }
+.bd-sel-b { border-color: var(--bd-b); }
+.bd-play { min-width: 78px; justify-content: center; }
+/* every control of the row one height and one font: the selects, the buttons and the lens segment */
+.bd-mode { font-size: 12.5px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 5px; background: var(--panel);
+  color: var(--text); }
+.bd-controls select, .bd-controls .btn-small, .bd-controls .seg { height: 26px; min-height: 26px; box-sizing: border-box; }
+.bd-controls .seg-btn { height: 100%; }
+.bd-lens-key { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: 22px; margin: 0 0 6px;
+  color: var(--muted); }
+/* under All the key row keeps its height, so the lanes never move when the lens changes */
+.bd-lens-key.bd-key-off { visibility: hidden; }
+.bd-count { padding: 0 6px; border: 1px solid var(--border-strong); border-radius: 9px; font-size: 11.5px;
+  color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bd-missed { cursor: help; }
+
+/* the slider under the time axis: its handle's width is tv_view_board.js THUMB, so the handle's middle sits on the
+   axis at the moment it shows */
+.bd-scrub { position: relative; display: flex; align-items: center; min-height: 24px; overflow: hidden; }
+.bd-slider { position: absolute; top: 50%; transform: translateY(-50%); height: 18px; margin: 0; padding: 0; background: none;
+  cursor: pointer; -webkit-appearance: none; appearance: none; }
+.bd-slider::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--border-strong); }
+.bd-slider::-moz-range-track { height: 4px; border-radius: 2px; background: var(--border-strong); }
+.bd-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px;
+  margin-top: -5px; border-radius: 50%; background: var(--text); border: 2px solid var(--panel);
+  box-sizing: border-box; }
+.bd-slider::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--text);
+  border: 2px solid var(--panel); box-sizing: border-box; }
+/* the readout in the gutter, right against the slider's left end; a step's time on a second line */
+.bd-pos { flex: none; box-sizing: border-box; display: flex; flex-direction: column; align-items: flex-end; padding-left: 6px;
+  font-variant-numeric: tabular-nums; font-size: 12px; line-height: 1.3; color: var(--text); text-align: right; }
+.bd-pos > span + span { color: var(--muted); font-size: 11px; }
+
+/* the two agents' cards, side by side and the same height: a head line, a grid of now and end per ladder, the
+   judge labels' scores */
+.bd-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 640px)); justify-content: start; gap: 8px; margin: 2px 0 8px; }
+.bd-card { min-width: 0; padding: 5px 10px; border-left: 4px solid; border-radius: 4px; font-size: 12.5px;
+  display: flex; flex-direction: column; gap: 4px; }
+.bd-card[hidden] { display: none; }
+.bd-card-a { border-color: var(--bd-a); background: var(--bd-a-bg); }
+.bd-card-b { border-color: var(--bd-b); background: var(--bd-b-bg); }
+.bd-card-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; white-space: nowrap; }
+.bd-sum { font-family: var(--mono); font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* a row per ladder and per judge label: the name, now and end in columns of one width, each chip on its column's
+   middle, then a judge label's kind */
+.bd-card-grid { display: grid; grid-template-columns: max-content minmax(96px, max-content) minmax(96px, max-content) max-content;
+  align-items: center; gap: 2px 14px; font-size: 12px; }
+.bd-card-grid > .bd-col, .bd-card-grid > .bd-now, .bd-card-grid > .bd-end, .bd-card-grid > .bd-score { justify-self: center; text-align: center; }
+.bd-col { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.bd-ladder { color: var(--muted); }
+.bd-end { cursor: help; }
+.bd-end.bd-same { opacity: .4; }
+.bd-score { display: inline-flex; align-items: center; gap: 5px; }
+.bd-score a { text-decoration: none; }
+.bd-kind { font-size: 11px; color: var(--muted); }
+.bd-key-a { color: var(--bd-a); font-weight: 600; }
+.bd-key-b { color: var(--bd-b); font-weight: 600; }
+.bd-call-link { font-family: var(--mono); font-size: 12px; }
+
+/* the timeline */
+.bd-svg-host { width: 100%; overflow: hidden; }
+.bd-svg { display: block; font-family: var(--sans); user-select: none; cursor: col-resize; touch-action: none; }
+.bd-lane { fill: var(--panel-2); stroke: var(--border); stroke-width: 1; }
+.bd-lane-a { fill: var(--bd-a-bg); }
+.bd-lane-b { fill: var(--bd-b-bg); }
+.bd-lane-board { fill: var(--panel); stroke-dasharray: 3 3; }
+.bd-swatch-a { fill: var(--bd-a); }
+.bd-swatch-b { fill: var(--bd-b); }
+.bd-name { font-size: 12.5px; font-weight: 600; fill: var(--text); font-family: var(--mono); }
+.bd-role { font-size: 10.5px; fill: var(--muted); }
+.bd-axis line { stroke: var(--border-strong); }
+.bd-axis .bd-grid { stroke: var(--grid); stroke-dasharray: 2 4; }
+.bd-axis text { font-size: 10.5px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.bd-call { cursor: pointer; shape-rendering: crispEdges; }
+.bd-call:hover { stroke: var(--text); stroke-width: 1; }
+.bd-call.bd-strong { stroke: var(--text); stroke-width: .8; }
+/* under a lens (tv_view_board.js callStyle): the lanes go neutral so the ladder's colours read; a marked call is
+   outlined, the rung reached so far is a quiet tint, and a call the lens has nothing for is dimmed */
+.bd-lensed .bd-lane-a, .bd-lensed .bd-lane-b { fill: var(--panel); }
+.bd-lensed .bd-call.bd-mark { stroke: var(--text); stroke-width: .6; }
+.bd-call.bd-sofar { opacity: .8; }
+.bd-call.bd-dim { opacity: .22; }
+.bd-reach { stroke: var(--text); stroke-width: 1; stroke-dasharray: 3 2; pointer-events: none; }
+.bd-reach.bd-reach-line { stroke-width: 2.2; stroke-dasharray: none; }
+.bd-reach-text { font-size: 9.5px; font-weight: 600; fill: var(--text); paint-order: stroke; stroke: var(--panel);
+  stroke-width: 3px; stroke-linejoin: round; cursor: pointer; }
+.bd-reach-text:hover { text-decoration: underline; }
+.bd-reach-ground { fill: var(--panel); opacity: .85; pointer-events: none; }
+.bd-reach-lead { stroke: var(--text); stroke-width: 1; stroke-dasharray: 1 2; pointer-events: none; }
+.bd-pbox { cursor: pointer; }
+.bd-pbox.bd-ahead { opacity: .28; }
+.bd-pbox rect { stroke-width: 1.2; }
+.bd-pbox text { font-size: 10px; font-weight: 600; font-family: var(--mono); pointer-events: none; }
+.bd-by-a rect { fill: var(--bd-a); stroke: var(--bd-a); }
+.bd-by-b rect { fill: var(--bd-b); stroke: var(--bd-b); }
+.bd-by-a text, .bd-by-b text { fill: #fff; }
+.bd-by-other rect { fill: var(--panel-2); stroke: var(--border-strong); }
+.bd-by-other text, .bd-by-system text { fill: var(--muted); }
+.bd-by-system rect { fill: var(--notice-bg); stroke: var(--notice); stroke-dasharray: 2 2; }
+/* a seed pack's post: the previous team's, on the board before round 1 */
+.bd-by-seed rect { fill: var(--bd-seed-bg); stroke: var(--bd-seed); stroke-width: 1.6; stroke-dasharray: 4 2; }
+.bd-by-seed text, .bd-seed-name { fill: var(--bd-seed); }
+/* the band before the run's start that holds the seed pack's posts */
+.bd-seed-band { fill: var(--bd-seed-bg); fill-opacity: .45; stroke: var(--bd-seed); }
+.bd-seed-tag { fill: var(--bd-seed); font-size: 10px; }
+.bd-pbox.bd-pdim rect { fill: var(--panel); }
+.bd-pbox.bd-pdim text { fill: var(--muted); }
+.bd-judged-dot { stroke: var(--text); stroke-width: 1; }
+.bd-arrow { stroke-width: 1.3; opacity: .85; }
+.bd-arrow.bd-read-latest { stroke-width: 1; stroke-dasharray: 4 3; }
+.bd-arrow.bd-read-from { stroke-width: 2.4; opacity: 1; }
+.bd-arrow.bd-read-plain { stroke-width: 1; stroke-dasharray: 1 2; }
+.bd-asked { font-size: 11px; font-weight: 700; font-family: var(--mono); paint-order: stroke; stroke: var(--panel);
+  stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
+.bd-asked-a { fill: var(--bd-a); }
+.bd-asked-b { fill: var(--bd-b); }
+.bd-arrow-a { stroke: var(--bd-a); }
+.bd-arrow-b { stroke: var(--bd-b); }
+.bd-arrowhead-a { fill: var(--bd-a); }
+.bd-arrowhead-b { fill: var(--bd-b); }
+.bd-future { fill: var(--panel); opacity: .72; pointer-events: none; }
+.bd-cursor { stroke: var(--text); stroke-width: 1.6; pointer-events: none; }
+.bd-current { fill: none; stroke: var(--text); stroke-width: 2; rx: 2; pointer-events: none; }
+.bd-latest-box { fill: none; stroke: var(--text); stroke-width: 2; pointer-events: none; }
+
+/* the legend, folded into its summary line */
+.bd-legend { margin-top: 2px; font-size: 12px; }
+.bd-legend summary { cursor: pointer; color: var(--text); }
+.bd-legend-body { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 4px; color: var(--muted); }
+.bd-key-svg { display: block; overflow: visible; }
+.bd-lg { display: inline-flex; align-items: center; gap: 4px; }
+.bd-sw { display: inline-block; width: 12px; height: 8px; border-radius: 2px; border: 1px solid var(--border-strong); }
+.bd-sw-a { background: var(--bd-a); border-color: var(--bd-a); height: 12px; width: 6px; }
+.bd-sw-b { background: var(--bd-b); border-color: var(--bd-b); height: 12px; width: 6px; }
+.bd-sw-judged { width: 10px; height: 10px; border-radius: 50%; background: #97a9cf; border: 1px solid var(--text); }
+.bd-sw-sofar { opacity: .8; }
+.bd-sw-latest { width: 16px; height: 10px; border: 2.4px solid var(--text); background: none; }
+.bd-sw-post { width: 18px; height: 11px; border-radius: 3px; background: var(--bd-a); border-color: var(--bd-a); }
+.bd-sw-seed { width: 18px; height: 11px; border-radius: 3px; background: var(--bd-seed-bg); border: 1.5px dashed var(--bd-seed); }
+.bd-sw-tall { width: 6px; height: 16px; border-color: var(--text); }
+.bd-tick { display: inline-block; width: 0; height: 14px; border-left: 1px dashed var(--text); }
+.bd-tick.bd-tick-line { border-left: 2.2px solid var(--text); }
+
+/* the message board */
+.bd-board-head { margin: 0; font-size: 14px; }
+.bd-board-box { max-height: 640px; overflow: auto; margin-top: 8px; position: relative; }
+.bd-posts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.bd-post { border: 1px solid var(--border); border-left: 4px solid var(--border-strong); border-radius: 6px;
+  padding: 5px 9px; background: var(--panel); cursor: pointer; }
+.bd-post:hover { background: var(--hover); }
+.bd-post-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 12.5px; }
+.bd-label { font-family: var(--mono); }
+.bd-writer { font-family: var(--mono); font-weight: 600; }
+.bd-post .bd-text { margin: 4px 0 0; font-size: 12px; max-height: none; }
+.bd-post.bd-system { border-style: dashed; border-left-style: solid; border-left-color: var(--notice);
+  background: var(--notice-bg); }
+.bd-post.bd-seeded { border-style: dashed; border-left-style: solid; border-left-color: var(--bd-seed);
+  background: var(--bd-seed-bg); }
+.bd-seed-badge { color: var(--bd-seed); border: 1px solid var(--bd-seed); background: var(--bd-seed-bg); }
+.bd-post.bd-mine-a { border-left-color: var(--bd-a); background: var(--bd-a-bg); }
+.bd-post.bd-mine-b { border-left-color: var(--bd-b); background: var(--bd-b-bg); }
+.bd-post.bd-mine-a .bd-writer { color: var(--bd-a); }
+.bd-post.bd-mine-b .bd-writer { color: var(--bd-b); }
+/* the latest post's frame inside its box, so the scrolling list never clips it */
+.bd-post.bd-latest { box-shadow: inset 0 0 0 2px var(--text); }
+/* a harness notice's word on the notice's own ground: no padding of its own, so the head keeps one gap */
+.bd-post-head .badge.b-notice { padding: 0; border: 0; background: none; }
+/* a record of who came and went: one slim line, no label, no readers */
+.bd-post.bd-record { display: flex; align-items: center; gap: 6px; padding: 1px 9px; font-size: 12px;
+  border-style: dashed; border-left-style: solid; border-left-color: var(--notice); background: var(--notice-bg); }
+.bd-record .badge.b-notice { padding: 0; border: 0; background: none; }
+.bd-record-text { font-family: var(--mono); color: var(--muted); }
+.bd-post.bd-has-label { border-right: 4px solid #5b73ad; }
+.bd-readers { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.bd-reader { font-family: var(--mono); }
+.bd-judged { margin-top: 4px; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.bd-reason { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: zoom-in; }
+.bd-reason.open { white-space: normal; cursor: zoom-out; }
+.bd-post.flash { animation: flash 1.2s ease-out; }
+/* Tidy cards and room throughout (2026-11-20): every chip fills its column, so a column reads as one width; the judge
+   labels sit under a rule with their kind beside the score; more space between every part of the tab. */
+.bd-tab .card { margin-bottom: 24px; }
+.bd-controls { gap: 10px 12px; margin-bottom: 14px; }
+.bd-lens-key { gap: 8px 12px; margin: 0 0 18px; }
+.bd-scrub { min-height: 36px; margin: 10px 0 6px; }
+.bd-cards { gap: 14px; margin: 16px 0 20px; }
+.bd-card { padding: 14px 18px; gap: 12px; }
+.bd-card-grid { grid-template-columns: max-content 128px 128px; gap: 10px 18px; }
+.bd-card-grid > .bd-now, .bd-card-grid > .bd-end { justify-self: stretch; display: flex; }
+.bd-card-grid > .bd-now > .lv-chip, .bd-card-grid > .bd-end .lv-chip { flex: 1; justify-content: center; }
+.bd-card-grid > .bd-end > * { flex: 1; display: flex; }
+.bd-card-grid > .bd-score { justify-self: stretch; justify-content: center; gap: 8px; }
+.bd-rule { grid-column: 1 / -1; border-top: 1px solid var(--border); margin: 2px 0; }
+.bd-legend { margin-top: 8px; }
+.bd-legend-body { gap: 10px 18px; margin-top: 10px; }
+.bd-board-box { margin-top: 14px; }
+.bd-posts { gap: 12px; }
+.bd-post { padding: 10px 14px; }
+.bd-post .bd-text { margin: 8px 0 0; }
+.bd-judged { margin-top: 8px; }
+
+/* the temp dirs panel (tv_tmp_panel.js): each machine's tree beside the selected file's text; an entry changed since
+   the previous stop takes the change's colour and mark, a path removed earlier is faint; a readers column when the
+   file names the machine's users */
+.bd-tmp .tmp-head { display: flex; align-items: center; gap: 10px; }
+.tmp-counts { display: inline-flex; gap: 6px; }
+.bd-count.tmp-c-added { color: var(--good); border-color: var(--good); background: var(--good-bg); }
+.bd-count.tmp-c-changed { color: var(--warn); border-color: var(--warn); background: var(--warn-bg); }
+.bd-count.tmp-c-removed { color: var(--bad); border-color: var(--bad); background: var(--bad-bg); }
+.tmp-body { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 14px; margin-top: 14px; }
+.tmp-trees { flex: 0 1 760px; min-width: 360px; display: flex; flex-direction: column; gap: 12px; }
+.tmp-machine-box { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.tmp-mhead { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--panel-2);
+  border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.tmp-machine { font-family: var(--mono); }
+.tmp-machine-name { color: var(--text); font-weight: 600; }
+.tmp-gone-chip { cursor: pointer; font-family: inherit; line-height: inherit; background: none; }
+.tmp-gone-chip.tmp-off { opacity: 0.55; text-decoration: line-through; }
+.tmp-rows { max-height: 420px; overflow: auto; padding: 4px 0; font-size: 12px; }
+.tmp-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) 64px 72px 128px; align-items: center; gap: 0 8px;
+  padding: 1px 10px 1px 6px; cursor: pointer; border-left: 3px solid transparent; }
+.tmp-has-readers .tmp-row { grid-template-columns: 16px minmax(0, 1fr) 64px 80px 72px 128px; }
+.tmp-readers { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tmp-readers .bd-count { font-size: 11px; }
+.tmp-readers-label { display: inline-flex; align-items: center; gap: 2px; }
+.tmp-row:hover { background: var(--hover); }
+.tmp-row.tmp-sel { box-shadow: inset 0 0 0 1.5px var(--text); }
+.tmp-mark { font-family: var(--mono); font-weight: 700; text-align: center; }
+.tmp-name { font-family: var(--mono); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tmp-t-dir .tmp-name { font-weight: 600; }
+.tmp-fold { display: inline-block; width: 12px; color: var(--muted); }
+.tmp-agent { font-family: var(--mono); }
+.tmp-owner { font-size: 11.5px; }
+.tmp-size { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tmp-by-cell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tmp-by { font-size: 11.5px; }
+.tmp-row.tmp-added { background: var(--good-bg); border-left-color: var(--good); }
+.tmp-row.tmp-added .tmp-mark { color: var(--good); }
+.tmp-row.tmp-changed { background: var(--warn-bg); border-left-color: var(--warn); }
+.tmp-row.tmp-changed .tmp-mark { color: var(--warn); }
+.tmp-row.tmp-removed { background: var(--bad-bg); border-left-color: var(--bad); }
+.tmp-row.tmp-removed .tmp-mark { color: var(--bad); }
+.tmp-row.tmp-removed .tmp-name { text-decoration: line-through; color: var(--muted); }
+.tmp-row.tmp-gone { opacity: 0.55; }
+.tmp-row.tmp-gone .tmp-mark { color: var(--muted); }
+.tmp-row.tmp-gone .tmp-name { text-decoration: line-through; color: var(--muted); }
+.tmp-file { flex: 1 1 420px; min-width: 320px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.tmp-file[hidden] { display: none; }
+.tmp-fhead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 10px;
+  background: var(--panel-2); border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.tmp-path { font-family: var(--mono); }
+.tmp-mode { font-family: var(--mono); }
+.tmp-close { min-width: 26px; justify-content: center; }
+.tmp-file .tmp-text { margin: 0; max-height: 420px; overflow: auto; font-size: 12px; white-space: pre-wrap;
+  border: 0; border-radius: 0; }
+.tmp-file > .muted.block { padding: 8px 10px; }
+
+/* the network panel (tv_net_panel.js): what listens at the position, by machine, beside every connect, accept and
+   send up to it; a call since the previous stop takes the added colour, a cross-agent call the bad colour */
+.bd-net .net-box { flex: 1 1 440px; min-width: 360px; }
+.bd-net .net-calls { flex: 2 1 640px; }
+.net-toggle { cursor: pointer; font-family: inherit; line-height: inherit; background: none; }
+.net-toggle.net-on { color: var(--text); border-color: var(--text); font-weight: 600; }
+.net-machine { display: flex; align-items: baseline; gap: 8px; padding: 5px 10px 2px 25px; font-size: 12px; }
+.net-machine + .net-lrow { margin-top: 1px; }
+.tmp-rows > .net-machine:not(:first-child) { margin-top: 6px; border-top: 1px solid var(--border); }
+.net-lrow { grid-template-columns: 16px minmax(0, 1fr) 44px 84px 64px 84px; }
+.net-crow { grid-template-columns: 16px 62px 44px minmax(150px, 1.3fr) 72px minmax(0, 1fr) 96px 84px; }
+.net-crow.net-cross { background: var(--bad-bg); border-left-color: var(--bad); }
+.net-crow.net-cross .tmp-mark { color: var(--bad); }
+.net-crow.net-cross-try { background: var(--warn-bg); border-left-color: var(--warn); }
+.net-crow.net-cross-try .tmp-mark { color: var(--warn); }
+.net-who { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+.net-port { font-family: var(--mono); font-weight: 600; }
+.net-prog { font-family: var(--mono); font-size: 11.5px; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.net-none { padding: 8px 10px; }
+.net-lrow, .net-crow { cursor: default; }
+.net-lrow .bd-count, .net-crow .bd-count { justify-self: start; }
+/* the network log's marks at the foot of a lane (tv_view_board.js), and their legend samples */
+.bd-net-mark { fill: var(--text); stroke: var(--bg); stroke-width: 1; cursor: pointer; }
+.bd-net-mark.bd-net-cross { fill: var(--bad); }
+.bd-net-mark.bd-net-try { fill: var(--warn); }
+.bd-net-mark:hover { stroke: var(--text); stroke-width: 1.5; }
+/* An agent's rounds on its lane (tv_view_board.js): a band each, every other one shaded, an edge at its start and its
+   number at the foot. */
+.bd-round-band { fill: transparent; }
+.bd-round-odd .bd-round-band { fill: var(--text); fill-opacity: .09; }
+.bd-round-edge { stroke: var(--text); stroke-opacity: .6; stroke-width: 1; pointer-events: none; }
+.bd-round-n { font: 600 10px var(--sans); fill: var(--text); fill-opacity: .75; pointer-events: none; }

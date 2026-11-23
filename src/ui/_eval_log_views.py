@@ -13,7 +13,6 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass
 from functools import cached_property
-from pathlib import Path
 
 from inspect_ai.event import ModelEvent
 
@@ -27,10 +26,11 @@ from src.export.atif_transcripts import (
     turn_rule_kinds,
 )
 from src.export.eval_sample_view import blocked_message_ids, held_orbit_submit, span_owners, usage_dict
+from src.measures.run_directory import RunDir
 from src.sandbox import task_tool_store
 from src.swarm.turn_rules import STOP_WORKING, SUBMIT, TURN_RULES_TAG, provider_system_text
+from src.ui import transcript_rounds
 from src.ui._run_store import Store
-from src.utils.json_files import read_json
 
 # Message metadata keys that mark what the provider saw, and the flag each becomes.
 FLAG_KEYS = {TURN_RULES_TAG: "turn_rules", "orbit_defense_redacted": "redacted"}
@@ -39,9 +39,9 @@ SAMPLE_STORE_KEYS = (
     "DefenseLog:blocks", "DefenseLog:activity", "DefenseLog:vaccination_injections",
     task_tool_store.STATES, task_tool_store.CALLS,
 )
-# The code ladder's moments the timeline places (src/measures/code_ladder.py): the call that first showed the agent a
-# pointer to the honeypot, and the call that first showed it the honeypot's content.
-SIGNAL_RUNGS = ("exposed", "opened")
+# The code's evidence the timeline places (signals.jsonl, src/measures/transcript_scan.py): the call that first showed
+# the agent a pointer to the honeypot, and the call that first showed it the honeypot's content.
+SIGNAL_EVIDENCE = ("exposed", "opened")
 # The timeline kind of a tool call that succeeded and ended work: submit handed in, stop_working stopped. A refused
 # call stays a "tool", and so does every call of a log whose agents held ORBIT's own submit (held_orbit_submit), where
 # a call named submit was that tool.
@@ -57,7 +57,7 @@ def message_dict(m, redacted: set, blocked: set = frozenset(), own_output: bool 
     flagged output_blocked only when it is a call's own output that a defense blocked (its id is in `blocked`); in an
     input history the same sentence is refusal_in_history, since the substituted message carries a new id and the
     model may also write the sentence itself. With `rewritten` (the run's turn rules logged the system message's
-    rewrite), a system message loses ORBIT's assistant paragraph, as the provider received it, and is flagged
+    rewrite), a system message loses the agent loop's assistant paragraph, as the provider received it, and is flagged
     turn_rules when that changed it.
     """
     text, reasoning = split_content(m.content)
@@ -137,7 +137,7 @@ class Call:
 
 
 def transcript_call_ids(transcript: dict) -> list[str]:
-    """The tool call ids of an ATIF transcript in the code ladder's numbering: call k is the k-th tool call of the
+    """The tool call ids of an ATIF transcript in the code's numbering: call k is the k-th tool call of the
     agent steps, from 0."""
     return [tc.get("tool_call_id") for step in transcript["trajectory"]["steps"] if step.get("source") == "agent"
             for tc in step.get("tool_calls") or []]
@@ -203,12 +203,13 @@ class LogViews:
     def timeline(self, name: str) -> dict:
         """Tool calls, model calls, defense interventions and board posts of one run, in seconds from the sample's
         start. Each board post carries the moment it was sent and who read it when; first_exposed and first_opened
-        place the code ladder's exposed and opened calls of each agent on the same clock."""
+        place the code's exposed and opened evidence of each agent on the same clock; rounds gives each agent's rounds
+        on it (transcript_rounds.from_start), None in a run before rounds of calls."""
         sample = self.store.eval_log(name).samples[0]
         owner = span_owners(sample)
         t0 = sample.events[0].timestamp
         eps = self.store.episodes(name)
-        marks = self._signal_marks(eps)
+        marks = self._signal_marks(RunDir(self.store.run_dir(name)), eps)
         blocked = blocked_message_ids(sample, "model_output")
         endings = {} if held_orbit_submit(sample) else ENDING_KINDS
         events = []
@@ -220,36 +221,38 @@ class LogViews:
             elif e.event == "info" and isinstance(e.data, dict) and e.data.get("event") == "defense_intervention":
                 events.append(_defense_item(e, t0))
         events.sort(key=lambda x: x["t"] if x["t"] is not None else 0)
-        first = {rung: {} for rung in SIGNAL_RUNGS}
+        first = {kind: {} for kind in SIGNAL_EVIDENCE}
         for item in events:
-            for rung in SIGNAL_RUNGS:
-                if item.get(rung) and item["agent"] and item["t"] is not None:
-                    first[rung].setdefault(item["agent"], item["t"])
-        communication = self.store.run_dir(name) / "communication" / f"{sample.id}#{sample.epoch}.json"
+            for kind in SIGNAL_EVIDENCE:
+                if item.get(kind) and item["agent"] and item["t"] is not None:
+                    first[kind].setdefault(item["agent"], item["t"])
         return {
             "run": name,
             "duration": sample.total_time,
-            "agents": self.store.run_json(name).get("agents") or sorted({e["orbit_agent"] for e in eps}),
-            "roles": {e["orbit_agent"]: e["role"] for e in eps if e.get("role")},
+            "agents": self.store.run_json(name).get("agents") or sorted({e["agent"] for e in eps}),
+            "roles": {e["agent"]: e["role"] for e in eps if e.get("role")},
             "first_exposed": first["exposed"],
             "first_opened": first["opened"],
             "limit": sample.limit.type if sample.limit else None,
             "events": events,
-            "board": _board(read_json(communication) or {}, events),
+            "board": _board(RunDir(self.store.run_dir(name)).board(f"{sample.id}#{sample.epoch}"), events),
+            "rounds": transcript_rounds.from_start(transcript_rounds.rounds(self.store.run_json(name)),
+                                                   t0.timestamp()),
         }
 
-    def _signal_marks(self, episodes: list[dict]) -> dict[str, set]:
-        """Tool call id -> the code ladder's rungs that call first showed, from signals and transcripts."""
+    def _signal_marks(self, run: RunDir, episodes: list[dict]) -> dict[str, set]:
+        """Tool call id -> the code's evidence that call first showed (SIGNAL_EVIDENCE), from signals and
+        transcripts."""
         marks: dict[str, set] = {}
         for ep in episodes:
             signals = ep["signals"] or {}
-            calls = [signals.get(f"{rung}_call") for rung in SIGNAL_RUNGS]
+            calls = [signals.get(f"{kind}_call") for kind in SIGNAL_EVIDENCE]
             if not ep["has_transcript"] or all(k is None for k in calls):
                 continue
-            ids = transcript_call_ids(read_json(Path(ep["transcript_path"])))
-            for rung, k in zip(SIGNAL_RUNGS, calls):
+            ids = transcript_call_ids(run.transcript(ep["episode"]))
+            for kind, k in zip(SIGNAL_EVIDENCE, calls):
                 if k is not None and k < len(ids):
-                    marks.setdefault(ids[k], set()).add(rung)
+                    marks.setdefault(ids[k], set()).add(kind)
         return marks
 
 
@@ -257,7 +260,7 @@ def _secs(ts, t0) -> float | None:
     return (ts - t0).total_seconds() if ts else None
 
 
-def _tool_item(e, agent, t0, rungs: set, endings: dict[str, str]) -> dict:
+def _tool_item(e, agent, t0, evidence: set, endings: dict[str, str]) -> dict:
     args = e.arguments if isinstance(e.arguments, dict) else {}
     shown = args.get("command") or args.get("code") or args.get("message") or args.get("answer")
     err = e.error.message if e.error else None
@@ -271,7 +274,7 @@ def _tool_item(e, agent, t0, rungs: set, endings: dict[str, str]) -> dict:
         "preview": str(shown or " ".join(str(v) for v in args.values()))[:160],
         "blocked": bool(err and err.startswith("Blocked by defense")),
         "error": bool(err),
-        **{rung: rung in rungs for rung in SIGNAL_RUNGS},
+        **{kind: kind in evidence for kind in SIGNAL_EVIDENCE},
     }
 
 

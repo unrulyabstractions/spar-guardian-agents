@@ -1,8 +1,8 @@
 # scripts/box
 
-These scripts run study_exploration_1 on rented vast.ai boxes. `study_table.py` states the study: its targets, regulators, arms and boxes. A box bills by the hour and holds the only copy of what it makes. Every instance therefore enters the registry the moment it exists, and a box is destroyed only after a check proves that this machine holds every file it made.
+These scripts run ian_baseline_explorations_1 on rented vast.ai boxes. `study_table.py` states the study: its targets, regulators, arms and boxes. A box bills by the hour and holds the only copy of what it makes. Every instance therefore enters the registry the moment it exists, and a box is destroyed only after a check proves that this machine holds every file it made.
 
-You launch each stage by hand and by name: `pilot`, `gate`, one `phase2-<target>`, one `phase2b-<target>`, `fixed-pilot`, `fixed-gate`, one `fixed-phase2-<target>`, `vuls-gate`, one `fixed-fill-<target>`, one `fixed-fill-argon-<target>`, `disreg-gate`, one `disreg-<target>`, one `contest-<target>` or one `rules-<target>`. Nothing starts one stage from another. No judge runs on a box. The code ladder is every run's result.
+You launch each stage by hand and by name: `pilot`, `gate`, one `phase2-<target>`, one `phase2b-<target>`, `fixed-pilot`, `fixed-gate`, one `fixed-phase2-<target>`, `vuls-gate`, one `fixed-fill-<target>`, one `fixed-fill-argon-<target>`, `disreg-gate`, one `disreg-<target>`, one `contest-<target>` or one `rules-<target>`. Nothing starts one stage from another. No judge runs on a box. The code record and its three ladders are every run's result.
 
 ## Stages
 
@@ -87,7 +87,7 @@ read -rs BOX_OPENROUTER_API_KEY && export BOX_OPENROUTER_API_KEY
 
 The key reaches a box through ssh's standard input, into `/root/.box_env` with mode 600. Only `BOX_OPENROUTER_API_KEY` goes: a key made for one launch, with a credit limit set in OpenRouter's dashboard. `scripts/box/box_key.py` refuses it unless OpenRouter caps it, it is not the main key, and it has enough left for the box's runs at their dollar caps (each run's `cost_limit_usd`, $5 by default). `--allow-main-key` is gone.
 
-On 2026-11-02 the user ordered the main key for study_exploration_1: `scripts/box/box_run.sh <id> --main-key` sends `OPENROUTER_API_KEY` instead, and the key check still needs its credit limit and enough left. Any other study needs the user's word again.
+On 2026-11-02 the user ordered the main key for ian_baseline_explorations_1: `scripts/box/box_run.sh <id> --main-key` sends `OPENROUTER_API_KEY` instead, and the key check still needs its credit limit and enough left. Any other study needs the user's word again.
 
 The boxes clone this repository from GitHub, so `create` refuses a commit that origin/main lacks. Push first, or pin what origin holds with `--commit origin/main`.
 
@@ -128,6 +128,33 @@ scripts/box/watch.sh --once <id>
 
 Before the first fleet with the access log, one box of each task runs the check in `src/domains/README.md` (A first real box).
 
+## Proc hiding check
+
+The runs hide /proc from the agents (src/sandbox/proc_hiding/): each agent sees only its own processes, and no process opens a page map. `box_setup_remote.sh` runs the check after the build and refuses the box when it fails; it writes `/root/proc_hiding_check.json`. By hand, on a box or on the Mac:
+
+```
+.venv/bin/python -m scripts.box.proc_hiding_check --json /root/proc_hiding_check.json
+```
+
+It loads the runs' AppArmor profile into the Docker host's kernel with the host's `apparmor_parser`, starts one container of the machines' image under it, remounts its /proc with `hidepid=2,gid=2999` from a privileged helper and runs the runs' own proof. Then, as uid 1001, `grep -r` over / must find a planted file within 120 s, the page map's open must fail, and bash's `<(...)`, python3, top and ps must work for the agent's own processes. Last, peer_shell's observer (uid 3001 with the group procview) leaves a setgid copy of bash and of python3 in /tmp and uid 1001 runs them: each must keep 1001's egid and see no other agent's command line, which holds only because every machine runs with Docker's `no-new-privileges`. It exits 0 when every check passes, 1 when one fails and 2 when it cannot start (no Docker, no AppArmor). It rents nothing and calls no model. It has passed on Colima (Ubuntu 24.04, kernel 6.8) and has not yet run on a vast.ai box.
+
+## Network trace check
+
+The network log's preflight says which way of recording the agents' network calls works on a box: eBPF through bpftrace from the `netlog` sidecar, or snapshots of the machines' socket tables. Run it on one box after `box_setup.sh`, as root, with the machines' image in place:
+
+```
+scripts/box/box_scp.sh <id> scripts/box/network_trace_check.sh box:/root/ship/
+scripts/box/box_ssh.sh <id> bash /root/ship/network_trace_check.sh --json /root/network_trace_check.json
+```
+
+It downloads the pinned bpftrace release (196 MB, sha256 checked) and unpacks it into the image `network-trace-bpftrace:v0.27.1-<arch>` with the runs' own Dockerfile, kept where one with the release's digest is already there. It starts two containers with memory limits, removes them, and prints one line per method and then `method ebpf`, `method procnet` or `method none`. It exits 1 when no method works. It rents nothing and calls no model.
+
+Its helper is the `netlog` sidecar exactly: the host's pid namespace, no network, `BPF`, `PERFMON` and `SYS_PTRACE` and no `SYS_ADMIN`, the tracer's image mounted at `/nix` (Docker 28 or newer) and `/sys/kernel/tracing` bound read only. The ebpf line passes only when the trace names the listen, the connect, the accept and the client socket's move from SYN_SENT to ESTABLISHED. The runs use the same cache and the same image; each run's sidecar mounts it. Where the build or the probe fails, the runs record by the socket tables, run.json `network.status` reads `partial` and `network.fallback` says why. This command runs the runs' own proof in the clone, and prints the image or `None` with the reason:
+
+```
+.venv/bin/python -c "from src.sandbox.network_log.network_monitor import ensure_tracer; print(ensure_tracer('cbtask:python311'))"
+```
+
 ## Pilot
 
 Rent and set up the pilot's boxes as above, then start each box and watch:
@@ -137,9 +164,9 @@ scripts/box/box_run.sh <id>
 scripts/box/watch.sh
 ```
 
-`watch.sh` pulls each box's `runs/`, `logs/` and `out/` every 3 minutes and prints its runs. It flags a box that cannot be reached, a run in trouble, and a box whose runs have all ended, since that box bills until it is captured and destroyed. It never starts, stops or destroys anything.
+`watch.sh` pulls each box's `runs/` and `logs/` every 3 minutes and prints its runs. It flags a box that cannot be reached, a run in trouble, and a box whose runs have all ended, since that box bills until it is captured and destroyed. It never starts, stops or destroys anything.
 
-`box_run.sh` on a box whose runner ended starts what is not finished. A run's arguments live in the box's plan, and the runner refuses a resume with other arguments. It stops a hung run and records it. A run that lacks only its code ladder gets it rebuilt, with no model call.
+`box_run.sh` on a box whose runner ended starts what is not finished. A run's arguments live in the box's plan, and the runner refuses a resume with other arguments. It stops a hung run and records it. A run that lacks only its code record gets it rebuilt, with no model call.
 
 Capture and destroy the pilot's boxes, then read its runs before the gate.
 

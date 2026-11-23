@@ -29,9 +29,9 @@ from src.measures import code_ladder
 from src.measures import team_ladder as team
 from src.measures.run_directory import RunDir
 from src.run import access_line
-from src.swarm.hidden_roles import assign_roles
-from src.swarm.turn_rules._turn_steps import follow_up_id, free_index, is_round_step, step_id, step_round
-from src.tasks import hidden_roles, swarm_task
+from src.swarm.influencers import assign_roles
+from src.swarm.turn_rules._turn_steps import step_id, step_round
+from src.tasks import agent_roles, swarm_task
 from tests.support.ordered_ids import DRAWN, drawn_ids, ordered_ids
 from tests.support.stub_ladder import OPENS, SHARDS, make_run
 
@@ -85,7 +85,7 @@ def test_each_run_of_one_seed_gets_its_own_ids_and_keeps_the_seats_of_the_seed(d
     assert first.seats != second.seats
     assert not set(first.seats) & set(second.seats)
     assert build_config("default", "small", [*pairs, "id_salt=poem_minimal_luna3"]).seats == first.seats
-    roles = [{config.seats.index(agent): role for agent, role in hidden_roles(config).items()}
+    roles = [{config.seats.index(agent): role for agent, role in agent_roles(config).items()}
              for config in (first, second)]
     assert roles[0] == roles[1] and "regulator" in roles[0].values()
 
@@ -151,7 +151,7 @@ def test_an_ids_place_in_the_roster_tells_no_role(drawn):
     configs = [build_config("default", "small", ["n_agents=4", "regulators=1", f"seed={seed}"]) for seed in range(400)]
     places = Counter()
     for config in configs:
-        roles = hidden_roles(config)
+        roles = agent_roles(config)
         assert list(roles) == config.names
         places[config.names.index(next(a for a, role in roles.items() if role == "regulator"))] += 1
     assert set(places) == {0, 1, 2, 3} and min(places.values()) > 70, places
@@ -160,7 +160,9 @@ def test_an_ids_place_in_the_roster_tells_no_role(drawn):
 @pytest.mark.parametrize("key", sorted(DOMAINS))
 def test_no_list_an_agent_can_read_follows_the_seats(key, drawn):
     """Every text of the task under seats exactly backwards: the system prompts, the setup script, the compose file and
-    the blocks staged into the sandbox mention the agents in the roster's order."""
+    the blocks staged into the sandbox mention the agents in the roster's order. No system prompt names a peer: peers
+    are announced as they enter (turn_rules presence), and a domain's own list of who holds what (knowledge work's
+    holders, chess's move order) follows the task in the first message, which the sample's metadata holds."""
     config = config_with_seats_reversed("n_agents=4", "regulators=1", "max_concurrency=4")
     sample = swarm_task(DOMAINS[key](), config).dataset[0]
     specs = sample.metadata["experiment"]["setup"]["agents"]
@@ -169,12 +171,15 @@ def test_no_list_an_agent_can_read_follows_the_seats(key, drawn):
     for spec in specs:
         others = [name for name in config.names if name != spec["name"]]
         prompt = spec.get("system_prompt") or ""
-        for text in (prompt, *prompt.split("\n")):             # the whole prompt, then each sentence's own list
+        for text in prompt.split("\n"):                        # each sentence's own list
             shown = first_seen(text, others)
             mentioned += len(shown)
             assert shown == [name for name in others if name in shown], text
-    assert mentioned > 0
+    assert mentioned == 0, (key, mentioned)
     cheatbench = sample.metadata["cheatbench"]
+    if key in ("knowledge_work", "chess"):          # every agent's first message lists its peers
+        first = cheatbench["first_message"]
+        assert all(any(other in first[a] for other in config.names if other != a) for a in config.names), first
     assert list(cheatbench["roles"]) == config.names and list(cheatbench["access"]["agents"]) == config.names
     compose = Path(sample.sandbox.config).read_text() if sample.sandbox else ""
     for text in (json.dumps(cheatbench), sample.setup or "", compose):
@@ -204,7 +209,7 @@ def test_the_roles_follow_the_seats_and_not_the_roster(drawn):
     for seed in range(20):
         config = build_config("default", "small", ["n_agents=5", "regulators=1", "disregulators=1", f"seed={seed}"])
         ordered = assign_roles(ordered_ids(5), 1, 1, seed)
-        assert [hidden_roles(config)[name] for name in config.seats] == list(ordered.values())
+        assert [agent_roles(config)[name] for name in config.seats] == list(ordered.values())
 
 
 def test_a_map_names_seats_and_lands_on_the_drawn_ids(drawn):
@@ -233,9 +238,8 @@ def test_a_map_written_with_ids_is_refused(drawn):
 def test_step_ids_carry_a_drawn_id():
     for name in DRAWN(100, 1):
         assert step_id(3, name) == f"r3-{name}" and step_round(step_id(12, name)) == 12
-        assert is_round_step(step_id(3, name)) and is_round_step(step_id(9, name, revision=4))
-        follow_up = follow_up_id(step_id(9, name, revision=4), 2)
-        assert (step_round(follow_up), free_index(follow_up), is_round_step(follow_up)) == (9, 2, False)
+        # a run before 2026-11-21 holds follow-up and pooled ids, which still give their round
+        assert step_round(f"r9-{name}-v4-free2") == 9 and step_round(f"r9-{name}-v4") == 9
 
 
 def test_the_ladders_roster_matching_reads_a_drawn_id():
@@ -259,8 +263,8 @@ def test_the_ladder_reads_a_run_of_drawn_ids(tmp_path, key_task):
     [record] = RunDir(folder).team_signals()
     assert list(rows) == record["agents"] == [first, second, third]
     assert rows[second]["pieces_seen"] == ["shard1", "shard2"]
-    assert record["collaboration_evidence"]["crossed"] == [f"{second}: saw shard1 holding shard2"]
-    assert [line.split(":")[0] for line in record["collaboration_evidence"]["solicited"]] == [f"post 1 by {first}"]
+    assert record["travel_evidence"]["crossed"] == [f"{second}: saw shard1 holding shard2"]
+    assert [line.split(":")[0] for line in record["travel_evidence"]["solicited"]] == [f"post 1 by {first}"]
 
 
 def test_each_roster_gets_a_compose_file_of_its_own(monkeypatch, tmp_path):
@@ -290,7 +294,7 @@ def test_a_real_process_can_only_draw():
 
 
 def test_nothing_a_real_run_imports_reaches_the_ordered_names():
-    for root in ("src", "examples", "elicitation", "scripts", "tools"):
+    for root in ("src", "examples", "studies", "elicitation", "scripts", "tools"):
         for path in (settings.ROOT / root).rglob("*.py"):
             if ".venv" not in path.parts:
                 assert not re.search(r"^\s*(?:from|import)\s+tests\b", path.read_text(), re.M), path

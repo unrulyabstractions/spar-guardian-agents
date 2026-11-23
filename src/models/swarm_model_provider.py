@@ -32,6 +32,7 @@ from inspect_ai.model import GenerateConfig, ModelAPI, get_model, modelapi
 from inspect_ai.model._generate_config import active_generate_config  # the eval's config: no public accessor
 
 from src.configuration.swarm_config import role_of
+from src.models import cost_cap
 from src.models import model_registry as models
 
 PROVIDER = "swarm"
@@ -102,6 +103,8 @@ class RegistryModelAPI(ModelAPI):
 
     forwarded: list[str] = []
     """The ModelAPI methods this class forwards to the inner API, set by `forwarding`."""
+    prices_its_calls = True
+    """served_model_usage gives Inspect each call's rates (cost_cap.price_calls leaves this API as it is)."""
 
     def __init__(self, model_name: str, base_url: str | None = None, api_key: str | None = None,
                  config: GenerateConfig = GenerateConfig(), **model_args: Any) -> None:
@@ -116,6 +119,12 @@ class RegistryModelAPI(ModelAPI):
     async def generate(self, input, tools, tool_choice, config: GenerateConfig):
         """The inner API's generate, with the eval's and the agents' config beneath the call's own."""
         return await self.inner.generate(input, tools, tool_choice, _beneath(config))
+
+    def served_model_usage(self, output):
+        """The call's usage at the rates the provider bills it (cost_cap.served_at_call_rates), batch prices when the
+        call's merged config asks for the batch API, so the run's cost cap counts what is billed."""
+        batch = bool(_beneath(GenerateConfig()).batch)
+        return cost_cap.served_at_call_rates(self.model_name, self.inner.served_model_usage(output), output, batch)
 
     def __getattr__(self, name: str) -> Any:
         # only for what the instance and its class lack; `inner` itself is looked up while it may not exist yet

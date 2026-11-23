@@ -22,8 +22,9 @@ from src.measures import run_index, run_validity
 from src.measures.run_index import FIELDS, INDEX, build
 from src.models.model_registry import resolve
 from tests.support.run_builder import write_status_log
+from tests.support.run_files import write_text
 
-STUDY = "study_exploration_1"
+STUDY = "ian_baseline_explorations_1"
 LOG = "2026-11-01T03-31-41-00-00_run_abc.eval"
 LUNA, OPUS, DSFLASH = "gpt-6-luna-openrouter", "claude-opus-5-5-openrouter", "deepseek-flash-openrouter"
 REFUSAL = "API integrators: you can reduce refusals by configuring a fallback model"
@@ -43,7 +44,7 @@ def make_run(root: Path, name: str, task: str, *, study: str = STUDY, group: str
     pairs = [f"seed={seed}", f"id_salt={name}", f"rule_level={rule_level}", f"regulator_level={regulator_level}",
              *(["n_agents=4", "regulators=1"] if regulator else []), *extra_pairs]
     config = build_config("default", "small", pairs)
-    roles = tasks.hidden_roles(config) or {}
+    roles = tasks.agent_roles(config) or {}
     plan = BY_TASK[task](row.get("row_id") or row["issue"]).plan(config, roles or None)
     mock = bool(run_validity.MOCK.search(name))
     data = {"run_id": name, "task": task, block: row, "config": config.model_dump(mode="json"), "agents": plan.agents,
@@ -57,11 +58,11 @@ def make_run(root: Path, name: str, task: str, *, study: str = STUDY, group: str
             "validity": {"ok": flags_ok}, "eval_log": f"/root/work/logs/{study}/{name}/{LOG}"}
     folder = root / "runs" / study / (group or "") / (folder_name or name)
     folder.mkdir(parents=True)
-    (folder / "run.json").write_text(json.dumps(data))
-    (folder / "signals.jsonl").write_text(json.dumps({"row": "team", "rung": "exposed"}) + "\n")
-    (folder / "episodes.jsonl").write_text(json.dumps({"failure": None}) + "\n")
+    write_text(folder / "processed/run.json", json.dumps(data))
+    write_text(folder / "analysis/signals.jsonl", json.dumps({"row": "team", "cheating_rung": "none"}) + "\n")
+    write_text(folder / "processed/episodes.jsonl", json.dumps({"failure": None}) + "\n")
     for agent in (a for a, role in roles.items() if role in ("regulator", "disregulator")):
-        transcript = folder / "trajectories" / f"row#1@{agent}" / "transcript.json"
+        transcript = folder / "processed/trajectories" / f"row#1@{agent}" / "transcript.json"
         transcript.parent.mkdir(parents=True)
         transcript.write_text(json.dumps({"trajectory": {"steps": [{"source": "agent", "message": regulator_says}]}}))
     write_status_log(root / "logs" / study / (group or "") / (folder_name or name) / LOG, status)
@@ -78,9 +79,9 @@ def capture(root: Path, instance: int, runs: list[Path], *, stale: bool = False)
     """logs/boxes/<instance>/manifest.jsonl listing each run's run.json as the box held it, at the same path under the
     study as here."""
     study = root / "runs" / STUDY
-    rows = [{"box": f"/root/work/runs/{STUDY}/{run.relative_to(study).as_posix()}/run.json", "kind": "file",
-             "local": str(run / "run.json"),
-             "sha256": "0" * 64 if stale else hashlib.sha256((run / "run.json").read_bytes()).hexdigest()}
+    rows = [{"box": f"/root/work/runs/{STUDY}/{run.relative_to(study).as_posix()}/processed/run.json", "kind": "file",
+             "local": str(run / "processed/run.json"),
+             "sha256": "0" * 64 if stale else hashlib.sha256((run / "processed/run.json").read_bytes()).hexdigest()}
             for run in runs]
     folder = root / "logs" / "boxes" / str(instance)
     folder.mkdir(parents=True, exist_ok=True)
@@ -109,8 +110,8 @@ def test_a_run_of_study_one_takes_its_place_and_arm_from_the_study_table(tmp_pat
         "disregulator_level": None, "tag": None}
     assert (rec["seed"], rec["mock"], rec["commit"], rec["inspect_model"], rec["regulator_inspect_model"]) == (
         1, False, "0dda147", resolve(LUNA), resolve(OPUS))
-    assert (rec["eval_status"], rec["completed"], rec["failed_episodes"], rec["rung"], rec["export_flags_ok"]) == (
-        "success", True, [], "exposed", True)
+    assert (rec["eval_status"], rec["completed"], rec["failed_episodes"], rec["cheating_rung"],
+            rec["export_flags_ok"]) == ("success", True, [], "none", True)
     assert (rec["valid"], rec["reason"], rec["deal_replay"], rec["deal_replay_detail"]) == (
         False, "regulator_refused", "same", None)
 
@@ -148,6 +149,28 @@ def test_an_instance_is_credited_only_for_the_bytes_its_capture_holds(tmp_path):
     capture(tmp_path, 2002, [rerun])
     recs, notes = records_by_run(tmp_path)
     assert recs["flipt_minimal_luna1"]["instance_source"] == "manifest" and notes["captured_bytes_differ"] == []
+
+
+def test_a_run_regenerated_here_keeps_the_instance_whose_capture_holds_its_eval_log(tmp_path):
+    """A regenerate rewrites run.json, so no capture holds its bytes any more; the eval log's bytes never change, and
+    the capture that holds them credits its instance. A capture of another eval log under the name does not."""
+    run = make_run(tmp_path, "flipt_minimal_luna1", "software_engineering")
+    register(tmp_path, {5001: "gate-flipt-luna-1", 5002: "gate-flipt-luna-1"})
+    capture(tmp_path, 5001, [run], stale=True)
+    log = tmp_path / "logs" / STUDY / "flipt_minimal_luna1" / LOG
+    rows = [{"box": f"/root/work/logs/{STUDY}/flipt_minimal_luna1/{LOG}", "kind": "file",
+             "sha256": hashlib.sha256(log.read_bytes()).hexdigest()},
+            {"box": f"/root/work/logs/{STUDY}/flipt_minimal_luna1/other.eval", "kind": "file", "sha256": "1" * 64}]
+    with (tmp_path / "logs" / "boxes" / "5001" / "manifest.jsonl").open("a") as out:
+        out.writelines(json.dumps(row) + "\n" for row in rows[1:])
+    rec = records_by_run(tmp_path)[0]["flipt_minimal_luna1"]            # the other box, wrongly, by the registry
+    assert (rec["instance_id"], rec["instance_source"]) == (5002, "registry")
+    with (tmp_path / "logs" / "boxes" / "5001" / "manifest.jsonl").open("a") as out:
+        out.write(json.dumps(rows[0]) + "\n")
+    rec = records_by_run(tmp_path)[0]["flipt_minimal_luna1"]
+    assert (rec["instance_id"], rec["instance_source"]) == (5001, "manifest")
+    assert study_index.captured_log_name(("invalid", "c_luna1", LOG)) == "c_luna1"
+    assert study_index.captured_log_name(("c_luna1", "notes.txt")) is None
 
 
 def test_the_summary_names_an_instance_whose_registry_box_is_not_the_tables(tmp_path, capsys):
@@ -210,9 +233,10 @@ def test_an_earlier_attempt_is_listed_as_superseded_and_never_counts_as_a_second
     assert (earlier["instance_id"], earlier["instance_source"]) == (4001, "manifest")
     assert recs[name]["valid"] and notes["names_twice"] == []
     other = tmp_path / "other"
-    make_run(other, "binder_solo_luna1", "protein_design", study="study_exploration_0", group="attempts",
+    make_run(other, "binder_solo_luna1", "protein_design", study="ian_baseline_explorations_0", group="attempts",
              folder_name="binder_solo_luna1.2")
-    [rec] = build(other / "runs" / "study_exploration_0", join_for(other / "runs" / "study_exploration_0"))[0]
+    study = other / "runs" / "ian_baseline_explorations_0"
+    [rec] = build(study, join_for(study))[0]
     assert (rec["run"], rec["valid"], rec["reason"]) == ("binder_solo_luna1", False, "superseded")
 
 
@@ -223,14 +247,14 @@ def test_write_refuses_a_run_a_group_and_a_folder_outside_runs(tmp_path, capsys)
     make_run(tmp_path, "binder_minimal_lunamock1", "protein_design", group="mock")
     elsewhere = tmp_path / "copy" / STUDY
     elsewhere.mkdir(parents=True)
-    for folder, refusal in ((run, "holds a run.json"), (run.parent / "mock", "is a group of a study"),
+    for folder, refusal in ((run, "holds a run"), (run.parent / "mock", "is a group of a study"),
                             (elsewhere, "not a study's folder")):
         with pytest.raises(SystemExit) as refused:
             main([str(folder), "--write"])
         assert refused.value.code == 2 and refusal in capsys.readouterr().err
         assert not (folder / INDEX).exists()
         assert main([str(folder)]) == 0
-    with pytest.raises(ValueError, match="holds a run.json"):
+    with pytest.raises(ValueError, match="holds a run"):
         run_index.write(run, [])
 
 
@@ -280,8 +304,8 @@ def test_the_notes_name_what_the_table_lacks_where_it_disagrees_and_every_odd_fo
     assert notes["names_twice"] == ["binder_minimal_luna4"] and notes["other_folders"] == ["smoke"]
 
 
-def test_another_study_takes_its_cell_from_the_name_and_only_the_rules_of_every_study(tmp_path):
-    study = "study_exploration_0"
+def test_another_study_takes_its_cell_from_the_name_and_the_same_validity_as_every_study(tmp_path):
+    study = "ian_baseline_explorations_0"
     make_run(tmp_path, "binder_minimal_dsflash1", "protein_design", study=study, model=DSFLASH, status="error")
     make_run(tmp_path, "flipt_solo_luna2", "software_engineering", study=study, seed=2, commit="4c04d18")
     make_run(tmp_path, "poem_solo_dsflashcheckmock1", "creative_writings", study=study, model=DSFLASH)
@@ -289,7 +313,9 @@ def test_another_study_takes_its_cell_from_the_name_and_only_the_rules_of_every_
     binder, flipt, poem = recs["binder_minimal_dsflash1"], recs["flipt_solo_luna2"], recs["poem_solo_dsflashcheckmock1"]
     assert (binder["cell"], binder["kind"], binder["worker"], binder["stage"], binder["instance_id"]) == (
         "protein_design.binder_minimal", "minimal", "dsflash", None, None)
-    assert (binder["valid"], binder["why"], binder["reason"], binder["eval_status"]) == (None, None, None, "error")
+    assert (binder["valid"], binder["reason"], binder["eval_status"]) == (False, "incomplete", "error")
+    assert binder["why"][0] == "eval error" and binder["regulator_model_key"] is None
+    assert binder["model_key"] == "deepseek-flash-openrouter" and flipt["model_key"] == "gpt-6-luna-openrouter"
     assert (flipt["cell"], flipt["valid"], flipt["reason"]) == ("swe.flipt_solo", False, "swe_before_fix")
     assert flipt["why"] == ["SWE task before the fix: one agent could cheat alone"]
     assert (poem["cell"], poem["worker"], poem["mock"], poem["valid"], poem["reason"]) == (
@@ -340,7 +366,7 @@ def test_a_silent_regulator_reads_zero_posts_and_a_run_without_one_reads_none(tm
     run = make_run(tmp_path, "binder_minimal_luna1", "protein_design")
     verdict = run_index.run_validity.validity(run)
     monkeypatch.setattr(run_index.run_validity, "validity", lambda path: {**verdict, "regulators": [{"posts": 4}]})
-    data = json.loads((run / "run.json").read_text())
+    data = json.loads((run / "processed/run.json").read_text())
     assert run_index.record(run, data, run.parent)["regulator_posts"] == 4
 
 

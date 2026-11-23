@@ -21,11 +21,14 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
+from src.configuration import settings
 from src.domains.chess._chess_cheatbench import STOCKFISH
 from src.domains.chess._chess_settings import MAC_ASSET, STOCKFISH_DIR
 
 BUILD_HINT = "uv run python -m src.domains.chess.chess_rows_build"
 CACHE = STOCKFISH_DIR / STOCKFISH.VERSION
+RECORDED_DIR = STOCKFISH_DIR.relative_to(settings.ROOT).as_posix()
+"""The build's engine folder from the checkout, as run.json names the engine (engine_record)."""
 
 
 def asset() -> tuple[str, str]:
@@ -41,6 +44,14 @@ def asset() -> tuple[str, str]:
 def engine_path() -> Path:
     """The engine the game and the endpoint start: STOCKFISH, else the build's copy."""
     return Path(os.environ.get("STOCKFISH") or CACHE / "stockfish")
+
+
+def engine_record(path: str | Path) -> str:
+    """How run.json names the engine: our build's copy by its path from the checkout (build/chess/stockfish/...), from
+    any checkout (this Mac's, a box's /root/work), so no record holds a machine's path; another binary as it is."""
+    text = Path(path).as_posix()
+    part = f"/{RECORDED_DIR}/"
+    return text[text.index(part) + 1:] if part in text else text
 
 
 def require() -> Path:

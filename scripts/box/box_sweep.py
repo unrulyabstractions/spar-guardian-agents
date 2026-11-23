@@ -31,10 +31,10 @@ import stat
 import subprocess
 import sys
 
-OUTPUT_DIRS = ("runs", "logs", "out")
+OUTPUT_DIRS = ("runs", "logs")
 CACHE_NAMES = {"__pycache__": "bytecode caches, compiled from the tracked source",
                ".pytest_cache": "pytest's cache", ".ruff_cache": "ruff's cache"}
-PRODUCERS = ("examples.", "scripts.screen", "scripts.box.box_runner", "src")
+PRODUCERS = ("examples.", "studies.", "scripts.screen", "scripts.box.box_runner", "src")
 GIT_STORES = "git's stores of the work trees, clones at the commits the work trees report"
 KEYS = "the keys box_run.sh wrote from the Mac's environment, and its temporary copy (never copied)"
 BOX_ID = "box_id"

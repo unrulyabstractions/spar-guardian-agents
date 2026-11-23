@@ -6,17 +6,24 @@ output is the transcript dict CheatBench's judge reads: a "trajectory" key holdi
 core/agents/factory.py validates without a vendor adapter.
 
     transcript, facts = episode_transcript(view, "k7q2m")
+    model = episode_model(view, "k7q2m")      # the agent's own model, which its transcript's header names
+
+The header names the agent by its bare ID ("k7q2m") and its own model: its role's model when the run gave the role one,
+else the eval's model (episode_model), with the registry entry beside it (model_key; None outside the registry).
 
 Each ORBIT agent becomes its own episode: the sample's projected messages are split by
 EnvironmentState:message_attribution (history_projection="all"). The system message is the text the provider
-received: in a run whose turn rules logged the "system_prompt" rewrite, ORBIT's assistant paragraph is taken out
-(turn_rules.provider_system_text), as the filter took it out of every call. Two things live only in Inspect's native
+received: in a run whose turn rules logged the "system_prompt" rewrite, the agent loop's assistant paragraph is taken
+out (turn_rules.provider_system_text), as the filter took it out of every call. Two things live only in Inspect's native
 events and are recovered from them:
 
   * the continue prompts and board notices of the turn rules' model filter (src/swarm/turn_rules/), which reach the
     provider only. Inspect writes the ModelEvent before ORBIT's model filters run, so they are absent from
     ModelEvent.input; _turn_rules_filter.py writes each one as an info event right after its ModelEvent, in the same
-    span;
+    span. A notice inside a round is the last paragraph of the message it went into (`into`: a tool result, or the
+    round's message), and so it is in the transcript: that message's text ends with it, and its extra lists it under
+    NOTICE_PARAGRAPH_TAG. A text of its own (`after`, and every notice of an older run, which opens "[Since your last
+    call]") is a user step of its own before the assistant step its call produced;
   * per-agent token usage.
 
 The results browser (src/ui) reads eval logs through the same helpers: split_content, tool_result_text,
@@ -24,8 +31,12 @@ output_message and the defense texts here, span_owners, blocked_message_ids and 
 """
 from __future__ import annotations
 
+import json
+import re
+
 from inspect_ai.model import ChatMessageAssistant, ChatMessageSystem, ChatMessageTool, ChatMessageUser
 
+from src.configuration.swarm_config import role_of
 from src.export.eval_sample_view import (
     SampleView,
     agent_events,
@@ -38,7 +49,16 @@ from src.export.eval_sample_view import (
     topology,
     usage_from_events,
 )
-from src.swarm.turn_rules import TURN_RULES_TAG, provider_system_text
+from src.models import model_registry
+from src.models import swarm_model_provider as provider
+from src.swarm.turn_rules import (
+    NOTICE_PARAGRAPH_TAG,
+    NOTICE_TAG,
+    PRESENCE_TAG,
+    ROUND_TAG,
+    TURN_RULES_TAG,
+    provider_system_text,
+)
 from src.utils.cheatbench_core import trajectory as atif
 
 # The info kinds that carry a message the provider got. "notice" is the board notice (SwarmConfig.notice).
@@ -46,6 +66,9 @@ TURN_RULES_PROMPTS = ("continue", "notice")
 SYSTEM_REWRITE = "system_prompt"    # the info kind of the filter's rewrite of the system message
 LAST_TEXT_KEY = "EnvironmentState:last_text_by_agent"
 REFUSAL_TEXT = "I cannot provide that response under the configured defense policy."   # orbit/defenses/boundaries.py
+REDACTED = "[redacted reasoning]"
+OPAQUE = re.compile(r"^(?:gAAAA\S*|[A-Za-z0-9_\-+/=]{40,})$")
+"""An encrypted reasoning blob: OpenAI's gAAAA... tokens or any long unbroken base64 run."""
 WITHHELD_TEXT = "[Content withheld by a configured defense.]"
 
 
@@ -57,7 +80,9 @@ def split_content(content) -> tuple[str, str | None]:
 
     A redacted reasoning part carries the provider's encrypted signature (Gemini's thought signatures), which is
     not readable reasoning, so it is never copied. Its summary, which OpenAI's Responses API sends beside the signature,
-    is readable and is kept. A step with nothing readable shows "[redacted reasoning]".
+    is readable and is kept. A reasoning part whose text is only provider blocks without text or summary (OpenRouter's
+    Anthropic signatures) or an encrypted blob counts as redacted too (visible_reasoning). A step with nothing readable
+    shows "[redacted reasoning]".
     """
     if content is None:
         return "", None
@@ -69,15 +94,48 @@ def split_content(content) -> tuple[str, str | None]:
         if kind == "text":
             texts.append(part.text)
         elif kind == "reasoning":
-            redacted = redacted or part.redacted
-            readable = part.summary if part.redacted else part.reasoning
+            given = part.summary if part.redacted else part.reasoning
+            readable = visible_reasoning(given)
+            redacted = redacted or part.redacted or (bool(given) and readable is None)
             if readable:
                 reasoning.append(readable)
         else:
             texts.append(f"[{kind} content omitted]")
     if not reasoning and redacted:
-        reasoning.append("[redacted reasoning]")
+        reasoning.append(REDACTED)
     return "\n".join(t for t in texts if t), ("\n".join(reasoning) or None)
+
+
+def visible_reasoning(raw) -> str | None:
+    """A model call's reasoning a reader can read, as the viewer shows it, or None: none, redacted, an encrypted blob,
+    or provider blocks with no text or summary."""
+    if raw is None:
+        return None
+    text = raw if isinstance(raw, str) else json.dumps(raw)
+    stripped = text.strip()
+    if not stripped or stripped == REDACTED or OPAQUE.match(stripped):
+        return None
+    if stripped.startswith("[{"):
+        try:
+            blocks = json.loads(stripped)
+        except json.JSONDecodeError:
+            return text
+        parts = [block_text(b) for b in blocks] if isinstance(blocks, list) else []
+        readable = "\n\n".join(p for p in parts if p.strip())
+        return readable or None
+    return text
+
+
+def block_text(block) -> str:
+    """The readable text of one provider reasoning block: its text, else its summary."""
+    if not isinstance(block, dict):
+        return ""
+    if isinstance(block.get("text"), str):
+        return block["text"]
+    summary = block.get("summary")
+    if isinstance(summary, list):
+        return "\n".join(str((s or {}).get("text") or "") for s in summary if isinstance(s, dict))
+    return summary if isinstance(summary, str) else ""
 
 
 def tool_result_text(result) -> str:
@@ -113,7 +171,9 @@ def rules_prompts_by_output(view: SampleView, model_events) -> dict[str, list[di
     "content"}}), keyed by the id of the assistant message the call that carried them produced.
 
     _turn_rules_filter.py writes each one as an info event inside the model call, right after Inspect wrote that call's
-    ModelEvent in the same span. A call that produced no message keeps its prompts out of the transcript.
+    ModelEvent in the same span. A call that produced no message keeps its prompts out of the transcript. A notice
+    marked boundary is the board part of a round's message, and one with `into` the last paragraph of a message
+    (rules_paragraphs), which the conversation holds: both are left out here.
     """
     last_call: dict = {}
     by_call: dict[int, list[dict]] = {}
@@ -123,13 +183,33 @@ def rules_prompts_by_output(view: SampleView, model_events) -> dict[str, list[di
             continue
         rule = (ev.data or {}).get(TURN_RULES_TAG) if ev.event == "info" and isinstance(ev.data, dict) else None
         call = last_call.get(ev.span_id)
-        if isinstance(rule, dict) and rule.get("kind") in TURN_RULES_PROMPTS and call is not None:
+        if isinstance(rule, dict) and rule.get("kind") in TURN_RULES_PROMPTS and call is not None \
+                and not rule.get("boundary") and not rule.get("into"):
             by_call.setdefault(id(call), []).append(rule)
     out: dict[str, list[dict]] = {}
     for ev in model_events:
         if output_message_id(ev) and id(ev) in by_call:
             out.setdefault(output_message_id(ev), []).extend(by_call[id(ev)])
     return out
+
+
+def rules_paragraphs(view: SampleView) -> dict[str, list[str]]:
+    """The board notices the filter gave the provider as a message's last paragraph, by that message's id (`into`), in
+    the order given."""
+    out: dict[str, list[str]] = {}
+    for ev in view.events:
+        rule = (ev.data or {}).get(TURN_RULES_TAG) if ev.event == "info" and isinstance(ev.data, dict) else None
+        if isinstance(rule, dict) and rule.get("kind") == "notice" and rule.get("into"):
+            out.setdefault(rule["into"], []).append(rule.get("content") or "")
+    return out
+
+
+def with_paragraphs(text: str, added: list[str]) -> str:
+    """The text with each added paragraph after a blank line, as the provider received it
+    (_turn_rules_filter.with_paragraph)."""
+    for paragraph in added:
+        text = f"{text.rstrip(chr(10))}\n\n{paragraph}" if text.strip() else paragraph
+    return text
 
 
 def turn_rule_kinds(events) -> set[str]:
@@ -155,8 +235,19 @@ def _error_extra(error) -> dict | None:
     return {"is_error": True, "error": error.message}
 
 
-def _user_step(msg, redacted: set) -> dict:
+def _user_step(msg, redacted: set, added: list[str] | None = None) -> dict:
+    """A user message as a step. A round's message (src/swarm/turn_rules/_turn_messages.py) keeps each part's tag in
+    extra: {ROUND_TAG: {round, of, left, calls}, PRESENCE_TAG: {round, events: [{id, agent, kind, why, round}]},
+    NOTICE_TAG: {kind, activation, call, round}}, the parts it lacks left out; turn_rules.message_parts reads it. A run
+    before 2026-11-22 holds the round's line ({round, n, of} before rounds of calls) and each presence line
+    ({PRESENCE_TAG: {id, agent, kind, why, round}}) as messages of their own."""
     text, _ = split_content(msg.content)
+    metadata = msg.metadata or {}
+    tags = {tag: metadata[tag] for tag in (ROUND_TAG, PRESENCE_TAG, NOTICE_TAG) if metadata.get(tag)}
+    if added:
+        text, tags = with_paragraphs(text, added), {**tags, NOTICE_PARAGRAPH_TAG: list(added)}
+    if tags:
+        return {"source": "user", "message": text, "extra": tags}
     if msg.id not in redacted:
         return {"source": "user", "message": text}
     # the provider received the placeholder; the judge must see what the agent saw
@@ -184,10 +275,14 @@ def _result_content(content, error) -> str:
     return tool_result_text(content) or (error.message if error else "")
 
 
-def _add_tool_result(msg, redacted: set, steps: list[dict], issued: dict[str, int]) -> None:
-    """Attach a tool result to the step that issued the call, or add it as an orphan user step."""
+def _add_tool_result(msg, redacted: set, steps: list[dict], issued: dict[str, int],
+                     added: list[str] | None = None) -> None:
+    """Attach a tool result to the step that issued the call, or add it as an orphan user step. The board notices the
+    provider got as its last paragraphs (added) end its content, and its extra lists them."""
     content = _result_content(msg.content, msg.error)
     extra = _error_extra(msg.error)
+    if added:
+        content, extra = with_paragraphs(content, added), {**(extra or {}), NOTICE_PARAGRAPH_TAG: list(added)}
     if msg.id in redacted:
         extra = {**(extra or {}), "withheld_from_model_by_defense": True, "withheld_text": content}
         content = WITHHELD_TEXT
@@ -209,11 +304,26 @@ def _atif_steps(steps: list[dict]) -> list[atif.Step]:
     return out
 
 
+def episode_model(view: SampleView, agent: str) -> str:
+    """The agent's own model: its role's model when the run gave the role one (metadata["cheatbench"]["role_models"]),
+    else the eval's model, as an Inspect string without the swarm provider's prefix. An agent without a role is a
+    worker."""
+    cb = (view.metadata or {}).get("cheatbench", {})
+    role_model = (cb.get("role_models") or {}).get(role_of(cb.get("roles"), agent))
+    return provider.inspect_string(role_model or view.model)
+
+
+def model_key(model: str) -> str | None:
+    """The registry entry of an Inspect model string (src/models/model_registry.yaml), or None outside the registry."""
+    return model_registry.entry_name(model)
+
+
 def build_trajectory(view: SampleView, agent: str) -> tuple[atif.Trajectory, dict]:
     """The agent's ATIF trajectory, and facts about it (system prompt, recovered prompts, counts, usage)."""
     messages = agent_messages(view, agent)
     model_events = agent_events(view, agent, "model")
     rules_prompts = rules_prompts_by_output(view, model_events)
+    paragraphs = rules_paragraphs(view)
     redacted = redacted_message_ids(model_events, view)
     blocked_outputs = blocked_message_ids(view, "model_output")
     output_ids = [output_message_id(ev) for ev in model_events]
@@ -231,7 +341,7 @@ def build_trajectory(view: SampleView, agent: str) -> tuple[atif.Trajectory, dic
                 system_prompt = text
             steps.append({"source": "system", "message": text})
         elif isinstance(msg, ChatMessageUser):
-            steps.append(_user_step(msg, redacted))
+            steps.append(_user_step(msg, redacted, paragraphs.get(msg.id)))
         elif isinstance(msg, ChatMessageAssistant):
             for rule in rules_prompts.get(msg.id, []):
                 steps.append({"source": "user", "message": rule.get("content") or "",
@@ -244,7 +354,7 @@ def build_trajectory(view: SampleView, agent: str) -> tuple[atif.Trajectory, dic
             for tc in step["tool_calls"] or []:
                 issued[tc.tool_call_id] = len(steps) - 1
         elif isinstance(msg, ChatMessageTool):
-            _add_tool_result(msg, redacted, steps, issued)
+            _add_tool_result(msg, redacted, steps, issued, paragraphs.get(msg.id))
         else:
             text, _ = split_content(getattr(msg, "content", None))
             steps.append({"source": "user", "message": text, "extra": {"role": getattr(msg, "role", "?")}})
@@ -265,7 +375,7 @@ def build_trajectory(view: SampleView, agent: str) -> tuple[atif.Trajectory, dic
         schema_version=atif.SCHEMA_VERSION,
         session_id=f"{view.id}#{view.epoch}",
         trajectory_id=f"{view.id}#{view.epoch}/{agent}",
-        agent=atif.Agent(name=f"orbit/{agent}", version=agent_version(), model_name=view.model),
+        agent=atif.Agent(name=agent, version=agent_version(view), model_name=episode_model(view, agent)),
         steps=atif_steps,
         final_metrics=final_metrics,
         extra={"final_text": last_text or None},
@@ -281,13 +391,14 @@ def build_trajectory(view: SampleView, agent: str) -> tuple[atif.Trajectory, dic
 
 def episode_transcript(view: SampleView, agent: str) -> tuple[dict, dict]:
     """(transcript, build_trajectory's facts) for one agent. The transcript is what CheatBench's judge reads:
-    {"agent", "model", "prompt", "trajectory", "orbit"}."""
+    {"agent", "model", "model_key", "prompt", "trajectory", "orbit"}. The run's eval log is named once, in run.json."""
     traj, info = build_trajectory(view, agent)
+    model = episode_model(view, agent)
     transcript = {
-        "agent": f"orbit/{agent}", "model": view.model,
+        "agent": agent, "model": model, "model_key": model_key(model),
         "prompt": judge_prompt(view, agent),
         "trajectory": traj.to_json_dict(),
-        "orbit": {"eval_log": view.eval_log, "agent": agent, "roster": roster(view),
+        "orbit": {"roster": roster(view),
                   "topology": topology(view), "system_prompt": info["system_prompt"],
                   "turn_rules_recovered_from_events": info["turn_rules_messages"],
                   "model_calls": info["model_calls"]},

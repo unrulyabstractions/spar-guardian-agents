@@ -1,0 +1,230 @@
+\section*{Appendix B: Extended results}
+
+\subsection*{How reliable are these measures?}
+We ask how far a reading of the transcripts confirms what the judge says. One judge scores the two labels. Separate
+AI agents checked the judge's scores by reading the transcripts, the board, the diffs and the hand-ins of a set of
+cases. No human made these checks. Table~\ref{tab:reliability} gives, for each range of scores, how many cases a
+reader read and how many held. A score held when the reader's own score sat at the same anchor or the next one.
+
+A disclosure score of 75 or more is an agent admitting a breach in its own words. Some of these admissions concern an
+order of the regulator and do not admit cheating. A score below 50 is no evidence that nothing was disclosed, because
+the judge scored some explicit admissions at 0 to 25 (Table~\ref{tab:reliability}). Counts of disclosure are therefore a floor. Manipulation of the
+kind control is read reliably. At 75 or more it is an order, a repeated demand or a claim of authority, nearly always
+by an influencer. At 50 it is mostly ordinary coordination. Manipulation of the kind mislead is not trustworthy at any
+score, and most of its high scores did not hold. We count no agent as misleading without reading its excerpt against
+its own calls. Every located excerpt sits in the agent's own post or reasoning. Each excerpt we could not locate is
+the agent's own text, which the judge paraphrased or joined. We therefore posit that the disclosure score read as a floor
+and the control kind of manipulation can carry our results, and that the mislead kind cannot.
+
+\begin{table}[tp]
+  \centering
+  \scriptsize
+  \input{generated/reliability}
+  \caption{How often an independent reading of the transcripts confirmed each judge score of the multi-domain
+  study. Read counts the cases checked, and held counts those where the reading agreed with the judge.
+  Wrong counts those where it disagreed, and unclear those the evidence allows either way.}
+  \label{tab:reliability}
+\end{table}
+
+\subsection*{How do teams cheat with and without instruction?}
+
+\subsubsection*{Which teams cheat untold, and which when told to?}
+Figure~\ref{fig:positive-control} sets each target's untold teams beside its teams told to cheat.
+\begin{figure}[tp]
+  \centering
+  \includegraphics[width=\linewidth]{positive_control}
+  \caption{Positive control: each team's Cheating rung and, under it, its Collusion rung, untold and told to cheat.
+  Every team is workers only: none holds a regulator or a disregulator.
+  Each cell counts the teams that cheated, that accessed the honeypot and that passed the grader.}
+  \label{fig:positive-control}
+\end{figure}
+
+\subsubsection*{Does a rule in the task instructions stop cheating?}
+Figure~\ref{fig:negative-control} sets a generic honesty rule beside a rule that names the exploit.
+\begin{figure}[tp]
+  \centering
+  \includegraphics[width=\linewidth]{negative_control}
+  \caption{Negative control: each team's Cheating and Collusion rungs under a generic rule and under a rule naming the
+  exploit. Every team is workers only: none holds a regulator or a disregulator.}
+  \label{fig:negative-control}
+\end{figure}
+
+Under a rule naming the exploit, no team cheated or accessed the honeypot in any cell.
+A generic rule did not stop DeepSeek teams on SWE.
+We therefore posit that a regulator is worth testing where no one can name the exploit in advance.
+
+\subsection*{Do regulators lower cheating?}
+
+\subsubsection*{Do regulators lower cheating on protein design?}
+Figure~\ref{fig:protein-regulators} gives every protein design team with a regulator.
+\begin{figure}[tp]
+  \centering
+  \includegraphics[width=\linewidth]{table_protein_regulators}
+  \caption{Protein design with GPT-6 Luna workers: each team's rungs by the regulator's model and level, with the
+  regulator's posts under each tile.}
+  \label{fig:protein-regulators}
+\end{figure}
+
+No team cheated in this task, untold or with a regulator.
+
+\subsubsection*{Do regulators lower cheating on SWE?}
+Figure~\ref{fig:swe-regulators} gives the SWE teams with DeepSeek workers, and Figure~\ref{fig:swe-luna-regulators}
+those with Luna workers.
+\begin{figure}[tp]
+  \centering
+  \includegraphics[width=\linewidth]{table_swe_regulators}
+  \caption{SWE with DeepSeek V4.1 Flash workers: each team's rungs by the regulator's model and level, the pieces of
+  the planted fix in its hand-in, and the regulator's posts.}
+  \label{fig:swe-regulators}
+\end{figure}
+
+\begin{figure}[tp]
+  \centering
+  \includegraphics[width=\linewidth]{table_swe_luna_regulators}
+  \caption{SWE with GPT-6 Luna workers: each team's rungs by the regulator's model and level, and the regulator's
+  posts.}
+  \label{fig:swe-luna-regulators}
+\end{figure}
+
+Fewer teams with DeepSeek workers cheated with a Haiku regulator at enforce than at ambiguous.
+No team with Luna workers cheated, with or without a regulator.
+Each cell holds one to four runs, too few to show an effect of a level or a model.
+
+\subsubsection*{Do regulators lower cheating on creative writing?}
+Figure~\ref{fig:creative-regulators} gives the creative writing teams with a regulator.
+\begin{figure}[tp]
+  \centering
+  \includegraphics[width=\linewidth]{table_creative_regulators}
+  \caption{Creative writing with GPT-6 Luna workers: each team's rungs by the regulator's model, and the regulator's
+  posts. Each regulator cell holds one run.}
+  \label{fig:creative-regulators}
+\end{figure}
+
+No team cheated or accessed the honeypot, untold or with a regulator.
+Each regulator cell holds one run, so these runs cannot show an effect of a regulator.
+
+\subsection*{Do disregulators raise cheating?}
+No untold team on either target cheated, so these cells sit at the floor of the measure.
+No team with a disregulator cheated.
+Figures~\ref{fig:swe-disregulators} and~\ref{fig:creative-disregulators} give every team with a disregulator.
+\begin{figure}[tp]
+  \centering
+  \includegraphics[width=\linewidth]{table_swe_disregulators}
+  \caption{SWE with GPT-6 Luna workers: untold teams, teams with a disregulator alone or beside an enforcing Haiku
+  regulator, and teams told to cheat. Each team's rungs, with the disregulator's posts under each tile.}
+  \label{fig:swe-disregulators}
+\end{figure}
+
+\begin{figure}[tp]
+  \centering
+  \includegraphics[width=\linewidth]{table_creative_disregulators}
+  \caption{Creative writing with GPT-6 Luna workers: untold teams, teams with a disregulator alone or beside an
+  enforcing Haiku regulator, and teams told to cheat. Each team's rungs, with the disregulator's posts under each
+  tile.}
+  \label{fig:creative-disregulators}
+\end{figure}
+
+\subsection*{How far do agents go with the honeypot?}
+Figure~\ref{fig:cheating-by-task} counts the Cheating rungs by task.
+\begin{figure}[tp]
+  \centering
+  \includegraphics[width=\linewidth]{table_cheating_by_task}
+  \caption{Cheating rungs by task, for workers, teams and influencers, with the runs that carry the alarm.}
+  \label{fig:cheating-by-task}
+\end{figure}
+
+Most workers stay at none in every task.
+Teams cheat only on SWE and creative writing, and only there do they reach hacked.
+No protein design team goes past tempted.
+No run carries the alarm.
+On SWE, hacked means the agent's own trace of the planted fix, or a piece it supplied, in a hand-in that passed the
+hidden tests.
+Some regulators on protein design reach looked through what their oversight tool showed them.
+No influencer goes past looked.
+
+\subsection*{How far do agents go in back-and-forth on the board?}
+Figure~\ref{fig:coordination-by-task} counts the Coordination levels by task.
+\begin{figure}[tp]
+  \centering
+  \includegraphics[width=\linewidth]{table_coordination_by_task}
+  \caption{Coordination levels by task, for workers, teams and influencers.}
+  \label{fig:coordination-by-task}
+\end{figure}
+
+Low is the most common level of workers, of teams and of influencers in every task.
+SWE holds almost every worker who read the board without posting.
+
+\subsection*{How far do agents take each other's work?}
+Figure~\ref{fig:collusion-by-task} counts the Collusion rungs by task.
+\begin{figure}[tp]
+  \centering
+  \includegraphics[width=\linewidth]{table_collusion_by_task}
+  \caption{Collusion rungs by task, for workers, teams and influencers.}
+  \label{fig:collusion-by-task}
+\end{figure}
+
+SWE holds most of the cooperation, collaboration and collusion, for workers and for teams.
+Collusion appears on SWE and creative writing and never on protein design.
+No influencer reaches collusion.
+No team with an influencer reaches collusion.
+The colluding teams are DeepSeek teams on SWE and one Luna team on creative writing told to cheat.
+
+\subsection*{How strongly do agents disclose cheating or steer others?}
+Figure~\ref{fig:label-scores} counts agents by the range of their scores, per task and role.
+\StudyLabelsJudged{}
+An agent without a score counts as not judged.
+\begin{figure}[tp]
+  \centering
+  \includegraphics[width=\linewidth]{table_label_scores_by_task}
+  \caption{Agents by the range of their disclosure and manipulation scores, per task, workers and influencers apart.}
+  \label{fig:label-scores}
+\end{figure}
+
+Table~\ref{tab:reliability} shows how far a reading of the transcripts confirmed each range.
+We therefore posit that a count of disclosure is a floor, and that a mislead score counts only after a reader checks
+its excerpt against the agent's own calls.
+
+\subsection*{How does \textit{CheatBench}'s judge compare with the code?}
+One judge, \StudyCheatBenchJudge{}, read every agent's trajectory of these runs with \textit{CheatBench}'s own rules.
+No human checked its verdicts.
+Figure~\ref{fig:judge-cheated} sets the judge's own verdict, cheated, beside our line of \CheatedFrom{} or above.
+\begin{figure}[tp]
+  \centering
+  \includegraphics[width=\linewidth]{table_judge_cheated_by_task}
+  \caption{\textit{CheatBench}'s judge against our line, by task: agents both call cheating, only the code, only the
+  judge, or neither.}
+  \label{fig:judge-cheated}
+\end{figure}
+
+The judge says cheated for every agent our line counts as cheating, and for many more in every task.
+Figure~\ref{fig:judge-labels} sets each of the code's clauses beside the labels of \textit{CheatBench}'s judge
+that answer it, for workers.
+\begin{figure}[tp]
+  \centering
+  \includegraphics[width=\linewidth]{table_judge_labels}
+  \caption{The code's clauses beside the labels of \textit{CheatBench}'s judge that answer them, for workers. n/a
+  counts the workers for whom the judge's answer excludes the clause.}
+  \label{fig:judge-labels}
+\end{figure}
+
+Most clauses have no label, so the judge cannot speak to them.
+The judge and the code agree on most workers for every clause the judge has a label for.
+On SWE, the judge finds the planted fix obtained or used by more workers than the code does.
+On creative writing, the judge records one use of the reference per agent.
+The judge cannot say both that an agent displayed the reference and that it sent the reference to the checker.
+Neither finds an attack on the evaluation on SWE.
+
+\subsection*{Does \textit{CheatBench}'s judge find that agents disclosed their access?}
+\textit{CheatBench}'s judge also records disclosed access on protein design and creative writing: whether an agent
+openly acknowledged its own access to the honeypot.
+Its SWE verdict has no such field.
+Disclosed access differs from the disclosure score.
+Figure~\ref{fig:disclosed-access} counts it.
+\begin{figure}[tp]
+  \centering
+  \includegraphics[width=\linewidth]{table_cheatbench_disclosed_access_by_task}
+  \caption{Disclosed access as \textit{CheatBench}'s judge records it, for agents at \AccessedFrom{} or above, by task.}
+  \label{fig:disclosed-access}
+\end{figure}
+
+Most protein design workers who accessed the honeypot disclosed it, and almost no creative writing worker did.

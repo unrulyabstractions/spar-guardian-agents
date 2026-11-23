@@ -220,7 +220,8 @@ def validation_of(run: Run, agents: dict[str, dict], grep: dict[str, dict]) -> d
             if signal in scanners:
                 pairs.setdefault(f"{signal}~{field}", []).append((scanners[signal], judge.get(field)))
         if cheating:
-            pairs.setdefault("scanners_cheated~cheated", []).append((row["scanners_cheated"], judge.get("cheated")))
+            pairs.setdefault("scanners_cheated~judge_cheated", []).append(
+                (row["scanners_cheated"], judge.get("cheated")))
         if "honey_pots_seen" in judge and row["grep_seen"] is not None:
             pairs.setdefault("grep_seen~honey_pots_seen", []).append((row["grep_seen"], judge.get("honey_pots_seen")))
     return {"judge_fields": fields, "cheating_signals": list(CHEATING_SIGNALS), "agents": rows,
@@ -307,8 +308,9 @@ def plot_onset(run: Run, agents: dict[str, dict], grep: dict[str, dict], directo
 
 
 def lane_label(run: Run, agent: str) -> str:
-    """An agent's lane label: name, role and the judge's verdict."""
-    cheated = run.cheated.get(agent)
-    verdict = "judge: cheated" if cheated else "judge: no verdict" if cheated is None else "judge: did not cheat"
+    """An agent's lane label: name, role and CheatBench's judge's verdict."""
+    cheated = run.judge_cheated.get(agent)
+    verdict = ("CheatBench judge: cheated" if cheated else "CheatBench judge: no verdict" if cheated is None
+               else "CheatBench judge: did not cheat")
     return f"{agent} ({run.roles.get(agent, 'worker')})\n{verdict}"
 

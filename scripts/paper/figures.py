@@ -1,6 +1,7 @@
 """The seven design figures of the paper, as 200-dpi PNG under tmp/figures/method/design/ (gitignored): the topologies,
 the round structure, the context ledger, the engagement funnel, the read graph, the access split and what each role is
-told.
+told. The paper sets topology_compare and round_structure at the text's width; each is
+refused when a text would print below PRINT_FLOOR_PT there.
 
     uv run python -m scripts.paper.figures
 
@@ -13,8 +14,10 @@ import math
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch, Polygon, Rectangle
 
+from scripts.paper.study_ladders import TEXT_WIDTH_IN
 from src.configuration import access_policy
 from src.configuration.settings import ROOT
+from src.utils import progress
 from src.utils.figure_style import (
     AXIS,
     GREY_RAMP,
@@ -58,7 +61,24 @@ plt.rcParams.update(
 ROLES5 = {"k7q2m": "worker", "t4x9n": "regulator", "p8s3z": "worker", "n5j6q": "disregulator", "x2m7s": "worker"}
 
 
-def save(fig, name):
+PRINT_FLOOR_PT = 6.5
+"""The smallest text a figure the paper prints may hold, in points at the width the paper sets it."""
+
+
+def check_print(fig, name: str, printed_in: float) -> None:
+    """Stop when a text of the figure would print below PRINT_FLOOR_PT once the paper sets it printed_in inches
+    wide."""
+    scale = printed_in / fig.get_figwidth()
+    texts = [t for t in [*fig.texts, *(t for ax in fig.axes for t in ax.texts)] if t.get_text().strip()]
+    size, text = min((t.get_fontsize() * scale, t.get_text()) for t in texts)
+    if size < PRINT_FLOOR_PT:
+        raise SystemExit(f"{name}: {text!r} prints at {size:.1f} pt, below {PRINT_FLOOR_PT} pt")
+
+
+def save(fig, name, printed_in: float | None = None):
+    """Write the figure. printed_in: the width in inches the paper sets it at, checked by check_print."""
+    if printed_in is not None:
+        check_print(fig, name, printed_in)
     OUT.mkdir(parents=True, exist_ok=True)
     fig.savefig(OUT / f"{name}.png", dpi=PRINT_DPI)
     plt.close(fig)
@@ -143,37 +163,37 @@ def role_legend(fig, y, extra=(), compact=False):
 
 # ---------------------------------------------------------------- the topologies
 def fig_topology_compare():
-    fig = plt.figure(figsize=(FULL, 2.85))
+    fig = plt.figure(figsize=(FULL, 3.15))
     names = list(ROLES5)
-    pos = ring(5, 2.4)
-    panels = ["Pull board (ours)", "OpenAI-HF incident"]
+    pos = ring(5, 2.7)
+    panels = ["Our board", "OpenAI-HF incident"]
     for i, title in enumerate(panels):
         ax = fig.add_axes([0.03 + i / 2, 0.17, 0.44, 0.74])
-        blank(ax, (-3.2, 3.2), (-3.95, 3.45))
-        ax.text(0, 3.0, title, ha="center", va="bottom", fontsize=8.5, weight="bold")
-        cw, ch = (1.7, 0.8) if i == 0 else (2.1, 1.15)
+        blank(ax, (-3.2, 3.2), (-3.95, 3.95))
+        ax.text(0, 3.45, title, ha="center", va="bottom", fontsize=8.5, weight="bold")
+        cw, ch = (1.7, 0.8) if i == 0 else (2.4, 1.15)
         if i == 0:
             box(ax, -cw / 2, -ch / 2, cw, ch, "board", fc=PLANE, ec=INK_SECONDARY, fs=7.5)
         else:
             box(ax, -cw / 2, -ch / 2, cw, ch, None, fc=PLANE, ec=INK_SECONDARY)
-            ax.text(0, ch / 2 - 0.25, "shared cache/", fontsize=6.5, ha="center", va="center", zorder=5)
+            ax.text(0, ch / 2 - 0.25, "shared cache/", fontsize=7, ha="center", va="center", zorder=5)
             for k in range(3):
                 yy = ch / 2 - 0.55 - 0.2 * k
                 ax.plot([-cw / 2 + 0.25, -cw / 2 + 0.25 + (1.1 - 0.25 * k)], [yy, yy], color=AXIS, lw=2.0,
                         solid_capstyle="round", zorder=5)
         for (x, y), n in zip(pos, names):
-            agent(ax, x, y, n, ROLES5[n] if i == 0 else "worker")
+            agent(ax, x, y, n, ROLES5[n] if i == 0 else "worker", r=0.62, fs=7.2)
             if i == 0:
-                arrow(ax, toward(x, y, 0, 0, 0.42), edge_point(0, 0, cw, ch, x, y), rad=0.3)
-                arrow(ax, edge_point(0, 0, cw, ch, x, y), toward(x, y, 0, 0, 0.42), ls=DOT, color=MUTED, rad=0.3)
+                arrow(ax, toward(x, y, 0, 0, 0.68), edge_point(0, 0, cw, ch, x, y), rad=0.3)
+                arrow(ax, edge_point(0, 0, cw, ch, x, y), toward(x, y, 0, 0, 0.68), ls=DOT, color=MUTED, rad=0.3)
             else:
-                ax.add_patch(FancyArrowPatch(toward(x, y, 0, 0, 0.42), edge_point(0, 0, cw, ch, x, y),
+                ax.add_patch(FancyArrowPatch(toward(x, y, 0, 0, 0.68), edge_point(0, 0, cw, ch, x, y),
                                              arrowstyle="<|-|>,head_length=0.36,head_width=0.21",
                                              color=INK_SECONDARY, lw=0.8, mutation_scale=10, zorder=2))
         kx, ky = -2.9, -3.2
         if i == 0:
             arrow(ax, (kx, ky), (kx + 0.7, ky))
-            ax.text(kx + 0.85, ky, "board_status / board_read / board_post", va="center", fontsize=7.5,
+            ax.text(kx + 0.85, ky, "check / read / post", va="center", fontsize=7.5,
                     color=INK_SECONDARY)
             arrow(ax, (kx, ky - 0.55), (kx + 0.7, ky - 0.55), ls=DOT, color=MUTED)
             ax.text(kx + 0.85, ky - 0.55, "notice: new posts per sender", va="center", fontsize=7.5,
@@ -184,71 +204,113 @@ def fig_topology_compare():
                                         lw=0.8))
             ax.text(kx + 0.85, ky, "list / read file / write file", va="center", fontsize=7.5, color=INK_SECONDARY)
     role_legend(fig, 0.05)
-    save(fig, "topology_compare")
+    save(fig, "topology_compare", printed_in=TEXT_WIDTH_IN)
 
 
 # ---------------------------------------------------------------- the round structure
+# Two rounds of five agents, drawn with N = 4 calls per round. Each lane is one agent's round: its calls in order. Every
+# round uses up one of the agent's rounds and every call counts toward N, board calls included
+# (src/swarm/turn_rules _turn_rounds; SwarmConfig.rounds and calls_per_round).
+ROUND_CALLS = (
+    {"k7q2m": ["post", "work", "work", "work"], "t4x9n": ["status", "read", "post", "wait"],
+     "p8s3z": ["read", "work", "no call"], "n5j6q": ["read", "post", "work", "wait"],
+     "x2m7s": ["status", "work", "job j1", "round time"]},
+    {"k7q2m": ["read", "work", "wait"], "t4x9n": ["status", "read", "wait"],
+     "p8s3z": ["work", "work", "post", "work"], "n5j6q": ["post", "wait"], "x2m7s": ["job_output", "submit"]},
+)
+SHOWN_N = 4
+
+
+def live_arrow(ax, a, b):
+    """A dotted line from a to b with a solid head: a read that sees a post of the same round."""
+    k = 1 - 0.18 / math.hypot(b[0] - a[0], b[1] - a[1])
+    mid = (a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k)
+    ax.plot([a[0], mid[0]], [a[1], mid[1]], color=INK, lw=0.9, ls=DOT, zorder=6)
+    arrow(ax, mid, b, color=INK, lw=0.9, z=6)
+
+
 def fig_round_structure():
-    """One round, its follow-up steps and the next round, step by step per agent."""
-    fig = plt.figure(figsize=(FULL, 2.3))
+    """Two rounds, call by call per agent: up to N calls a round, wait (the tool that ends a round), a reply with no
+    tool call, a read of a post made in the same round, a command that outlives its round's time as job j1 and its read
+    in the next round (command_jobs), and the submitter's exit."""
+    fig = plt.figure(figsize=(FULL, 3.05))
     ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
     ax.set_xlim(0, 17.0)
-    ax.set_ylim(0.6, 6.4)
+    ax.set_ylim(0.55, 7.8)
     ax.axis("off")
     names = list(ROLES5)
-    lane_h, top = 0.62, 5.05
-    cols = [("r", 1.2, 3.6), ("f1", 5.0, 1.45), ("f2", 6.55, 1.45), ("f3", 8.1, 1.45), ("r1", 9.85, 3.6)]
-    acts = {
-        "r": {"k7q2m": "post", "t4x9n": "work", "p8s3z": "status", "n5j6q": "work", "x2m7s": "read"},
-        "f1": {"k7q2m": "work", "p8s3z": "read", "x2m7s": "post"},
-        "f2": {"p8s3z": "post", "x2m7s": "work"},
-        "f3": {"p8s3z": "read"},
-        "r1": {"k7q2m": "work", "t4x9n": "agent_actions", "p8s3z": "work", "n5j6q": "read", "x2m7s": "submit"},
-    }
+    lane_h, top = 0.88, 6.1
+    pitch, w = 1.5, 1.42
+    starts = (1.2, 7.95)
     for j, n in enumerate(names):
         y = top - j * lane_h
-        agent(ax, 0.6, y, n, ROLES5[n], r=0.24, fs=5.8)
-        ax.plot([1.0, 15.8], [y - lane_h / 2, y - lane_h / 2], color=GRID, lw=0.5, zorder=0)
-    ax.plot([1.0, 15.8], [top + lane_h / 2, top + lane_h / 2], color=GRID, lw=0.5, zorder=0)
-    for key, x, w in cols:
+        agent(ax, 0.55, y, n, ROLES5[n], r=0.44, fs=7.2)
+        ax.plot([1.0, 16.8], [y - lane_h / 2, y - lane_h / 2], color=GRID, lw=0.5, zorder=0)
+    ax.plot([1.0, 16.8], [top + lane_h / 2, top + lane_h / 2], color=GRID, lw=0.5, zorder=0)
+    for x0, calls in zip(starts, ROUND_CALLS):
         for j, n in enumerate(names):
             y = top - j * lane_h
-            a = acts[key].get(n)
-            if a is None:
-                continue
-            step(ax, a, x, y - lane_h / 2 + 0.04, w, lane_h - 0.08)
-    ax.add_patch(Rectangle((13.6, top - 4 * lane_h - lane_h / 2 + 0.04), 2.2, 5 * lane_h - 0.08, fc="none",
+            place = 0
+            for k, a in enumerate(calls[n]):
+                step(ax, a, x0 + k * pitch, y - lane_h / 2 + 0.04, w, lane_h - 0.08)
+                if a in ("wait", "no call", "round time"):    # no place in its round (transcript_rounds.places)
+                    continue
+                place += 1
+                ax.text(x0 + k * pitch + w - 0.13, y + lane_h / 2 - 0.13, str(place) if place < SHOWN_N else "N",
+                        ha="right", va="top", fontsize=6.9, color=MUTED, zorder=5)
+    # the board is live: t4x9n's read sees k7q2m's post of the same round
+    live_arrow(ax, (starts[0] + 0.72 * w, top - 0.2), (starts[0] + pitch + 0.2 * w, top - lane_h + 0.2))
+    # the submitter (bottom lane) exits at its submit; the others work two more rounds
+    hx = starts[1] + SHOWN_N * pitch + 0.45
+    ax.add_patch(Rectangle((hx, top - 3 * lane_h - lane_h / 2 + 0.04), 16.8 - hx, 4 * lane_h - 0.08, fc="none",
                            ec=AXIS, hatch="////", lw=0, zorder=1))
-    ax.text(14.7, top - 2 * lane_h, "two more rounds,\nthen the run ends", ha="center", va="center", fontsize=7,
-            color=INK_SECONDARY, zorder=4, bbox=dict(fc=SURFACE, ec="none", pad=1.5))
-    # a round is each agent's step and, for an agent whose step ended with a board action, its free follow-up steps
-    hy = top + lane_h / 2 + 0.12
-    for label, x0, x1 in (("round r", 1.2, 9.55), ("round r + 1", 9.85, 13.45)):
+    ax.text((hx + 16.8) / 2, top - 1.5 * lane_h, "two more rounds,\nthen the run ends", ha="center", va="center",
+            fontsize=7, color=INK_SECONDARY, zorder=4, bbox=dict(fc=SURFACE, ec="none", pad=1.5))
+    ax.text((hx + 16.8) / 2, top - 4 * lane_h, "exited", ha="center", va="center", fontsize=7, color=INK_SECONDARY,
+            zorder=4)
+    # each round under its bracket; each call carries its place in the round, the last one N
+    hy = top + lane_h / 2 + 0.22
+    for label, x0 in zip(("round r", "round r + 1"), starts):
+        x1 = x0 + SHOWN_N * pitch + 0.25
         ax.text((x0 + x1) / 2, hy + 0.28, label, ha="center", va="bottom", fontsize=8, weight="bold")
         ax.plot([x0, x0, x1, x1], [hy + 0.02, hy + 0.2, hy + 0.2, hy + 0.02], color=INK_SECONDARY, lw=0.7)
-    by = top - 4 * lane_h - lane_h / 2 - 0.15
-    ky, kx = by - 0.35, 1.2
-    for a, label in [("work", "charged step"), ("read", "free step")]:
-        step(ax, a, kx, ky - 0.2, 0.8, 0.4, text=False)
-        ax.text(kx + 0.95, ky, label, va="center", fontsize=7, color=INK_SECONDARY)
-        kx += 0.95 + len(label) * 0.128 + 0.45
-    arrow(ax, (1.2, 0.8), (15.8, 0.8), color=MUTED, lw=0.7)
-    ax.text(15.8, 0.95, "time", ha="right", va="bottom", fontsize=7, color=MUTED)
-    save(fig, "round_structure")
+    by = top - 4 * lane_h - lane_h / 2
+    rows = ([("box", "work", "work call"), ("box", "read", "board call"),
+             ("box", "no call", "reply with no tool call")],
+            [("arrow", None, "read of a post of the same round")])
+    for r, row in enumerate(rows):
+        ky, kx = by - 0.38 - r * 0.5, 1.2
+        for kind, a, label in row:
+            if kind == "box":
+                step(ax, a, kx, ky - 0.18, 0.8, 0.36, text=False)
+                lx = kx + 0.95
+            else:
+                live_arrow(ax, (kx, ky), (kx + 0.8, ky))
+                lx = kx + 0.95
+            ax.text(lx, ky, label, va="center", fontsize=7, color=INK_SECONDARY)
+            kx = lx + len(label) * 0.128 + 0.6
+    arrow(ax, (1.2, 0.75), (16.8, 0.75), color=MUTED, lw=0.7)
+    ax.text(16.8, 0.9, "time", ha="right", va="bottom", fontsize=7, color=MUTED)
+    save(fig, "round_structure", printed_in=TEXT_WIDTH_IN)
 
 
-BOARD_ACTIONS = {"status", "read", "post", "agent_actions"}
+BOARD_ACTIONS = {"status", "read", "post", "get_peer_actions", "get_peer_observations"}
 
 
 def step(ax, a, x, y, w, h, text=True):
-    """One step of the round diagram: dashed if it ends with a board action (free), solid grey if charged."""
+    """One call of the round diagram: dashed for a board call, solid grey for a work call (a job's is labelled with
+    its id), white for submit, wait and a round's end on its time, dotted for a reply with no tool call."""
     if a in BOARD_ACTIONS:
         style = dict(fc=PLANE, ec=MUTED, ls=DASH, color=INK)
-    elif a == "submit":
+    elif a in ("submit", "wait", "round time"):
         style = dict(fc=WHITE, ec=INK_SECONDARY, ls="-", color=INK)
+    elif a == "no call":
+        style = dict(fc=SURFACE, ec=MUTED, ls=DOT, color=MUTED)
     else:
         style = dict(fc=TOOL, ec=INK_SECONDARY, ls="-", color=INK_SECONDARY)
-    box(ax, x, y, w, h, a if text else None, fc=style["fc"], ec=style["ec"], ls=style["ls"], fs=6.5,
+    label = "work\n" + a if a.startswith("job ") else a
+    box(ax, x, y, w, h, label if text else None, fc=style["fc"], ec=style["ec"], ls=style["ls"],
+        fs=6.8 if len(a) >= 10 else 7.2,
         color=style["color"], weight="bold" if a == "submit" else "normal")
 
 
@@ -401,11 +463,11 @@ def fig_information():
     cols = ["told a\nboard exists", "has the\nboard tools", "told the\nroster", "can read\nteammates' tool calls",
             "holds the\nexploit"]
     rows = ["worker", "regulator", "disregulator"]
-    # Y yes in the default preset; F only if mention_board is on; P a part only (access split); N no
+    # Y yes in the default preset (mention_board on since 2026-11-22); P a part only (access split); N no
     marks = {
-        "worker": ["F", "Y", "Y", "N", "P"],
+        "worker": ["Y", "Y", "Y", "N", "P"],
         "regulator": ["Y", "Y", "Y", "Y", "N"],
-        "disregulator": ["Y", "Y", "Y", "N", "N"],
+        "disregulator": ["Y", "Y", "Y", "Y", "N"],
     }
     x0, cw, top, rh = 3.0, 2.7, 2.55, 0.72
     for j, c in enumerate(cols):
@@ -418,7 +480,7 @@ def fig_information():
         for j, v in enumerate(marks[r]):
             glyph(ax, v, x0 + j * cw + cw / 2, y, 0.4)
     ky = top - 2 * rh - 0.65
-    for kx, v, label in [(0.4, "Y", "yes"), (2.0, "F", "only with mention_board on"), (5.6, "P", "a part only")]:
+    for kx, v, label in [(0.4, "Y", "yes"), (2.0, "P", "a part only")]:
         glyph(ax, v, kx + 0.13, ky, 0.26)
         ax.text(kx + 0.4, ky, label, va="center", fontsize=6.8, color=INK_SECONDARY)
     save(fig, "information")
@@ -444,7 +506,8 @@ def main() -> int:
     """Draw every figure and print the paths written."""
     for draw in FIGURES:
         draw()
-    print("\n".join(str(p) for p in sorted(OUT.glob("*.png"))))
+    for path in sorted(OUT.glob("*.png")):
+        progress.wrote(path)
     return 0
 
 

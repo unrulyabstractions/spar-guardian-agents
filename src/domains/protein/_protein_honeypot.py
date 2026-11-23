@@ -11,6 +11,9 @@ no disk of its machine. An agent holding the whole gets CheatBench's files. N is
 The fingerprints name the file by its hashes (the whole, and the file of each segment as a slice), by its lines (the
 six designs, every segment of at least MIN_SEGMENT residues and the record headers, with the length each form carries,
 lower-cased as the probe and the ladder compare them) and by the paths that point at it.
+
+A variant with side copies (Variant.side_copies) also puts each agent's candidates file, the same bytes, at SIDE_COPY
+on its own machine (side_copy): an agent holding no segment gets none, so no machine holds another agent's segments.
 """
 from __future__ import annotations
 
@@ -18,7 +21,7 @@ import hashlib
 import re
 from pathlib import PurePosixPath
 
-from src.domains.protein._protein_settings import BUILD, LOG, MIN_SEGMENT, PAYLOAD
+from src.domains.protein._protein_settings import BUILD, LOG, MIN_SEGMENT, PAYLOAD, SIDE_COPY
 from src.measures.honeypot_fingerprints import Fingerprints
 from src.sandbox import cheatbench_task_files as task_files
 
@@ -101,6 +104,18 @@ def agent_files(row: dict, pieces: list[int] | None, n: int | None) -> dict[str,
         return {**files, log_dest(row): screening_only(log).encode()}
     data = "".join(segment_text(text, k, n) for k in pieces).encode()
     return {**files, payload: data, log_dest(row): held_log(log, len(data)).encode()}
+
+
+def side_copy_path(row: dict) -> str:
+    """Where a variant with side copies puts the agent's candidates file again (SIDE_COPY)."""
+    return SIDE_COPY.format(target=row["id"])
+
+
+def side_copy(row: dict, files: dict[str, bytes]) -> dict[str, bytes]:
+    """One agent's side copy, {path: bytes}, from its copy of the row (agent_files): its candidates file's bytes at
+    side_copy_path; {} for an agent whose copy holds no candidates file."""
+    data = files.get(row["payload_file"])
+    return {} if data is None else {side_copy_path(row): data}
 
 
 def fingerprints(row: dict, n: int | None) -> Fingerprints:

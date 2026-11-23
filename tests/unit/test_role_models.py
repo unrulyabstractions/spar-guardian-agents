@@ -8,7 +8,14 @@ import asyncio
 import inspect
 
 import pytest
-from inspect_ai.model import GenerateConfig, ModelAPI, ModelOutput, get_model
+from inspect_ai.model import (
+    ChatMessageAssistant,
+    ChatMessageSystem,
+    GenerateConfig,
+    ModelAPI,
+    ModelOutput,
+    get_model,
+)
 from inspect_ai.model._generate_config import active_generate_config_context_var
 from inspect_ai.model._providers.mockllm import MockLLM
 from inspect_ai.model._providers.openrouter import OpenRouterAPI
@@ -17,8 +24,8 @@ from src import run
 from src.configuration.presets import PRESETS, build_config, with_overrides
 from src.configuration.swarm_config import ROLES, SwarmConfig
 from src.domains.openmath import OpenMath
+from src.export.atif_transcripts import episode_model, episode_transcript, model_key
 from src.export.eval_sample_view import SampleView
-from src.export.export_episodes import episode_model
 from src.models import model_registry as models
 from src.models import swarm_model_provider as provider
 from src.models.swarm_model_provider import RegistryModelAPI
@@ -77,8 +84,10 @@ def test_a_model_outside_the_registry_builds_as_it_is():
 
 
 def test_every_public_method_of_model_api_is_forwarded():
-    assert "generate" in PUBLIC and "max_connections" in PUBLIC
-    assert RegistryModelAPI.forwarded == [name for name in PUBLIC if name != "generate"]
+    """Every public ModelAPI method but the two the class defines itself: generate, with the agents' config beneath the
+    call's, and served_model_usage, which prices each call at the rates it is billed (cost_cap)."""
+    assert {"generate", "served_model_usage", "max_connections"} <= set(PUBLIC)
+    assert RegistryModelAPI.forwarded == [name for name in PUBLIC if name not in ("generate", "served_model_usage")]
     api = get_model("swarm/mockllm/model", memoize=False).api
     for name in RegistryModelAPI.forwarded:
         is_async = inspect.iscoroutinefunction(vars(ModelAPI)[name])
@@ -174,6 +183,25 @@ def test_each_episode_names_its_agents_own_model():
     # no roles: every agent is a worker; a run before role models: the eval's model, without the provider's prefix
     assert episode_model(view_of({"role_models": {"worker": FLASH}}), "a01") == FLASH
     assert episode_model(view_of({"roles": roles}, model=f"swarm/{FLASH}"), "a02") == FLASH
+
+
+def test_an_influencers_transcript_names_its_own_model_and_its_bare_agent_id():
+    """The header of a regulator's transcript names the regulator's model, not the workers' (the eval's), with its
+    registry entry, and the agent by its bare ID; its episode record says the same."""
+    roles = {"a01": "worker", "a02": "regulator"}
+    messages = [ChatMessageSystem(content="You are a02."), ChatMessageAssistant(content="I watch.", model=FLASH)]
+    store = {"EnvironmentState:message_attribution": [{"index": 0, "agent": "a02"}, {"index": 1, "agent": "a02"}]}
+    view = SampleView(id="riemann", epoch=1, messages=messages, events=[], store_get=store.get, model="mockllm/model",
+                      metadata={"cheatbench": {"roles": roles, "role_models": {"worker": None, "regulator": FLASH}},
+                                "experiment": {"setup": {"agents": [{"name": "a01"}, {"name": "a02"}]}}},
+                      input="", output=None, scores=None, limit=None, error=None, total_time=None)
+    transcript, _ = episode_transcript(view, "a02")
+    assert (transcript["agent"], transcript["model"], transcript["model_key"]) == (
+        "a02", FLASH, models.entry_name(FLASH))
+    assert transcript["trajectory"]["agent"]["name"] == "a02"
+    assert transcript["trajectory"]["agent"]["model_name"] == FLASH
+    assert "eval_log" not in transcript["orbit"] and "agent" not in transcript["orbit"]
+    assert models.entry_name(FLASH) is not None and model_key("mockllm/model") is None
 
 
 # ------------------------------------------------------------------------------------------------ the run

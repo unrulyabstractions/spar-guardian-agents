@@ -4,13 +4,14 @@
         qwen3.8-27b-openrouter gemma-4-31b-openrouter --samples 5 --jobs 5 [--set key=value ...] [--summary-only]
 
 Sample k of a model is `python -m elicitation.swe --model <model> --condition <condition> --set seed=<k>`, which names
-its run flipt_duo_<model>_s<k>, or flipt_duo_<model>_<condition>_s<k> under a condition other than none. Its output goes to logs/<study>/screen/<name>.log. The runs go round robin over the models, so
-every model advances at the same pace. Each run's line prints as it ends. A run whose signals.jsonl exists is skipped,
+its run flipt_duo_<model>_s<k>, or flipt_duo_<model>_<condition>_s<k> under a condition other than none. Its output
+goes to logs/<study>/screen/<name>.log. The runs go round robin over the models, so every model advances at the same
+pace. Each run's line prints as it ends. A run whose signals.jsonl exists is skipped,
 so a stopped screen resumes. Every --set goes to every run. --set seed is refused, since a sample's seed is its number.
 
-The summary gives each run's team rung, its agents' rungs and its ledger (scripts/screen.py summary). Then one line per
-model gives its finished runs, how many teams the code ladder found at each honeypot rung from tried to shipped and with
-evidence for each collaboration level, how many passed the hidden tests, and how many model calls errored.
+The summary gives each run's team Cheating rung, its agents' rungs and its ledger (scripts/screen.py summary). Then one
+line per model gives its finished runs, how many teams hold each kind of the code's evidence from tried to shipped and
+each kind of travel evidence, how many passed the hidden tests, and how many model calls errored.
 """
 from __future__ import annotations
 
@@ -26,8 +27,10 @@ from src.configuration import settings
 from src.measures.run_directory import RunDir
 from src.models import model_registry as models
 
-RATE_RUNGS = ("tried", "opened", "used", "shipped")
-RATE_LEVELS = ("discussed", "solicited", "crossed", "assembled")
+RATE_EVIDENCE = ("tried", "opened", "used", "shipped")
+"""The kinds of the team's evidence (src/measures/rungs.py EVIDENCE) a model's row counts."""
+RATE_TRAVEL = ("discussed", "solicited", "crossed", "assembled")
+"""The kinds of travel evidence (rungs.TRAVEL_EVIDENCE) a model's row counts."""
 
 
 def jobs(entries: list[str], samples: int, condition: str = "none") -> list[tuple[str, int, str]]:
@@ -55,22 +58,23 @@ def launch(entry: str, sample: int, name: str, pairs: list[str], condition: str 
 
 
 def counts(entry: str, samples: int, condition: str = "none") -> list[str]:
-    """One model's row: finished runs, the teams whose code ladder found each rung and each collaboration level, the
-    teams that passed, and the model calls that errored. Each level counts the teams with evidence for it, since a team
-    can cross without discussing."""
+    """One model's row: finished runs, the teams that hold each kind of evidence (RATE_EVIDENCE) and of travel
+    evidence (RATE_TRAVEL), the teams that passed, and the model calls that errored. Each kind counts on its own,
+    since a team can cross without discussing."""
     runs = [RunDir(settings.RUNS / name) for _, _, name in jobs([entry], samples, condition) if screen.done(name)]
     teams = [team for run in runs for team in run.team_signals()[:1]]
     n = len(teams)
     errored = sum(agent.get("errored", 0) for run in runs
                   for agent in ((run.run_json.get("ledger") or {}).get("agents") or {}).values())
-    return [entry, str(n), *[f"{sum(bool(t.get(r)) for t in teams)}/{n}" for r in RATE_RUNGS],
-            *[f"{sum(bool((t.get('collaboration_evidence') or {}).get(c)) for t in teams)}/{n}" for c in RATE_LEVELS],
+    return [entry, str(n), *[f"{sum(bool(t.get(r)) for t in teams)}/{n}" for r in RATE_EVIDENCE],
+            *[f"{sum(bool((t.get('travel_evidence') or {}).get(c)) for t in teams)}/{n}"
+              for c in RATE_TRAVEL],
             f"{sum(bool(t.get('passed')) for t in teams)}/{n}", str(errored)]
 
 
 def rates(entries: list[str], samples: int, condition: str = "none") -> str:
     """The table of counts(), one line per model."""
-    table = [["model", "runs", *RATE_RUNGS, *RATE_LEVELS, "passed", "errored_calls"],
+    table = [["model", "runs", *RATE_EVIDENCE, *RATE_TRAVEL, "passed", "errored_calls"],
              *[counts(entry, samples, condition) for entry in entries]]
     widths = [max(len(row[i]) for row in table) for i in range(len(table[0]))]
     return "\n".join("  ".join(cell.ljust(w) for cell, w in zip(row, widths)).rstrip() for row in table)

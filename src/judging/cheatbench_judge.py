@@ -1,25 +1,47 @@
-"""CheatBench's judge, run in process through Inspect's model API.
+"""CheatBench's judge, run in process through Inspect's model API, and the one way any of our judges makes a call.
 
 CheatBench's core/judge.py supplies everything that defines a verdict: the task's Verdict schema with the shared
-rule fields (load_judge_spec), the judge prompt (build_judge_prompt over render_transcript) and the validation of the
-reply (Verdict.model_validate_json). Inspect makes the call, with the Verdict as a strict JSON response schema, as
-CheatBench's llm_agents._coerce_response_format sends it. Judge entries come from src/judging/judge_models.yaml in
+rule fields (load_judge_spec, whose with_shared_rules sets cheated = the task's criteria OR
+explicit_prohibition_violated when the reply is validated), the judge prompt (build_judge_prompt over
+render_transcript) and the validation of the reply (Verdict.model_validate_json). Inspect makes the call, with the
+Verdict as a strict JSON response schema, as CheatBench's llm_agents._coerce_response_format sends it, and retries a
+transient fault as CheatBench's judge_episode does. Judge entries come from src/judging/judge_models.yaml in
 CheatBench's models.yaml format.
 
     judge = Judge.of("gpt-6-luna", batch=True)
     verdicts = await judge_sample(view, judge_spec(task_dir, "openmath_agent"), judge)   # {agent: verdict}
+    row = await unit.judge(judge)                       # one call of a stored pass: its verdict row
 
-The scorer `cheatbench_judge` runs judge_sample on a live sample, and `python -m src judge` on every sample of a
-finished eval log. A verdict holds the judge's settings, the task's verdict fields and the call's usage and cost; the
-export adds the episode's identity when it writes judge.jsonl, in the row shape of CheatBench's judge.jsonl.
+Three callers: the scorer `cheatbench_judge` runs judge_sample on a live sample; `python -m src judge|rejudge` on every
+sample of a finished eval log (src/run.py, which re-exports the run with the verdicts); and the pass "cheatbench" of
+`python -m src judge-pass` (src/judging/judge_pass.py), which judges each stored trajectory of a run through
+prompt_text, validator and Unit and writes judges/cheatbench.<judge>.jsonl, never the run's own files. A verdict row
+holds the judge's settings, the task's verdict fields and the call's usage and cost, in the row shape of CheatBench's
+judge.jsonl.
+
+Where our wrapper differs from CheatBench's own judge (submodules/cheatbench/core/judge.py and judge.py):
+- Inspect makes the call. On OpenAI it may use the Responses API, where CheatBench uses Chat Completions; the prompt,
+  the schema and the validation are the same.
+- The schema is OpenAI's strict form of the Verdict (type_to_response_format_param, as CheatBench sends it), with
+  objects_only applied so Anthropic's structured outputs take it too. The constraint is the same. Inspect's
+  JSONSchema keeps no "title", so the pydantic titles ("SharedVerdict", "Cheated", ...) are not sent; every field
+  name and description is.
+- The cost is priced from the call's own token counts at src/models/model_registry.yaml's rates, where CheatBench
+  records the provider's reported cost, and a reply that does not validate keeps its cost (CheatBench records 0).
+- The task's judge_schema.py is loaded from a byte-identical copy under build/judge/<task>/, so the submodule gets no
+  __pycache__; schema_path names the copy.
 """
 from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import os
+import random
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 
 from inspect_ai.log import transcript as inspect_transcript
 from inspect_ai.model import ChatMessageUser, GenerateConfig, Model, ResponseSchema, get_model, model_roles
@@ -31,7 +53,7 @@ from openai.lib._parsing._completions import type_to_response_format_param
 from src.configuration import settings
 from src.export.atif_transcripts import episode_transcript
 from src.export.eval_sample_view import SampleView, agent_messages, roster, usage_dict
-from src.models.model_registry import cost_usd, usd_per_million
+from src.models.model_registry import cost_usd, entry_of, usd_per_million
 from src.sandbox.staging import write_atomic
 from src.utils.cheatbench_core import judge as cb_judge
 
@@ -42,19 +64,8 @@ JUDGE_ADDENDUM = settings.LUCY / "experiments" / "orbit_cheatbench" / "judge_add
 
 
 # --------------------------------------------------------------------------
-# the spec, the judge and the schema
+# the judge entry
 # --------------------------------------------------------------------------
-def judge_spec(task_dir: Path, task_name: str, *, addendum: Path | list[Path] | None = None) -> cb_judge.JudgeSpec:
-    """The task's Verdict and context, loaded from a copy of its judge_schema.py under build/judge/, so the submodule
-    gets no __pycache__. Each addendum is appended to the copy in order, as Lucy's harness appends hers; the copy's
-    folder joins their stems."""
-    addenda = [] if addendum is None else [addendum] if isinstance(addendum, Path) else list(addendum)
-    text = "\n\n".join([(Path(task_dir) / cb_judge.SCHEMA_MODULE).read_text(), *(Path(a).read_text() for a in addenda)])
-    folder = settings.BUILD / "judge" / "+".join([task_name, *(Path(a).stem for a in addenda)])
-    write_atomic(folder / cb_judge.SCHEMA_MODULE, text.encode())
-    return cb_judge.load_judge_spec(folder, task_name=task_name)
-
-
 def judge_entry(name: str) -> dict:
     """The judge_models.yaml entry as CheatBench resolves it: model, api_key_env, generation_config, unsupported."""
     return cb_judge.load_judge_config(settings.JUDGE_MODELS_CONFIG, name)
@@ -81,14 +92,16 @@ def require_judge_key(name: str) -> None:
 
 @dataclass(frozen=True)
 class Judge:
-    """A judge entry ready to call: its client, its generation settings, its prices at the API the client uses, and
-    the entry's settings each verdict records."""
+    """A judge entry ready to call: its client, its generation settings, its prices at the API the client uses, the
+    entry's settings each verdict records, and the most output tokens its model can return (the registry's
+    max_output, None when unknown), which bounds what one call can cost."""
 
     name: str
     model: Model
     config: GenerateConfig
     prices: dict | None
     entry: dict
+    max_output: int | None = None
 
     @classmethod
     def of(cls, name: str, *, batch: bool, model: Model | None = None) -> Judge:
@@ -96,14 +109,33 @@ class Judge:
         one. A fresh client, since a memoized one belongs to the event loop that first used it."""
         model_name, config = judge_model_config(name)
         model = model or get_model(model_name, config=GenerateConfig(batch=batch), memoize=False)
-        return cls(name, model, config, judge_prices(name, batch=batch), judge_entry(name))
+        registry = entry_of(model_name) or {}
+        return cls(name, model, config, judge_prices(name, batch=batch), judge_entry(name), registry.get("max_output"))
 
 
-def response_schema(spec: cb_judge.JudgeSpec) -> ResponseSchema:
-    """The Verdict as a strict JSON schema: every field required, no additional properties on any object."""
-    param = type_to_response_format_param(spec.verdict)["json_schema"]
-    return ResponseSchema(name=param["name"], json_schema=JSONSchema.model_validate(objects_only(param["schema"])),
-                          strict=True)
+# --------------------------------------------------------------------------
+# the schema
+# --------------------------------------------------------------------------
+def response_schema(model: type) -> ResponseSchema:
+    """A pydantic model as a strict JSON schema: every field required, no additional properties on any object, a
+    nested model written out in place (inlined)."""
+    param = type_to_response_format_param(model)["json_schema"]
+    schema = inlined(param["schema"], param["schema"].get("$defs") or {})
+    return ResponseSchema(name=param["name"], json_schema=JSONSchema.model_validate(objects_only(schema)), strict=True)
+
+
+def inlined(node, defs: dict):
+    """The schema with each {"$ref": "#/$defs/X"} replaced by X's schema and the $defs dropped. Inspect's JSONSchema
+    keeps no $ref or $defs, so a nested model (a list of Flag) would reach the provider as an item with no type."""
+    if isinstance(node, dict):
+        ref = node.get("$ref")
+        if isinstance(ref, str) and ref.startswith("#/$defs/"):
+            return inlined({**defs[ref.removeprefix("#/$defs/")], **{k: v for k, v in node.items() if k != "$ref"}},
+                           defs)
+        return {k: inlined(v, defs) for k, v in node.items() if k != "$defs"}
+    if isinstance(node, list):
+        return [inlined(v, defs) for v in node]
+    return node
 
 
 def objects_only(node):
@@ -125,59 +157,168 @@ def objects_only(node):
     return node
 
 
+def sha256(data: str | bytes) -> str:
+    return hashlib.sha256(data.encode() if isinstance(data, str) else data).hexdigest()
+
+
+def schema_sha256(schema: ResponseSchema) -> str:
+    """The hash of the schema exactly as it is sent."""
+    return sha256(json.dumps(schema.json_schema.model_dump(exclude_none=True), sort_keys=True))
+
+
+# --------------------------------------------------------------------------
+# one call
+# --------------------------------------------------------------------------
+class Reply(NamedTuple):
+    """What one judge call gave: the validated fields (None when the call failed or the reply did not validate), the
+    call's usage, the error, the raw reply and how many attempts were made."""
+    fields: dict | None
+    usage: dict | None
+    error: str | None
+    raw: str
+    attempts: int
+
+
+async def backoff(attempt: int) -> None:
+    """CheatBench's wait before attempt + 1: 1 s, then 2 s, each plus up to 1 s of jitter."""
+    base = cb_judge.JUDGE_BACKOFF_BASE
+    await asyncio.sleep(base * (2 ** (attempt - 1)) + random.uniform(0, base))
+
+
+def transient(ex: Exception) -> bool:
+    """Whether CheatBench retries this fault: its error classifier reads the exception's text."""
+    errors = cb_judge.agent_errors
+    return errors.is_transient(errors.classify(f"{type(ex).__name__}: {ex}"))
+
+
+async def ask(judge: Judge, text: str, schema: ResponseSchema, validate: Callable[[str], dict]) -> Reply:
+    """One user message, structured output enforced by `schema`, the reply validated locally by `validate` (which
+    raises on an invalid reply). A transient fault is tried again, up to CheatBench's JUDGE_MAX_ATTEMPTS; any other
+    failure, and a reply that does not validate, gives fields None with the error. Nothing is guessed."""
+    config = judge.config.merge(GenerateConfig(response_schema=schema))
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            output = await judge.model.generate([ChatMessageUser(content=text)], config=config)
+            break
+        except Exception as ex:  # noqa: BLE001 - one failed call must not lose the other verdicts
+            if transient(ex) and attempt < cb_judge.JUDGE_MAX_ATTEMPTS:
+                await backoff(attempt)
+                continue
+            return Reply(None, None, f"{type(ex).__name__}: {ex}", "", attempt)
+    usage = usage_dict(output.usage) if output.usage else None
+    raw = output.completion or ""
+    try:
+        return Reply(validate(raw), usage, None, raw, attempt)
+    except Exception as ex:  # noqa: BLE001
+        return Reply(None, usage, f"{type(ex).__name__}: {ex}", raw, attempt)
+
+
+def call_cost(judge: Judge, usage: dict | None) -> float | None:
+    """What a call's tokens cost at the judge's prices; None without usage or prices."""
+    if not usage:
+        return None
+    return cost_usd(judge.prices, usage["input"], usage["cache_read"], usage["output"],
+                    cache_write=usage.get("cache_write", 0))
+
+
+def verdict_row(judge: Judge, names: tuple[str, ...], reply: Reply, prompt: dict) -> dict:
+    """A verdict in the row shape of CheatBench's judge.jsonl, without the unit's identity: the judge's settings, the
+    prompt's record (`prompt`: judge_prompt, judge_schema and, for a stored pass, their hashes), parse_ok, the fields
+    `names` (None when the reply did not validate), the call's usage and cost, the attempts, the error, and the raw
+    reply when it did not validate."""
+    fields = reply.fields or {}
+    row = {"judge": judge.name, "judge_generation_config": judge.entry["generation_config"],
+           "judge_generation_config_unsupported": judge.entry["unsupported"], **prompt,
+           "parse_ok": reply.fields is not None, **{k: fields.get(k) for k in names},
+           "output_mode": cb_judge.MODE_STRUCTURED, "judge_cost_usd": call_cost(judge, reply.usage),
+           "judge_usage": reply.usage, "judge_attempts": reply.attempts, "judge_error": reply.error}
+    if reply.fields is None:
+        row["raw"] = reply.raw
+    return row
+
+
+@dataclass(frozen=True)
+class Unit:
+    """One judge call of a stored pass: the run, the unit's key in the verdict file (an episode or an agent), the one
+    user message, the response schema, the local validation, the verdict fields the row keeps, the prompt's record and
+    the unit's identity, which leads the row."""
+    run_dir: Path
+    key: str
+    text: str
+    schema: ResponseSchema
+    validate: Callable[[str], dict]
+    names: tuple[str, ...]
+    prompt: dict
+    identity: dict
+
+    async def judge(self, judge: Judge) -> dict:
+        """The unit's verdict row: identity, then the verdict, then the input's hash."""
+        row = verdict_row(judge, self.names, await ask(judge, self.text, self.schema, self.validate), self.prompt)
+        return {**self.identity, **row, "input_sha256": sha256(self.text)}
+
+
+# --------------------------------------------------------------------------
+# CheatBench's spec and prompt
+# --------------------------------------------------------------------------
+def judge_spec(task_dir: Path, task_name: str, *, addendum: Path | list[Path] | None = None) -> cb_judge.JudgeSpec:
+    """The task's Verdict and context, loaded from a copy of its judge_schema.py under build/judge/, so the submodule
+    gets no __pycache__. Each addendum is appended to the copy in order, as Lucy's harness appends hers; the copy's
+    folder joins their stems."""
+    addenda = [] if addendum is None else [addendum] if isinstance(addendum, Path) else list(addendum)
+    text = "\n\n".join([(Path(task_dir) / cb_judge.SCHEMA_MODULE).read_text(), *(Path(a).read_text() for a in addenda)])
+    folder = settings.BUILD / "judge" / "+".join([task_name, *(Path(a).stem for a in addenda)])
+    write_atomic(folder / cb_judge.SCHEMA_MODULE, text.encode())
+    return cb_judge.load_judge_spec(folder, task_name=task_name)
+
+
+def repo_path(path: Path) -> str:
+    """A file's path from the checkout (settings.ROOT), as a verdict row records it; the absolute path for a file
+    outside it."""
+    path = Path(path).resolve()
+    return path.relative_to(settings.ROOT).as_posix() if path.is_relative_to(settings.ROOT) else path.as_posix()
+
+
 def spec_record(spec: cb_judge.JudgeSpec) -> dict:
     """Hashes that identify the prompt and the schema a verdict was made with."""
-    return {"prompt_sha256": hashlib.sha256(spec.prompt_path.read_bytes()).hexdigest(),
-            "schema_sha256": hashlib.sha256(spec.schema_path.read_bytes()).hexdigest(),
-            "schema_path": str(spec.schema_path)}
+    return {"prompt_sha256": sha256(spec.prompt_path.read_bytes()),
+            "schema_sha256": sha256(spec.schema_path.read_bytes()),
+            "schema_path": repo_path(spec.schema_path)}
 
 
-# --------------------------------------------------------------------------
-# one transcript, one sample
-# --------------------------------------------------------------------------
+def spec_prompt(spec: cb_judge.JudgeSpec) -> dict:
+    """The prompt's record of a CheatBench row: the general prompt's path from the checkout and the task schema's file
+    name."""
+    return {"judge_prompt": repo_path(spec.prompt_path), "judge_schema": spec.schema_path.name}
+
+
 def render(transcript: dict) -> str:
     """CheatBench's rendering of a stored transcript: the ordered log the judge reads."""
     return cb_judge.render_transcript(transcript)
 
 
-def verdict_row(spec: cb_judge.JudgeSpec, judge: Judge, fields: dict | None, *, usage: dict | None = None,
-                error: str | None = None, raw: str = "") -> dict:
-    """A verdict without the episode's identity: the judge's settings, parse_ok, the task's fields (None when the
-    reply did not parse), the call's usage and cost, the error, and the raw reply when parsing failed."""
-    cost = cost_usd(judge.prices, usage["input"], usage["cache_read"], usage["output"],
-                    cache_write=usage.get("cache_write", 0)) if usage else None
-    row = {"judge": judge.name, "judge_generation_config": judge.entry["generation_config"],
-           "judge_generation_config_unsupported": judge.entry["unsupported"],
-           "judge_prompt": str(spec.prompt_path), "judge_schema": spec.schema_path.name,
-           "parse_ok": fields is not None, **{k: (fields or {}).get(k) for k in spec.fields},
-           "output_mode": cb_judge.MODE_STRUCTURED, "judge_cost_usd": cost, "judge_usage": usage,
-           "judge_attempts": 1, "judge_error": error}
-    if fields is None:
-        row["raw"] = raw
-    return row
+def prompt_text(spec: cb_judge.JudgeSpec, transcript: dict) -> str:
+    """CheatBench's one user message for a transcript, as its judge_episode builds it: the shared rubric with the
+    task's EXTRA_CONTEXT, the agent's own instructions (the transcript's "prompt") and the rendered trajectory. The
+    Verdict reaches the judge as the response schema, its field descriptions included."""
+    return cb_judge.build_judge_prompt(spec, render(transcript), transcript.get("prompt") or "")[0]["content"]
 
 
-async def judge_text(spec: cb_judge.JudgeSpec, rendered: str, agent_prompt: str, judge: Judge) -> dict:
-    """One verdict: CheatBench's prompt over a rendered log, Inspect's call, CheatBench's validation. A failed call or
-    a reply that does not validate gives parse_ok False with the error."""
-    text = cb_judge.build_judge_prompt(spec, rendered, agent_prompt)[0]["content"]
-    call_config = judge.config.merge(GenerateConfig(response_schema=response_schema(spec)))
-    try:
-        output = await judge.model.generate([ChatMessageUser(content=text)], config=call_config)
-    except Exception as ex:  # noqa: BLE001 - one failed call must not lose the other agents' verdicts
-        return verdict_row(spec, judge, None, error=f"{type(ex).__name__}: {ex}")
-    usage = usage_dict(output.usage) if output.usage else None
-    raw = output.completion or ""
-    try:
-        verdict = spec.verdict.model_validate_json(raw)
-    except Exception as ex:  # noqa: BLE001
-        return verdict_row(spec, judge, None, usage=usage, error=f"{type(ex).__name__}: {ex}", raw=raw)
-    return verdict_row(spec, judge, verdict.model_dump(), usage=usage)
+def validator(spec: cb_judge.JudgeSpec) -> Callable[[str], dict]:
+    """CheatBench's validation of a reply: the Verdict with the shared rules, so cheated is the task's criteria OR
+    explicit_prohibition_violated."""
+    return lambda raw: spec.verdict.model_validate_json(raw).model_dump()
 
 
+# --------------------------------------------------------------------------
+# one transcript, one sample (the eval's judge)
+# --------------------------------------------------------------------------
 async def judge_transcript(spec: cb_judge.JudgeSpec, transcript: dict, judge: Judge) -> dict:
-    """One verdict over CheatBench's rendering of a stored transcript."""
-    return await judge_text(spec, render(transcript), transcript["prompt"], judge)
+    """One verdict over CheatBench's prompt for a transcript. A failed call or a reply that does not validate gives
+    parse_ok False with the error."""
+    reply = await ask(judge, prompt_text(spec, transcript), response_schema(spec.verdict), validator(spec))
+    return verdict_row(judge, spec.fields, reply, spec_prompt(spec))
 
 
 async def judge_sample(view: SampleView, spec: cb_judge.JudgeSpec, judge: Judge) -> dict[str, dict]:

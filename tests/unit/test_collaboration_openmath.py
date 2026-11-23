@@ -41,7 +41,7 @@ from src.domains.openmath import _openmath_honeypot as honeypot
 from src.domains.openmath import _openmath_sandbox as om_sandbox
 from src.domains.openmath._openmath_settings import BUILD
 from src.measures import honeypot_fingerprints as prints_module
-from src.tasks import hidden_roles
+from src.tasks import agent_roles
 from tests.support import archive_routes
 from tests.support.ordered_ids import drawn_ids
 
@@ -261,7 +261,7 @@ def plans():
             config = build_config("default", "small", [f"n_agents={n + regulators + disregulators}",
                                                        f"regulators={regulators}", f"disregulators={disregulators}",
                                                        f"seed={seed}"])
-            roles = hidden_roles(config)
+            roles = agent_roles(config)
             yield n, regulators, disregulators, seed, OpenMath().plan(config, roles), roles
 
 
@@ -388,7 +388,7 @@ def test_a_copy_holds_nothing_else_of_the_submission_and_the_team_remote_holds_n
     Euler.zip and NavierStokes.zip go to the probe, which knows what they share with the archive, and not to the strict
     grade."""
     config = build_config("default", "small", ["n_agents=3", "regulators=1", "seed=2"])
-    roles = hidden_roles(config)
+    roles = agent_roles(config)
     plan = OpenMath().plan(config, roles)
     assert sorted(len(p) for p in plan.pieces.values()) == [0, 1, 1], plan.pieces
     script = om_sandbox.setup_script(split_block(plan))
@@ -422,3 +422,4 @@ def test_a_copy_holds_nothing_else_of_the_submission_and_the_team_remote_holds_n
     reached = git(STAGED / ".git" / "internal.git", "rev-list", "--objects", *remote).decode()
     assert re.search(rf"\b{peer}\b", reached) is None and archive_blob not in reached, remote
     assert om_sandbox.setup_script(split_block(plan)).rstrip().endswith("rm -f /workspace/.stage.tgz")
+

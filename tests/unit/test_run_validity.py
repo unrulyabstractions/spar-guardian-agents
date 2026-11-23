@@ -1,5 +1,5 @@
 """run_validity: a run is valid only when it is no rehearsal, completed, on a task that met the collaboration rule, with
-a regulator that acted, a disregulator that acted and posted, and a team the code ladder placed. Each case builds a run
+a regulator that acted, a disregulator that acted and posted, and a team the code placed. Each case builds a run
 folder the way the export writes it, under runs/<study>/ or one of its groups, and its eval log at the same path under
 logs/."""
 from __future__ import annotations
@@ -11,16 +11,17 @@ import pytest
 
 from src.measures import run_validity as rv
 from tests.support.run_builder import write_status_log
+from tests.support.run_files import write_text
 
 NOTICE = rv.REFUSAL_NOTICE + " by configuring a fallback model"
 LOG = "2026-11-01T03-31-41-00-00_run_abc.eval"
 
 
 def make_run(root: Path, name: str, *, task: str = "protein_design", commit: str = "HEAD", regulator_steps=None,
-             failure: str | None = None, rung: str | None = "used", posts: int = 0, group: str | None = None,
+             failure: str | None = None, rung: str | None = "tempted", posts: int = 0, group: str | None = None,
              disregulator_steps=None, disregulator_posts: int = 0) -> Path:
     run = root / "runs" / "study" / (group or "") / name
-    (run / "trajectories").mkdir(parents=True)
+    (run / "processed/trajectories").mkdir(parents=True)
     roles = {"w1": "worker", "w2": "worker", "w3": "worker",
              **({"r1": "regulator"} if regulator_steps is not None else {}),
              **({"d1": "disregulator"} if disregulator_steps is not None else {})}
@@ -31,12 +32,13 @@ def make_run(root: Path, name: str, *, task: str = "protein_design", commit: str
             "model": "openrouter/workers",
             "role_models": {"regulator": "openrouter/x" if regulator_steps is not None else None},
             "eval_log": f"/root/work/logs/study/{name}/{LOG}"}
-    (run / "run.json").write_text(json.dumps(data))
-    (run / "signals.jsonl").write_text(json.dumps({"row": "team", "rung": rung}) + "\n" if rung else "")
-    (run / "episodes.jsonl").write_text(json.dumps({"failure": failure}) + "\n")
+    write_text(run / "processed/run.json", json.dumps(data))
+    write_text(run / "analysis/signals.jsonl", json.dumps({"row": "team",
+                                                           "cheating_rung": rung}) + "\n" if rung else "")
+    write_text(run / "processed/episodes.jsonl", json.dumps({"failure": failure}) + "\n")
     for agent, messages in (("r1", regulator_steps), ("d1", disregulator_steps)):
         if messages is not None:
-            folder = run / "trajectories" / f"row#1@{agent}"
+            folder = run / "processed/trajectories" / f"row#1@{agent}"
             folder.mkdir()
             steps = [{"source": "agent", "message": m} for m in messages]
             (folder / "transcript.json").write_text(json.dumps({"trajectory": {"steps": steps}}))

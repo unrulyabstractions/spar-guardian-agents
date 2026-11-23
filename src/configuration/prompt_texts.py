@@ -1,12 +1,14 @@
 """The system prompt texts that depend on a setting.
 
 These helpers build the openmath board system prompt, the SWE board fields, what submit says and what it says is
-missing, the bullets of the tools that end an agent's work and the sentence on rounds. Each one reads its text from
-prompts.yaml and chooses by the run's SwarmConfig and by whether the agent's system prompt tells it of its team
-(`told`, Benchmark.tells_team): an agent not told never reads of a teammate.
+missing, the bullets of the tools that end an agent's work, the facts block that ends every first message
+(with_facts) and the values of the parameters a system prompt states with no number (first_value, submit_value). The
+rounds' rules in the system prompt name the agent's board calls, so they live with the board (src/swarm/board.py
+round_rules). Each one reads its text from prompts.yaml and chooses by the run's SwarmConfig and by whether the
+agent's system prompt tells it of its team (`told`, Benchmark.tells_team): an agent not told never reads of a teammate.
 
     prompt = board_system_prompt(config, "k7q2m", config.names)
-    text = submit_text("swe", config.submit_kind, config.submit_delay_rounds, {}, told=True)
+    text = submit_text(config.submit_kind, config.submit_delay_rounds, told=True)
     lines = ending_lines(config, "worker", tool_line("submit", text), told=True)
 """
 from __future__ import annotations
@@ -16,19 +18,20 @@ from src.configuration.swarm_config import SwarmConfig
 
 
 def board_system_prompt(config: SwarmConfig, name: str, names: list[str]) -> str | None:
-    """The openmath system prompt of one agent of a board, before any role text, or None for no prompt of ours:
-    prompts.yaml `team` when knows_team, then `board` when mention_board, a blank line apart. A lone agent has
-    none."""
-    others = [a for a in names if a != name]
-    if name not in names or not others:
+    """The system prompt of one agent of a board, before any role text, or None for no prompt of ours: prompts.yaml
+    `team` when knows_team. It names no peer: peers are announced as they enter (turn_rules presence). The board is no
+    sentence of it: it is a bullet of the tool list (board_line). A lone agent has none."""
+    if name not in names or len(names) < 2 or not config.knows_team:
         return None
-    prompts = settings.load_prompts()
-    parts = []
-    if config.knows_team:
-        parts.append(prompts["team"].format(name=name, others=" and ".join(others), n=len(names)))
-    if config.mention_board:
-        parts.append(prompts["board"])
-    return "\n\n".join(parts) or None
+    return settings.load_prompts()["team"].format(name=name)
+
+
+def board_line(config: SwarmConfig, name: str, names: list[str]) -> str | None:
+    """The board's tool bullet for one agent of a board when mention_board is on (prompts.yaml `board`), listed with
+    the other tools' bullets; None for a lone agent or with mention_board off."""
+    if name not in names or len(names) < 2 or not config.mention_board:
+        return None
+    return settings.load_prompts()["board"]
 
 
 def opening(config: SwarmConfig, name: str, names: list[str]) -> str:
@@ -41,14 +44,9 @@ def opening(config: SwarmConfig, name: str, names: list[str]) -> str:
 def swe_board_fields(config: SwarmConfig) -> dict:
     """The placeholders of prompts.yaml swe.system_shared that depend on the board settings.
 
-    board_paragraph: the "Team chat" paragraph with its two leading newlines, and board_tool_line: the tool bullet
-    for the board with its leading newline, both "" without mention_board, so the tool list stays the only hint of
-    the board. turns: the last line, on rounds (prompts.yaml rounds.told)."""
-    prompts = settings.load_prompts()
-    swe = prompts["swe"]
-    return {"board_paragraph": swe["board_paragraph"] if config.mention_board else "",
-            "board_tool_line": swe["board_tool_line"] if config.mention_board else "",
-            "turns": prompts["rounds"]["told"]}
+    board_tool_line: the tool bullet for the board with its leading newline, "" without mention_board."""
+    swe = settings.load_prompts()["swe"]
+    return {"board_tool_line": swe["board_tool_line"] if config.mention_board else ""}
 
 
 def _pick(entry: str | dict, kind: str) -> str:
@@ -61,17 +59,36 @@ def rounds_text(delay: int) -> str:
     return f"{delay} round{'' if delay == 1 else 's'}"
 
 
-def submit_text(domain: str, kind: str, delay: int, values: dict[str, str], told: bool) -> str:
-    """What submit does for an agent of this kind (SwarmConfig.submit_kind) and what counts in the domain (its
-    Benchmark.key), from prompts.yaml submit; values fill the domain's placeholders. A team's text says when the run
-    ends: when the current round ends for delay 0, else delay rounds after it. An agent not told of its team gets
-    the `untold` texts."""
+def submit_text(kind: str, delay: int, told: bool) -> str:
+    """What submit does for an agent of this kind (SwarmConfig.submit_kind), from prompts.yaml submit, with no task
+    detail: what counts is counts_text, in the first message. A team's text says when the run ends: when the current
+    round ends for delay 0, else a set number of rounds after it, with no number (the number is submit_value, in the
+    first message). An agent not told of its team gets the `untold` texts."""
     texts = settings.load_prompts()["submit"]
-    ends = texts["ends"]["now"] if delay == 0 else \
-        texts["ends"]["later" if told else "later_untold"].format(rounds=rounds_text(delay))
+    ends = texts["ends"]["now"] if delay == 0 else texts["ends"]["later" if told else "later_untold"]
     text = texts[kind] if told or kind == "lone" else texts["untold"][kind]
-    return text.format(ends=ends, counts=_pick(texts["counts"][domain], kind).format(**values),
-                       ready=texts["ready"].get(domain, "").format(**values))
+    return text.format(ends=ends)
+
+
+def counts_text(domain: str, kind: str, values: dict[str, str]) -> str:
+    """What counts at a submit in the domain (its Benchmark.key), for an agent of this kind, for the first message
+    (prompts.yaml submit.counted); values fill the domain's placeholders."""
+    texts = settings.load_prompts()["submit"]
+    return texts["counted"].format(counts=_pick(texts["counts"][domain], kind).format(**values),
+                                   ready=texts["ready"].get(domain, "").format(**values))
+
+
+def overseen_counts_text(domain: str, kind: str, values: dict[str, str]) -> str:
+    """What counts when a regulator's teammates hand in their work (prompts.yaml roles.regulator_counts), for a team of
+    this kind (SwarmConfig.submit_kind): the team's counts text, or each teammate's own (submit.counts_teammate where
+    the domain has one); values fill the domain's placeholders."""
+    prompts = settings.load_prompts()
+    submit = prompts["submit"]
+    team = kind == "team"
+    entry = submit["counts"][domain] if team or domain not in submit["counts_teammate"] \
+        else submit["counts_teammate"][domain]
+    return prompts["roles"]["regulator_counts"]["team" if team else "solo"].format(
+        counts=_pick(entry, kind).format(**values))
 
 
 def missing_text(domain: str, kind: str, values: dict[str, str]) -> str:
@@ -96,7 +113,7 @@ def stop_text(told: bool) -> str:
 
 
 def ending_lines(config: SwarmConfig, role: str, submit_line: str, told: bool) -> list[str]:
-    """The bullets of the tools that end an agent's work, as an agent of this hidden role holds them: submit_line
+    """The bullets of the tools that end an agent's work, as an agent of this role holds them: submit_line
     (Benchmark.submit_line) when it holds submit, then stop_working's when it holds that."""
     lines = [submit_line] if config.holds_submit(role) else []
     if config.holds_stop_working(role):
@@ -104,9 +121,50 @@ def ending_lines(config: SwarmConfig, role: str, submit_line: str, told: bool) -
     return lines
 
 
-def rounds_line(config: SwarmConfig, told: bool) -> str | None:
-    """What a round is (prompts.yaml rounds), for the agents of a shared_task team whose submit ends the run some
-    rounds on, since its texts and the board's notice count rounds; None otherwise."""
-    if not (config.gives_submit and config.submit_kind == "team"):
+def first_value(name: str, **values) -> str:
+    """One parameter's value for the first message (prompts.yaml first_values), the number a system prompt leaves
+    out."""
+    return settings.load_prompts()["first_values"][name].format(**values)
+
+
+def submit_value(config: SwarmConfig) -> str | None:
+    """When a team's hand-in ends the run, for an agent whose system prompt says a set number of rounds after it: the
+    number (first_values.submit). None when a submit hands in no team's work or ends the run with its round."""
+    if config.submit_kind != "team" or config.submit_delay_rounds == 0:
         return None
-    return settings.load_prompts()["rounds"]["told" if told else "untold"]
+    return first_value("submit", rounds=rounds_text(config.submit_delay_rounds))
+
+
+def counted(n: int | float, noun: str) -> str:
+    """A count in words: "1 round", "30 rounds", "1 tool call"; noun is the singular."""
+    return f"{n:g} {noun}{'' if n == 1 else 's'}"
+
+
+def facts_block(facts: list[str]) -> str:
+    """The run's facts as the last paragraph of a first message: prompts.yaml `facts`, then one labelled line per fact
+    ("- What counts when you submit: ...")."""
+    return "\n".join([settings.load_prompts()["facts"], *(f"- {fact}" for fact in facts)])
+
+
+def split_facts(message: str) -> tuple[str, list[str]]:
+    """A first message without its facts block, and the block's facts (facts_block), [] when it has none."""
+    heading = f"\n\n{settings.load_prompts()['facts']}\n"
+    cut = message.rfind(heading)
+    if cut < 0:
+        return message, []
+    lines = message[cut + len(heading):].strip().splitlines()
+    return message[:cut], [line[2:] for line in lines if line.startswith("- ")]
+
+
+def with_facts(message: str, facts: list[str] | None = None, note: str | None = None) -> str:
+    """A first message in its shape: the task, then the note on a paragraph of its own, then one facts block, last,
+    with the facts it held and these after them, none twice."""
+    body, held = split_facts(message)
+    merged = list(dict.fromkeys([*held, *(f for f in facts or [] if f)]))
+    parts = [body.strip("\n"), note.strip() if note else None, facts_block(merged) if merged else None]
+    return "\n\n".join(p for p in parts if p) + "\n"
+
+
+def joined(names: list[str]) -> str:
+    """Names in a sentence: "a", "a and b", "a, b and c"."""
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"

@@ -119,7 +119,7 @@ def test_agent_spec_names_the_runs_exploit_and_its_branches():
     run = load_run("riemann_minimal")
     assert "agent-014, agent-022" in exploit_locations(run)
     context = flat(agent_spec(load_spec(SPEC_PATH), run, "a02").context)
-    assert "hidden role is worker" in context and "Riemann.zip on agent-014" in context
+    assert "whose role is worker" in context and "Riemann.zip on agent-014" in context
     for key in ("goal", "prior_work", "protected"):
         assert flat(settings.load_instruction_levels()["vars"]["openmath"][key]) in context, key
     assert "verify_subset" not in context and "the team works on one problem" in context

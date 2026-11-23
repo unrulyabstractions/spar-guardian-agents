@@ -13,15 +13,19 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
 from src.configuration import settings
+from src.utils import progress
 from tests.smoke import LOGS, STAMP_VARIABLE, invocation_stamp
 
-NOT_SUITES = {"__init__", "access_load", "all_suites", "common"}      # access_load fills the machine by itself
+# access_load fills the machine by itself; replay_swe plays back a stored run instead of running a task
+NOT_SUITES = {"__init__", "access_load", "all_suites", "common", "replay_swe"}
 SUITES = sorted(path.stem for path in Path(__file__).parent.glob("*.py") if path.stem not in NOT_SUITES)
 NAME = "smoke_all"
 """The combined run's folder under logs/study_smoke/."""
@@ -59,11 +63,19 @@ def run_suite(name: str, command: list[str], logs: Path, env: dict[str, str] | N
                    sum(line.startswith("[FAIL]") for line in lines), (time.monotonic() - started) / 60, log)
 
 
-def run_all(commands: dict[str, list[str]], logs: Path, env: dict[str, str] | None = None) -> list[Outcome]:
-    """Run every command at once under `env` and wait for the last one."""
+def run_all(commands: dict[str, list[str]], logs: Path, env: dict[str, str] | None = None,
+            finished: Callable[[Outcome], None] | None = None) -> list[Outcome]:
+    """Run every command at once under `env` and wait for the last one; `finished` hears of each as it ends."""
     logs.mkdir(parents=True, exist_ok=True)
+
+    def one(item: tuple[str, list[str]]) -> Outcome:
+        outcome = run_suite(*item, logs, env)
+        if finished:
+            finished(outcome)
+        return outcome
+
     with ThreadPoolExecutor(max_workers=len(commands)) as pool:
-        return list(pool.map(lambda item: run_suite(*item, logs, env), commands.items()))
+        return list(pool.map(one, commands.items()))
 
 
 def summary(outcomes: list[Outcome]) -> str:
@@ -77,11 +89,26 @@ def main() -> int:
     """Every suite at once under one stamp: their outputs in logs/study_smoke/smoke_all/<stamp>/."""
     stamp = invocation_stamp()
     logs = LOGS / NAME / stamp
-    print(f"== {len(SUITES)} suites at once, stamp {stamp}, logs under {logs}", flush=True)
+    progress.step(f"Run {len(SUITES)} smoke suites at once")
+    progress.detail("stamp", stamp)
+    progress.detail("logs", progress.short(logs))
     commands = {name: [sys.executable, "-m", f"tests.smoke.{name}"] for name in SUITES}
-    outcomes = run_all(commands, logs, {**os.environ, STAMP_VARIABLE: stamp})
-    print(summary(outcomes))
-    return 0 if all(o.ok for o in outcomes) else 1
+    lock = threading.Lock()
+    with progress.Counter(len(SUITES), "finished", "suites") as count:
+        def finished(o: Outcome) -> None:
+            with lock:
+                count.log(f"{o.suite:<16} {'PASS' if o.ok else 'FAIL'}  {o.passed} passed, {o.failed} failed, "
+                          f"{o.minutes:.1f} min")
+                count.tick()
+        outcomes = run_all(commands, logs, {**os.environ, STAMP_VARIABLE: stamp}, finished)
+    progress.step("Summary")
+    progress.detail(summary(outcomes))
+    passed = sum(o.ok for o in outcomes)
+    if passed < len(outcomes):
+        progress.failed(f"{passed} of {len(outcomes)} suites passed; logs in {progress.short(logs)}")
+        return 1
+    progress.done(f"{passed} of {len(outcomes)} suites passed", out=progress.short(logs))
+    return 0
 
 
 if __name__ == "__main__":

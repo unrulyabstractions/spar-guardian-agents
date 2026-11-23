@@ -40,8 +40,9 @@ rehearsal takes no share. A box that held no cell run belongs to no cell: the re
 count it.
 
 Whole and valid are src.measures.run_validity's, of the run, never of an attempt. Nothing here writes. study_table.py
-states study_exploration_1, and study_exploration_0 reuses its run names, so the readout refuses any other study. It
-refuses a checkout without runs/boxes.json, runs/<study> or logs/<study>, so missing data never reads as $0.
+states ian_baseline_explorations_1, and ian_baseline_explorations_0 reuses its run names, so the readout refuses any
+other study. It refuses a checkout without runs/boxes.json, runs/<study> or logs/<study>, so missing data never reads as
+$0.
 """
 from __future__ import annotations
 
@@ -54,7 +55,7 @@ from pathlib import Path
 from scripts.box.fleet_layout import BOXES, REGISTRY, REGULATORS, REMOTE_REPO, ROOT, cells, run_name
 from scripts.box.study_table import STAGES, TABLE_STUDY, stage_boxes
 from src.configuration import settings
-from src.measures.run_directory import ATTEMPT_FOLDER, ATTEMPTS, GROUPS, find_run, mirrored
+from src.measures.run_directory import ATTEMPT_FOLDER, ATTEMPTS, GROUPS, RunDir, find_run, mirrored
 from src.measures.run_directory import run_name as own_name
 from src.measures.run_validity import MOCK, validity
 from src.utils.json_files import read_json, read_jsonl
@@ -155,18 +156,18 @@ def model_cost(run_dir: Path, log_dir: Path | None) -> tuple[float, list[str]]:
     """(what the provider billed for the run's agents, why that falls short of what the run's models cost). A call
     counts as billed when the export kept its billed cost; the ledger counts every call and the errored ones. The
     export's own ledger says whether it is complete, and why not."""
-    run = read_json(run_dir / "run.json")
+    run = read_json(RunDir(run_dir).file("run.json"))
     if run is None:
         return 0.0, [NO_EXPORT]
     usd, short, errored, other = 0.0, [], 0, 0
-    episodes = read_jsonl(run_dir / "episodes.jsonl")
+    episodes = RunDir(run_dir).episodes()
     if not episodes:
         short.append(NO_EPISODES)
     for episode in episodes:
         usage, ledger = episode.get("usage") or {}, episode.get("ledger") or {}
         usd += usage.get("billed_usd") or 0.0
         if ledger.get("calls") is None:
-            short.append(f"agent {episode.get('orbit_agent')} {NO_LEDGER}")
+            short.append(f"agent {episode.get('agent')} {NO_LEDGER}")
             continue
         unbilled = max(0, ledger["calls"] - (usage.get("billed_calls") or 0))
         failed = min(unbilled, ledger.get("errored") or 0)
@@ -236,8 +237,8 @@ def readout(root: Path = settings.ROOT, study: str = TABLE_STUDY, stage: str | N
             now: datetime | None = None) -> dict:
     """Every cell with a run (of one stage, or all), each with its runs; the boxes of those stages; the totals."""
     if study != TABLE_STUDY:
-        raise ValueError(f"study_table.py states {TABLE_STUDY}, not {study}; study_exploration_0 reuses its run names, "
-                         f"so another study's runs would land in the wrong cells")
+        raise ValueError(f"study_table.py states {TABLE_STUDY}, not {study}; ian_baseline_explorations_0 reuses its "
+                         f"run names, so another study's runs would land in the wrong cells")
     if stage is not None and stage not in STAGES:
         raise ValueError(f"unknown stage {stage!r}; choose one of {list(STAGES)}")
     missing = missing_data(root, study)
@@ -370,7 +371,7 @@ def text(result: dict) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--stage", choices=list(STAGES), help="one stage of study_table.py; every stage by default")
-    parser.add_argument("--study", default=settings.STUDY, help=f"the study to read; only {TABLE_STUDY} has a table")
+    parser.add_argument("--study", default=TABLE_STUDY, help=f"the study to read; only {TABLE_STUDY} has a table")
     parser.add_argument("--root", type=Path, default=settings.ROOT, help="the checkout whose runs/ and logs/ to read")
     parser.add_argument("--json", action="store_true", help="print one JSON document")
     args = parser.parse_args(argv)

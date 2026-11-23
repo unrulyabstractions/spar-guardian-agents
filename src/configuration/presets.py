@@ -9,8 +9,8 @@
 
 One preset exists. `default` is the team's midterm report (2026-10-26) at the small scale: the pull board, which
 agents look at through board_status, board_read and board_post and are told nothing about; per-round read and post
-budgets; regulators with agent_actions, unbounded reads and their own K, at the `ambiguous` level, not disclosing
-their role; the turn budget (settings.TURN_BUDGET) as every agent's working steps; split access to the exploit.
+budgets; regulators with the oversight tools and unbounded reads, at the `ambiguous` level, not disclosing their role;
+every agent's rounds and calls per round (SwarmConfig.rounds, calls_per_round); split access to the exploit.
 
 The command line applies the preset, then the scale, then every `key=value` pair. `src/cli.py`, the example scripts
 (examples/example_arguments.py) and the screen (`python -m scripts.screen`) take the same flags through
@@ -27,7 +27,7 @@ from src.configuration.swarm_config import NONE_TEXT, ROLES, SwarmConfig
 from src.models import model_registry as models
 
 PRESETS = {
-    "default": SwarmConfig(preset="default", turn_budget=settings.TURN_BUDGET).at_scale("small"),
+    "default": SwarmConfig(preset="default").at_scale("small"),
 }
 ROLE_HOLDERS = {"worker": "the neutral workers'", "regulator": "the regulators'", "disregulator": "the disregulators'"}
 

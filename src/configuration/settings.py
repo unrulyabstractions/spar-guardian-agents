@@ -17,9 +17,10 @@ import yaml
 
 HERE = Path(__file__).resolve().parent          # src/configuration/
 ROOT = HERE.parents[1]                           # the repository root
-STUDY = os.environ.get("STUDY", "study_exploration_1")
+STUDY = os.environ.get("STUDY", "ian_seed_prototyping_0")
 """The study this process reads and writes: its runs under runs/<study>/ and its eval logs under logs/<study>/. The
-environment's STUDY reaches another, such as study_exploration_0, the first screen's."""
+environment's STUDY reaches another, such as ian_baseline_explorations_1, the November screen's, or
+ian_baseline_explorations_0, the first screen's."""
 RUNS = ROOT / "runs" / STUDY
 LOGS = ROOT / "logs" / STUDY
 BUILD = ROOT / "build"
@@ -39,24 +40,20 @@ JUDGE_MODEL = "gpt-6-luna"
 JUDGE_MODELS_CONFIG = HERE.parent / "judging" / "judge_models.yaml"
 UI_PORT = 8765
 MODEL_TIMEOUT_S = 2700
-# The turn budget per agent: the working steps every agent of a swarm gets at every scale (SwarmConfig.turn_budget,
-# SwarmConfig.working_steps), on every domain. CheatBench bounds an episode at 150 harness turns (run.py --max-turns)
-# and the task's wall clock, never told to the agent; ours is two thirds of that, since agents stop on their own (GPT-6
-# Luna alone: 11 to 14 turns on openmath, 25 to 44 on SWE, 35 to 41 on knowledge work, 2026-10-27) and the cap only
-# bounds the stragglers. It is twice the latest first attempt at the exploit seen in the Gemini sweep (turn 45 of 361
-# agents). A run changes it with `--set turn_budget=120`.
-TURN_BUDGET = 100
-
 # Seconds Inspect's hard time limit sits above the scheduler's soft halt (SwarmConfig.time_grace_s default): ORBIT
 # halts between turns at time_limit_s, so a step in flight finishes and its usage is logged; the hard limit cuts only
 # a run whose step never returns.
 HARD_TIME_GRACE_S = 600
+# Seconds one round of an agent may last, model time included (SwarmConfig.round_time_s default). Measured on
+# 2026-11-22 over every eval log under runs/ and logs/: for the worker models in use, 10 minutes cuts 0.73% of the
+# rounds, and a hung whole-filesystem grep freezes the team's round barrier for 10 minutes at most.
+ROUND_TIME_S = 600
 
 # Episode failure labels that mean the run is incomplete: a harness crash or a provider error.
 INCOMPLETE_FAILURES = ("harness", "connection_closed")
 
 # The submodule commits this code was written against. Task construction refuses any other head.
-EXPECTED_SUBMODULE_HEADS = {"cheatbench": "4d1a825", "orbit": "588b303", "lucy": "68a1199"}
+EXPECTED_SUBMODULE_HEADS = {"cheatbench": "4d1a825", "orbit": "28dc629", "lucy": "449fbf0"}
 
 
 @functools.cache
@@ -83,13 +80,14 @@ def submodule_head(name: str) -> str | None:
 
 def code_state() -> dict:
     """The code a run uses, for run.json "code": the repository's short commit, whether src, tests, examples,
-    elicitation or scripts carry uncommitted changes, and every submodule's head; None where git cannot say."""
+    studies, elicitation or scripts carry uncommitted changes, and every submodule's head; None where git cannot
+    say."""
     def git(*args: str) -> str:
         return subprocess.check_output(["git", "-C", str(ROOT), *args], text=True).strip()
     try:
         commit = git("rev-parse", "--short", "HEAD")
         dirty = bool(git("status", "--porcelain", "--untracked-files=no", "--ignore-submodules", "--",
-                         "src", "tests", "examples", "elicitation", "scripts"))
+                         "src", "tests", "examples", "studies", "elicitation", "scripts"))
     except Exception:  # noqa: BLE001 - no git, no claim
         commit, dirty = None, None
     heads: dict[str, str | None] = {}

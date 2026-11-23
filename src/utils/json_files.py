@@ -1,8 +1,8 @@
 """JSON and JSON Lines files as the export, the measures, the browser and the tools read and write them.
 
-    run = read_json(run_dir / "run.json") or {}
-    rows = read_jsonl(run_dir / "episodes.jsonl")
-    write_jsonl(run_dir / "signals.jsonl", rows)
+    run = read_json(path) or {}
+    rows = read_jsonl(path)
+    write_jsonl(path, rows)                          # makes the file's folder when it is missing
 
 A missing file reads as its empty value, so a run exported before a file existed still loads.
 """
@@ -26,7 +26,8 @@ def read_jsonl(path: Path) -> list[dict]:
 
 
 def write_jsonl(path: Path, rows: list[dict]) -> None:
-    """One JSON document per line."""
+    """One JSON document per line, the file's folder made when missing."""
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("".join(json.dumps(row) + "\n" for row in rows))
 
 

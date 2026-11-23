@@ -15,10 +15,12 @@ tool, the review logs and evaluation.json) and `read` (the pipeline artifact) as
 container. Each agent's tools follow what it holds: review_deliverable goes to the holders of `review`. The access log
 watches the artifact and evaluation.json, which names it.
 
-The access note. When the plan is split, every seat's system prompt ends with the same note on who holds the review
-tool and who holds read access (access_note), in agent IDs and in the Linux group a seat can look up. It names nothing
-the access reaches. A seat that holds nothing, such as a regulator, reads the note and stands in neither list. When
-some seat lacks the tool, the README all seats share adds one sentence that says so (knowledge_sandbox.py).
+The access note. When the plan is split, every seat's system prompt ends with the same note (access_note): not every
+agent holds the same access, the items are the review tool and read access through a Linux group a seat can look up,
+and the first message says who holds what. It names no agent. Every seat's first message then follows the task with
+the holders of each item in agent IDs (first_note). Neither names anything the access reaches. A seat that holds
+nothing, such as a regulator, reads both and stands in neither list. When some seat lacks the tool, the README all
+seats share adds one sentence that says so (knowledge_sandbox.py).
 """
 from __future__ import annotations
 
@@ -62,9 +64,9 @@ SPLIT_DEVIATIONS = [
     "review_logs_and_evaluation_json_readable_by_the_group_review_only_and_the_artifacts_directory_traverse_only",
     "pipeline_artifact_staged_under_a_random_name_so_a_reader_cannot_guess_it",
 ]
-ACCESS_NOTE_DEVIATION = "system_prompt_states_who_holds_the_review_tool_and_who_holds_read_access"
+ACCESS_NOTE_DEVIATION = "first_message_states_who_holds_the_review_tool_and_who_holds_read_access"
 README_DEVIATION = "readme_adds_a_sentence_that_not_everyone_holds_the_review_tool"
-SOLO_DEVIATIONS = [users.PRIVATE_TEMP_DEVIATION, "each_agent_has_its_own_contract_copy_and_candidate_id",
+SOLO_DEVIATIONS = [users.PRIVATE_FILES_DEVIATION, "each_agent_has_its_own_contract_copy_and_candidate_id",
                    "evaluation_json_lists_every_candidate_under_candidate"]
 
 
@@ -111,18 +113,30 @@ class KnowledgeWork(RowBenchmark):
         holders = {a: [REVIEW_TOOL] if "review" in plan.holds[a] else [] for a in plan.agents}
         return roster_tools(plan.agents, seats, task_tools=review_binding(), holders=holders)
 
+    def tells_holders(self, plan: Plan) -> bool:
+        """Whether the seats are told how the access is dealt: the plan is split and the prompts tell the agents of
+        their team, since the holders are teammates."""
+        return plan.split and self.tells_team(plan)
+
     def access_note(self, plan: Plan) -> str | None:
-        """Who holds the review tool and who holds read access (prompts.yaml knowledge_work.access_note), the same text
-        for every seat, or None when the plan is not split or the prompts do not tell the agents of their team, since a
-        note names teammates. A regulator's prompt can call it as it stands: the note takes no seat."""
-        if not (plan.split and self.tells_team(plan)):
+        """That not every seat holds the same access and that the first message lists the items and who holds each
+        (prompts.yaml knowledge_work.access_note), the same text for every seat, or None where tells_holders is false.
+        It names no agent and no item. A regulator's prompt can call it as it stands: the note takes no seat."""
+        if not self.tells_holders(plan):
+            return None
+        return load_prompts()["knowledge_work"]["access_note"]
+
+    def first_note(self, plan: Plan, agent: str) -> str | None:
+        """Who holds the review tool and who holds read access, in agent IDs (prompts.yaml knowledge_work.holders), the
+        same text for every seat, a regulator's included, or None where tells_holders is false."""
+        if not self.tells_holders(plan):
             return None
         texts = load_prompts()["knowledge_work"]
         names = {item: ", ".join(sandbox.holders(plan, item)) or texts["nobody"] for item in sandbox.ITEMS}
-        return texts["access_note"].format(tool=REVIEW_TOOL, group=PIPELINE_GROUP, **names)
+        return texts["holders"].format(tool=REVIEW_TOOL, group=PIPELINE_GROUP, **names)
 
     def system_prompts(self, plan: Plan) -> dict[str, str]:
-        """The base's prompts, then the access note on its own paragraph where there is one."""
+        """The base's prompts, then the access note on its own paragraph where there is one. Neither names a peer."""
         prompts, note = super().system_prompts(plan), self.access_note(plan)
         return {a: f"{prompt}\n\n{note}" for a, prompt in prompts.items()} if note else prompts
 

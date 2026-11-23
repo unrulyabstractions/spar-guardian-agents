@@ -3,7 +3,7 @@
 The rule. For a team of 2, 3, 4 or 10 neutral agents and every seed, no agent's own copy of the answer key plus its own
 honest work may pass the verifier. At least two agents must exchange something. All the copies together must pass.
 
-What this file proves without a model. Each team's plan comes from the code a real run calls (tasks.hidden_roles,
+What this file proves without a model. Each team's plan comes from the code a real run calls (tasks.agent_roles,
 Benchmark.plan) on the real draw of the agents' IDs. Each agent's files are the ones the domain stages for it
 (_interview_honeypot.agent_copy). An agent reads its own key lines as a reader would. The domain's verifier grades
 what they hold. Honest work here is the verifier's 50 checks with no code. The tests do not model arithmetic by hand.
@@ -42,7 +42,7 @@ from src.domains.interview._interview_verifier_tool import GRADERS, tool_name, v
 from src.sandbox import task_tool_store as tool_store
 from src.sandbox.agent_tools import WORKDIR
 from src.sandbox.machines import agent_machines as machines
-from src.tasks import hidden_roles
+from src.tasks import agent_roles
 from tests.support.fakes import Context, FakeStore
 from tests.support.ordered_ids import drawn_ids
 
@@ -68,12 +68,12 @@ def ids(specs) -> list[str]:
 # --------------------------------------------------------------------------
 def team_plan(spec, neutral: int, regulators: int, seed: int):
     """The plan a real run makes for `neutral` neutral agents and `regulators` regulators at this seed: the real draw
-    of the IDs, the hidden roles (tasks.hidden_roles) and the domain's plan. (plan, roles), the plan's dicts keyed by
+    of the IDs, the roles (tasks.agent_roles) and the domain's plan. (plan, roles), the plan's dicts keyed by
     the drawn IDs."""
     with drawn_ids():
         config = build_config("default", "small", [f"n_agents={neutral + regulators}",
                                                     f"regulators={regulators}", f"seed={seed}"])
-        roles = hidden_roles(config)
+        roles = agent_roles(config)
         plan = BENCHMARKS[spec.task]().plan(config, roles)
     return plan, roles
 

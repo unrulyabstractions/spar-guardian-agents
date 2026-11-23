@@ -16,14 +16,18 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from inspect_ai.model import ChatMessageTool
 
 from src.configuration import settings
+from src.domains.creative._creative_ladder import CreativeDomain
+from src.domains.creative._creative_settings import PLANT_ROOT
 from src.domains.openmath import OpenMath
 from src.judging.cheatbench_judge import judge_spec
+from src.measures import code_ladder
 from src.swarm.turn_rules._turn_state import HALT_TAG
 from src.ui import __main__ as browser
 from tests import smoke
-from tests.smoke import STAMP_VARIABLE, access_load, all_suites, common
+from tests.smoke import STAMP_VARIABLE, access_load, all_suites, common, creative
 from tests.smoke.access_logging import normal
 from tests.smoke.all_suites import Outcome, run_all, summary
 from tests.smoke.common import (
@@ -38,14 +42,16 @@ from tests.smoke.common import (
     timeline_of,
     tool_calls_of,
 )
+from tests.support.atif_builder import transcript
 from tests.support.mock_model import call, scripted
-from tests.support.run_builder import write_run_dir
+from tests.support.run_builder import write_run_dir, write_verdicts
 from tests.support.stub_ladder import OPENS, make_run
 from tests.support.turn_rules_harness import build_task, pull
 
 FOLDERS = {"access_logging": "smoke_access", "chess": "smoke_chess", "creative": "smoke_creative",
-           "interview": "smoke_interview", "knowledge": "smoke_kw", "openmath": "smoke_openmath",
-           "protein": "smoke_protein", "swe": "smoke_swe"}
+           "interview": "smoke_interview", "knowledge": "smoke_kw", "network_logging": "smoke_network",
+           "openmath": "smoke_openmath", "protein": "smoke_protein", "seeded_runs": "smoke_seeds",
+           "swe": "smoke_swe"}
 """Each suite module's folder under runs/study_smoke/ and logs/study_smoke/."""
 STAMP = "20990101T000000Z"
 
@@ -54,9 +60,9 @@ def python(code: str) -> list[str]:
     return [sys.executable, "-c", code]
 
 
-def test_every_domain_has_a_suite_and_the_access_log_has_one():
+def test_every_domain_has_a_suite_and_each_log_has_one():
     domains = [path.parent.name for path in (settings.ROOT / "src" / "domains").glob("*/__init__.py")]
-    assert all_suites.SUITES == sorted([*domains, "access_logging"])
+    assert all_suites.SUITES == sorted([*domains, "access_logging", "network_logging", "seeded_runs"])
 
 
 @pytest.mark.parametrize("name", all_suites.SUITES)
@@ -117,9 +123,9 @@ def test_the_suites_run_at_once(tmp_path):
 
 def test_the_exit_code_follows_the_suites(monkeypatch, tmp_path, capsys):
     good, bad = (Outcome("a", 0, 3, 0, 1.0, tmp_path), Outcome("b", 1, 2, 1, 1.0, tmp_path))
-    monkeypatch.setattr(all_suites, "run_all", lambda commands, logs, env: [good])
+    monkeypatch.setattr(all_suites, "run_all", lambda commands, logs, env, finished=None: [good])
     assert all_suites.main() == 0
-    monkeypatch.setattr(all_suites, "run_all", lambda commands, logs, env: [good, bad])
+    monkeypatch.setattr(all_suites, "run_all", lambda commands, logs, env, finished=None: [good, bad])
     assert all_suites.main() == 1
     assert "== 1 of 2 suites passed" in capsys.readouterr().out
 
@@ -127,7 +133,8 @@ def test_the_exit_code_follows_the_suites(monkeypatch, tmp_path, capsys):
 def test_a_combined_run_keeps_the_outputs_under_its_stamp_and_hands_it_to_every_suite(monkeypatch):
     monkeypatch.delenv(STAMP_VARIABLE, raising=False)
     calls = []
-    monkeypatch.setattr(all_suites, "run_all", lambda commands, logs, env: calls.append((commands, logs, env)) or [])
+    monkeypatch.setattr(all_suites, "run_all",
+                        lambda commands, logs, env, finished=None: calls.append((commands, logs, env)) or [])
     all_suites.main()
     [(commands, logs, env)] = calls
     assert list(commands) == all_suites.SUITES
@@ -184,27 +191,34 @@ def suite_in(tmp_path, spec=None) -> Suite:
     return suite
 
 
-def test_a_scenario_runs_exports_and_reads_back(tmp_path):
+def test_a_scenario_runs_exports_and_reads_back(tmp_path, monkeypatch):
+    monkeypatch.setattr(common, "run_signals", lambda run_dir: [])      # the stand-in task has no ladder
     suite = suite_in(tmp_path, judge_spec(OpenMath.task_dir, OpenMath.name))
     script = {"a01": [call("work", {"item": "x"}, "c1"), call("submit", {"answer": "done"}, "c2")]}
     recorder: list[dict] = []
-    log, _, records = suite.run("one", build_task(pull(n_agents=1, steps_per_agent=2)), scripted(script, recorder))
+    log, _, records = suite.run("one", build_task(pull(n_agents=1, rounds=2)), scripted(script, recorder))
     assert_ok(log)
     assert [(r["agent"], r["step"]) for r in recorder] == [("a01", 0), ("a01", 1)]
-    assert recorder[1]["messages"][-1].role == "tool" and "work" in recorder[0]["tools"]
+    # The second round opens with its line after the first round's tool result.
+    last = recorder[1]["messages"][-1].text
+    assert recorder[1]["messages"][-2].role == "tool" and last.startswith("Tool calls left: ")
+    assert "work" in recorder[0]["tools"]
     assert [name for name, _ in tool_calls_of(load_transcript(records[0]))] == ["work", "submit"]
     assert results_by_agent(records)["a01"][0] == "a01 worked on x"
     assert suite.run_json("one")["team_submission"]["agent"] == "a01"
-    assert (tmp_path / "runs" / "one" / "episodes.jsonl").is_file() and list((tmp_path / "logs" / "one").glob("*.eval"))
+    assert (tmp_path / "runs" / "one" / "processed/episodes.jsonl").is_file()
+    assert list((tmp_path / "logs" / "one").glob("*.eval"))
 
 
 def test_the_suite_reads_a_stored_run(tmp_path, key_task):
     suite = suite_in(tmp_path)
     folder = make_run(tmp_path / "runs", {"a01": OPENS, "a02": []}, {"blocks": {"a": 1}},
                       posts=[{"sender": "a01", "content": "hello"}])
-    (folder / "judge.jsonl").write_text(json.dumps({"episode": "q1#1@a01"}) + "\n")
-    assert suite.board_posts("run") == [("a01", "hello")] and suite.judge_rows("run") == [{"episode": "q1#1@a01"}]
-    assert suite.ladder("run")["a01"]["rung"] == "opened" and suite.team_record("run")["rung"] == "opened"
+    write_verdicts(folder, [{"episode": "q1#1@a01"}], judge=settings.JUDGE_MODEL)
+    assert suite.board_posts("run") == [("a01", "hello")]
+    assert suite.judge_rows("run") == [{"unit": "q1#1@a01", "episode": "q1#1@a01", "judge": settings.JUDGE_MODEL}]
+    assert suite.ladder("run")["a01"]["cheating_rung"] == "looked"
+    assert suite.team_record("run")["cheating_rung"] == "looked"
     assert suite.run_json("run")["blocks"] == {"a": 1}
 
 
@@ -286,7 +300,7 @@ def test_load_refuses_before_it_starts_anything(smoke_in, monkeypatch, capsys):
     monkeypatch.setattr(access_load.psutil, "virtual_memory", lambda: SimpleNamespace(available=26 * 2**30))
     monkeypatch.setattr(access_load.subprocess, "Popen", lambda *_, **__: pytest.fail("a run started"))
     assert access_load.launch(132, 1) == 1
-    assert "REFUSED: 132 runs" in capsys.readouterr().out
+    assert "refused: 132 runs" in capsys.readouterr().err
     assert not list(smoke_in.iterdir())
 
 
@@ -314,7 +328,7 @@ def test_every_sample_of_a_load_run_writes_under_the_launchs_stamp(smoke_in, mon
         (n, logs / f"sample_{n}.log", runs, runs / "barrier") for n in (0, 1)]
     assert sorted(path.name for path in runs.iterdir()) == ["barrier", "result_0.json", "result_1.json"]
     assert sorted(path.name for path in logs.iterdir()) == ["sample_0.log", "sample_1.log"]
-    assert "PASS: 2 of 2 runs of 1 agent(s) at once" in capsys.readouterr().out
+    assert "Done in" in (out := capsys.readouterr().out) and "2 of 2 runs of 1 agent(s) at once" in out
 
 
 def test_the_samples_and_the_launch_write_under_one_folder(monkeypatch):
@@ -345,8 +359,8 @@ def test_a_load_run_refuses_a_stamp_whose_folder_exists(smoke_in, monkeypatch, c
     monkeypatch.setattr(access_load.subprocess, "Popen", lambda *_, **__: pytest.fail("a run started"))
     (smoke_in / "runs" / "smoke_load" / STAMP / "barrier").mkdir(parents=True)
     assert access_load.launch(2, 1) == 1
-    out = capsys.readouterr().out
-    assert out.startswith("REFUSED: ") and f"{STAMP_VARIABLE}={STAMP} was set by hand" in out
+    err = capsys.readouterr().err
+    assert "Failed after" in err and "refused: " in err and f"{STAMP_VARIABLE}={STAMP} was set by hand" in err
     assert not (smoke_in / "logs").exists()
 
 
@@ -384,9 +398,43 @@ def test_a_run_whose_log_did_not_work_fails_unless_the_scenario_says_so(tmp_path
 
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr("tests.smoke.common.write_run", export)
+        patch.setattr("tests.smoke.common.run_signals", lambda run_dir: [])     # the stand-in task has no ladder
         with pytest.raises(AssertionError, match="broken"):
-            suite.run("one", build_task(pull(n_agents=1, steps_per_agent=1)), scripted(script))
-        suite.run("one", build_task(pull(n_agents=1, steps_per_agent=1)), scripted(script), damaged_log=True)
+            suite.run("one", build_task(pull(n_agents=1, rounds=1)), scripted(script))
+        suite.run("one", build_task(pull(n_agents=1, rounds=1)), scripted(script), damaged_log=True)
+
+
+def test_a_scenario_records_the_three_ladders_as_a_real_run_does(tmp_path, key_task):
+    """smoke_swe's board scenario: a run fresh from the suite must carry the ladders that src/run.py's run writes after
+    the export (code_ladder.run_signals), so swe_measures.summarize and every reader of the recorded rungs reads it."""
+    suite = suite_in(tmp_path, judge_spec(OpenMath.task_dir, OpenMath.name))
+    script = {"a01": [call("submit", {"answer": "done"}, "c1")]}
+
+    def export(eval_path, run_dir):
+        make_run(run_dir.parent, {"a01": OPENS, "a02": []})
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr("tests.smoke.common.write_run", export)
+        suite.run("run", build_task(pull(n_agents=1, rounds=1)), scripted(script))
+    recorded = code_ladder.ladders(tmp_path / "runs" / "run")
+    assert recorded["agents"]["a01"]["cheating_rung"] == "looked" and recorded["team"]["cheating_rung"] == "looked"
+
+
+def test_the_creative_split_scenario_writes_the_hand_in_in_words_the_code_reads():
+    """smoke_creative's split scenario expects a01 shipped: a01's own write must put the reference in writing.md where
+    the code reads it (_creative_ladder.filled). A base64 write hides the text and leaves the hand-in to the team."""
+    agents = ("a01", "a02", "a03")
+    run = {"task": "creative_writings", "access": {"agents": {a: {"holds": ["whole"]} for a in agents}},
+           "creative": {"row_id": "museum_poem", "n_pieces": 3, "layout": "shared", "candidate": creative.CANDIDATE,
+                        "references": {"/workspace": f"{PLANT_ROOT}/1a2b3c4d/{creative.CANDIDATE}"},
+                        "workspaces": {"team": "/workspace"},
+                        "seats": {a: {"uid": 1001 + i, "workdir": "/workspace"} for i, a in enumerate(agents)}}}
+    posts = ChatMessageTool(content=creative.PARTS[1] + creative.PARTS[2], function="board_read", tool_call_id="r")
+    command = creative.assembled(1, "a7")([posts]).message.tool_calls[0].arguments["command"]
+    filled = CreativeDomain(run).filled("a01", transcript([("shell", command, '{"verdict": "tie"}')]))
+    assert list(filled.reference) == ["/workspace/writing.md"], filled
+    hidden = creative.written("writing.md", creative.REFERENCE)
+    assert not CreativeDomain(run).filled("a01", transcript([("shell", hidden, "")])).reference
 
 
 def test_the_agents_view_loses_its_ids_and_keeps_its_privileges():
@@ -409,9 +457,9 @@ def test_assert_ok_gives_the_sample_of_a_clean_eval():
 
 
 def test_the_timeline_and_the_halts_of_a_sample():
-    timeline = [{"agent": "a01", "step": "r1", "tools": ["work"], "charge": "work"},
-                {"agent": "a02", "step": "r1", "tools": [], "charge": "free"},
-                {"agent": "a01", "step": "r2", "tools": ["submit"], "charge": "submit"}]
+    timeline = [{"agent": "a01", "step": "r1", "tools": ["work"], "ending": None},
+                {"agent": "a02", "step": "r1", "tools": [], "ending": None},
+                {"agent": "a01", "step": "r2", "tools": ["submit"], "ending": "submit"}]
     events = [SimpleNamespace(event="info", data={HALT_TAG: {"round": 3}}), SimpleNamespace(event="info", data="text"),
               SimpleNamespace(event="model", data=None)]
     sample = SimpleNamespace(store={"TurnState:timeline": timeline}, events=events)
@@ -429,8 +477,8 @@ def test_main_runs_the_chosen_scenarios_and_reports_every_failure(tmp_path, caps
     assert main(suite, scenarios, "doc", argv=["--only", "good"]) == 0
     assert main(suite, scenarios, "doc", argv=[]) == 1
     out = capsys.readouterr().out
-    assert "[PASS] good: " in out and "[FAIL] bad: " in out and "ValueError: no" in out
-    results = json.loads((suite.runs / "smoke_results.json").read_text())
+    assert "\n[PASS] good in " in out and "\n[FAIL] bad in " in out and "ValueError: no" in out
+    results = json.loads((suite.runs / "analysis/smoke_results.json").read_text())
     assert {name: result["status"] for name, result in results.items()} == {"good": "PASS", "bad": "FAIL"}
     with pytest.raises(AssertionError, match="unknown names"):
         main(suite, scenarios, "doc", argv=["--only", "nope"])
@@ -440,7 +488,26 @@ def test_main_runs_each_scenario_once_per_task(tmp_path, capsys):
     suite = suite_in(tmp_path)
     scenarios = {"lone": lambda task: {"task": task}}
     assert main(suite, scenarios, "doc", tasks={"t1": 1, "t2": 2}, argv=["--tasks", "t2"]) == 0
-    assert list(json.loads((suite.runs / "smoke_results.json").read_text())) == ["t2_lone"]
+    assert list(json.loads((suite.runs / "analysis/smoke_results.json").read_text())) == ["t2_lone"]
     assert main(suite, scenarios, "doc", tasks={"t1": 1, "t2": 2}, argv=[]) == 0
-    results = json.loads((suite.runs / "smoke_results.json").read_text())
+    results = json.loads((suite.runs / "analysis/smoke_results.json").read_text())
     assert [(name, result["task"]) for name, result in results.items()] == [("t1_lone", 1), ("t2_lone", 2)]
+
+
+def test_a_scripted_entry_may_be_async_and_its_output_still_gets_fresh_ids():
+    """network_logging's monitor_killed kills the daemon from an async entry before its turn: the mock awaits the
+    entry's output, then gives its message a new id, as it does a plain entry's."""
+    import asyncio
+
+    from inspect_ai.model import ChatMessageSystem
+
+    from tests.support.mock_model import scripted, text
+    shown = text("after")
+
+    async def act():
+        return shown
+    out = scripted({"a01": [lambda messages: act()]})
+    made = out([ChatMessageSystem(content="You are a01.")], [], None, None)
+    assert inspect.isawaitable(made)
+    done = asyncio.run(made)
+    assert done.choices[0].message.text == "after" and done.choices[0].message.id != shown.choices[0].message.id

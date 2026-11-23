@@ -1,105 +1,108 @@
-"""A Claude request through OpenRouter asks for automatic caching, through Inspect's real request code down to the bytes
-the OpenAI client would send (a fake server stands in for OpenRouter): whatever its newest message, with a slot left
-among Anthropic's four breakpoints, its routing kept, a tool message's string untouched, nothing for other models, and
-Claude refused until a paid check is recorded."""
+"""Claude's cache marks through OpenRouter, read from the bytes Inspect's real request code sends through the swarm
+provider to a fake OpenRouter: never more than Anthropic's four, on the system prompt, the last tool and the last two
+text blocks of the history, none for other families; and Claude refused until a paid check under the installed Inspect
+is recorded."""
 from __future__ import annotations
 
-import asyncio
-import json
-
-import httpx
-import openai
 import pytest
-from inspect_ai.model import ChatMessageAssistant, ChatMessageSystem, ChatMessageTool, ChatMessageUser, get_model
-from inspect_ai.tool import ToolCall, ToolInfo, ToolParams
+from inspect_ai.model import ChatMessageAssistant, ChatMessageSystem, ChatMessageTool, ChatMessageUser
+from inspect_ai.tool import ToolCall
 
+from scripts.check_anthropic_cache import TOOLS, request_body
 from src.models import model_registry as models
 from src.models import openrouter_anthropic_cache as cache
 
-COMPLETION = {"id": "x", "object": "chat.completion", "created": 0, "model": "m",
-              "choices": [{"index": 0, "message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
-              "usage": {"prompt_tokens": 10, "completion_tokens": 1, "total_tokens": 11}}
-TOOL = ToolInfo(name="board_read", description="Read the board.", parameters=ToolParams())
+CLAUDE = sorted(name for name in models.entries() if cache.is_claude_on_openrouter(name))
+OTHERS = ["gpt-6-luna-openrouter", "deepseek-flash-openrouter", "gemini-4-argon-openrouter"]
 
 
-def sent_body(model_name: str, messages: list, monkeypatch) -> dict:
-    """The JSON body the real request code sends for these messages, read by a fake OpenRouter."""
+def tool_turn(*ids: str, text: str = "") -> list:
+    """An assistant's tool calls (in parallel when several) and their results."""
+    calls = [ToolCall(id=i, function="board_read", arguments={}) for i in ids]
+    return [ChatMessageAssistant(content=text, tool_calls=calls),
+            *(ChatMessageTool(content=f"posts for {i}", tool_call_id=i, function="board_read") for i in ids)]
+
+
+START = [ChatMessageSystem(content="You oversee a team."), ChatMessageUser(content="Begin.")]
+HISTORIES = {
+    "a tool result": [*START, *tool_turn("c1")],
+    "the round line": [*START, *tool_turn("c1"), ChatMessageUser(content="[Round 2 of 10] The board changed.")],
+    "parallel tool results": [*START, *tool_turn("c1"), *tool_turn("c2", "c3", "c4")],
+    "a long run": [*START, *(m for k in range(12) for m in tool_turn(f"c{k}", text=f"Step {k}.")),
+                   ChatMessageUser(content="[Round 3 of 10]"), ChatMessageSystem(content="A second system note."),
+                   *tool_turn("c99")],
+    "an assistant reply": [*START, *tool_turn("c1"), ChatMessageAssistant(content="Done.")],
+}
+
+
+@pytest.fixture(autouse=True)
+def dummy_key(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "dummy")
-    cache.install()
-    bodies: list[dict] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        bodies.append(json.loads(request.content))
-        return httpx.Response(200, json=COMPLETION)
-
-    model = get_model(model_name, memoize=False, **models.model_args(model_name))
-    model.api.client = openai.AsyncOpenAI(api_key="dummy", base_url="https://openrouter.ai/api/v1", max_retries=0,
-                                          http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
-    asyncio.run(model.generate(messages, tools=[TOOL]))
-    assert len(bodies) == 1
-    return bodies[0]
 
 
-def history(newest) -> list:
-    call = ToolCall(id="call_1", function="board_read", arguments={})
-    return [ChatMessageSystem(content="You oversee a team."), ChatMessageUser(content="Begin."),
-            ChatMessageAssistant(content="", tool_calls=[call]),
-            ChatMessageTool(content="posts", tool_call_id="call_1", function="board_read"), newest]
+@pytest.mark.parametrize("ending", HISTORIES)
+@pytest.mark.parametrize("name", CLAUDE)
+def test_a_claude_request_never_carries_more_than_four_cache_marks(name, ending):
+    """Anthropic refuses a fifth mark with HTTP 400 (2026-11-22), so a fifth would end every Claude run."""
+    marks = cache.breakpoints(request_body(name, HISTORIES[ending]))
+    assert len(marks) <= cache.MAX_BREAKPOINTS, marks
 
 
-def markers(body: dict) -> list[tuple[int, str]]:
-    found = [(i, m["role"]) for i, m in enumerate(body["messages"]) if isinstance(m.get("content"), list)
-             for block in m["content"] if isinstance(block, dict) and "cache_control" in block]
-    return found + [(-1, "tool") for tool in body.get("tools") or [] if "cache_control" in tool]
+@pytest.mark.parametrize("name", CLAUDE)
+def test_the_marks_sit_on_the_system_prompt_the_last_tool_and_the_last_two_history_blocks(name):
+    """The mark on the last block writes each call's whole prompt; the one before is the lookback's fallback. Nothing
+    goes top-level, which would make a fifth."""
+    body = request_body(name, HISTORIES["the round line"])   # system, user, assistant (no text), tool, user
+    assert cache.breakpoints(body) == [f"tool {TOOLS[-1].name}", "system 0", "tool 3", "user 4"]
+    assert body["messages"][3]["content"] == [{"type": "text", "text": "posts for c1",
+                                               "cache_control": {"type": "ephemeral"}}]
+    assert body["provider"] == models.routing(models.resolve(name))
 
 
-HAIKU = models.resolve("claude-haiku-5-5-openrouter")
+@pytest.mark.parametrize("ending", HISTORIES)
+def test_a_claude_request_marks_its_last_text_block(ending):
+    body = request_body("claude-haiku-5-5-openrouter", HISTORIES[ending])
+    last = len(body["messages"]) - 1
+    assert f"{body['messages'][last]['role']} {last}" in cache.breakpoints(body)
 
 
-AUTOMATIC = {"type": "ephemeral"}
+@pytest.mark.parametrize("name", OTHERS)
+def test_other_families_get_no_marks_and_their_strings_stay_strings(name):
+    body = request_body(name, HISTORIES["parallel tool results"])
+    assert cache.breakpoints(body) == []
+    assert all(isinstance(m["content"], str) for m in body["messages"] if m["role"] in ("user", "tool", "system"))
 
 
-def test_a_claude_request_ending_in_a_user_message_asks_for_automatic_caching(monkeypatch):
-    body = sent_body(HAIKU, history(ChatMessageUser(content="[Since your last turn] the board changed.")), monkeypatch)
-    assert body["cache_control"] == AUTOMATIC
-    assert body["messages"][-1]["content"] == "[Since your last turn] the board changed."
+def test_claude_through_openrouter_is_refused_until_a_check_under_the_installed_inspect_is_recorded(monkeypatch):
+    opus = "swarm/claude-opus-5-5-openrouter"
+    unproven = {k: v for k, v in models.entry_of("claude-opus-5-5-openrouter").items() if k != "caching_verified"}
 
+    def recorded(value):
+        entry = dict(unproven, caching_verified=value)
+        monkeypatch.setattr(cache.models, "entry_of", lambda name: entry if "claude" in name else unproven)
 
-def test_a_claude_request_ending_in_a_tool_result_asks_too_and_the_result_stays_a_string(monkeypatch):
-    """An agent's newest message is nearly always a tool result, so this is the request that matters."""
-    body = sent_body(HAIKU, history(ChatMessageUser(content="go"))[:-1], monkeypatch)
-    assert body["cache_control"] == AUTOMATIC
-    assert isinstance(body["messages"][-1]["content"], str) and body["messages"][-1]["role"] == "tool"
-
-
-@pytest.mark.parametrize("cut", [0, 1], ids=["user message", "tool result"])
-def test_automatic_caching_leaves_a_breakpoint_free_and_keeps_the_routing(monkeypatch, cut):
-    """Anthropic allows four breakpoints and the automatic one takes a slot, so Inspect's markers may take three."""
-    messages = history(ChatMessageUser(content="go"))
-    body = sent_body(HAIKU, messages[:len(messages) - cut], monkeypatch)
-    assert len(markers(body)) <= 3
-    assert body["provider"] == models.routing(HAIKU)
-
-
-def test_other_models_are_not_asked(monkeypatch):
-    for name in ("gpt-6-luna-openrouter", "deepseek-flash-openrouter", "gemini-4-argon-openrouter"):
-        body = sent_body(models.resolve(name), history(ChatMessageUser(content="go")), monkeypatch)
-        assert "cache_control" not in body and markers(body) == [], name
-
-
-def test_installing_twice_wraps_once():
-    from inspect_ai.model._providers.openrouter import OpenRouterAPI
-
-    cache.install()
-    wrapped = OpenRouterAPI._generate_completion
-    cache.install()
-    assert OpenRouterAPI._generate_completion is wrapped
-
-
-def test_claude_through_openrouter_is_refused_until_a_paid_check_is_recorded(monkeypatch):
+    monkeypatch.setattr(cache.models, "entry_of", lambda name: unproven)
     with pytest.raises(ValueError, match="refused until scripts/check_anthropic_cache.py"):
-        cache.require_proven([models.resolve("gpt-6-luna-openrouter"), "swarm/claude-opus-5-5-openrouter"])
+        cache.require_proven([models.resolve("gpt-6-luna-openrouter"), opus])
     cache.require_proven([models.resolve("gpt-6-luna-openrouter"), "mockllm/model", None])
-    entry = dict(models.entry_of("claude-opus-5-5-openrouter"), caching_verified="2026-11-02")
-    monkeypatch.setattr(cache.models, "entry_of", lambda name: entry)
-    cache.require_proven(["swarm/claude-opus-5-5-openrouter"])
+
+    recorded("2026-11-02")   # the older form, from before the Inspect commit was recorded
+    with pytest.raises(ValueError, match="refused until"):
+        cache.require_proven([opus])
+    recorded({"date": "2026-11-02", "inspect": "c060c201c"})
+    with pytest.raises(ValueError, match=f"names Inspect c060c201c, and Inspect {cache.installed_inspect()} is"):
+        cache.require_proven([opus])
+    recorded({"date": "2026-11-22", "inspect": cache.installed_inspect()})
+    cache.require_proven([opus])
+
+
+def test_every_recorded_check_names_its_date_and_inspect_commit():
+    for name in CLAUDE:
+        verified = models.entries()[name].get("caching_verified")
+        if verified is not None:
+            assert set(verified) == {"date", "inspect"}, name
+
+
+def test_one_commit_abbreviated_to_two_lengths_is_the_same_inspect():
+    assert cache.same_commit("c574b6bf6", "c574b6bf6674e6d5") and cache.same_commit("c574b6bf6674", "c574b6bf6")
+    assert not cache.same_commit("c574b6bf6", "c060c201c") and not cache.same_commit("0.3.292", "0.3.29")

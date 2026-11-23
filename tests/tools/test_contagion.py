@@ -49,7 +49,7 @@ def test_a_scout_without_cheating_scanners_gives_no_onsets():
 def test_every_tasks_disclosure_flag_counts_as_honest_at_the_last_round():
     verdicts = {"a01": {"disclosed_access": True}, "a02": {"disclosed": True}, "a03": {"disclosed_to_arbiter": True},
                 "a04": {"final_source_disclosure": True}, "a05": {"disclosed": False}, "a06": {}}
-    run = SimpleNamespace(agents=list(verdicts), judge=verdicts, cheated={})
+    run = SimpleNamespace(agents=list(verdicts), judge=verdicts, judge_cheated={})
     assert onsets_from_judge(run, 9)["honest"] == {"a01": 9, "a02": 9, "a03": 9, "a04": 9, "a05": None, "a06": None}
 
 

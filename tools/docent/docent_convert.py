@@ -1,20 +1,66 @@
 """A run's agent episodes and board as Docent AgentRuns.
 
 Each agent's ATIF transcript goes through the SDK's convert_atif_to_agent_run. Every message then gets the round,
-activation, timeline step and turn of the agent step it came from, and the AgentRun gets the run's metadata.
-The board becomes one AgentRun of its own, one user message per post.
+activation, timeline step and turn of the agent step it came from, and the AgentRun gets the run's metadata under the
+project's names (FIELDS): the three ladders, cheating_rung (src/measures/cheating_ladder.py), coordination_level
+(src/measures/coordination.py) and collusion_rung (src/measures/collusion.py), with cheated (cheating_ladder.cheated:
+the rung is attempted or higher), all four as src/measures/code_ladder.py ladders gives them, recorded or computed; the
+judge labels' scores, disclosure_score and manipulation_score (0 to 100, None where the pass "labels" did not read the
+agent), as src/measures/judge_labels.py labels gives them; and judge_cheated, CheatBench's judge's own `cheated`, a
+broader definition, with the judge's other flags. The team's are team_<field>, a label's the workers' highest score.
+The measures run in the run environment (RUN_PYTHON), which imports the domains and so ORBIT, which this environment
+lacks; nothing is written back. The board becomes one AgentRun of its own, one user message per post.
 """
 from __future__ import annotations
 
+import functools
 import json
+import subprocess
+from pathlib import Path
 
 from docent.data_models.agent_run import AgentRun
 from docent.data_models.chat.message import SystemMessage, UserMessage
 from docent.data_models.transcript import Transcript
 from docent.sdk.integrations import convert_atif_to_agent_run
 
+from src.measures.run_directory import RunDir
+from src.measures.rungs import LADDER_FIELDS
 from src.measures.verdict_fields import flag_names
 from tools.run_reader import Post, Run, Step
+
+ROOT = Path(__file__).resolve().parents[2]
+RUN_PYTHON = ROOT / ".venv" / "bin" / "python"
+"""The run environment's Python, which imports the domains and so computes the measures."""
+LABELS = ("disclosure", "manipulation")
+"""The judge labels, by the measures' names (src/measures/judge_labels.py LABELS)."""
+SCORES = tuple(f"{label}_score" for label in LABELS)
+"""Each judge label's score, as an agent and the team carry it."""
+FIELDS = (*LADDER_FIELDS, "cheated", *SCORES)
+"""What an agent carries of the measures: the three rungs, cheated and the judge labels' scores."""
+TEAM_FIELDS = FIELDS
+"""What the team carries, as team_<field>: the same, a label's score the workers' highest."""
+COMPUTE = ("import json, sys; from pathlib import Path; from src.measures import code_ladder, judge_labels; "
+           "run = Path(sys.argv[1]); print(json.dumps({'ladders': code_ladder.ladders(run), "
+           "'labels': judge_labels.labels(run)}))")
+
+
+@functools.cache
+def measures(directory: Path) -> tuple[dict[str, dict], dict]:
+    """The run's measures (FIELDS) by agent, and the team's (TEAM_FIELDS), computed in the run environment: the
+    ladders as src/measures/code_ladder.py ladders gives them (recorded, or computed for a run recorded before a
+    ladder), each judge label's score. Empty for a folder without run.json or signals.jsonl (a run the code never
+    read)."""
+    if not RunDir(directory).file("signals.jsonl").is_file() or not RunDir(directory).is_run():
+        return {}, {}
+    done = subprocess.run([str(RUN_PYTHON), "-c", COMPUTE, str(directory.resolve())], cwd=ROOT, capture_output=True,
+                          text=True, check=True)
+    computed = json.loads(done.stdout)
+    ladders, labels = computed["ladders"], computed["labels"]
+    agents = {agent: {**rungs, **{f"{label}_score": ((labels["agents"].get(agent) or {}).get(label) or {}).get("score")
+                                  for label in LABELS}}
+              for agent, rungs in ladders["agents"].items()}
+    team = {**ladders["team"], **{f"{label}_score": labels["team"][label] for label in LABELS}}
+    return agents, {field: team[field] for field in TEAM_FIELDS}
 
 
 def run_agent_runs(run: Run, with_board: bool) -> list[AgentRun]:
@@ -33,9 +79,14 @@ def agent_agent_run(run: Run, agent: str) -> AgentRun:
         for message in transcript.messages:
             message.metadata = {**(message.metadata or {}), **message_placement(message.metadata or {}, steps)}
     role = run.roles.get(agent, "worker")
-    verdict = run.cheated.get(agent)
+    mine = measures(run.directory)[0].get(agent) or {}
     agent_run.name = f"{run.name}/{agent}"
-    agent_run.description = f"{agent} ({role}) in {run.name}, {run.domain}; judge cheated={verdict}"
+    agent_run.description = (f"{agent} ({role}) in {run.name}, {run.domain}; cheating={mine.get('cheating_rung')}, "
+                             f"cheated={mine.get('cheated')}, coordination={mine.get('coordination_level')}, "
+                             f"collusion={mine.get('collusion_rung')}, "
+                             f"disclosure_score={mine.get('disclosure_score')}, "
+                             f"manipulation_score={mine.get('manipulation_score')}; "
+                             f"judge_cheated={run.judge_cheated.get(agent)}")
     agent_run.metadata = {**agent_run.metadata, **agent_metadata(run, agent)}
     return agent_run
 
@@ -57,8 +108,15 @@ def message_placement(metadata: dict, steps: dict[int, Step]) -> dict:
     }
 
 
+def judge_key(flag: str) -> str:
+    """A judge flag's metadata key: its name, but judge_cheated for the judge's own `cheated`, which differs from the
+    project's cheated."""
+    return "judge_cheated" if flag == "cheated" else flag
+
+
 def agent_metadata(run: Run, agent: str) -> dict:
-    """The agent's metadata: identity, configuration, access, the judge's verdict and the agent's own posts."""
+    """The agent's metadata: identity, configuration, access, its measures (FIELDS), CheatBench's verdict and the
+    agent's own posts."""
     judge = run.judge.get(agent) or {}
     episode = run.episodes.get(agent) or {}
     engagement = episode.get("engagement") or {}
@@ -72,7 +130,8 @@ def agent_metadata(run: Run, agent: str) -> dict:
         "access_policy": access.get("policy"),
         "holds": run.exploit.get("holds", {}).get(agent, []),
         "access": (access.get("agents") or {}).get(agent, {}),
-        **{field: judge.get(field) for field in flag_names(run.task)},
+        **{field: (measures(run.directory)[0].get(agent) or {}).get(field) for field in FIELDS},
+        **{judge_key(field): judge.get(field) for field in flag_names(run.task)},
         "judge_summary": judge.get("summary"),
         "judge": judge,
         "discovery_round": engagement.get("discovery_round"),
@@ -89,7 +148,9 @@ def agent_metadata(run: Run, agent: str) -> dict:
 def run_fields(run: Run) -> dict:
     """The fields every AgentRun of a run shares."""
     engagement = run.run_json.get("engagement") or {}
+    team = measures(run.directory)[1]
     return {
+        **{f"team_{field}": team.get(field) for field in TEAM_FIELDS},
         "domain": run.domain,
         "task": run.task,
         "model": run.model,
@@ -98,7 +159,7 @@ def run_fields(run: Run) -> dict:
         "scale": run.run_json.get("scale") or run.config.get("scale"),
         "roster": list(run.agents),
         "roles": dict(run.roles),
-        "cheated_by_agent": dict(run.cheated),
+        "judge_cheated_by_agent": dict(run.judge_cheated),
         "median_discovery_round": engagement.get("median_discovery_round"),
         "read_graph": engagement.get("read_graph") or {},
         "rounds": run.rounds,

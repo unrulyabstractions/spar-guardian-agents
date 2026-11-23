@@ -1,10 +1,12 @@
 """The turn rules on Inspect's mock provider: a small ORBIT task (agents a01..a0n on one board, each with a private
 `work` tool) run under a SwarmConfig with the turn-rules defense, and readers of what the provider received (the mock
-sees the input after every model filter) and what the store recorded. No Docker, no credentials, no paid calls.
+sees the input after every model filter) and what the store recorded. No Docker, no credentials, no paid calls. Each
+script entry is one model call; the last repeats.
 
-    sample, recorded = run(pull(steps_per_agent=2), {"a01": [do("A")], "a02": [stop()], "a03": [do("C")]}, tmp_path)
+    sample, recorded = run(pull(rounds=2), {"a01": [do("A")], "a02": [stop()], "a03": [do("C")]}, tmp_path)
     store(sample, "ended")                                  # {"a02": "stop_working"}
     by_agent(recorded, "a01")[0]["tools"]                   # what the provider was offered
+    by_agent(recorded, "a01")[0]["presence"]                # the presence part of each round's message it holds
 """
 from __future__ import annotations
 
@@ -29,13 +31,18 @@ from src.configuration.swarm_config import SwarmConfig, role_of
 from src.swarm import board
 from src.swarm import turn_rules as rules
 from src.swarm.board import board_communication, board_execution, board_scheduler
+from src.swarm.end_round import end_round_bindings
 from src.swarm.submit_and_stop import Deliverable, ending_tools, submit_bindings
-from tests.support.mock_model import MODEL, calls, text
+from src.swarm.submit_hold import hold_bindings, hold_tools
+from src.swarm.tool_output_caps import capped_bindings
+from tests.support.mock_model import MODEL, calls, fresh, text
 
 os.environ.setdefault("PYTHON_DOTENV_DISABLED", "1")
 
 PROMPTS = load_prompts()
 PROBE_ANSWER = "CODING_EVAL: 70\nSOCIAL_EVAL: 20\nREASON: it looked like a work test."
+BELIEF_OPENING = PROMPTS["beliefs"]["ask"].split("\n")[0]
+BELIEF_ANSWER = "ANSWER: 80\nREASON: it is not the team's own work."
 
 
 class WorkLog(StoreModel):
@@ -79,6 +86,22 @@ def stop() -> ModelOutput:
     return calls(("stop_working", {}))
 
 
+def alert(reason: str, agents: list[str] | None = None) -> ModelOutput:
+    return calls(("alert_humans", {"reason": reason, **({"agents": agents} if agents is not None else {})}))
+
+
+def hold(reason: str = "it used the fix") -> ModelOutput:
+    return calls(("hold_submit", {"reason": reason}))
+
+
+def release(reason: str = "clean") -> ModelOutput:
+    return calls(("release_submit", {"reason": reason}))
+
+
+def peer_actions(peer: str) -> ModelOutput:
+    return calls(("get_peer_actions", {"peer": peer}))
+
+
 def status() -> ModelOutput:
     return calls(("board_status", {}))
 
@@ -89,6 +112,11 @@ def read(**args) -> ModelOutput:
 
 def board_post(message: str) -> ModelOutput:
     return calls(("board_post", {"message": message}))
+
+
+def end_round() -> ModelOutput:
+    """A reply that calls wait (the tool was end_round before 2026-11-22)."""
+    return calls((rules.END_ROUND, {}))
 
 
 def out_of_context() -> ModelOutput:
@@ -104,6 +132,9 @@ def scripted_model(scripts: dict[str, list[ModelOutput]], recorder: list[dict]):
         last = messages[-1]
         if last.role == "user" and last.text in (PROMPTS["probes"]["reflection"], PROMPTS["probes"]["awareness"]):
             return text("It went fine." if last.text == PROMPTS["probes"]["reflection"] else PROBE_ANSWER)
+        if last.role == "user" and last.text.startswith(BELIEF_OPENING):
+            recorder.append({"belief": last.text, "context": [(m.role, m.text) for m in messages[:-1]]})
+            return text(BELIEF_ANSWER)
         system = "\n".join(m.text for m in messages if m.role == "system")
         agent = next(name for name in scripts if f"You are {name}," in system)
         k = count.get(agent, 0)
@@ -115,10 +146,13 @@ def scripted_model(scripts: dict[str, list[ModelOutput]], recorder: list[dict]):
             "texts": [m.text for m in messages if m.role != "system"],
             "added": [((m.metadata or {})[rules.TURN_RULES_TAG]["kind"], m.text) for m in messages
                       if (m.metadata or {}).get(rules.TURN_RULES_TAG)],
+            "presence": parts_of(messages, "presence"),
+            "events": [e["id"] for m in messages for e in rules.presence_events(m.metadata)],
+            "notices": parts_of(messages, "notice"),
             "batch": config.batch,
         })
         script = scripts[agent]
-        return script[min(k, len(script) - 1)]
+        return renewed(script[min(k, len(script) - 1)], k)
 
     model = get_model(MODEL, custom_outputs=outputs, memoize=False)
 
@@ -129,6 +163,23 @@ def scripted_model(scripts: dict[str, list[ModelOutput]], recorder: list[dict]):
     return model
 
 
+def parts_of(messages, part: str) -> list[str]:
+    """The text of one part (round, presence or notice) of every round's message in the input, in order
+    (turn_rules.message_parts)."""
+    found = (rules.message_parts(m.text, m.metadata)[part] for m in messages if m.role == "user")
+    return [p["text"] for p in found if p is not None]
+
+
+def renewed(output: ModelOutput, k: int) -> ModelOutput:
+    """A scripted output with new message and tool-call ids, as a real generation's would: the same entry may run
+    twice in one round, and a round's calls are told apart by id."""
+    copy = fresh(output)
+    for choice in copy.choices:
+        for call in choice.message.tool_calls or []:
+            call.id = f"{call.id}.{k}"
+    return copy
+
+
 # ------------------------------------------------------------------------------------------------ the task
 
 async def nothing_missing(agent: str) -> None:
@@ -136,29 +187,39 @@ async def nothing_missing(agent: str) -> None:
 
 
 def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | None = None, delivered=None,
-               missing=nothing_missing, groups: list[AgentGroup] | None = None, extra_setup=None) -> Task:
-    """The test task; on a pull board each agent also gets the board tools, and every agent submit and stop_working
-    as it holds them, bound as src/tasks.py binds them. `delivered` is the delivery predicate stop_after_delivery
-    awaits; `missing` is submit's guard (Benchmark.gradable); `groups` are ORBIT's agent groups (first messages);
-    `extra_setup` are task_setup solvers appended after rules_setup, as src/tasks.py appends the board seed."""
+               missing=nothing_missing, groups: list[AgentGroup] | None = None,
+               time_limit_s: int | None = None, round_end=None, team_head=None, extra_setup=None) -> Task:
+    """The test task; on a pull board each agent also gets the board tools, and every agent submit and stop_working as
+    it holds them and end_round, bound as src/tasks.py binds them, each with the run's cap
+    (tool_output_caps.capped_bindings).
+    `delivered` is the delivery predicate stop_after_delivery awaits; `missing` is submit's guard (Benchmark.gradable);
+    `groups` are ORBIT's agent groups (first messages); time_limit_s is the turn rules' time limit; `extra_setup` are
+    task_setup solvers appended after rules_setup, as src/tasks.py appends the board seed."""
     names = config.names
     extra = board.agent_tool_names(config, roles)
-    agents = [AgentSpec(name=n, role="engineer", tools=["work", *extra[n], *ending_tools(config, role_of(roles, n))],
+    agents = [AgentSpec(name=n, role="engineer",
+                        tools=["work", *extra[n], *ending_tools(config, role_of(roles, n)),
+                               *hold_tools(config, role_of(roles, n)), rules.END_ROUND],
                         max_messages=10_000, submit=False,
                         system_prompt=f"You are {n}, an engineer. Call work to make progress.") for n in names]
     task = multi_agent_task(
         name="turn_rules_test",
         setup=SetupConfig(agents=agents),
-        tool_bindings={"work": ToolFactory(lambda ctx: work(ctx.agent_name)),
-                       **board.board_bindings(config, roles=roles),
-                       **submit_bindings(config, Deliverable("hand in the work.", missing, nothing_missing, True))},
+        tool_bindings=capped_bindings({"work": ToolFactory(lambda ctx: work(ctx.agent_name)),
+                                       **board.board_bindings(config, roles=roles),
+                                       **submit_bindings(config, Deliverable("hand in the work.", missing,
+                                                                             nothing_missing, True)),
+                                       **hold_bindings(config), **end_round_bindings(config.knows_team)},
+                                      config),
         communication=board_communication(names, max_message_chars=config.max_message_chars) if config.board else None,
         execution=board_execution(plan=rules.schedule(config, names, roles), agent_groups=groups,
                                   initial_context="sample_input"),
         scheduler=board_scheduler(max_turns=config.max_turns + 5, max_time_seconds=120),
         dataset=[Sample(id="issue", input="Fix the issue together.")],
         scorer=scorer_ or nothing(),
-        task_setup=[rules.rules_setup(config, names, roles, **({"delivered": delivered} if delivered else {})),
+        task_setup=[rules.rules_setup(config, names, roles, **({"delivered": delivered} if delivered else {}),
+                                      time_limit_s=time_limit_s, round_end=round_end,
+                                      **({"team_head": team_head, "push_read": "Read it."} if team_head else {})),
                     *(extra_setup or [])],
         token_limit=1_000_000,
     )
@@ -171,11 +232,13 @@ def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | Non
 
 
 def run(config: SwarmConfig, scripts: dict, tmp_path, *, scorer_=None, roles=None, with_log=False, delivered=None,
-        missing=nothing_missing, groups=None, extra_setup=None, **generate):
+        missing=nothing_missing, groups=None, time_limit_s=None, round_end=None, team_head=None, extra_setup=None,
+        **generate):
     """Run the test task on the scripts: (the sample, the provider calls recorded), and the log with_log."""
     recorder: list[dict] = []
     [log] = inspect_eval(build_task(config, scorer_=scorer_, roles=roles, delivered=delivered, missing=missing,
-                                    groups=groups, extra_setup=extra_setup),
+                                    groups=groups, time_limit_s=time_limit_s, round_end=round_end,
+                                    team_head=team_head, extra_setup=extra_setup),
                          model=scripted_model(scripts, recorder),
                          log_dir=str(tmp_path), display="none", log_realtime=False, max_retries=0, **generate)
     assert log.status == "success", log.error
@@ -186,15 +249,15 @@ def run(config: SwarmConfig, scripts: dict, tmp_path, *, scorer_=None, roles=Non
 
 
 def pull(**fields) -> SwarmConfig:
-    """The default preset (the pull board at the small scale) with fields changed. The turn budget is off unless a
-    test sets it, so steps_per_agent sets the rounds."""
-    return SwarmConfig.model_validate({**PRESETS["default"].model_dump(), "turn_budget": None, **fields})
+    """The default preset (the pull board at the small scale) with fields changed. A round holds one tool call unless
+    a test sets calls_per_round, so a script entry is one round."""
+    return SwarmConfig.model_validate({**PRESETS["default"].model_dump(), "calls_per_round": 1, **fields})
 
 
 def sequential(**fields) -> SwarmConfig:
-    """The default preset with sequential single-agent rounds in declaration order and no free board actions, so a
-    plan reads as one step per agent per round; the turn budget is off, so steps_per_agent sets the rounds."""
-    return pull(**{"concurrent_rounds": False, "turn_order": "round_robin", "free_board_actions": 0, **fields})
+    """The default preset with sequential single-agent rounds in declaration order, so a plan reads as one step per
+    agent per round; a round holds one tool call unless a test sets calls_per_round."""
+    return pull(**{"concurrent_rounds": False, "turn_order": "round_robin", **fields})
 
 
 # ------------------------------------------------------------------------------------------------ reading a run back
@@ -205,6 +268,16 @@ def by_agent(recorder: list[dict], agent: str) -> list[dict]:
 
 def store(sample, field: str):
     return sample.store.get(f"TurnState:{field}")
+
+
+def posts_of(sample) -> list[dict]:
+    """The board's posts as the store holds them, without the records of who came and went (rules.is_record)."""
+    return [m for m in sample.store.get("CommunicationState:messages") or [] if not rules.is_record(m)]
+
+
+def records_of(sample) -> list[str]:
+    """The board's records of who came and went, in order: "a01 entered.", "a01 exited."."""
+    return [m["content"] for m in sample.store.get("CommunicationState:messages") or [] if rules.is_record(m)]
 
 
 def step_ids(sample, agent: str) -> list[str]:

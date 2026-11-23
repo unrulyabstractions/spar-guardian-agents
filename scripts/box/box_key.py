@@ -13,7 +13,7 @@ the command line, never printing it, and asks OpenRouter's GET /api/v1/key, whic
 Exit 0 when the key passes, 1 with every reason when it does not. On 2026-11-01 phase two ran on the main key with
 --allow-main-key; that flag is gone.
 
---main-key checks the main key itself, for box_run.sh --main-key. The user ordered it for study_exploration_1 on
+--main-key checks the main key itself, for box_run.sh --main-key. The user ordered it for ian_baseline_explorations_1 on
 2026-11-02 ("Capped key NO, JUST USE THE KEY WE HAVE"). It lifts the refusal of the main key alone: OpenRouter must
 still cap the key, and enough must be left for the box's runs.
 """

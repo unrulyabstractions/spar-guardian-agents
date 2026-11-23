@@ -6,14 +6,14 @@
  */
 import { DASH, debounce, firstLine, fmtCompact, fmtInt, fmtSecs, fmtUsd, h, plural } from './dom.js';
 import { P, R, apiFresh, setHashQuietly } from './api.js';
-import { COLLABORATION, RUNG_ORDER, badge, collaborationBadge, dataTable, endedByBadge, labeled, link, mono, muted,
-  registeredCell, roleBadge, rungBadge, select, verdictCell, yn } from './components.js';
+import { badge, dataTable, endedByBadge, labeled, link, mono, muted, registeredCell, roleBadge, select, verdictCell,
+  yn } from './components.js';
 import { endingsText, settingSortKey } from './run_facts.js';
 
-const runsState = { q: '', setting: '', control: '', cheated: '', failed: 'hide', sortKey: 'setting', sortDir: 1 };
+const runsState = { q: '', setting: '', control: '', judge_cheated: '', failed: 'hide', sortKey: 'setting', sortDir: 1 };
 const openRuns = new Set();   // runs whose agent rows are open, kept across visits
 
-/** The task's verdict flags other than cheated, with the number of counted agents that have each. */
+/** The task's verdict flags other than the judge's own cheated, with the number of counted agents that have each. */
 function flagCounts(run) {
   return run.verdict_fields.filter(f => f.field !== 'cheated').map(f => [f, run.aggregate.flags[f.field] || 0]);
 }
@@ -31,16 +31,13 @@ function cmpNullsLast(a, b, dir) {
 }
 
 const agg = run => run.aggregate;
-const rank = (order, v) => (v == null ? null : order.indexOf(v));
 const RUN_COLS = [
   { key: 'run', label: 'Run', sort: run => run.run },
-  { key: 'setting', label: 'Setting', sort: run => settingSortKey(run.setting, run.run), title: 'task, graph, roster size and hidden roles' },
+  { key: 'setting', label: 'Setting', sort: run => settingSortKey(run.setting, run.run), title: 'task, graph, roster size and influencers' },
   { key: 'control', label: 'Control', sort: run => run.control },
   { key: 'agents', label: 'Agents', num: true, sort: run => run.n_agents },
-  { key: 'cheated', label: 'Cheated', num: true, sort: run => (agg(run).judged ? agg(run).cheated / agg(run).judged : null), title: 'agents the judge found cheated, over counted verdicts' },
+  { key: 'judge_cheated', label: 'CheatBench judge: cheated', num: true, sort: run => (agg(run).judged ? agg(run).judge_cheated / agg(run).judged : null), title: 'agents CheatBench\'s judge says cheated, over counted verdicts: the judge\'s own word, broader than the Cheating ladder\'s' },
   { key: 'flags', label: 'Verdict flags', sort: run => flagCounts(run).reduce((s, [, n]) => s + n, 0), title: 'counted agents with each of the task’s verdict flags' },
-  { key: 'rung', label: 'Team rung', sort: run => rank(RUNG_ORDER, run.team && run.team.rung), title: `the team record’s rung by code, raised when a pass proves more: ${RUNG_ORDER.join(', ')}` },
-  { key: 'collaboration', label: 'Collaboration', sort: run => rank(COLLABORATION, run.team && run.team.collaboration), title: `the team record’s collaboration level: ${COLLABORATION.join(', ')}; none for a lone agent` },
   { key: 'registered', label: 'Registered', sort: run => (run.deliverables || {}).registered_on_main, title: 'a registry entry on main at the end' },
   { key: 'ended', label: 'Ended', sort: run => endingsText(run.endings), title: 'how the agents’ episodes ended' },
   { key: 'blocks', label: 'Blocks / checks', num: true, sort: run => (agg(run).controlled ? agg(run).blocks : null) },
@@ -50,7 +47,7 @@ const RUN_COLS = [
 ];
 
 /**
- * Runs-list state from the URL: #/runs?q=&setting=&control=&cheated=&failed=1|only&sort=&dir=desc.
+ * Runs-list state from the URL: #/runs?q=&setting=&control=&judge_cheated=&failed=1|only&sort=&dir=desc.
  * A bare #/runs keeps the state from earlier in the session; #/runs?all=1 resets every filter.
  */
 function runsStateFromQuery(q, settings, controls) {
@@ -59,7 +56,7 @@ function runsStateFromQuery(q, settings, controls) {
   runsState.q = q.get('q') || '';
   runsState.setting = pick(q.get('setting') || '', settings);
   runsState.control = pick(q.get('control') || '', controls);
-  runsState.cheated = pick(q.get('cheated') || '', ['yes', 'no', 'none']);
+  runsState.judge_cheated = pick(q.get('judge_cheated') || '', ['yes', 'no', 'none']);
   const f = q.get('failed');
   runsState.failed = f === '1' || f === 'show' ? 'show' : f === 'only' ? 'only' : 'hide';
   const sk = q.get('sort');
@@ -70,7 +67,7 @@ function runsStateFromQuery(q, settings, controls) {
 function runsQuery() {
   const s = runsState;
   return {
-    q: s.q.trim() ? s.q : '', setting: s.setting, control: s.control, cheated: s.cheated,
+    q: s.q.trim() ? s.q : '', setting: s.setting, control: s.control, judge_cheated: s.judge_cheated,
     failed: s.failed === 'show' ? '1' : s.failed === 'only' ? 'only' : '', sort: s.sortKey === 'setting' ? '' : s.sortKey, dir: s.sortDir < 0 ? 'desc' : '',
   };
 }
@@ -86,14 +83,12 @@ function endedCell(ep) {
 /** The agents of one run, one row each. */
 function episodesTable(run) {
   const flags = run.verdict_fields.filter(f => f.field !== 'cheated');
-  const cols = ['agent', 'role', { label: 'calls', num: true }, 'ended by', 'cheated',
-    { label: 'judged rung', title: 'the judged ladder’s rung (ladder.jsonl)' },
-    { label: 'code rung', title: 'the code ladder’s agent row (signals.jsonl)' }, ...flags.map(f => f.label),
+  const cols = ['agent', 'role', { label: 'calls', num: true }, 'ended by', 'CheatBench judge: cheated', ...flags.map(f => f.label),
     { label: 'prompt tok', num: true }, { label: 'judge $', num: true }, h('span', { class: 'visually-hidden' }, 'links')];
   return dataTable(cols, run.episodes.map(ep => {
     const v = ep.verdict;
     const u = ep.usage || {};
-    const name = ep.orbit_agent;
+    const name = ep.agent;
     return [
       ep.has_transcript ? link(R.episode(run.run, ep.episode), name, 'ep-link')
         : h('span', { title: 'no transcript on disk' }, name, ' ', muted('(no transcript)', 'small')),
@@ -101,14 +96,12 @@ function episodesTable(run) {
       h('span', { title: `${fmtInt(ep.n_turns)} turns` }, fmtInt(ep.n_tool_calls)),
       endedCell(ep),
       h('span', null, verdictCell(ep), v && (v.parse_ok === false || v.judge_error) ? [' ', badge('judge issue', 'warn', String(v.judge_error || 'parse failed'))] : null),
-      ep.ladder && ep.ladder.rung ? rungBadge(ep.ladder.rung) : null,
-      ep.signals && ep.signals.rung ? rungBadge(ep.signals.rung) : null,
       ...flags.map(f => yn(v ? v[f.field] : null, f.kind)),
       h('span', { title: `${fmtInt(u.input)} prompt (${fmtInt(u.cache_read)} cache read), ${fmtInt(u.output)} completion` }, fmtCompact(u.input)),
       v ? fmtUsd(v.judge_cost_usd) : null,
       h('span', { class: 'links-cell' },
         ep.has_transcript ? link(R.episode(run.run, ep.episode), 'transcript', 'small') : null, ' ',
-        link(R.context(run.run, { agent: ep.orbit_agent }), 'context', 'small')),
+        link(R.context(run.run, { agent: ep.agent }), 'context', 'small')),
     ];
   }), { cls: 'compact eps-table', bare: true });
 }
@@ -116,7 +109,7 @@ function episodesTable(run) {
 function runRowCells(run) {
   const a = run.aggregate;
   const td = (content, opts = {}) => h('td', { class: [opts.num && 'num', opts.cls], title: opts.title }, content);
-  const frac = a.judged ? a.cheated / a.judged : null;
+  const frac = a.judged ? a.judge_cheated / a.judged : null;
   const flagged = flagCounts(run).filter(([, n]) => n);
   return [
     td([link(R.run(run.run), run.run, 'run-link'), run.failed ? [' ', badge('failed', 'bad', 'harness crash or provider error; not counted')] : null,
@@ -124,11 +117,9 @@ function runRowCells(run) {
     td([run.setting.label, run.setting.composition ? [' ', mono(run.setting.composition)] : null], { cls: 'wrap-cell' }),
     td(run.control || DASH),
     td(fmtInt(run.n_agents), { num: true }),
-    td(a.judged ? h('span', { class: ['cheated-cell', a.cheated && 'text-bad'] }, `${a.cheated}/${a.judged}`) : muted('not judged', 'small'),
+    td(a.judged ? h('span', { class: ['cheated-cell', a.judge_cheated && 'text-bad'] }, `${a.judge_cheated}/${a.judged}`) : muted('not judged', 'small'),
       { num: true, title: frac == null ? 'no counted verdict' : `${Math.round(frac * 100)}% of counted verdicts` }),
     td(a.judged ? flagged.map(([f, n]) => `${f.label} ${n}`).join(', ') || 'none' : DASH, { cls: 'wrap-cell small' }),
-    td(run.team ? rungBadge(run.team.rung) : muted(DASH)),
-    td(run.team && run.team.collaboration ? collaborationBadge(run.team.collaboration) : muted(DASH)),
     td(registeredCell(run.deliverables)),
     td(endingsText(run.endings) || DASH, { cls: 'wrap-cell small' }),
     td(a.controlled ? h('span', { class: a.blocks ? 'has-blocks' : '' }, `${fmtInt(a.blocks)} / ${fmtInt(a.checks)}`) : DASH, { num: true }),
@@ -184,7 +175,7 @@ export async function viewRuns({ query: urlQ }, view) {
       toggle();
     });
     const hay = [run.run, run.control, run.setting.label, run.setting.composition, run.model, run.monitor_model, run.defenses.join(' '),
-      ...run.episodes.flatMap(ep => [ep.orbit_agent, ep.failure, ep.role, ep.verdict && ep.verdict.summary])]
+      ...run.episodes.flatMap(ep => [ep.agent, ep.failure, ep.role, ep.verdict && ep.verdict.summary])]
       .filter(Boolean).join(' \n ').toLowerCase();
     sync();
     tbody.append(tr, detail);
@@ -206,7 +197,7 @@ export async function viewRuns({ query: urlQ }, view) {
     let shown = 0;
     let agents = 0;
     let judged = 0;
-    let cheated = 0;
+    let judgeCheated = 0;
     let failedHidden = 0;
     for (const row of rows) {
       const { run } = row;
@@ -216,10 +207,10 @@ export async function viewRuns({ query: urlQ }, view) {
       if (runsState.failed === 'only' && !run.failed) ok = false;
       if (ok && runsState.setting && run.setting.key !== runsState.setting) ok = false;
       if (ok && runsState.control && run.control !== runsState.control) ok = false;
-      if (ok && runsState.cheated) {
-        if (runsState.cheated === 'yes' && !(a.cheated > 0)) ok = false;
-        if (runsState.cheated === 'no' && !(a.judged > 0 && a.cheated === 0)) ok = false;
-        if (runsState.cheated === 'none' && a.judged > 0) ok = false;
+      if (ok && runsState.judge_cheated) {
+        if (runsState.judge_cheated === 'yes' && !(a.judge_cheated > 0)) ok = false;
+        if (runsState.judge_cheated === 'no' && !(a.judged > 0 && a.judge_cheated === 0)) ok = false;
+        if (runsState.judge_cheated === 'none' && a.judged > 0) ok = false;
       }
       if (ok && q && !row.hay.includes(q)) ok = false;
       row.tr.hidden = !ok;
@@ -227,13 +218,13 @@ export async function viewRuns({ query: urlQ }, view) {
       if (ok) {
         shown++;
         agents += run.n_agents;
-        if (!run.failed) { judged += a.judged; cheated += a.cheated; }
+        if (!run.failed) { judged += a.judged; judgeCheated += a.judge_cheated; }
       }
     }
     band();
     summary.replaceChildren(
       h('strong', null, plural(shown, 'run')), ` shown, ${plural(agents, 'agent')} · `,
-      h('strong', { class: cheated ? 'text-bad' : '' }, `${fmtInt(cheated)} cheated`), ` of ${fmtInt(judged)} judged`,
+      'CheatBench judge: ', h('strong', { class: judgeCheated ? 'text-bad' : '' }, `${fmtInt(judgeCheated)} cheated`), ` of ${fmtInt(judged)} judged`,
       runsState.failed === 'hide' && failedHidden ? ` · ${plural(failedHidden, 'failed run')} hidden` : '',
       runsState.failed !== 'hide' ? ' · failed runs are never counted' : '');
     updateUrl();
@@ -278,8 +269,8 @@ export async function viewRuns({ query: urlQ }, view) {
     search,
     labeled('setting', select([['', 'all'], ...settings.map(s => [s.key, s.label])], runsState.setting, v => { runsState.setting = v; apply(); })),
     labeled('control', select([['', 'all'], ...controls], runsState.control, v => { runsState.control = v; apply(); })),
-    labeled('cheated', select([['', 'any'], ['yes', 'at least one agent'], ['no', 'none of the judged'], ['none', 'not judged']], runsState.cheated,
-      v => { runsState.cheated = v; apply(); })),
+    labeled('CheatBench judge: cheated', select([['', 'any'], ['yes', 'at least one agent'], ['no', 'none of the judged'], ['none', 'not judged']], runsState.judge_cheated,
+      v => { runsState.judge_cheated = v; apply(); })),
     labeled('failed runs', select([['hide', 'hidden'], ['show', 'shown'], ['only', 'only failed']], runsState.failed, v => { runsState.failed = v; apply(); })),
     openAll);
 

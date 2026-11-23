@@ -1,7 +1,7 @@
 """The stop-after-delivery rule (SwarmConfig.stop_after_delivery).
 
 The activation that closes a round awaits the benchmark's delivery predicate while some active agent's deliverable
-is unseen. An agent alone or in solo_task is ended "delivered" after N more of its working steps once its own
+is unseen. An agent alone or in solo_task is ended "delivered" after N more of its rounds used up once its own
 deliverable is seen. A team is ended "delivered" N rounds after the round that showed its deliverable. The record
 lives in the store as Delivered.
 
@@ -17,6 +17,8 @@ from orbit.configs.scheduling import ScheduleStep
 from src.swarm.turn_rules._turn_state import DELIVERED, DELIVERED_TAG, PREDICATE, Delivered, TurnState, running_record
 from src.swarm.turn_rules._turn_steps import step_round
 
+LIMIT_ENDINGS = ("rounds", "context")      # the TurnState.ended reasons of an agent's own limit
+
 
 def delivery() -> Delivered | None:
     """The Delivered record when stop_after_delivery is on in this sample, else None, with nothing written."""
@@ -24,7 +26,7 @@ def delivery() -> Delivered | None:
 
 
 def spent(record: Delivered, agent: str, used: int) -> bool:
-    """Whether an agent with its own deliverable has taken its N working steps since the deliverable was seen."""
+    """Whether an agent with its own deliverable has used up N rounds since the deliverable was seen."""
     seen = record.seen.get(agent)
     return not record.team and seen is not None and used >= seen["turn"] + record.after
 
@@ -48,9 +50,11 @@ def _round_over(runtime, step: ScheduleStep | None, agent: str, keep: list[dict]
 
 async def _look(st: TurnState, record: Delivered, round_number: int) -> None:
     """Await the delivery predicate once, unless the team's deliverable or every active agent's was seen, and record
-    each first sighting: the round and the agent's working steps by then. A team's sighting counts for every agent
-    of the roster and sets its last round, N rounds on."""
-    active = [a for a in st.agents if a not in st.ended]
+    each first sighting: the round and the rounds the agent had used up by then. An agent a limit ended in this round
+    (out of rounds, or at the context limit: TurnState.ended_round) is looked for too, since its last round may have
+    delivered. A team's sighting counts for every agent of the roster and sets its last round, N rounds on."""
+    active = [a for a in st.agents if a not in st.ended
+              or (st.ended[a] in LIMIT_ENDINGS and st.ended_round.get(a) == round_number)]
     unseen = [a for a in active if a not in record.seen]
     if not unseen or (record.team and record.halt_round is not None):
         return
@@ -66,7 +70,7 @@ async def _look(st: TurnState, record: Delivered, round_number: int) -> None:
         shown = [a for a in unseen if a in found]
     if not shown:
         return
-    record.seen = {**record.seen, **{a: {"round": round_number, "turn": st.work_steps.get(a, 0)} for a in shown}}
+    record.seen = {**record.seen, **{a: {"round": round_number, "turn": st.rounds_used.get(a, 0)} for a in shown}}
     if record.team:
         record.halt_round = round_number + record.after
     transcript().info({DELIVERED_TAG: {"kind": "seen", "round": round_number, "agents": shown,
@@ -84,7 +88,7 @@ async def after_delivery(st: TurnState, record: Delivered, runtime, step: Schedu
     """The rule at the end of an activation, on the amended plan `keep`. When the activation closes a round it looks
     for deliverables. A team's steps after its last round are cut at every activation, and the agents they belonged
     to are kept in `cut`. At the end of the team's last round (or of the plan) the active agents with a step cut are
-    ended; an agent with its own deliverable is ended once its N working steps are spent and it still holds a step.
+    ended; an agent with its own deliverable is ended once it has used up N more rounds and still holds a step.
     Returns the plan without the ended agents' steps, which go to nobody, and the agents it ended."""
     over = _round_over(runtime, step, agent, keep)
     round_number = step_round(step.id) if step is not None else 0
@@ -101,7 +105,7 @@ async def after_delivery(st: TurnState, record: Delivered, runtime, step: Schedu
         if record.halt_round is not None and (round_number >= record.halt_round or not keep):
             ended = [a for a in active if a in record.cut]
     elif over:
-        ended = [a for a in active if spent(record, a, st.work_steps.get(a, 0)) and _holds(a, keep)]
+        ended = [a for a in active if spent(record, a, st.rounds_used.get(a, 0)) and _holds(a, keep)]
     if not ended:
         return keep, ended
     end(st, ended, round_number)
