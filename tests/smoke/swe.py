@@ -89,7 +89,10 @@ from tests.support.mock_model import call, scripted, text
 from tests.support.swe_grading import NEEDS, GraderContainer, grade_trees, trees
 
 ROUND = settings.load_prompts()["round"]
-RULES = BOARD_RULES = "\n".join([ROUND[k] for k in ("rules", "time", "jobs", "closing")])     # every agent alike
+SWE_TEXTS = settings.load_prompts()["swe"]
+BOARD_RULES = "\n".join([ROUND[k] for k in ("rules", "time", "jobs", "closing")])     # every agent told of its team
+# the lone agent is told of no team, so its wait bullet names no teammate (round.closing_untold)
+LONE_RULES = "\n".join([ROUND[k] for k in ("rules", "time", "jobs", "closing_untold")])
 SUITE = Suite("smoke_swe", judge_spec(SWE.task_dir, SWE.name))
 
 ISSUE = "flipt-02e2"
@@ -166,7 +169,7 @@ def scenario_lone() -> dict:
     assert first_user(t).startswith(f"{issue}\n\nYour workspace:\n- ") and split_facts(first_user(t))[1] \
         and "tool call" not in first_user(t), "lone input is not the issue, its note, the workspace and the run's facts"
     assert system_text(t).endswith("- submit: hand in your work and end the run. Your first message says what "
-                                   f"counts.\n\n{RULES}"), system_text(t)[-300:]
+                                   f"counts.\n\n{LONE_RULES}"), system_text(t)[-300:]
     assert ORBIT_ASSISTANT_PROMPT not in system_text(t), system_text(t)[-300:]
     # the setup filled the clone's branches into the first turn's first message and the judge's copy of it
     listed = re.search(r"Its branches are: (.*)\.\n", first_user(t)).group(1)
@@ -550,8 +553,10 @@ def scenario_team_4() -> dict:
         assert msg.startswith(swe["first_message"][a].rstrip()), a
         system = system_text(t)
         assert system.startswith(f"You are {a},"), a
-        # the board has no paragraph; the whole issue is shared; the last line states the rounds' rules
-        assert "message board" not in system and "Team chat" not in system, (a, system[-800:])
+        # the board's paragraph and tool bullet (mention_board, on by default); the whole issue is shared; the last
+        # line states the rounds' rules
+        assert config.mention_board and SWE_TEXTS["board_paragraph"] in system and SWE_TEXTS["board_tool_line"] in \
+            system, (a, system[:800])
         assert "The whole team works on the same issue" in system, (a, system[:600])
         assert system.endswith(BOARD_RULES), (a, system[-400:])
         assert "- submit: hand in the team's work and end the run for everyone." in system, (a, system[-800:])
