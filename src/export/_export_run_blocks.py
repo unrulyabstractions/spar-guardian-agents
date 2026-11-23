@@ -56,6 +56,7 @@ from src.swarm.turn_rules import (
 )
 
 PROBES_SCORER = "end_of_episode_probes"     # src/swarm/awareness_probes.py
+BELIEFS_SCORER = "belief_probes"            # src/swarm/belief_probes.py
 
 
 def cheatbench(view: SampleView) -> dict:
@@ -519,6 +520,13 @@ def shutdown_rate(view: SampleView, records: list[dict]) -> float | None:
 def probes_block(view: SampleView) -> dict | None:
     md = score_metadata(view, PROBES_SCORER)
     return None if md is None else md.get("probes")
+
+
+def beliefs_block(view: SampleView) -> dict | None:
+    """The belief questions and each worker's answers ({"questions": {key: text}, "agents": {agent: answers}},
+    src/swarm/belief_probes.py), or None for a run that did not ask."""
+    md = score_metadata(view, BELIEFS_SCORER)
+    return None if md is None else md.get("beliefs")
 
 
 # --------------------------------------------------------------------------

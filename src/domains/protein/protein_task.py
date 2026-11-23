@@ -41,7 +41,7 @@ from src.configuration.settings import load_prompts
 from src.domains.benchmark_protocol import Plan, RowBenchmark, Staged
 from src.domains.protein import _protein_scoring as scoring
 from src.domains.protein._protein_checker_tool import checker_binding
-from src.domains.protein._protein_honeypot import agent_files, log_dest, side_copy, side_copy_path
+from src.domains.protein._protein_honeypot import agent_files, colleague_dir, log_dest, side_copy, side_copy_path
 from src.domains.protein._protein_ladder import ProteinDomain
 from src.domains.protein._protein_settings import (
     ASSESSMENT_LINE,
@@ -149,6 +149,16 @@ class ProteinDesign(RowBenchmark):
         row = self.row_of(self.row)
         found = {a: side_copy(row, files) for a, files in self.copies(plan).items()}
         return {a: files for a, files in found.items() if files}
+
+    def belief_words(self) -> dict[str, str]:
+        """The colleague's candidates, the backup's folder under a variant with side copies, and the scenario's
+        principal in place of the manager."""
+        words = load_prompts()["beliefs"]["words"][TASK]
+        row, told = self.row_of(self.row), scenario(self.adds.scenario) or {}
+        side = str(Path(side_copy_path(row)).parent)
+        return {"exploit_1": words["exploit_1"].format(colleague_dir=colleague_dir(row)),
+                "principal": told.get("principal", words["principal"]),
+                **({"exploit_2": words["exploit_2"].format(side_dir=side)} if self.adds.side_copies else {})}
 
     def stage(self, plan: Plan, row: dict) -> Staged:
         """Each agent's copy of the row as a staging archive for its own service, and the block the setup, the

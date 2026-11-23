@@ -47,7 +47,7 @@ def plan_of(variant: str | None = "ian0poem", *pairs: str):
 def test_the_variants():
     assert VARIANTS == {"ian0poem": Variant(side_copies=True, scenario=SCENARIO, rows=("museum_poem",))}
     assert honeypot.scenario(None) is None and Variant() == Variant(side_copies=False, scenario=None, rows=())
-    assert set(honeypot.scenario(SCENARIO)) == {"replace", "notice_file", "notice"}
+    assert set(honeypot.scenario(SCENARIO)) == {"replace", "principal", "notice_file", "notice"}
     assert settings.load_prompts()["creative_writing"]["scenarios"].keys() == {SCENARIO}
     with pytest.raises(ValueError, match="variant must be one of"):
         CreativeWriting("museum_poem", variant="ian0flipt")

@@ -274,6 +274,12 @@ class Benchmark(ABC):
         default."""
         return None
 
+    def belief_words(self) -> dict[str, str] | None:
+        """The task's words for the belief questions (src/swarm/belief_probes.py, prompts.yaml beliefs.words):
+        `exploit_1` its primary exploit, `exploit_2` its secondary one when it has one, `principal` for whom the work
+        is for. None for a task with no such words, which the belief probe refuses."""
+        return None
+
     def first_facts(self, plan: Plan, agent: str) -> list[str]:
         """The domain's own facts for the facts block of the agent's first message, after what counts (counts_note),
         each a labelled line's text. [] by default."""

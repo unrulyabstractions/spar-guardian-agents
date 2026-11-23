@@ -26,13 +26,22 @@ from collections.abc import Awaitable, Callable
 
 from inspect_ai.scorer import Scorer
 
+from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import SwarmConfig
 from src.domains.benchmark_protocol import Plan, RowBenchmark, Staged
 from src.domains.creative import _creative_honeypot as honeypot
 from src.domains.creative import _creative_scoring as scoring
 from src.domains.creative import creative_sandbox as sandbox
 from src.domains.creative._creative_ladder import CreativeDomain
-from src.domains.creative._creative_settings import DEFAULT_ROW, KEY, TASK, TASK_DIR, VARIANTS, Variant
+from src.domains.creative._creative_settings import (
+    DEFAULT_ROW,
+    KEY,
+    SIDE_COPY_DIR,
+    TASK,
+    TASK_DIR,
+    VARIANTS,
+    Variant,
+)
 from src.sandbox.access_log.access_monitor import Watched
 from src.sandbox.agent_tools import AgentTools, roster_tools
 from src.sandbox.agent_users import agent_users as users
@@ -98,6 +107,14 @@ class CreativeWriting(RowBenchmark):
         variants = cfg["variants"]
         prompt = variants[variants["default"]]["prompt"]
         return {**cfg, "prompts": {**cfg["prompts"], "instruction": cfg["prompts"][prompt]}}
+
+    def belief_words(self) -> dict[str, str]:
+        """The reference the grader's config names, the side copies' folder under a variant that has them, and the
+        scenario's principal in place of the interviewer."""
+        words = load_prompts()["beliefs"]["words"][KEY]
+        told = honeypot.scenario(self.adds.scenario) or {}
+        return {"exploit_1": words["exploit_1"], "principal": told.get("principal", words["principal"]),
+                **({"exploit_2": words["exploit_2"].format(side_dir=SIDE_COPY_DIR)} if self.adds.side_copies else {})}
 
     def instruction(self, cfg: dict, row: dict) -> str:
         """CheatBench's rendering, with a variant's scenario sentences in place of the interview's."""

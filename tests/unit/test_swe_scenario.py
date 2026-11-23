@@ -27,7 +27,7 @@ def test_the_variants():
                                              issue_note=False)}
     assert scenario(None) is None and Variant() == Variant(side_patches=False, scenario=None, branch_list=True,
                                                            issue_note=True)
-    assert set(scenario("clean_room_fork")) == {"ticket", "notice_file", "notice"}
+    assert set(scenario("clean_room_fork")) == {"ticket", "principal", "notice_file", "notice"}
 
 
 def test_the_ticket_stands_where_the_work_test_line_stood():

@@ -19,14 +19,18 @@ parts:
     files: [src/export/*.py]
     pins: []
     version: 1
-    fingerprint: sha256:6e10b5fcce2eefe8234264676dfb73f3dc23e75441a1fa3ac4e3b2ee75b777bb
+    fingerprint: sha256:a2deed2c29bbe9c26a9b497e855267b40da35128883678061930a4af101f0978
     log:
       1: '2026-11-22 first version: the eval log turned into run files by src/export of c619e3d (re-locked
         2026-11-22: the stored layout: the same bytes, written under processed/ and analysis/ through
         run_directory.FILES) (re-locked 2026-11-22: the stored layout: the same bytes, read and written
         under processed/ and analysis/ through run_directory.FILES) (re-locked 2026-11-22: a board notice
         inside a round ends the message it went into, one blank line below its last line; no stored run
-        holds such a notice)'
+        holds such a notice) (re-locked 2026-11-23: the belief questions'' block (run.json beliefs, an
+        episode''s beliefs) is written only by a run that asked (SwarmConfig.belief_probe), which no stored
+        run did: three runs of ian_seed_prototyping_2, one per task, exported again from their eval logs
+        with this code: 53 files, byte-equal but run.json, which differs only by the signals block that
+        the measures add afterwards (every other key equal, in the same order))'
   replay:
     file: [processed/replay/steps.jsonl, processed/replay/replay.json, processed/tmp_snapshots.json]
     make: null

@@ -15,6 +15,7 @@ import json
 from pathlib import Path
 
 from src.export._export_run_blocks import (
+    beliefs_block,
     cheatbench,
     ended_by,
     engagement_record,
@@ -141,6 +142,7 @@ def sample_records(view: SampleView, run_dir: Path) -> list[dict]:
     _write_defense(view, run_dir, defenses_cfg, evidence)
     rules = rules_state(view)
     probes = probes_block(view) or {}
+    beliefs = beliefs_block(view)
     submission = team_submission(view)
     notices = notice_counts(view)
     records = []
@@ -154,6 +156,8 @@ def sample_records(view: SampleView, run_dir: Path) -> list[dict]:
             record.update(_no_transcript(error, failure))
         record["rules"] = rules_facts(rules, agent)
         record["probes"] = probes.get(agent)
+        if beliefs is not None:                 # only in a run that asked; a worker's answers, None for an influencer
+            record["beliefs"] = beliefs["agents"].get(agent)
         record["engagement"] = engagement_record(view, agent, rules, submission, notices)
         model_events = agent_events(view, agent, "model")
         record["validity"] = validity_record(steps, len(model_events), record["engagement"],

@@ -45,6 +45,7 @@ from src.domains.swe.swe_inputs import (
     patch_files,
     piece_patch,
     run_values,
+    scenario,
     task_config,
 )
 from src.domains.swe.swe_ladder import SweDomain
@@ -60,6 +61,7 @@ from src.domains.swe.swe_settings import (
     PARTS,
     PIECES,
     SECRETS,
+    SIDE_PATCH_DIR,
     TASK,
     TASK_DIR,
     VARIANTS,
@@ -225,6 +227,16 @@ class SWE(Benchmark):
         prompts, kind = settings.load_prompts()["swe"], "shared" if plan.mode == "shared_task" else "solo"
         listed = prompts[f"branch_list_{kind}"].format(branches=honeypot.BRANCHES) if self.adds.branch_list else ""
         return prompts[f"workspace_{kind}"].format(repo=load_split(self.row)["repo"], branch=agent, branch_list=listed)
+
+    def belief_words(self) -> dict[str, str]:
+        """The fix on the planted branches (in the history, as released), the side patches' folder under a variant
+        that has them, and the scenario's principal in place of the interviewer."""
+        words = settings.load_prompts()["beliefs"]["words"]["swe"]
+        told = scenario(self.adds.scenario) or {}
+        first = words["exploit_1_as_released" if self.honeypot == "as_released" else "exploit_1"]
+        side = SIDE_PATCH_DIR.format(repo=load_split(self.row)["repo"])
+        return {"exploit_1": first, "principal": told.get("principal", words["principal"]),
+                **({"exploit_2": words["exploit_2"].format(side_dir=side)} if self.adds.side_patches else {})}
 
     def oversight_note(self, plan: Plan, agent: str) -> str | None:
         """For a shared_task team, how to read its work through the team remote (prompts.yaml

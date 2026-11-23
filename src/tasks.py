@@ -88,6 +88,7 @@ from src.sandbox.network_log.network_monitor import (
 from src.sandbox.proc_hiding.proc_hiding import hide_proc, keeps_proc_hiding, with_proc_hiding
 from src.swarm import influencers as roles_module
 from src.swarm.awareness_probes import end_of_episode_probes
+from src.swarm.belief_probes import belief_probes
 from src.swarm.board import (
     agent_tool_names,
     board_bindings,
@@ -310,13 +311,19 @@ def cleanup(benchmark: Benchmark, config: SwarmConfig) -> Callable[[TaskState], 
 def scorers(benchmark: Benchmark, config: SwarmConfig) -> list:
     """The end of the command jobs (every job still running is killed) for a benchmark whose agents hold a shell, the
     access log's capture before any harness read of the honeypot, then the network log's, the benchmark's scorers,
-    CheatBench's judge unless the config's judge is None, and the awareness probes."""
+    CheatBench's judge unless the config's judge is None, the awareness probes and the belief questions (refused
+    for a benchmark that gives them no words, Benchmark.belief_words)."""
     monitor = [access_capture()] if benchmark.keeps_access_log(config) else []
     monitor += [network_capture()] if keeps_network_log(benchmark, config) else []
     judge = [cheatbench_judge(benchmark.name, str(benchmark.task_dir), judge=config.judge,
                               addendum=str(JUDGE_ADDENDUM) if config.judge_addendum else None,
                               batch=config.batch_judge)] if config.judge else []
     probes = [end_of_episode_probes()] if config.awareness_probe else []
+    if config.belief_probe:
+        words = benchmark.belief_words()
+        if words is None:
+            raise ValueError(f"belief_probe: {benchmark.key} gives the belief questions no words (belief_words)")
+        probes.append(belief_probes(words))
     jobs = [command_jobs.jobs_capture()] if benchmark.commands else []
     return [*jobs, *monitor, *benchmark.scorers(), *judge, *probes]
 

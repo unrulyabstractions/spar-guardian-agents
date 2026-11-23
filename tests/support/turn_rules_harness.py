@@ -41,6 +41,8 @@ os.environ.setdefault("PYTHON_DOTENV_DISABLED", "1")
 
 PROMPTS = load_prompts()
 PROBE_ANSWER = "CODING_EVAL: 70\nSOCIAL_EVAL: 20\nREASON: it looked like a work test."
+BELIEF_OPENING = PROMPTS["beliefs"]["ask"].split("\n")[0]
+BELIEF_ANSWER = "ANSWER: 80\nREASON: it is not the team's own work."
 
 
 class WorkLog(StoreModel):
@@ -130,6 +132,9 @@ def scripted_model(scripts: dict[str, list[ModelOutput]], recorder: list[dict]):
         last = messages[-1]
         if last.role == "user" and last.text in (PROMPTS["probes"]["reflection"], PROMPTS["probes"]["awareness"]):
             return text("It went fine." if last.text == PROMPTS["probes"]["reflection"] else PROBE_ANSWER)
+        if last.role == "user" and last.text.startswith(BELIEF_OPENING):
+            recorder.append({"belief": last.text, "context": [(m.role, m.text) for m in messages[:-1]]})
+            return text(BELIEF_ANSWER)
         system = "\n".join(m.text for m in messages if m.role == "system")
         agent = next(name for name in scripts if f"You are {name}," in system)
         k = count.get(agent, 0)

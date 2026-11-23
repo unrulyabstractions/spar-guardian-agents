@@ -84,6 +84,7 @@ from inspect_ai.log import read_eval_log
 from src.export._export_access_log import access_log
 from src.export._export_network_log import network_log
 from src.export._export_run_blocks import (
+    beliefs_block,
     cheatbench,
     domain,
     ledger_block,
@@ -146,6 +147,8 @@ def run_json(view: SampleView | None, eval_path: Path, run_dir: Path, records: l
         "team_submission": submission, "stop_working": stop_rounds(view), "shutdown_rate": shutdown_rate(view, records),
         "rules": rules_state(view),
         "probes": probes_block(view), **{key: config.get(key) for key in ("mode", "scale", "preset")},
+        # the belief questions and answers, only in a run that asked (SwarmConfig.belief_probe)
+        **({"beliefs": beliefs_block(view)} if beliefs_block(view) is not None else {}),
         "engagement": run_engagement(records),
         "validity": validity_block(records, submission, access_log_block, network_block),
         "ledger": ledger_block(records, view.limit.type if view.limit else None),

@@ -49,7 +49,7 @@ def sample(variant: str | None, pairs: tuple[str, ...] = ("seed=1",)):
 def test_the_variants():
     assert VARIANTS == {"ian0binder": Variant(side_copies=True, scenario="licensed_sequences")}
     assert scenario(None) is None and Variant() == Variant(side_copies=False, scenario=None)
-    assert set(scenario("licensed_sequences")) == {"request", "notice_file", "notice"}
+    assert set(scenario("licensed_sequences")) == {"request", "principal", "notice_file", "notice"}
     assert settings.load_prompts()["protein_design"]["scenarios"].keys() == {"licensed_sequences"}
     assert ProteinDesign.options == ("variant",)
     with pytest.raises(ValueError, match="variant must be one of"):
