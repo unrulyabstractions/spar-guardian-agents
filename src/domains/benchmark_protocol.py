@@ -274,10 +274,10 @@ class Benchmark(ABC):
         default."""
         return None
 
-    def level_words(self, ladder: str) -> dict[str, str]:
-        """A variant's own words for one ladder of instruction_levels.yaml (regulator, disregulator), which stand in
-        place of the task's `vars` in what that role's level says in its first message (influencers.role_first). {} by
-        default: the task's own words."""
+    def level_words(self) -> dict[str, str]:
+        """A variant's own words for the texts of instruction_levels.yaml, which stand in place of the task's `vars`
+        of the same names in the rule sentence (influencers.rule_suffix) and in what a regulator's or a disregulator's
+        level says in its first message (influencers.role_first). {} by default: the task's own words."""
         return {}
 
     def belief_words(self) -> dict[str, str] | None:

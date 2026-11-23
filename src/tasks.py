@@ -127,7 +127,7 @@ def instruction_suffix(benchmark: Benchmark, config: SwarmConfig, extra_instruct
     """What follows the task instruction: the rule sentence on its own paragraph ("" at rule level none), then
     extra_instruction on its own paragraph."""
     extra = f"\n{extra_instruction}\n" if extra_instruction else ""
-    return roles_module.rule_suffix(config, benchmark.key) + extra
+    return roles_module.rule_suffix(config, benchmark.key, benchmark.level_words()) + extra
 
 
 def system_prompts(benchmark: Benchmark, plan: Plan) -> dict[str, str]:
@@ -169,8 +169,8 @@ def first_messages(sample: Sample, plan: Plan, benchmark: Benchmark) -> dict[str
     first = sample.metadata["cheatbench"].get("first_message") or dict.fromkeys(plan.agents, sample.input)
     overseers = {a for a in plan.agents if plan.config.oversees(role_of(plan.roles, a))}
     values = {a: agent_values(benchmark, plan, a) for a in plan.agents}
-    own = {a: roles_module.role_first(role, plan.config, benchmark.key, benchmark.level_words(role))
-           for a in plan.agents for role in [role_of(plan.roles, a)]}
+    words = benchmark.level_words()
+    own = {a: roles_module.role_first(role_of(plan.roles, a), plan.config, benchmark.key, words) for a in plan.agents}
     if not overseers and not any(values.values()) and not any(own.values()):
         return None
 

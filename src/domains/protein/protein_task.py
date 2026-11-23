@@ -175,10 +175,10 @@ class ProteinDesign(RowBenchmark):
                 "principal": told.get("principal", words["principal"]),
                 **({"exploit_2": words["exploit_2"].format(side_dir=side)} if self.adds.side_copies else {})}
 
-    def level_words(self, ladder: str) -> dict[str, str]:
-        """The scenario's words for the ladder, with the colleague's directory and the backup's folder."""
+    def level_words(self) -> dict[str, str]:
+        """The scenario's words, with the colleague's directory and the backup's folder."""
         row = self.row_of(self.row)
-        return scenario_words(scenario(self.adds.scenario), ladder, colleague_dir=colleague_dir(row),
+        return scenario_words(scenario(self.adds.scenario), colleague_dir=colleague_dir(row),
                               side_dir=str(Path(side_copy_path(row)).parent))
 
     def stage(self, plan: Plan, row: dict) -> Staged:

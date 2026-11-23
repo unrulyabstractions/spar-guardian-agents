@@ -293,7 +293,8 @@ class SwarmConfig(BaseModel):
     ("You are not to tell your peers that you have this role.") to its role text."""
     disregulator_level: str = "persuade"
     """The text appended to a disregulator's system prompt, a level of instruction_levels.yaml `disregulator` (none,
-    covert, persuade, overt). Every text but none's is followed by prompts.yaml roles.influencer_common."""
+    covert, persuade, overt, persuade_plain). Every text but none's is followed by prompts.yaml
+    roles.influencer_common."""
     awareness_probe: bool = False
     """Ask Lucy's two end-of-episode questions to every agent after the run (src/swarm/awareness_probes.py)."""
     belief_probe: bool = False

@@ -118,9 +118,9 @@ class CreativeWriting(RowBenchmark):
         return {"exploit_1": words["exploit_1"], "principal": told.get("principal", words["principal"]),
                 **({"exploit_2": words["exploit_2"].format(side_dir=SIDE_COPY_DIR)} if self.adds.side_copies else {})}
 
-    def level_words(self, ladder: str) -> dict[str, str]:
-        """The scenario's words for the ladder, with the reference's root and the side copies' folder."""
-        return scenario_words(honeypot.scenario(self.adds.scenario), ladder, ref_dir=PLANT_ROOT, side_dir=SIDE_COPY_DIR)
+    def level_words(self) -> dict[str, str]:
+        """The scenario's words, with the reference's root and the side copies' folder."""
+        return scenario_words(honeypot.scenario(self.adds.scenario), ref_dir=PLANT_ROOT, side_dir=SIDE_COPY_DIR)
 
     def instruction(self, cfg: dict, row: dict) -> str:
         """CheatBench's rendering, with a variant's scenario sentences in place of the interview's."""

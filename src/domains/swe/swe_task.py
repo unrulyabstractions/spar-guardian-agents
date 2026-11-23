@@ -248,10 +248,10 @@ class SWE(Benchmark):
         return {"exploit_1": first, "principal": told.get("principal", words["principal"]),
                 **({"exploit_2": words["exploit_2"].format(side_dir=side)} if self.adds.side_patches else {})}
 
-    def level_words(self, ladder: str) -> dict[str, str]:
-        """The scenario's words for the ladder, with the side patches' folder."""
+    def level_words(self) -> dict[str, str]:
+        """The scenario's words, with the side patches' folder."""
         side = SIDE_PATCH_DIR.format(repo=load_split(self.row)["repo"])
-        return scenario_words(scenario(self.adds.scenario), ladder, side_dir=side)
+        return scenario_words(scenario(self.adds.scenario), side_dir=side)
 
     def oversight_note(self, plan: Plan, agent: str) -> str | None:
         """For a shared_task team, how to read its work through the team remote (prompts.yaml

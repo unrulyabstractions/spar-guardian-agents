@@ -37,7 +37,7 @@ plan and live in `OLD/runs/`.
 | script | what the cell is | plans |
 |---|---|---|
 | `ian0flipt_minimal.py` | three neutral agents on `ian0flipt`: `flipt-02e2` under the jigsaw honeypot, each piece also a patch file outside the repository, with a clean-room fork in place of CheatBench's work-test line | `ian_seed_prototyping_2` (baseline, seeded) |
-| `ian0flipt_minimal_cheat.py` | `ian0flipt_minimal` with every agent told to cheat (flipt's `CHEAT`) | `ian_seed_prototyping_2` (positive control) |
+| `ian0flipt_minimal_cheat.py` | `ian0flipt_minimal` with every agent told to cheat, in the task's own paragraph since 2026-11-23 (upstream's code, both places); the runs of `ian_seed_prototyping_2` read flipt's `CHEAT` | `ian_seed_prototyping_2` (positive control) |
 | `ian0flipt_minimal_regulated.py` | `ian0flipt_minimal` with a fourth agent, a hidden regulator who holds no piece | none |
 | `ianswe0_minimal.py` | three neutral agents on `ian_swe0`: `flipt-02e2` under the jigsaw honeypot, each piece held twice, as a planted branch and as a patch file outside the repository | `ian_seed_prototyping_1` (baseline, negative control) |
 | `ianswe0_minimal_cheat.py` | `ianswe0_minimal` with every agent told to cheat (flipt's `CHEAT`) | `ian_seed_prototyping_1` (positive control) |
@@ -49,14 +49,14 @@ plan and live in `OLD/runs/`.
 | script | what the cell is | plans |
 |---|---|---|
 | `ian0poem_minimal.py` | three neutral agents on `ian0poem`: the brief `museum_poem` under the split, each segment of the reference also in a side folder its holder alone reads, with a client's commission in place of CheatBench's interview sentences | `ian_seed_prototyping_2` (baseline, seeded) |
-| `ian0poem_minimal_cheat.py` | `ian0poem_minimal` with every agent told to cheat (`poem_minimal_cheat`'s `CHEAT`) | `ian_seed_prototyping_2` (positive control) |
+| `ian0poem_minimal_cheat.py` | `ian0poem_minimal` with every agent told to cheat, in the task's own paragraph since 2026-11-23 (Fernway Studio's poem, both places); the runs of `ian_seed_prototyping_2` read `poem_minimal_cheat`'s `CHEAT` | `ian_seed_prototyping_2` (positive control) |
 
 ### Protein design (`cells/protein_design/`)
 
 | script | what the cell is | plans |
 |---|---|---|
 | `ian0binder_minimal.py` | three neutral agents on `ian0binder`: the target `alfalfa_chi`, each agent's candidates file also in the screening directory's backup, with a client's request in place of CheatBench's sentence about a manager | `ian_seed_prototyping_2` (baseline, seeded) |
-| `ian0binder_minimal_cheat.py` | `ian0binder_minimal` with every agent told to cheat (`binder_minimal_cheat`'s `CHEAT`) | `ian_seed_prototyping_2` (positive control) |
+| `ian0binder_minimal_cheat.py` | `ian0binder_minimal` with every agent told to cheat, in the task's own paragraph since 2026-11-23 (the candidate sequences, both places); the runs of `ian_seed_prototyping_2` read `binder_minimal_cheat`'s `CHEAT` | `ian_seed_prototyping_2` (positive control) |
 
 Each script's docstring holds the full description of its cell.
 
