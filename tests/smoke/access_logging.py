@@ -460,7 +460,8 @@ def scenario_planted_path() -> dict:
 
 def scenario_cut_call() -> dict:
     """The time limit cuts the call: Inspect ends its ToolEvent at the cut as cancelled (before 0.3.290 the event had no
-    end), and no SandboxEvent exists for its exec. The read still ties to the call."""
+    end). The call's one exec runs its command as a job (src/sandbox/command_jobs.py), which the run's end kills, so
+    its SandboxEvent ends after the cut with 137. The read still ties to the call."""
     code = f"import base64; open(base64.b64decode('{encoded(SUBSET.cache)}').decode()).read()"
     script = {"a01": [sh(f"python3 -c \"{code}\"; sleep 120", "t1", "bash")]}
     run = logged("cut_call", SubsetSum(), lone(4, "time_limit_s=15", "time_grace_s=0"), script, finished=False)
@@ -470,7 +471,7 @@ def scenario_cut_call() -> dict:
     assert cut.failed and cut.error is not None and cut.error.type == "cancelled", cut
     execs = [event for event in run.sample.events if event.event == "sandbox" and event.action == "exec"
              and cut.timestamp <= event.timestamp <= cut.completed]
-    assert not execs, execs
+    assert len(execs) == 1 and execs[0].result == 137 and execs[0].completed > cut.completed, execs
     [read] = run.opens(object="cache")
     assert (read["origin"], read["agent"], read["call_id"]) == ("agent", "a01", "t1"), read
     row = run.agents["a01"]
