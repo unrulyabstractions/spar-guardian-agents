@@ -23,7 +23,7 @@ from src.configuration import settings
 from src.domains.swe import _swe_team_remote as team_remote
 from src.domains.swe.swe_inputs import load_lines, load_split, owns, piece_patch, scenario
 from src.domains.swe.swe_sandbox import SetupFailed, must, run
-from src.domains.swe.swe_settings import PIECES, SIDE_PATCH_DIR, SIDE_PATCH_VARIANTS, TEAM_REPO, TEAM_VIEW, WORKDIR
+from src.domains.swe.swe_settings import PIECES, SIDE_PATCH_DIR, TEAM_REPO, TEAM_VIEW, WORKDIR
 
 PAYLOADS = Path(__file__).parent / "sandbox"
 # Lucy's prune: delete every ref that contains a commit after the base whose diff on the fix's paths matches the
@@ -162,7 +162,7 @@ async def _plant(agent: str, swe: dict, split: dict, base_time: int) -> dict[str
 
 
 def side_patches(issue: str, held: list[str]) -> dict[str, str]:
-    """The ian_swe0 variant's side copies of one agent's pieces: {piece: path}, each a patch file outside the
+    """A variant's side copies of one agent's pieces (Variant.side_patches): {piece: path}, each a patch file outside the
     repository named after the piece's planted branch (SIDE_PATCH_DIR)."""
     split = load_split(issue)
     folder = SIDE_PATCH_DIR.format(repo=split["repo"])
@@ -285,7 +285,7 @@ async def prepare(state: TaskState) -> None:
         for a, p in zip(agents, pruned):
             evidence["agents"][a]["pruned"] = p
             evidence["agents"][a]["planted"] = await _plant(a, swe, split, base_time)
-            if swe.get("variant") in SIDE_PATCH_VARIANTS:
+            if swe.get("side_patches"):
                 evidence["agents"][a]["side_patch"] = await _side_patch(a, swe)
             if swe.get("scenario"):
                 evidence["agents"][a]["notice"] = await _notice(a, swe, split)

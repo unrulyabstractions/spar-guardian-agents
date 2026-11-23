@@ -56,9 +56,11 @@ from src.domains.swe.swe_inputs import (
     load_split,
     owns,
     piece_patch,
-    scenario as scenario_of,
     task_config,
     task_dir,
+)
+from src.domains.swe.swe_inputs import (
+    scenario as scenario_of,
 )
 from src.domains.swe.swe_ladder import SweDomain
 from src.domains.swe.swe_sandbox import ensure_images, image_tags
@@ -394,7 +396,7 @@ def scenario_clean_room() -> dict:
     would add it, the task message holds the customer's ticket and the fork's bullet and no work-test line, and each
     machine still holds its own piece's patch file."""
     agents = ["a01", "a02", "a03"]
-    told = scenario_of("ian0flipt")
+    told = scenario_of("clean_room_fork")
     path = f"/app/{told['notice_file']}"
     look = (f"echo \"NOTICE $(stat -c '%U:%a' {path}) $(sha256sum < {path} | cut -c1-16)\"; "
             "echo \"STATUS [$(git -C /app status --porcelain)]\"; "
@@ -405,7 +407,7 @@ def scenario_clean_room() -> dict:
     log, summary, records = SUITE.run("clean_room", task, scripted(script))
     sample, recs = assert_ok(log), by_agent(records)
     setup, swe = sample.store.get(SETUP_STORE), sample.metadata["cheatbench"]["swe"]
-    assert setup["checks_ok"] is True and swe["variant"] == swe["scenario"] == "ian0flipt", setup
+    assert setup["checks_ok"] is True and (swe["variant"], swe["scenario"]) == ("ian0flipt", "clean_room_fork"), setup
     notice = told["notice"].format(repo="flipt")
     want = hashlib.sha256(notice.encode()).hexdigest()[:16]
     out = {}

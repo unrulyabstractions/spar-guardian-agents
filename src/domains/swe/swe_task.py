@@ -60,13 +60,12 @@ from src.domains.swe.swe_settings import (
     JIGSAW_PIECES,
     PARTS,
     PIECES,
-    SCENARIO_VARIANTS,
     SECRETS,
-    SIDE_PATCH_VARIANTS,
     TASK,
     TASK_DIR,
     VARIANTS,
     WORKDIR,
+    Variant,
 )
 from src.measures.run_directory import RunDir
 from src.sandbox import command_jobs
@@ -124,16 +123,18 @@ class SWE(Benchmark):
         if honeypot not in HONEYPOTS:
             raise ValueError(f"honeypot must be one of {HONEYPOTS}, got {honeypot!r}")
         if variant is not None and (variant not in VARIANTS or honeypot != "jigsaw"):
-            raise ValueError(f"variant must be one of {VARIANTS} on the jigsaw honeypot, got {variant!r} on {honeypot}")
+            raise ValueError(f"variant must be one of {sorted(VARIANTS)} on the jigsaw honeypot, got {variant!r} on "
+                             f"{honeypot}")
+        self.adds = VARIANTS.get(variant, Variant())
         self.honeypot, self.grade, self.variant = honeypot, grade, variant
         self.task_deviations = [
             "native_arm64_rebuild_of_the_amd64_swe_bench_pro_image", "no_network_in_every_container",
             f"agents_share_one_time_limit_and_get_{AGENT_CPUS:g}_cpus_{AGENT_MEM}_each",
             "tools_shell_and_run_python_bound_per_agent",
             *([f"honeypot_{honeypot}_pruned_and_planted_at_sample_setup"] if honeypot != "as_released" else []),
-            *(["each_piece_also_a_patch_file_outside_the_repository"] if variant in SIDE_PATCH_VARIANTS else []),
+            *(["each_piece_also_a_patch_file_outside_the_repository"] if self.adds.side_patches else []),
             *(["work_test_line_replaced_by_a_scenario_with_a_notice_file_in_each_clone"]
-              if variant in SCENARIO_VARIANTS else []),
+              if self.adds.scenario else []),
             *(["instruction_names_what_the_hidden_tests_call"] if issue_note(self.row) else []),
             *(["pieces_and_hidden_tests_hold_values_of_ours_where_the_fix_wrote_its_own"]
               if run_values(self.row, honeypot) else [])]
@@ -224,7 +225,7 @@ class SWE(Benchmark):
         text = settings.load_prompts()["swe"]["workspace_shared" if plan.mode == "shared_task" else "workspace_solo"]
         repo = load_split(self.row)["repo"]
         note = text.format(repo=repo, branch=agent, branches=honeypot.BRANCHES)
-        told = scenario(self.variant)
+        told = scenario(self.adds.scenario)
         if told is None:
             return note
         # the scenario's bullet leads the workspace's bullets
@@ -245,15 +246,15 @@ class SWE(Benchmark):
         split = load_split(self.row)
         instance = split["task"]
         cfg = task_config(instance)
-        instruction = instruction_text(self.row, instance, self.variant) + instruction_suffix
+        instruction = instruction_text(self.row, instance, self.adds.scenario) + instruction_suffix
         system = self.system_prompts(plan)
         first = self.first_messages(plan, instruction) or {a: instruction for a in plan.agents}
         swe = {
             "issue": self.row, "instance": instance, "repo": cfg["repo"], "base_commit": cfg["base_commit"],
             "fix_commit": fix_commit(instance), "honeypot": self.honeypot, "variant": self.variant,
             "side_patches": ({a: honeypot.side_patches(self.row, held) for a, held in plan.holds.items()}
-                             if self.variant in SIDE_PATCH_VARIANTS else {}),
-            "scenario": self.variant if self.variant in SCENARIO_VARIANTS else None,
+                             if self.adds.side_patches else {}),
+            "scenario": self.adds.scenario,
             "seed": plan.config.seed,
             "n_agents": len(plan.agents), "agents": plan.agents, "mode": plan.mode, "shutdown": plan.config.shutdown,
             "instruction": instruction, "pieces": plan.holds, "piece_times": piece_times(plan.config.seed, self.row),
