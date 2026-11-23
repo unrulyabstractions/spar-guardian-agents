@@ -728,8 +728,9 @@ def test_the_run_page_has_a_board_tab_and_a_details_tab_and_serves_the_board():
 
 
 def test_a_post_has_one_number_everywhere_on_the_page():
-    """The run page, the Board tab and the judges name a post P<n> by its place on the board, harness notices
-    included; no page reads or writes a count over the agents' posts alone ("post N")."""
+    """The run page, the Board tab and the judges name a post P<n> by its place among the board's posts, harness
+    notices included and records of who came and went left out, the #n agents see; no page reads or writes a count over
+    the agents' posts alone ("post N")."""
     run = (STATIC / "tv_view_run.js").read_text()
     assert "/\\[(\\d+)\\]|\\bP\\d+\\b/g" in run and "post_n" not in run and "post (\\d+)" not in run
     assert all("post_n" not in path.read_text() for path in STATIC.glob("tv_*"))

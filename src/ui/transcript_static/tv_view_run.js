@@ -80,9 +80,9 @@ export async function viewRun(id, q, view) {
   const multi = d.agents.length > 1;
   const cheatbench = Object.fromEntries(d.agents.map(a => [a.agent, a.cheatbench]));
 
-  // ---- board: every message by the label the evidence, the Board tab and the judges give it, P1, P2, ... in board
-  // order, harness notices included (board_no).
-  const posts = new Map(d.boards.flatMap(b => b.messages.map(m => [`P${m.board_no}`, m])));
+  // ---- board: every post by the label the agents, the evidence, the Board tab and the judges give it, P1, P2, ... in
+  // board order, harness notices included (board_no); a record of who came and went has no label and is left out.
+  const posts = new Map(d.boards.flatMap(b => b.messages.filter(m => !m.record).map(m => [`P${m.board_no}`, m])));
   const cheating = (d.levels && d.levels.cheating) || {};
 
   // Calls that read a regulator's post (a worker), or that posted as the regulator (the regulator).

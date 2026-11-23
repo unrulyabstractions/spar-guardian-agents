@@ -62,9 +62,12 @@ parts:
       src/judging/labels_manipulation.md]
     pins: []
     version: 1
-    fingerprint: sha256:8fb9d2cd7f7d18b33718e4de58b16a4b88d3ba4aeb5f7c2fbdfbcc926138a610
+    fingerprint: sha256:bbb1436c105ef45b3be602b34a0e38bb84759d8bbd4fead854f88ca7e5ffd1ff
     log:
-      1: '2026-11-22 first version: the labels pass, disclosure and manipulation per agent of c619e3d'
+      1: '2026-11-22 first version: the labels pass, disclosure and manipulation per agent of c619e3d
+        (re-locked 2026-11-22: the judge is shown no board record of who came and went and numbers the
+        posts alone; no stored run holds a record, and run_records gives the same board on all 87 runs
+        of ian_seed_prototyping_0 and _1)'
   signals:
     file: analysis/signals.jsonl
     make: src.measures.code_ladder:signals_part
@@ -100,12 +103,14 @@ parts:
     files: [src/measures/stored_json.py, src/measures/topology_fact.py, src/configuration/seed_packs.py]
     pins: []
     version: 1
-    fingerprint: sha256:0318df103058b5d8ee9614a8f202ec7bf4f872316605457db6a5d554be9975fb
+    fingerprint: sha256:c05713cebbbbd1acb9264549588dc68240807fab9869fa42f56454bb1785c23a
     log:
       1: '2026-11-22 first version: who posted, read, was shown and named whom, per board, from communication/
         (re-locked 2026-11-22: 9c48ea6 changed seed_packs.authors only; is_seeded, which topology reads,
         is unchanged) (re-locked 2026-11-22: the stored layout: the same bytes, read and written under
-        processed/ and analysis/ through run_directory.FILES)'
+        processed/ and analysis/ through run_directory.FILES) (re-locked 2026-11-22: a board record of
+        who came and went takes no post number and is marked record; no stored run holds a record, and
+        processing ian_seed_prototyping_0 and _1 (87 runs) into a copy wrote the same bytes)'
   cheating:
     file: analysis/labels/cheating.json
     make: src.ui.viewer_parts:cheating_part
@@ -119,7 +124,7 @@ parts:
       src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py]
     pins: []
     version: 2
-    fingerprint: sha256:637d2174c7c815822f6b0cb7b7bb6ec4693f976f8f7ae954f6bfe374ca27625a
+    fingerprint: sha256:83542ef6b732d6a246063643d13fcb8e5c8277da707dba88404d31d324288693
     log:
       1: '2026-11-22 first version: the Cheating ladder with CheatBench''s labels beside its clauses,
         as the viewer keeps it, of b7b1bed (re-locked 2026-11-22: the stored layout: the same bytes, read
@@ -132,7 +137,9 @@ parts:
       2: '2026-11-22 ian_swe0''s side route: a copy of a side patch is moved, a counting loop is no attempt,
         a copy applied dates built; the 42 stored SWE runs without side patches are byte-equal (re-locked
         2026-11-22: before landing: routes read a planted commit named by id as the branch route; routes
-        feed no label)'
+        feed no label) (re-locked 2026-11-22: a board record of who came and went takes no post number
+        and is marked record; no stored run holds a record, and processing ian_seed_prototyping_0 and
+        _1 (87 runs) into a copy wrote the same bytes)'
   coordination:
     file: analysis/labels/coordination.json
     make: src.measures.coordination:coordination_part
@@ -140,9 +147,11 @@ parts:
     files: [src/measures/stored_json.py, src/measures/coordination.py, src/measures/topology_fact.py]
     pins: []
     version: 1
-    fingerprint: sha256:2eb5d94f5f79e719f45d792d20b822739547f28c31f6619f4b2b455c4aeb2316
+    fingerprint: sha256:e9e3224fc458d495877eba3f40bbbfa80806ce77c7765ad775ef49fd59bc3ca5
     log:
-      1: '2026-11-22 first version: the Coordination ladder from the stored topology'
+      1: '2026-11-22 first version: the Coordination ladder from the stored topology (re-locked 2026-11-22:
+        a board record of who came and went takes no post number and is marked record; no stored run holds
+        a record, and processing ian_seed_prototyping_0 and _1 (87 runs) into a copy wrote the same bytes)'
   collusion:
     file: analysis/labels/collusion.json
     make: src.ui.viewer_parts:collusion_part
@@ -156,7 +165,7 @@ parts:
       src/domains/*/*_settings.py]
     pins: []
     version: 2
-    fingerprint: sha256:418ab859890686c3447fc875ddcfd5f39199bf88fd6cae766c0c02689f290ed6
+    fingerprint: sha256:e4e42721c2db7b12ce0ebf143617ac216cdd8cbd5dc7adcf209ac5d8bf74d8e1
     log:
       1: '2026-11-22 first version: the Collusion ladder as the viewer keeps it, of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -167,7 +176,9 @@ parts:
         swe.side_patches reads as before, and no stored run has any)'
       2: '2026-11-22 ian_swe0''s side route as in signals v2; the 42 stored SWE runs without side patches
         are byte-equal (re-locked 2026-11-22: before landing: routes read a planted commit named by id
-        as the branch route; routes feed no label)'
+        as the branch route; routes feed no label) (re-locked 2026-11-22: a board record of who came and
+        went takes no post number and is marked record; no stored run holds a record, and processing ian_seed_prototyping_0
+        and _1 (87 runs) into a copy wrote the same bytes)'
   judged:
     file: analysis/labels/judged.json
     make: src.ui.viewer_parts:judged_part
@@ -189,7 +200,7 @@ parts:
       src/ui/transcript_index.py, src/ui/transcript_levels.py, src/ui/viewer_parts.py]
     pins: []
     version: 2
-    fingerprint: sha256:c9397bd659a763bc830eb1b2b0b7711bddc86f7e79b140bc881734fdd04a7d5c
+    fingerprint: sha256:72c4cf8c4cfeb085198b91d40bbe48b9ef33a9e27885add1c447d4becb7ea3a3
     log:
       1: '2026-11-22 first version: the runs page''s row (transcript_index.build_row) of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -198,4 +209,7 @@ parts:
         smoke has, and the code record of all 41 SWE runs of ian_seed_prototyping_0 is byte-equal with
         and without them)'
       2: '2026-11-22 A run whose name is no <stem>_<cell>_<tag> takes its cell from the script that launched
-        it (run.json launch.module): the told-to-cheat runs of a study plan no longer read as baseline'
+        it (run.json launch.module): the told-to-cheat runs of a study plan no longer read as baseline
+        (re-locked 2026-11-22: a board record of who came and went takes no post number and is marked
+        record; no stored run holds a record, and processing ian_seed_prototyping_0 and _1 (87 runs) into
+        a copy wrote the same bytes)'

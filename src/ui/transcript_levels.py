@@ -397,9 +397,10 @@ def _team_cheat(C: dict) -> dict:
 
 # -------------------------------------------------------------------------------------------------- Coordination
 def _post_labels(boards: list[dict]) -> dict[str, str]:
-    """Board message id -> its label, P<n> by its place on the board (board_no), as the Board tab and the judges name
-    it."""
-    return {m["id"]: f"P{m['board_no']}" for b in boards for m in b.get("messages") or [] if m.get("id") is not None}
+    """Board post id -> its label, P<n> by its place among the board's posts (board_no), as the agents, the Board tab
+    and the judges number it. A record of who came and went has no label."""
+    return {m["id"]: f"P{m['board_no']}" for b in boards for m in b.get("messages") or []
+            if m.get("id") is not None and not m.get("record")}
 
 
 def _coordination(measure: dict, boards: list[dict]) -> dict:

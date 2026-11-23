@@ -31,6 +31,7 @@ from src.measures import judge_labels, stored_json, stored_versions
 from src.measures.ladder_by_domain import HIDDEN_TASKS, TASK_DOMAIN, hidden_task
 from src.measures.run_directory import RunDir, episode_agent, is_influencer, is_worker, roles_of, run_name
 from src.measures.run_listing import Listed, list_collection
+from src.measures.topology_fact import board_numbers
 from src.ui import transcript_levels
 
 SKIP = ("study_smoke", "study_orbit2_check", "apart_controls")
@@ -105,10 +106,11 @@ def folder_agents(run_dir: Path, episodes: list[dict]) -> dict[str, str]:
 
 
 def board_view(run_dir: Path, roles: dict) -> list[dict]:
-    """Each sample's board (RunDir.boards): each message's id, its place on the board (board_no, the label P<n> the run
-    page, the Board tab and the judges give it), whether it is a harness notice, whether a seed pack put it there
-    (SwarmConfig.seed_pack: a previous team's post), its sender and the sender's role, and the tool calls that sent it
-    and read it."""
+    """Each sample's board (RunDir.boards): each message's id, its place among the board's posts (board_no, the #n
+    agents see and the label P<n> the run page, the Board tab and the judges give it; topology_fact.board_numbers),
+    whether it is a harness notice, whether a seed pack put it there (SwarmConfig.seed_pack: a previous team's post),
+    its sender and the sender's role, and the tool calls that sent it and read it. A record of who came and went is no
+    post: its board_no is None and it alone carries "record": True."""
     boards = []
     for c in RunDir(run_dir).boards():
         sent, reads = {}, {}
@@ -118,11 +120,13 @@ def board_view(run_dir: Path, roles: dict) -> list[dict]:
                     sent[mid] = {"agent": e.get("agent_id"), "call_id": e.get("tool_call_id")}
                 elif e.get("kind") == "read":
                     reads.setdefault(mid, []).append({"agent": e.get("agent_id"), "call_id": e.get("tool_call_id")})
+        listed = c.get("messages") or []
         boards.append({"messages": [
-            {"id": m.get("id"), "board_no": i, "notice": m.get("sender") == SYSTEM, "seeded": is_seeded(m),
+            {"id": m.get("id"), "board_no": n, "notice": m.get("sender") == SYSTEM, "seeded": is_seeded(m),
              "sender": m.get("sender"),
-             "role": roles.get(m.get("sender")), "sent": sent.get(m.get("id")), "reads": reads.get(m.get("id"), [])}
-            for i, m in enumerate(c.get("messages") or [], 1)]})
+             "role": roles.get(m.get("sender")), "sent": sent.get(m.get("id")), "reads": reads.get(m.get("id"), []),
+             **({"record": True} if n is None else {})}
+            for n, m in zip(board_numbers(listed), listed)]})
     return boards
 
 

@@ -243,8 +243,10 @@ export function renderBoard(el, d, opts) {
   const boardList = h('ol', { class: 'bd-posts' });
   const empty = muted('no post yet', 'small block');
   const boardBox = h('div', { class: 'bd-board-box' }, empty, boardList);
-  const seededCount = d.posts.filter(p => p.kind === 'seeded').length;
-  const boardHead = h('h3', { class: 'bd-board-head' }, `Message board · ${plural(d.posts.length, 'post')}`,
+  // a record of who came and went (record) is no post: a slim line in the list, no count, nothing on the lanes
+  const postCount = d.posts.filter(p => !p.record).length;
+  const seededCount = d.posts.filter(p => p.kind === 'seeded' && !p.record).length;
+  const boardHead = h('h3', { class: 'bd-board-head' }, `Message board · ${plural(postCount, 'post')}`,
     seededCount ? ` · ${seededCount} seeded` : '');
   // the /tmp panel, when the run has snapshots: every call's place on the clock, by agent and k
   const callTime = new Map(d.agents.flatMap(a => a.calls.map(c => [`${a.agent}:${c.k}`, c.t])));
@@ -257,6 +259,13 @@ export function renderBoard(el, d, opts) {
 
   // ---- the posts as the board shows them, built once; a change of the pair changes their classes only
   const items = d.posts.map((p, i) => {
+    if (p.record) {
+      const li = h('li', { class: ['bd-post', 'bd-record'], dataset: { i: String(i) }, hidden: true },
+        badge('system', 'notice', 'who entered or left the board; not a post'),
+        h('span', { class: 'bd-record-text' }, p.text));
+      boardList.appendChild(li);
+      return { p, li };
+    }
     const readers = new Map();
     for (const r of p.reads) {
       if (!readers.has(r.agent)) readers.set(r.agent, []);
@@ -341,13 +350,17 @@ export function renderBoard(el, d, opts) {
       if (state.a === state.b) break;
     }
     for (const p of d.posts) {
-      if (p.kind !== 'seeded' && p.writer !== state.a && p.writer !== state.b) out.push({ t: p.t, post: p, calls: [] });
+      if (p.kind !== 'seeded' && !p.record && p.writer !== state.a && p.writer !== state.b) {
+        out.push({ t: p.t, post: p, calls: [] });
+      }
     }
     out.sort((x, y) => x.t - y.t || String(x.agent).localeCompare(String(y.agent)));
     out.forEach((u, i) => { for (const c of u.calls) c.u = i; if (u.post) u.post.u = i; });
     const written = new Map(SIDES.flatMap(s => byAgent.get(state[s]).calls.map(c => [`${state[s]}:${c.k}`, c.u])));
+    const stopTimes = out.map(u => u.t);
     for (const p of d.posts) {
       if (p.kind === 'seeded') p.u = -1;
+      else if (p.record) p.u = lastAtOrBefore(stopTimes, p.t);   // with the last stop at or before it
       else if (p.writer === state.a || p.writer === state.b) p.u = written.get(`${p.writer}:${p.call}`) ?? 0;
       for (const r of p.reads) r.u = written.get(`${r.agent}:${r.k}`);
     }
@@ -372,7 +385,7 @@ export function renderBoard(el, d, opts) {
     // the seed pack's posts stand in a band of their own between the gutter and the lanes' start, in posting order
     // along its rows (seedSlot); the lanes and the axis start after it
     const rows = Math.floor((BOARD_H - 8) / (POST_H + POST_GAP));
-    const seeded = d.posts.filter(p => p.kind === 'seeded');
+    const seeded = d.posts.filter(p => p.kind === 'seeded' && !p.record);
     const seedCols = Math.ceil(seeded.length / rows);
     const SEED_BOX = 30;
     const seedW = seeded.length ? 8 + seedCols * (SEED_BOX + POST_GAP) - POST_GAP : 0;
@@ -441,7 +454,7 @@ export function renderBoard(el, d, opts) {
     lanes.append(svgEl('rect', { class: 'bd-lane bd-lane-board', x: x0, y: yBoard, width: x1 - x0, height: BOARD_H }),
       svgEl('text', { x: 18, y: yName, class: 'bd-name' }, 'board'),
       svgEl('text', { x: 18, y: yName + 14, class: 'bd-role' },
-        `${plural(d.posts.length, 'post')}${seedName ? ` · ${seededCount} seeded` : ''}`),
+        `${plural(postCount, 'post')}${seedName ? ` · ${seededCount} seeded` : ''}`),
       ...(seedName ? [svgEl('text', { x: 18, y: yName + 27, class: 'bd-role bd-seed-name' }, `(${seedName})`,
         svgEl('title', null, `seed pack ${d.seed_pack}`))] : []));
     svg.appendChild(lanes);
@@ -589,6 +602,7 @@ export function renderBoard(el, d, opts) {
       const at = [];
       let ok = true;
       for (const p of d.posts) {
+        if (p.record) { at.push(null); continue; }
         if (seedSlot.has(p)) { at.push(seedSlot.get(p)); continue; }
         const from = Math.min(Math.max(x0, mid(p) - boxW / 2), x1 - boxW);
         let r = ends.findIndex(e => e + POST_GAP <= from);
@@ -609,6 +623,7 @@ export function renderBoard(el, d, opts) {
     const arrow = (into, s, cls, x1, y1, x2, y2) => into.appendChild(svgEl('line', {
       class: ['bd-arrow', cls, `bd-arrow-${s}`], x1, y1, x2, y2, 'marker-end': `url(#bd-arrow-${s}-${uid})` }));
     d.posts.forEach((p, i) => {
+      if (p.record) return;
       const { from, r } = packed.at[i];
       const w = seedSlot.has(p) ? SEED_BOX : boxW;
       const y = yBoard + 4 + r * (POST_H + POST_GAP);
@@ -737,6 +752,7 @@ export function renderBoard(el, d, opts) {
     // the board's events in order (each post written, and each read by one of the two), for the latest post
     const events = [];
     d.posts.forEach((p, i) => {
+      if (p.record) return;
       events.push({ key: keyOf(p), i });
       for (const r of p.reads) if (r.agent === state.a || r.agent === state.b) events.push({ key: keyOf(r), i });
     });
@@ -799,10 +815,13 @@ export function renderBoard(el, d, opts) {
     }
     // the board: show each post the position has reached, hide the rest
     const k = lastAtOrBefore(L.orderKeys, P) + 1;
-    const reveal = (i, on) => { items[i].li.hidden = !on; L.postBox.get(i).g.classList.toggle('bd-ahead', !on); };
+    const reveal = (i, on) => {
+      items[i].li.hidden = !on;
+      if (L.postBox.has(i)) L.postBox.get(i).g.classList.toggle('bd-ahead', !on);
+    };
     while (shown < k) reveal(L.order[shown++], true);
     while (shown > k) reveal(L.order[--shown], false);
-    empty.hidden = shown > 0;
+    empty.hidden = L.order.slice(0, shown).some(i => !d.posts[i].record);
     showArrows();
     const e = lastAtOrBefore(L.eventKeys, P);
     const now = e >= 0 ? L.events[e].i : -1;
@@ -836,7 +855,7 @@ export function renderBoard(el, d, opts) {
 
   // The arrows shown: the post at the position, the RECENT posts before it, and the post under the pointer.
   function showArrows() {
-    const want = new Set(L.order.slice(Math.max(0, shown - 1 - RECENT), shown));
+    const want = new Set(L.order.slice(0, shown).filter(i => L.postBox.has(i)).slice(-1 - RECENT));
     if (hovered >= 0) want.add(hovered);
     for (const i of lit) if (!want.has(i)) L.postBox.get(i).arrows.setAttribute('visibility', 'hidden');
     for (const i of want) if (!lit.has(i)) L.postBox.get(i).arrows.setAttribute('visibility', 'visible');

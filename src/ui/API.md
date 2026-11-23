@@ -474,13 +474,16 @@ Agent = {agent, role, folder (its trajectories/ folder), transcript_bytes,
                    final_text, usage, defense, defenses},   # the keys episodes.jsonl has of these
          cheatbench: {judge: verdict row},
          routes: [str] | null}   # signals.jsonl's routes (SWE alone), chips beside the agent's Cheating rung
-Board = {messages: [{id, board_no (P<n>), notice (a harness notice), sender, role,   # one per sample (RunDir.boards)
-         sent: {agent, call_id}, reads: [{agent, call_id}]}]}
+Board = {messages: [{id, board_no (P<n>; null on a record), notice (a harness notice), sender, role,   # per sample
+         sent: {agent, call_id}, reads: [{agent, call_id}], record? (true on a record only)}]}   # (RunDir.boards)
 # A board message whose invocation_id is "presence_record" in communication/<sample>.json is a record of who came and
 # went (src/swarm/turn_rules is_record): sender "system", content "<agent> entered." or "<agent> exited.", with no
 # reason; a seed pack's authors each get an exit record after the pack's posts. The agents' board_read prints a record
-# with no number, so an agent's #n counts posts alone; here it is a notice (notice true; BoardPost kind "system") and
-# takes a P<n> like any notice. Runs before 2026-11-22 hold no record.
+# with no number, so an agent's #n counts posts alone, and every reader here numbers the same way: board_no, the
+# topology fact's P, BoardPost's label and the judges' labels count the posts alone (harness notices included,
+# records left out; src/measures/topology_fact.py board_numbers). A record is a notice (notice true; BoardPost kind
+# "system") with board_no null, label null and `record: true`, a key no post carries. The judges are never shown a
+# record. Runs before 2026-11-22 hold no record.
 Levels = {agents: {agent: {<ladder>: Cell}}, team: {<ladder>: Cell}, events: {agent: [Event]}, labels: {agent: [Label]},
           judge_labels: JudgeLabels, single, ladders, order, cheating: Cheating,
           judge_label_about: {labels: JUDGE_LABELS, anchors: [[score, meaning]], scored_by},   # label_about()
@@ -534,7 +537,8 @@ panel: the team's rung, the influencers' own rungs, each agent's rung and its Ch
 and their calls, whether the hand-in holds work of both and the pieces it pooled, then the hand-in's contributors; and
 the judge labels panel: the two labels explained, and each agent's score chips with the excerpt, the reason and the
 link to the excerpt's place. Every page names a post P<n> by its
-place on the board, harness notices included, as the judges do; a P<n> anywhere opens the Board tab at that post. The bar's "Run record" button opens the run record at the foot of the page: the run's
+place among the board's posts, harness notices included and records of who came and went left out, as the agents and
+the judges do; a P<n> anywhere opens the Board tab at that post. The bar's "Run record" button opens the run record at the foot of the page: the run's
 labels, its settings and each agent's record with its Cheating evidence, its judge labels and each CheatBench judge's
 verdict.
 
@@ -607,10 +611,13 @@ BoardCall = {k (the agent tab's "Call k"), m (its model call, per agent from 0),
                      coordination: [{level ("read" | "write"), index, evidence, post, took_up: [agent]}],
                      collusion: [{level ("cooperation"), index, giver, rule, planted, evidence}],
                      judge: [{label, score, kind, where ("reasoning" | "post"), evidence (the excerpt)}]}}
-BoardPost = {label ("P1", "P2", ... in board order, system notices included: the judges' numbering), writer, role,
+BoardPost = {label ("P1", "P2", ... in board order, system notices included, records left out: the agents' and the
+             judges' numbering; null on a record), writer, role,
              kind ("post" | "system" | "seeded": a seed pack's post, on the board before round 1), t, call (the writer's call k, null for a notice), text,
              reads: [{agent, k, t, form, asked}] (every read by another agent),
-             labels: [{agent, label, score, excerpt, reason, start, end}]}   # judge labels located in the post
+             labels: [{agent, label, score, excerpt, reason, start, end}],   # judge labels located in the post
+             record? (true on a record of who came and went only: no reads, no labels; the Board tab lists it as a
+             slim "system" line in its place, leaves it out of "N posts" and draws nothing for it on the lanes)}
 ```
 The clock is the eval log's tool events where the log times every call (`run_calls.load_run(times=True)`, the
 source the results browser's timeline reads): `t` and `dur` in seconds from the first call's start. Without them it is

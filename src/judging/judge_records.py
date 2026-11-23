@@ -8,9 +8,12 @@
     locate("copy the gold", "post", own_posts, reasoning)
                                     # {"where": "post", "post": "P3", "call": None, "start": 120, "end": 135} or None
 
-The board is every post of the run in board order, labelled P1, P2, ... (the transcript viewer's Board tab numbers
-them the same way). A post's readers are the agents other than its writer with a read event that returned it. A post
-by a sender who is no agent of the run is a harness notice.
+The board is every post of the run in board order, labelled P1, P2, ..., the #n agents see (src/swarm/board.py
+_numbers; the transcript viewer's Board tab numbers them the same way). A post's readers are the agents other than its
+writer with a read event that returned it. A post by a sender who is no agent of the run is a harness notice. A record
+of who came and went ("a01 entered.", src/swarm/turn_rules is_record) is no post: it takes no number, and the judge is
+not shown it (RunRecords.board leaves it out). posts(run) keeps it in its place for the Board tab, with no label, no
+readers and "record": True.
 
 Visible reasoning is a model call's reasoning_content that a reader can read: not the export's "[redacted reasoning]",
 not an encrypted blob, not a list of provider blocks with no text or summary. It is the text the transcript viewer's
@@ -34,6 +37,7 @@ from typing import NamedTuple
 from src.export.atif_transcripts import visible_reasoning
 from src.measures.run_calls import Run, load_run
 from src.measures.run_directory import RunDir, episode_agent
+from src.measures.topology_fact import board_numbers
 
 PLAIN = str.maketrans({"`": "", "‘": "'", "’": "'", "‚": "'", "‛": "'", "′": "'",
                        "“": '"', "”": '"', "„": '"', "‟": '"', "″": '"'})
@@ -103,15 +107,20 @@ def action_calls(transcript: dict) -> list[Action]:
 # the board
 # --------------------------------------------------------------------------
 def posts(run: Run) -> list[dict]:
-    """The run's posts in board order, each with its label (P1, P2, ...), id, writer and readers (the agents other
-    than its writer with a read event that returned it)."""
+    """The run's board messages in board order: each post with its label (P1, P2, ..., records left out), id, writer
+    and readers (the agents other than its writer with a read event that returned it); each record of who came and
+    went with label None, no readers and "record": True, the one key only a record has."""
     readers: dict[str, set[str]] = {}
     for event in run.reads:
         for message_id in event.get("message_ids") or []:
             readers.setdefault(message_id, set()).add(event.get("agent_id"))
     out = []
-    for n, message in enumerate(run.messages, 1):
+    for n, message in zip(board_numbers(run.messages), run.messages):
         writer = message.get("sender")
+        if n is None:
+            out.append({"label": None, "id": message.get("id"), "writer": writer, "readers": [],
+                        "content": str(message.get("content") or ""), "record": True})
+            continue
         out.append({"label": f"P{n}", "id": message.get("id"), "writer": writer,
                     "readers": sorted(readers.get(message.get("id"), set()) - {writer, None}),
                     "content": str(message.get("content") or "")})
@@ -157,8 +166,8 @@ def run_records(run_dir: Path) -> RunRecords:
         transcript = stored.transcript(ep["episode"])
         reasoning.setdefault(agent, []).extend(reasoning_calls(transcript))
         actions.setdefault(agent, []).extend(action_calls(transcript))
-    return RunRecords(stored.path, stored.run_json.get("task"), run.roles, run.prompts, episodes, posts(run),
-                      reasoning, actions)
+    return RunRecords(stored.path, stored.run_json.get("task"), run.roles, run.prompts, episodes,
+                      [p for p in posts(run) if not p.get("record")], reasoning, actions)
 
 
 # --------------------------------------------------------------------------

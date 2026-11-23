@@ -6,7 +6,8 @@ transcript viewer (src/ui/transcript_viewer.py, route /api/board).
     payload["agents"][0]["calls"][0]["marks"]["cheating"]   # [{level, index, clause, evidence}]: one lens's marks
     payload["agents"][0]["final"]           # {ladder: {level, facts}}: the agent's level at the end of the run
     payload["agents"][0]["unplaced"]        # {lens: {clause, rule or label: records that name no call}}
-    payload["posts"][0]                     # {label, writer, role, kind, t, call, text, reads, labels}
+    payload["posts"][0]                     # {label, writer, role, kind, t, call, text, reads, labels}, and
+                                            # "record": True on a record (label None)
     payload["posts"][0]["reads"][0]         # {agent, k, t, form ("latest" | "from" | None), asked}
     payload["pair"]                         # the two agents the tab opens with, and payload["pair_why"]
     payload["notes"]                        # load_run's notes, then the count of reads of no recorded form
@@ -20,9 +21,11 @@ The calls are run_calls.load_run's, numbered as the transcript scan numbers them
 The clock is the eval log's tool events where the run's log holds every call (load_run's times, the source the
 results browser's timeline reads): t and dur in seconds from the first call's start. Without them the clock is call
 order: t is the call's place in Run.ordered (by turn, then agent and number) and every call lasts 1. The posts are
-numbered P1, P2, ... in board order as the judges number them (src/judging/judge_records.py posts), system notices
-included. A post is placed at the start of the call that wrote it; a system notice, which no call wrote, at the end of
-the call of the board's last event before it. Each read is a board_read call of another agent whose result held the
+numbered P1, P2, ... in board order as the agents and the judges number them (src/judging/judge_records.py posts),
+system notices included. A record of who came and went ("a01 entered.") stands in its place among them with no label,
+no reads and no judge label, and alone carries "record": True; it is no post. A post is placed at the start of the
+call that wrote it; a system notice or a record, which no call wrote, at the end of the call of the board's last event
+before it. Each read is a board_read call of another agent whose result held the
 post, with its form from the call's own arguments (src/swarm/board.py board_read, read_form): "from" when the call
 named the post's writer in `from_agent`, with `asked` that agent; "latest" when it asked for the newest posts (`latest`,
 or no argument) or named another writer; None when its arguments are none of the tool's, and the payload's notes count
@@ -426,7 +429,8 @@ def board_payload(run_dir: Path, levels: dict) -> dict:
     name, at, total = clock(run)
     by_model = model_calls(run_dir)
     steps = step_numbers(by_model)
-    labelled = {m["id"]: f"P{i}" for i, m in enumerate(run.messages, 1)}
+    listed = labelled_posts(run)
+    labelled = {p["id"]: p["label"] for p in listed if not p.get("record")}
     events = sorted((e for board in run.boards for e in board.get("events") or []),
                     key=lambda e: e.get("sequence") or 0)
     wrote: dict[str, list[str]] = {}
@@ -442,7 +446,7 @@ def board_payload(run_dir: Path, levels: dict) -> dict:
     judged = post_labels(levels)
     ordered = sorted(by_id.values(), key=lambda c: at[(c.agent, c.k)][0])
     posts = []
-    for post, message in zip(labelled_posts(run), run.messages):
+    for post, message in zip(listed, run.messages):
         writer_call = sent_by.get(post["id"])
         if writer_call is not None:
             t = at[(writer_call.agent, writer_call.k)][0]
@@ -450,12 +454,13 @@ def board_payload(run_dir: Path, levels: dict) -> dict:
             t = notice_time(message, events, by_id, at)
         reads = [{"agent": c.agent, "k": c.k, "t": at[(c.agent, c.k)][0],
                   **dict(zip(("form", "asked"), read_form(c.arguments, post["writer"])))} for c in ordered
-                 if post["label"] in read.get(c.id, []) and c.agent != post["writer"]]
+                 if not post.get("record") and post["label"] in read.get(c.id, []) and c.agent != post["writer"]]
         posts.append({"label": post["label"], "writer": post["writer"], "role": run.roles.get(post["writer"]),
                       "kind": "seeded" if is_seeded(message) else "post" if post["writer"] in run.roles else "system",
                       "t": t,
                       "call": writer_call.k if writer_call else None, "text": post["content"], "reads": reads,
-                      "labels": judged.get(post["label"], [])})
+                      "labels": judged.get(post["label"], []) if not post.get("record") else [],
+                      **({"record": True} if post.get("record") else {})})
     posts.sort(key=lambda p: p["t"])
     placed = Placed()
     logged = logged_calls(run_dir, {c.id: (c.agent, c.k) for c in by_id.values()})

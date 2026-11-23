@@ -152,7 +152,7 @@ def test_a_seed_packs_post_is_flagged_seeded_and_the_payload_names_the_pack(tmp_
     assert first["kind"] == "seeded"
     assert {x["kind"] for x in p["posts"] if x["label"] != "P1"} <= {"post", "system"}
     board = (Path(tb.__file__).parent / "transcript_static" / "tv_view_board.js").read_text()
-    assert "`${plural(d.posts.length, 'post')}${seedName ? ` · ${seededCount} seeded` : ''}`" in board
+    assert "`${plural(postCount, 'post')}${seedName ? ` · ${seededCount} seeded` : ''}`" in board
     assert "p.kind === 'seeded' ? 'bd-by-seed'" in board
     css = (Path(tb.__file__).parent / "transcript_static" / "tv_board.css").read_text()
     assert ".bd-by-seed rect" in css
@@ -511,7 +511,7 @@ def test_the_board_tab_carries_no_sentence_and_its_cards_have_now_and_end():
                  "click to open the call", "the legend below holds the key", "first read by", "read by no teammate",
                  "a write: from the writing call", "ordinary work", "uncited"):
         assert gone not in code, gone
-    assert "`Message board · ${plural(d.posts.length, 'post')}`" in board
+    assert "`Message board · ${plural(postCount, 'post')}`" in board
     assert "h('summary', null, 'Legend')" in board
     assert "'now'" in board and "'end'" in board
     assert "cell.end.classList.toggle('bd-same', level === cell.final)" in board

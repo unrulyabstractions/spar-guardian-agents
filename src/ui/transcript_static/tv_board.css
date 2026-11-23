@@ -179,6 +179,11 @@
 .bd-post.bd-latest { box-shadow: inset 0 0 0 2px var(--text); }
 /* a harness notice's word on the notice's own ground: no padding of its own, so the head keeps one gap */
 .bd-post-head .badge.b-notice { padding: 0; border: 0; background: none; }
+/* a record of who came and went: one slim line, no label, no readers */
+.bd-post.bd-record { display: flex; align-items: center; gap: 6px; padding: 1px 9px; font-size: 12px;
+  border-style: dashed; border-left-style: solid; border-left-color: var(--notice); background: var(--notice-bg); }
+.bd-record .badge.b-notice { padding: 0; border: 0; background: none; }
+.bd-record-text { font-family: var(--mono); color: var(--muted); }
 .bd-post.bd-has-label { border-right: 4px solid #5b73ad; }
 .bd-readers { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
 .bd-reader { font-family: var(--mono); }
