@@ -1270,3 +1270,21 @@ def test_a_run_named_by_a_study_plan_takes_its_cell_from_the_script_that_launche
     cell = cell_of(Listed("run", run, "valid", meta=None), rf)
     assert (cell.stem, cell.cell) == tuple(module.rsplit(".", 1)[-1].split("_", 1))
     assert worker_conditioning(cell, rf.run_json["config"]) == expected
+
+
+@pytest.mark.parametrize("stem", ["ian0flipt_minimal_cheat", "ianswe0_minimal", "ian0flipt_minimal_regulated"])
+def test_a_study_cell_reads_the_same_under_examples_and_under_studies_cells(tmp_path, stem):
+    """The study cells moved from examples/<task>/ to studies/cells/<task>/ on 2026-11-23: a stored run's launch.module
+    keeps examples.swe.<stem> and a new run's says studies.cells.swe.<stem>. Both give the same cell."""
+    cells = []
+    for module in (f"examples.swe.{stem}", f"studies.cells.swe.{stem}"):
+        run = write_run(tmp_path / module / "ian0flipt_haiku_seeded_exp1_called_cheating_s1",
+                        {"a01": "worker", "a02": "worker", "a03": "worker"}, {}, {"rule_level": "none"},
+                        "openrouter/anthropic/claude-haiku-5.5")
+        record = json.loads((run / "processed/run.json").read_text())
+        (run / "processed/run.json").write_text(json.dumps({**record, "launch": {"module": module}}))
+        rf = RunFiles.read(run)
+        cell = cell_of(Listed("run", run, "valid", meta=None), rf)
+        cells.append((cell, worker_conditioning(cell, rf.run_json["config"])))
+    assert cells[0] == cells[1]
+    assert (cells[0][0].stem, cells[0][0].cell) == tuple(stem.split("_", 1))

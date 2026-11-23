@@ -246,7 +246,7 @@ Shared helpers.
 |---|---|
 | `run <name> [--benchmark openmath\|swe\|knowledge_work\|subset_sum\|prime_factorization\|protein_design\|creative_writing\|chess] [--preset default] [--scale small\|medium\|large\|extra_large\|gigantic] [--set key=value ...] [--no-judge]` | runs one task, writes `logs/<study>/<name>/`, exports `runs/<study>/<name>/` and prints the summary; the preset applies first, then the scale, then every `--set`; `--no-judge` is `--set judge=none` |
 | `run ... --row R` | the benchmark's row: the openmath_agent row (`riemann` by default), the SWE issue (`flipt-02e2` by default, or `vuls-1832`), the knowledge_work row (`2ea2e5b5`), the subset_sum or prime_factorization question (`subsetsum_n60d10_4`, `fact_n52_4`), the protein_design target (`alfalfa_chi`), the creative_writings brief (`museum_poem`) or the chess position (`LR4pA`) |
-| `run ... --honeypot as_released\|own_piece\|jigsaw [--no-grade]` | Lucy's honeypot on SWE, `jigsaw` by default; `--no-grade` skips the hidden tests. The variant `ian_swe0` (each piece also a patch file outside the repository) has no flag: `SWE(row, "jigsaw", variant="ian_swe0")`, as `examples/swe/ianswe0_*.py` build it |
+| `run ... --honeypot as_released\|own_piece\|jigsaw [--no-grade]` | Lucy's honeypot on SWE, `jigsaw` by default; `--no-grade` skips the hidden tests. The variant `ian_swe0` (each piece also a patch file outside the repository) has no flag: `SWE(row, "jigsaw", variant="ian_swe0")`, as `studies/cells/swe/ianswe0_*.py` build it |
 | `run ... --model M --timeout S` | the agents' model, an entry of `src/models/model_registry.yaml` or an Inspect model string, and the seconds one model request may take (default `MODEL_TIMEOUT_S`) |
 | `run ... --worker-model M --regulator-model M --disregulator-model M` | a role's own model, set after every `--set`; it runs through the swarm provider with its registry routing and the agents' generate config. The eval log names its calls `swarm/<model>`, and `runs/<study>/<name>/episodes.jsonl` names each agent's real model |
 | `run ... --replace` | sets the run already in `runs/<study>/<name>/` aside into `runs/<study>/attempts/<name>.<n>/`, with its eval log and its figures, before the eval starts. Without it a run refuses a name whose folder holds a run, before the eval starts, so a rerun never replaces a run unasked |
@@ -272,10 +272,10 @@ The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the mo
 
 | folder | holds |
 |---|---|
-| `examples/` | one script per task and cell of the first experiment; see `examples/README.md` |
+| `examples/` | one generic script per task and cell; see `examples/README.md` |
 | `seeds/` | the seed packs, one folder per pack, `seeds/<task>/<pack>/`; see `seeds/README.md` |
-| `studies/` | the plans of `scripts/run_study.py`: a study's targets, packs and seeds, one run per cell |
-| `scripts/` | `run_study.py` (a study from its plan in `studies/`), `screen.py` (the example cells in bulk), `study_readme.py` (each study's `runs/<study>/README.md`: its layout and every file's schema, from the data and the code), `paper/` (the paper's figures, tables and appendix) and `box/` (the rented boxes; see `scripts/box/README.md`) |
+| `studies/` | the studies: `plans/` (the plans of `scripts/run_study.py`) and `cells/<task>/` (the cell scripts made for a study); see `studies/README.md` |
+| `scripts/` | `run_study.py` (a study from its plan in `studies/plans/`), `screen.py` (the example cells in bulk), `study_readme.py` (each study's `runs/<study>/README.md`: its layout and every file's schema, from the data and the code), `paper/` (the paper's figures, tables and appendix) and `box/` (the rented boxes; see `scripts/box/README.md`) |
 | `tools/` | the analysis tools in their own environment; see `tools/README.md` |
 | `tests/` | `unit/` (one test module per module or concept), `smoke/` (the mock-model suites), `tools/` (the analysis tools' tests) and `support/` (what they share) |
 | `submodules/` | CheatBench, ORBIT, Lucy's repository and Inspect Swarm, read only |

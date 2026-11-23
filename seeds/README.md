@@ -64,10 +64,10 @@ uv run python -m examples.swe.flipt_minimal --model gpt-6-luna-openrouter --no-j
 ```
 
 run.json `seed` records the pack, the previous team's IDs and every post and file, and `launch` records the command.
-A study of many cells runs from a plan in `studies/`, one run per target, pack and seed:
+A study of many cells runs from a plan in `studies/plans/`, one run per target, pack and seed (`studies/README.md`):
 
 ```
-uv run python -m scripts.run_study studies/ian_seed_prototyping_0.yaml --dry-run
+uv run python -m scripts.run_study studies/plans/ian_seed_prototyping_0.yaml --dry-run
 ```
 
 Without `--dry-run` it needs `--yes`, because the runs make paid model calls.

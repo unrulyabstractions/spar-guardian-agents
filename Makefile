@@ -82,8 +82,8 @@ test:  ## offline unit tests: tests/unit
 test-tools:  ## offline unit tests of the analysis tools, in their own environment: tests/tools
 	@$(STEPS) "Unit tests of the analysis tools (tests/tools)" --summary "the tools' unit tests passed" --step tests "$(TOOLS) -m pytest tests/tools -q"
 
-lint:  ## ruff over src, tests, examples, elicitation, scripts and tools (ruff.toml: 120 columns, sorted imports)
-	@$(STEPS) "Lint (ruff)" --summary "lint clean" --step ruff "uvx ruff check src tests examples elicitation scripts tools"
+lint:  ## ruff over src, tests, examples, studies, elicitation, scripts and tools (ruff.toml: 120 columns, sorted imports)
+	@$(STEPS) "Lint (ruff)" --summary "lint clean" --step ruff "uvx ruff check src tests examples studies elicitation scripts tools"
 
 .PHONY: study-readmes
 study-readmes:  ## write each study's runs/<study>/README.md from its own files and the code (CHECK=1 writes nothing, fails when one is stale)

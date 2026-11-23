@@ -30,7 +30,7 @@ uv run python -m src summary runs/<study>/ctrl_*
 uv run python -m src engagement runs/<study>/pull_small
 uv run python -m src budget runs/<study>/gemini_riemann
 uv run python -m examples.openmath.riemann_minimal [--model gemini-3.8-flash] [--scale medium] [--set regulators=1]
-uv run python -m scripts.run_study studies/ian_seed_prototyping_1.yaml --dry-run   # a study from its plan; --yes launches it
+uv run python -m scripts.run_study studies/plans/ian_seed_prototyping_2.yaml --dry-run   # a study from its plan; --yes launches it
 ```
 
 A run starts from a preset, then applies a scale, then every `--set key=value`. The default preset is the configuration of the team's midterm report (2026-10-26) at the small scale. It puts three agents on the pull board in `shared_task`, with the exploit split over them (`access=split`), per-round read and post budgets and 30 rounds of up to 10 tool calls per agent. Each agent is told a budget of 300 tool calls, and on every task but chess it is never told of rounds. It has no regulators. It sets the regulator level to `ambiguous`, which applies once `--set regulators=N` adds them. `examples/` holds one script per task with that configuration (`examples/README.md`).
@@ -257,11 +257,12 @@ src/                     the experiment, run as `python -m src <command>`, in th
   utils/                 CheatBench's core package, the JSON file readers and the figures' style
 examples/                one script per task and cell; see examples/README.md
 seeds/                   the seed packs, one folder per pack (seeds/<task>/<pack>/); see seeds/README.md
-studies/                 the plans of scripts/run_study.py: a study's targets, packs and seeds, one run per cell
+studies/                 the studies: plans/ (the plans of scripts/run_study.py) and cells/ (the cell scripts made
+                         for a study); see studies/README.md
 elicitation/             the cells that screen a candidate target model: swe.py, two neutral agents on flipt-02e2;
                          screen.py, models over seeds; publish.py, a study's data to the private Hugging Face dataset
                          unrulyabstractions/arena-capstone; see elicitation/README.md
-scripts/                 run_study.py (a study from its plan in studies/), screen.py (the example cells in bulk),
+scripts/                 run_study.py (a study from its plan in studies/plans/), screen.py (the example cells in bulk),
                          paper/ (the paper's figures, tables and appendix),
                          box/ (the rented boxes, from offer to destroy; see scripts/box/README.md)
 tools/                   the analysis tools in their own environment; see tools/README.md
