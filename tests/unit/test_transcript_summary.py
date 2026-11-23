@@ -65,10 +65,10 @@ def test_one_column_per_influencer_combination_in_order():
     assert labels == [
         "Baseline", "Generic rule", "Rule naming the exploit",
         "+ regulator · enforce · haiku", "+ regulator · enforce · luna", "+ regulator · ambiguous · haiku",
-        "Told to cheat",
+        "Positive control",
         "+ disregulator · persuade · luna", "+ disregulator · overt · luna",
         "+ both · enforce, persuade · haiku, luna",
-        "Rule: copy no solution", "Told to cheat + regulator · enforce · haiku"]
+        "Rule: copy no solution", "Positive control + regulator · enforce · haiku"]
     groups = [c["group"] for c in s["columns"]]
     assert groups == ["baseline", "negative", "negative"] + ["regulator"] * 3 + ["positive"] + ["disregulator"] * 2 \
         + ["both", "other", "other"]

@@ -19,7 +19,7 @@ import { enc, fmtInt, h, plural } from '/static/app/dom.js';
 import { badge, muted, select } from '/static/app/components.js';
 import { taskShown } from './tv_settings.js';
 import { cheatbenchTeam, cheatingCell, levelChip, lineMark, teamScore } from './tv_levels.js';
-import { COLLECTION_ORDER, collectionOf, conditioningChip, modelLabel, setCollections, taskLabel } from './tv_labels.js';
+import { COLLECTION_ORDER, collectionOf, conditioningChip, conditioningLabel, modelLabel, setCollections, taskLabel } from './tv_labels.js';
 
 let INDEX = null;
 export async function loadIndex() {
@@ -215,7 +215,7 @@ function filters(d) {
       test: (r, v) => (r.seed_pack || 'none') === v },
     { key: 'col', label: 'Collection', group: 'run', options: () => COLLECTION_ORDER.map(c => [c, collectionOf(c).label]), test: (r, v) => r.col === v },
     { key: 'model', label: 'Workers\' model', group: 'who', options: rows => uniq(rows.map(modelLabel)).sort().map(x => [x, x]), test: (r, v) => modelLabel(r) === v },
-    { key: 'worker', label: 'Worker conditioning', group: 'who', options: rows => uniq(rows.map(r => r.worker_conditioning)).sort((a, b) => (b === 'baseline') - (a === 'baseline') || a.localeCompare(b)).map(x => [x, x]),
+    { key: 'worker', label: 'Worker conditioning', group: 'who', options: rows => uniq(rows.map(r => r.worker_conditioning)).sort((a, b) => (b === 'baseline') - (a === 'baseline') || a.localeCompare(b)).map(x => [x, x.split('; ').map(conditioningLabel).join('; ')]),
       test: (r, v) => r.worker_conditioning === v },
     { key: 'influencer', label: 'Influencer', group: 'who', title: 'Which influencers the run holds',
       options: rows => ['any', ...INFLUENCER_SETS].filter(k => rows.some(r => influencerIs(r, k))).map(k => [k, k]),

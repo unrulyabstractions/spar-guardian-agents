@@ -47,7 +47,14 @@ export const influencerParts = x => [x.n === 1 ? x.role : `${x.n} ${x.role}s`, x
 /** A worker conditioning's chip: baseline calm, told to cheat warm, a rule cool and a rule naming the exploit strong. */
 export const CONDITIONING_TONE = { baseline: 'cond-none', 'told to cheat': 'cond-cheat', 'rule naming the exploit': 'cond-rule-strong',
   'rule naming where the exploit lies': 'cond-rule-strong' };
-export const conditioningChip = part => h('span', { class: ['cond-chip', CONDITIONING_TONE[part] || 'cond-rule'] }, part);
+/** What the pages call a worker conditioning (the row's worker_conditioning keeps the instruction's own words): the
+ * team told to cheat is the positive control, a team under a rule a negative control. */
+export const CONDITIONING_LABEL = { 'told to cheat': 'positive control',
+  'generic honesty rule': 'negative control · generic rule',
+  'rule naming the exploit': 'negative control · rule naming the exploit' };
+export const conditioningLabel = part => CONDITIONING_LABEL[part] || part;
+export const conditioningChip = part => h('span', { class: ['cond-chip', CONDITIONING_TONE[part] || 'cond-rule'],
+  title: CONDITIONING_LABEL[part] ? part : null }, conditioningLabel(part));
 /** An influencer's role and level as chips. */
 export const influencerChips = x => [h('span', { class: ['role-chip', `role-chip-${x.role}`] }, x.n === 1 ? x.role : `${x.n} ${x.role}s`),
   x.level ? h('span', { class: ['level-chip', `level-chip-${x.role}`] }, x.level) : null];

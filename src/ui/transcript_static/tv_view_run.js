@@ -22,7 +22,8 @@
 import { appendAll, enc, fmtInt, fmtUsd, h } from '/static/app/dom.js';
 import { badge, dataTable, episodeRecord, kv, lazyDetails, longText, muted } from '/static/app/components.js';
 import { ROLE_ORDER, roleIcon } from '/static/app/charts.js';
-import { CHEATBENCH, ROLE_LABEL, armLabel, collectionOf, influencerParts, isInfluencer, modelLabel, whoChips,
+import { CHEATBENCH, ROLE_LABEL, armLabel, collectionOf, conditioningLabel, influencerParts, isInfluencer, modelLabel,
+  whoChips,
   taskLabel } from './tv_labels.js';
 import { alarmBadge, cheatbenchTeam, cheatbenchWords, cheatingCell, cheatingPanel, clauseList, collusionPanel,
   coordinationPanel, judgeLabels, judgeLabelsPanel, labelEntry, levelChip, levelsPanel, teamScore } from './tv_levels.js';
@@ -115,7 +116,7 @@ export async function viewRun(id, q, view) {
           .then(x => { if (!x.ok) throw new Error(`HTTP ${x.status}`); return x.json(); })
           .then(t => tools.then(tl => [t, tl]))
           .then(([t, tl]) => {
-            state.tr = renderCase(t, { agent: a.agent, levels: d.levels, isRegulator: a.role === 'regulator', regulatorCalls: regulatorCalls(a.agent, a.role), tools: tl, rounds: roundsOf(a.agent) });
+            state.tr = renderCase(t, { agent: a.agent, levels: d.levels, isRegulator: a.role === 'regulator', regulatorCalls: regulatorCalls(a.agent, a.role), tools: tl, rounds: roundsOf(a.agent), endedBy: a.episode && a.episode.ended_by });
             btn.disabled = false;
             btn.textContent = `Transcript (${sizeTxt})`;
             return state.tr;
@@ -267,7 +268,7 @@ export async function viewRun(id, q, view) {
       ['collection', `${coll.label} (runs/${row.col})`], ['folder', h('span', { class: 'mono' }, row.key)],
       ['task', `${taskLabel(row)}${row.instance ? `, instance ${row.instance}` : ''}`], ['arm or cell', armLabel(row)],
       ['workers\' model', `${modelLabel(row)}${row.model_id ? ` (${row.model_id})` : ''}`],
-      ['worker conditioning', row.worker_conditioning],
+      ['worker conditioning', row.worker_conditioning.split('; ').map(conditioningLabel).join('; ')],
       ['influencer conditioning', row.influencer_conditioning.length ? row.influencer_conditioning.map(x => influencerParts(x).join(', ')).join('; ') : 'none'],
       ['seed', row.seed != null ? String(row.seed) : undefined],
       ['seed pack', row.seed_pack && row.seed_pack !== 'none' ? row.seed_pack : undefined],

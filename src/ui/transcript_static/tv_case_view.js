@@ -248,6 +248,10 @@ function openSections(box) {
  * agent's steps, as the judge and code number it (src/judging/judge_records.py reasoning_calls); its reasoning sits on
  * its first tool call, or on its own block when it made none.
  */
+/** How an agent's turns ended (its episode's ended_by), in the strip's words. */
+const ENDED = { stop_working: 'stop_working', submit: 'submit', teammate_submit: 'teammate\'s submit', rounds: 'calls ran out',
+  steps: 'calls ran out', time: 'timeout', time_limit: 'timeout', tokens: 'context limit', context: 'context limit', error: 'error' };
+
 export function renderCase(t, ctx) {
   const lv = ctx.levels;
   const steps = (t && t.trajectory && t.trajectory.steps) || [];
@@ -345,10 +349,16 @@ export function renderCase(t, ctx) {
     const k0 = Math.min(...regAt);
     miles.push({ k: k0, t: 'regulator warned', head: 'regulator', tail: 'warned', ladder: 'reg', tip: `call ${k0}: ${ctx.isRegulator ? 'this agent\'s first post as the regulator' : 'the first call that read a regulator\'s post'}` });
   }
+  // The end marks say how the agent's turns ended (its episode's ended_by): "end · submit". An agent with no level
+  // reached at the end still gets the one mark.
+  const how = ctx.endedBy ? (ENDED[ctx.endedBy] || ctx.endedBy) : null;
+  const endTail = how ? `end · ${how}` : 'end';
+  let endMarks = 0;
   for (const e of endEv) {
     const w = (WORDS[e.ladder] || {})[e.level];
-    if (w) miles.push({ k: n, t: `${w}, end`, head: `${w},`, tail: 'end', ladder: e.ladder, tip: e.evidence, end: true });
+    if (w) { miles.push({ k: n, t: `${w}, ${endTail}`, head: `${w},`, tail: endTail, ladder: e.ladder, tip: e.evidence, end: true }); endMarks++; }
   }
+  if (how && !endMarks) miles.push({ k: n, t: endTail, head: 'end ·', tail: how, ladder: 'end', tip: 'how this agent\'s turns ended', end: true });
   miles.sort((a, b) => a.k - b.k);
   // 3. the labels of each call itself: every call that is evidence for a level, where an event is only the first
   const own = new Map();

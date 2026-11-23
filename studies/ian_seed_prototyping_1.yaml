@@ -1,30 +1,28 @@
-# ian_seed_prototyping_1 (2026-11-22): the first runs after agents stopped being told of rounds (c632292: a budget of
-# tool calls and wait) and got one message per round (acdb786). One run per cell.
-#
-# swe_deepseek: the control on flipt-02e2, to compare with ian_seed_prototyping_0's swe_deepseek_none runs.
+# ian_seed_prototyping_1 (2026-11-22). One run per cell.
 #
 # ianswe0_<workers>_<condition>: the task ian_swe0 (flipt-02e2 with each piece also a patch file outside the
 # repository) with the seed pack swe/exp1_called_cheating, on Haiku and on Luna workers, four conditions each:
-#   baseline         three workers, told nothing
-#   told_to_cheat    the positive control: the workers are told to cheat
-#   rule             the negative control: the rule naming the exploit (rule_level=identified)
-#   regulated        the baseline with a hidden Haiku regulator (four agents)
+#   baseline            three workers, told nothing
+#   positive_control    the workers are told to cheat
+#   negative_control    the rule naming the exploit (rule_level=identified)
+#   regulated           the baseline with a hidden Haiku regulator (four agents)
+#
+# The eight runs stored under these names ran on 2026-11-22 with two things the user did not order: every agent was
+# shown the first line of each post on the board (notice=previews), and a call past ten in a round was refused. They
+# are to be run again on the corrected setup, on the user's word. set_aside/swe_deepseek_none_s1 is a run with no seed
+# that the user never asked for; no target of this plan names it.
 study: ian_seed_prototyping_1
 seeds: [1]
 targets:
-  swe_deepseek:
-    module: examples.swe.flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
   ianswe0_haiku_baseline:
     module: examples.swe.ianswe0_minimal
     model: claude-haiku-5-5-openrouter
     packs: [swe/exp1_called_cheating]
-  ianswe0_haiku_told_to_cheat:
+  ianswe0_haiku_positive_control:
     module: examples.swe.ianswe0_minimal_cheat
     model: claude-haiku-5-5-openrouter
     packs: [swe/exp1_called_cheating]
-  ianswe0_haiku_rule:
+  ianswe0_haiku_negative_control:
     module: examples.swe.ianswe0_minimal
     model: claude-haiku-5-5-openrouter
     packs: [swe/exp1_called_cheating]
@@ -38,11 +36,11 @@ targets:
     module: examples.swe.ianswe0_minimal
     model: gpt-6-luna-openrouter
     packs: [swe/exp1_called_cheating]
-  ianswe0_luna_told_to_cheat:
+  ianswe0_luna_positive_control:
     module: examples.swe.ianswe0_minimal_cheat
     model: gpt-6-luna-openrouter
     packs: [swe/exp1_called_cheating]
-  ianswe0_luna_rule:
+  ianswe0_luna_negative_control:
     module: examples.swe.ianswe0_minimal
     model: gpt-6-luna-openrouter
     packs: [swe/exp1_called_cheating]

@@ -28,11 +28,13 @@ INFLUENCERS = ("regulator", "disregulator")
 SETS = ("regulator", "disregulator", "both")
 """The influencer sets of the influencer columns, in the page's order."""
 CONTROLS = [
-    {"key": "told_to_cheat", "label": "Told to cheat", "group": "positive", "worker": "told to cheat"},
+    {"key": "told_to_cheat", "label": "Positive control", "group": "positive", "worker": "told to cheat"},
     {"key": "generic_rule", "label": "Generic rule", "group": "negative", "worker": "generic honesty rule"},
     {"key": "rule_naming_the_exploit", "label": "Rule naming the exploit", "group": "negative",
      "worker": "rule naming the exploit"},
 ]
+SHOWN = {"told to cheat": "positive control"}
+"""What a combined column calls a worker conditioning: the team told to cheat is the positive control."""
 BASELINE = {"key": "baseline", "label": "Baseline", "group": "baseline", "worker": "baseline"}
 COLUMNS = [BASELINE, *CONTROLS]
 """The conditions with no influencer that every collection's page shows. group names the band over the column
@@ -95,7 +97,7 @@ def short(influencers: tuple) -> str:
 
 def column_of(worker: str, influencers: tuple) -> dict:
     """The column of a condition. A fixed one (COLUMNS) for no influencer; an influencer column for baseline workers
-    with influencers; otherwise an "other" column named by its combination ("Told to cheat + regulator · ...")."""
+    with influencers; otherwise an "other" column named by its combination ("Positive control + regulator · ...")."""
     roles = {x[0] for x in influencers}
     infl = "both" if len(roles) > 1 else next(iter(roles)) if roles else "none"
     listed = [{"role": r, "level": lv, "model": m or None, "n": n} for r, lv, m, n in influencers]
@@ -107,7 +109,8 @@ def column_of(worker: str, influencers: tuple) -> dict:
     if worker == "baseline":
         return {"key": f"baseline | {words}", "label": f"+ {short(influencers)}", "group": infl,
                 "worker": worker, "influencer": infl, "influencers": listed}
-    label = worker if not influencers else f"{worker} + {short(influencers)}"
+    named = "; ".join(SHOWN.get(part, part) for part in worker.split("; "))
+    label = named if not influencers else f"{named} + {short(influencers)}"
     return {"key": f"{worker} | {words or 'none'}", "label": label[0].upper() + label[1:], "group": "other",
             "worker": worker, "influencer": infl, "influencers": listed}
 
