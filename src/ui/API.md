@@ -177,9 +177,11 @@ A user step with `extra.swarm_round` is a round's message (`src/swarm/turn_rules
 message an agent gets at the start of each of its rounds. Its parts are paragraphs, one blank line between them, in
 this order, each tagged in `extra` when present (a part with nothing to say is left out; `turn_rules.message_parts`
 splits them):
-- `swarm_round` (`{round, of, left, calls}`): the line "Tool calls left: up to {left times calls}." (`_turn_rounds.py`),
-  the only text that states the budget: no first message does. `round` is the run's round, the same for every agent;
-  the agent reads no round number. A run from 2a99a6c (2026-11-21) until c632292 (2026-11-22) read "Round {round} of
+- `swarm_round` (`{round, of, left, calls, budget}`): the line "Tool calls left: {left}." (`_turn_rounds.py`), the only
+  text that states the budget: no first message does. `left` is the calls the agent has left of its own budget C
+  (`budget`), `calls` N and `of` the plan's rounds. `round` is the run's round, the same for every agent; the agent reads
+  no round number. A run from c632292 until ec68304 (2026-11-22) tags `left` as the rounds left and reads "Tool calls
+  left: up to {left times calls}." A run from 2a99a6c (2026-11-21) until c632292 (2026-11-22) read "Round {round} of
   {of}. You have {left} rounds left, including this one. Up to {calls} tool calls this round.", and one before 2a99a6c
   tags `{round, n, of}` and reads "Round {n} of {of}.", `n` the agent's own count.
 - `swarm_presence` (`{round, events: [{id, agent, kind, why, round, folded?}]}`): who entered and left, the alerts,

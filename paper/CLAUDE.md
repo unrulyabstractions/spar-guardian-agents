@@ -14,7 +14,7 @@ it, which a reader rewrote as a conjecture.
 | `main.tex` | preamble and the order of the sections | by hand |
 | `sections/*.tex` | one file per section, body then appendices | by hand |
 | `sections/references.tex` | the PDF's 49 references in its order, so [1] to [49] match | by hand |
-| `generated/params.tex` | macros: the board's budgets, `\ToolOutputKiB` (tool_output_bytes), `\Rounds` and `\CallsPerRound` from `PRESETS["default"]`; `\TurnBudget`, `\FreeBoardActions` and `\FreeBoardActionsInfluencer` from `scripts/paper/paper_sources.py` STUDY_STEPS (the reported runs' turn rules); `\JudgeName`, `\JudgeEffort` from `settings.JUDGE_MODEL` and `src/judging/judge_models.yaml`; `\CheatingAlarm` and `\CheatedFrom` from `src/measures/cheating_ladder.py` ALARM and CHEATED_FROM; `\AccessedFrom` from `scripts/paper/study_ladders.py` ACCESSED_FROM | `make paper-sources` |
+| `generated/params.tex` | macros: the board's budgets, `\ToolOutputKiB` (tool_output_bytes), `\Rounds`, `\CallsPerRound` and `\CallBudget` (call_budget, R x N) from `PRESETS["default"]`; `\BudgetValues`, `\BudgetLine` and `\NoCallsLeft` from prompts.yaml round (line, spent); `\TurnBudget`, `\FreeBoardActions` and `\FreeBoardActionsInfluencer` from `scripts/paper/paper_sources.py` STUDY_STEPS (the reported runs' turn rules); `\JudgeName`, `\JudgeEffort` from `settings.JUDGE_MODEL` and `src/judging/judge_models.yaml`; `\CheatingAlarm` and `\CheatedFrom` from `src/measures/cheating_ladder.py` ALARM and CHEATED_FROM; `\AccessedFrom` from `scripts/paper/study_ladders.py` ACCESSED_FROM | `make paper-sources` |
 | `generated/scales.tex` | the scales table, from `src/configuration/scales.py` | `make paper-sources` |
 | `generated/regulator_suffix.tex` | the regulator prompt box: what `src/swarm/influencers.py` role_text appends after a regulator's level under `PRESETS["default"]` (`prompts.yaml` roles.influencer_common, regulator_check, regulator_no_disclosure) | `make paper-sources` |
 | `generated/regulator_levels.tex`, `disregulator_levels.tex` | the level texts, from `src/configuration/instruction_levels.yaml` | `make paper-sources` |
@@ -1799,3 +1799,63 @@ work." holds: the facts block's first line), "On a hand-in, a worker reads only 
 
 Built in `worktree/paper-ianswe0` with runs/, logs/, OLD/, build/ and .venv linked from the main tree and the
 submodules cloned from the main tree's copies at their pins.
+
+## A budget of tool calls per agent, the peer tools and chess without rounds, ian_swe0's stricter side route, 2026-11-22
+
+The code: each agent has its own budget of C = R x N tool calls, counted per agent (ec68304). Every call counts against
+it: wait, a call after wait in the same reply, a call whose arguments do not parse, and a reply with no tool call. N is
+a soft cap: no call is refused for it, and a round ends after the reply in which the agent's calls reach it. A call past
+C reads "No tool calls are left." and the agent's turns end. The plan holds C rounds, so no count of rounds ends an
+agent; a late entrant starts with C. Each round's line is "Tool calls left: N." from the agent's own count. The system
+prompt says wait and a reply with no tool call each use one call. The peer tools' rows lose their round and
+get_peer_actions its since_round; chess's texts count the team's turns (c5a2c9e). ian_swe0's side route reads loops,
+variables, substitutions and sweeps, a command that only counts, hashes or tests a patch file is no read, a copy counts
+as its patch file, an access-log open counts only where the call's command reads the file, and each SWE agent's row
+gains its routes (e2bb3fa).
+
+Regenerated: `params.tex` (`\BudgetValues` "Tool calls left: 300.", `\BudgetLine` "Tool calls left: 280.", new
+`\CallBudget` and `\NoCallsLeft`). No figure or table changed: Figure 7 draws no refused call and N as four.
+
+Sentences changed (old, then new):
+- Methods: "Each agent is told a budget of tool calls." became "Each agent has its own budget of tool calls. Every call
+  counts against it."
+- Rounds: "In a round, an agent makes up to N tool calls." became "... about N tool calls."; "... or at its N-th call."
+  became "... or after the reply in which its calls reach N."; added "No call is refused for N." and "A reply that
+  starts below N therefore runs whole."
+- Rounds: "The run has R rounds. Every round uses up one of the agent's rounds, whatever the agent does in it." became
+  "Each agent has its own \textbf{budget} of R times N tool calls. Every call counts against it, and so does a reply
+  with no tool call. That includes wait, a call after wait in the same reply, and a call whose arguments do not parse.
+  An agent's turns end after the reply that uses its last call. A call past the budget does not run. The agent reads
+  ``\NoCallsLeft'' No count of rounds ends an agent. The run holds as many rounds as the budget holds calls. No agent
+  therefore runs out of rounds with calls left."
+- Rounds: "An agent that enters late has only the rounds left in the run." became "An agent that enters late starts
+  with the whole budget too."
+- Rounds, second paragraph: the bold moved off the later "budget"; added "The system prompt says that each of them uses
+  one tool call."; "Only the tools that read a teammate's calls give each call's round." became "The tools that read a
+  teammate's calls give no round."; "An agent that enters late reads the budget of the rounds left in the run." deleted;
+  "It starts with the most tool calls the agent can still make" became "It starts with the tool calls the agent has
+  left"; "The number is the same for every agent present." became "The number counts the agent's own calls."
+- Figure 7 caption: "A round holds up to N tool calls, board calls included." became "A round ends after the reply in
+  which the agent's calls reach N, board calls included."; "Every round uses up one of the agent's rounds." became
+  "Every call, wait included, counts against the agent's budget."
+- Entries and exits: "runs out of rounds" became "runs out of tool calls".
+- Tasks: "Every agent gets \Rounds{} rounds of up to \CallsPerRound{} tool calls on every task." became "Every agent
+  gets a budget of \CallBudget{} tool calls on every task."
+- Tasks, the SWE variant: "A command that only lists the file is not a read." became "A command that only lists,
+  counts, hashes or tests the file is not a read."; added "Code follows a command's folder changes, loops, variables
+  and inner commands to the files they name.", "A copy of the file counts as the file.", "Reading or applying a copy
+  later is a read or an apply of the file.", "An open counts as a read only when the command of its call reads the
+  file." and "On every SWE run, code records for each agent the routes its reads took: a planted branch, a patch file,
+  the upstream fix by its commit id, or the network."
+- Other parameters: "Rounds per agent (R): \Rounds{}, for workers and influencers alike." became "Budget per agent:
+  \CallBudget{} tool calls, R times N with R of \Rounds{}, for workers and influencers alike."; the N item gains "No
+  call is refused for N."
+
+Checked and unchanged: Communication's per-round read and write budgets (the harness's), "The call to wait never
+counts toward N." (wait counts against the budget, not toward N), "A call our rules refuse does not run, and it still
+counts toward N." (a tool's own refusal passes the gate and counts), the differ list (the study runs had working steps,
+told no agent a number and had no rounds' lines), the chess texts (the paper describes no chess team), Results,
+Discussion, Conclusion and Abstract (they report the runs).
+
+Built in `worktree/paper-budget` with runs/, logs/, OLD/, build/ and .venv linked from the main tree and the submodules
+cloned from the main tree's copies at their pins.

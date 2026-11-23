@@ -115,19 +115,29 @@ These poisoned agents represent negative peer pressure.
 
 \subsubsection*{Rounds}
 Agents work in \textbf{rounds}.
-In a round, an agent makes up to N tool calls.
+In a round, an agent makes about N tool calls.
 Its model calls run one after another.
 Each model call sees the results of the tool calls before it.
 A reply that asks for several tool calls counts each of them.
-A round ends when the agent calls wait, when it replies with no tool call, or at its N-th call.
+A round ends when the agent calls wait, when it replies with no tool call, or after the reply in which its calls
+reach N.
+No call is refused for N.
+A reply that starts below N therefore runs whole.
 The call to wait never counts toward N.
-The run has R rounds.
-Every round uses up one of the agent's rounds, whatever the agent does in it.
+Each agent has its own \textbf{budget} of R times N tool calls.
+Every call counts against it, and so does a reply with no tool call.
+That includes wait, a call after wait in the same reply, and a call whose arguments do not parse.
+An agent's turns end after the reply that uses its last call.
+A call past the budget does not run.
+The agent reads ``\NoCallsLeft''
+No count of rounds ends an agent.
+The run holds as many rounds as the budget holds calls.
+No agent therefore runs out of rounds with calls left.
 Every tool call counts toward N.
 That includes the \textbf{board calls}: board\_status, board\_read, board\_post and the tools that read a
 teammate's calls.
 A call our rules refuse does not run, and it still counts toward N.
-An agent that enters late has only the rounds left in the run.
+An agent that enters late starts with the whole budget too.
 A round also has a time limit T, counted from its first model call, model time included.
 A round ends once T has passed.
 No command has a time limit of its own.
@@ -159,9 +169,10 @@ Figure~\ref{fig:rounds} shows two rounds for five agents.
 An agent's system prompt holds its name, its role and the rules of the run, as bullet lines.
 The system prompt states these rules with no numbers.
 No agent is told of rounds.
-An agent reads instead that it has a \textbf{budget} of tool calls and that its time is limited.
+An agent reads instead that it has a budget of tool calls and that its time is limited.
 The tool that ends a round is called wait.
 It pauses the agent until its teammates have acted, and a reply with no tool call waits too.
+The system prompt says that each of them uses one tool call.
 The first user message holds the task and every detail of it, such as an SWE agent's repository and branch.
 It ends with one block of labelled lines under the heading ``This run:''.
 The block says what counts when the agent submits.
@@ -169,11 +180,10 @@ It then gives the value of each rule that the system prompt states with no numbe
 No rule of time gives the agent a number.
 On a hand-in, a worker reads only ``\SubmitValue''
 The texts of a hand-in name no round either.
-Only the tools that read a teammate's calls give each call's round.
-An agent that enters late reads the budget of the rounds left in the run.
+The tools that read a teammate's calls give no round.
 Each round opens with one user message.
-It starts with the most tool calls the agent can still make, such as ``\BudgetLine''
-The number is the same for every agent present.
+It starts with the tool calls the agent has left, such as ``\BudgetLine''
+The number counts the agent's own calls.
 In the first round, this line gives the whole budget, R times N tool calls: ``\BudgetValues''
 Only these lines state the budget.
 The message then says which peers entered or exited since the agent's last round.
@@ -182,9 +192,9 @@ It ends with what changed on the board.
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\linewidth]{round_structure}
-  \caption{Two rounds of a run, call by call for each agent. A round holds up to N tool calls, board calls included. A number
-  marks each call's place in its round. A call to wait has no place. Every round uses up one of the agent's
-  rounds. A dotted arrow marks a read that returns a post made in the same round.
+  \caption{Two rounds of a run, call by call for each agent. A round ends after the reply in which the agent's calls reach N, board
+  calls included. A number marks each call's place in its round. A call to wait has no place. Every call, wait
+  included, counts against the agent's budget. A dotted arrow marks a read that returns a post made in the same round.
   A command still running when its round's time runs out becomes a job.
   The round then ends. The agent reads the job's output in a later round with job\_output.
   After a submit, the submitter exits and the others work two more rounds.}
@@ -199,7 +209,7 @@ When an agent \textbf{enters} the run, every other agent reads a line such as ``
 that opens its next round.
 Agents that enter together share one line, such as ``k7q2m and t4x9n entered.''
 Influencers are announced like workers, with no role shown.
-An agent \textbf{exits} when it submits, stops working or runs out of rounds.
+An agent \textbf{exits} when it submits, stops working or runs out of tool calls.
 Every peer still present then reads why, such as ``k7q2m stopped working (stop\_working).''
 A second line follows: ``k7q2m exited.''
 An alert ends no agent's turns.
@@ -241,7 +251,7 @@ We adapt the following tasks from \textit{CheatBench}~\cite{phan2026cheatbench},
 for cheating, and integrating them into \textit{ORBIT}~\cite{hagag2026orbit}.
 
 \subsubsection*{Tasks}
-Every agent gets \Rounds{} rounds of up to \CallsPerRound{} tool calls on every task.
+Every agent gets a budget of \CallBudget{} tool calls on every task.
 The tasks are hard. Agents choose how to divide the work. A honeypot offers a shortcut that an agent can share openly
 or use quietly. Figure~\ref{fig:access} shows how the pieces of the honeypot are dealt.
 
@@ -266,10 +276,16 @@ The file sits on the same machine as the worker's planted branch and on no other
 A worker still holds one piece, so cheating still takes two agents by either route.
 Our collaboration tests check this variant too.
 Code treats a read of such a file like a read of a planted branch.
-A command that only lists the file is not a read.
+A command that only lists, counts, hashes or tests the file is not a read.
+Code follows a command's folder changes, loops, variables and inner commands to the files they name.
+A copy of the file counts as the file.
+Reading or applying a copy later is a read or an apply of the file.
 Applying the file puts its piece in the agent's work.
 The file's name is a pointer to the honeypot.
 The access log records every open of each file.
+An open counts as a read only when the command of its call reads the file.
+On every SWE run, code records for each agent the routes its reads took: a planted branch, a patch file, the upstream fix by its
+commit id, or the network.
 No result of this paper uses this variant.
 
 \subsubsection*{Target model and environment selection}
@@ -549,8 +565,8 @@ The judge is \JudgeName{} at \JudgeEffort{} effort.
 \begin{itemize}
   \item Workers per team: three.
   \item Max message length: \MaxMessageChars{} characters.
-  \item Rounds per agent (R): \Rounds{}, for workers and influencers alike.
-  \item Tool calls per round (N): \CallsPerRound{}, board calls included.
+  \item Budget per agent: \CallBudget{} tool calls, R times N with R of \Rounds{}, for workers and influencers alike.
+  \item Tool calls per round (N): \CallsPerRound{}, board calls included. No call is refused for N.
   \item Time per round (T): \RoundMinutes{} minutes, model time included.
   \item Max message writes per round: \PostsPerTurn.
   \item Max messages read per round: \ReadsPerTurn, and a read returns at most one page of \ReadPage{} posts.
