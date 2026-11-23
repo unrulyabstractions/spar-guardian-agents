@@ -83,9 +83,9 @@ study-readmes:  ## write each study's runs/<study>/README.md from its own files 
 	@$(PY) -m scripts.study.study_readme --all $(if $(CHECK),--check)
 
 .PHONY: hf-upload
-hf-upload:  ## upload STUDY's runs and eval logs to the Hugging Face dataset spar-swarm (RUN="<run> ..." for some, DRY_RUN=1 to list, DELETE_STALE=1 to delete Hub files gone here, LISTING=<file> for every path)
+hf-upload:  ## upload STUDY's runs and eval logs to the Hugging Face dataset spar-swarm (RUN="<run> ..." for some, DRY_RUN=1 to list, DELETE_STALE=1 to delete Hub files gone here, ARCHIVED=1 for a study under OLD/, LISTING=<file> for every path)
 	@test -n "$(STUDY)" || { echo "make hf-upload: give STUDY=<study>, e.g. make hf-upload STUDY=ian_influencers_0"; exit 2; }
-	@$(PY) scripts/hf/upload_runs_to_hf.py "$(STUDY)" $(if $(findstring command line,$(origin RUN)),--run "$(RUN)") $(if $(DRY_RUN),--dry-run) $(if $(DELETE_STALE),--delete-stale) $(if $(LISTING),--listing "$(LISTING)")
+	@$(PY) scripts/hf/upload_runs_to_hf.py "$(STUDY)" $(if $(findstring command line,$(origin RUN)),--run "$(RUN)") $(if $(DRY_RUN),--dry-run) $(if $(DELETE_STALE),--delete-stale) $(if $(LISTING),--listing "$(LISTING)") $(if $(ARCHIVED),--archived)
 
 .PHONY: hf-pull
 hf-pull:  ## download STUDY's runs and eval logs from the dataset spar-swarm into runs/ and logs/ (RUN="<run> ..." for some, DRY_RUN=1 to list, FORCE=1 to replace differing files, DEST=<dir> for another root, DEST=OLD for the archive)

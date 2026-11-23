@@ -426,3 +426,15 @@ def test_a_large_upload_goes_in_parts_with_the_deletes_last(root, api, monkeypat
     assert any(isinstance(op, CommitOperationDelete) for op in made[-1][3])
     assert made[0][2].endswith(f"part 1 of {len(made)}")
 
+
+def test_an_archived_study_is_taken_from_the_archive_and_keeps_its_dataset_paths(root, api, tmp_path):
+    """--archived: a study that archive_study moved under OLD/ uploads to the paths it had under runs/ and logs/."""
+    before = [remote for files in upload.select("study_x", [], root)[0].values() for remote, _ in files]
+    for kind in ("runs", "logs"):
+        (tmp_path / "OLD" / kind).mkdir(parents=True)
+        (tmp_path / kind / "study_x").rename(tmp_path / "OLD" / kind / "study_x")
+    with pytest.raises(SystemExit):
+        upload.main(["study_x", "--token", FAKE, "--dry-run"], root=root)          # no longer under runs/
+    assert upload.main(["study_x", "--token", FAKE, "--archived"], root=root) == 0
+    assert sorted(api.hub) == sorted(before) and before
+

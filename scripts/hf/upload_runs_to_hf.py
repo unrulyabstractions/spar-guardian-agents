@@ -2,7 +2,10 @@
 
 Give a token once: run `hf auth login`, or `export HF_TOKEN=<token>`. Then upload:
 
-    make hf-upload STUDY=<study> [RUN=<run>] [DRY_RUN=1] [DELETE_STALE=1] [LISTING=<file>]
+    make hf-upload STUDY=<study> [RUN=<run>] [DRY_RUN=1] [DELETE_STALE=1] [LISTING=<file>] [ARCHIVED=1]
+
+ARCHIVED=1 (--archived) takes the study from OLD/runs and OLD/logs, where scripts/study/archive_study.py puts a study
+that is over; its paths in the dataset are the same.
 """
 from __future__ import annotations
 
@@ -23,6 +26,7 @@ from scripts.hf.publish_arena_capstone import (  # noqa: E402  (publish also tea
     same,
     secrets,
 )
+from scripts.study.archive_study import ARCHIVE  # noqa: E402
 from src.measures.run_directory import RunDir  # noqa: E402
 from src.utils import progress  # noqa: E402
 
@@ -274,7 +278,10 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
                         help="also delete, in the same commit, the Hub's files in reach whose local file is gone")
     parser.add_argument("--listing", type=Path, metavar="FILE",
                         help="write every path by what the upload does to it (add, change, same, delete, stale, keep)")
+    parser.add_argument("--archived", action="store_true",
+                        help=f"the study is an archived one: take it from {ARCHIVE}/runs and {ARCHIVE}/logs")
     args = parser.parse_args(argv)
+    root = root / ARCHIVE if args.archived else root
     runs = [name for value in args.run for name in value.split()]
 
     items, skipped = select(args.study, runs, root)
