@@ -27,7 +27,7 @@ import { CHEATBENCH, ROLE_LABEL, armLabel, collectionOf, conditioningLabel, infl
   taskLabel } from './tv_labels.js';
 import { alarmBadge, cheatbenchTeam, cheatbenchWords, cheatingCell, cheatingPanel, clauseList, collusionPanel,
   coordinationPanel, judgeLabels, judgeLabelsPanel, labelEntry, levelChip, levelsPanel, teamScore } from './tv_levels.js';
-import { DEFAULT_FOLDS, PARTS, centreVertically, renderCase, stripLegend } from './tv_case_view.js';
+import { DEFAULT_FOLDS, PARTS, centreVertically, disregChip, renderCase, stripLegend } from './tv_case_view.js';
 import { renderBoard } from './tv_view_board.js';
 import { netUrl } from './tv_net_panel.js';
 import { alertsBadge, alertsCard, presenceCard } from './tv_presence.js';
@@ -120,7 +120,7 @@ export async function viewRun(id, q, view) {
           .then(x => { if (!x.ok) throw new Error(`HTTP ${x.status}`); return x.json(); })
           .then(t => tools.then(tl => [t, tl]))
           .then(([t, tl]) => {
-            state.tr = renderCase(t, { agent: a.agent, levels: d.levels, isRegulator: a.role === 'regulator', regulatorCalls: regulatorCalls(a.agent, a.role), tools: tl, rounds: roundsOf(a.agent), endedBy: a.episode && a.episode.ended_by, beliefs: beliefsOf(a) });
+            state.tr = renderCase(t, { agent: a.agent, levels: d.levels, isRegulator: a.role === 'regulator', regulatorCalls: regulatorCalls(a.agent, a.role), tools: tl, rounds: roundsOf(a.agent), endedBy: a.episode && a.episode.ended_by, disregulator: a.disregulator, beliefs: beliefsOf(a) });
             btn.disabled = false;
             btn.textContent = `Transcript (${sizeTxt})`;
             return state.tr;
@@ -133,7 +133,7 @@ export async function viewRun(id, q, view) {
     btn.addEventListener('click', () => { selectTab(a.agent); });
     appendAll(card, [
       h('div', { class: 'ep-card-head' },
-        h('h2', { class: 'agent-h' }, `Agent ${a.agent}`), roleTag(a.role),
+        h('h2', { class: 'agent-h' }, `Agent ${a.agent}`), roleTag(a.role), disregChip(a.disregulator),
         a.episode.model ? muted(a.episode.model, 'small') : null,
         h('span', { class: 'spacer' }), btn),
       wideItems(episodeRecord({ ...a.episode, agent: undefined })),   // the card's title names the agent

@@ -111,6 +111,9 @@ table.idx-table tr.is-last td:first-child { box-shadow: inset 3px 0 0 var(--acce
 .agent-card.role-regulator { border-left: 4px solid var(--role-regulator); }
 .agent-h { margin: 0; }
 .role-tag { display: inline-flex; align-items: center; gap: 2px; }
+.disreg-chip { margin-left: 4px; border: 1px solid var(--role-disregulator); color: var(--text); background: none; }
+.disreg-chip.disreg-carried_out { background: var(--role-disregulator); color: #1c1c1a; }
+.disreg-chip.disreg-unknown { border-style: dashed; color: var(--muted); }
 .tr-holder { margin-top: 10px; }
 /* the ladders: colours from the theme tokens, so light and dark both read */
 .lv-table { border-collapse: collapse; width: 100%; font-size: 13px; }

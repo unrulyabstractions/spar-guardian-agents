@@ -293,6 +293,21 @@ parts:
       1: '2026-11-22 first version: the judge labels and CheatBench''s verdicts, of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
         through run_directory.FILES)'
+  disregulator_roles:
+    file: analysis/labels/disregulator_roles.json
+    make: src.measures.disregulator_roles:disregulator_part
+    needs: [export, signals]
+    files: [src/measures/stored_json.py, src/measures/disregulator_roles.py, src/measures/team_ladder.py,
+      src/measures/ladder_domain.py, src/measures/honeypot_fingerprints.py, src/measures/command_errors.py,
+      src/measures/shell_commands.py, src/measures/rungs.py, src/measures/eval_log_events.py, src/export/eval_sample_view.py,
+      src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*]
+    pins: []
+    version: 1
+    fingerprint: sha256:94ee02876c76291cb4ecbb7a0d93351c25f2d9cba2a0057e6fdef83fec35b2a9
+    log:
+      1: '2026-11-23 first version: what each disregulator did with its role (carried_out, filtered, refused,
+        dropped, unknown), with mode, disclosed and the evidence, by code from the board, the code record''s
+        agent row, the transcript and the eval log''s stop reasons'
   row:
     file: analysis/row.json
     make: src.ui.viewer_parts:row_part

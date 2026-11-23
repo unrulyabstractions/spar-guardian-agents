@@ -292,11 +292,23 @@ function openSections(box) {
 /**
  * ctx: {agent, levels (the run's three-ladder payload, with its labels by call and its judge labels), isRegulator,
  * regulatorCalls: Set of tool_call_ids that read a regulator's post, or that posted as the regulator, beliefs: the
- * worker's {questions, answers} (/api/run beliefs), null for an influencer or a run that did not ask}.
+ * worker's {questions, answers} (/api/run beliefs), null for an influencer or a run that did not ask, disregulator: a
+ * disregulator's {label, mode, disclosed} (/api/run agents[].disregulator), null for any other agent}.
  * Returns {el, findCall, findToolCall, showReasoning, setFolds (a Set of PARTS keys folded everywhere), refresh, nCalls}. A model call is numbered from 1 over the
  * agent's steps, as the judge and code number it (src/judging/judge_records.py reasoning_calls); its reasoning sits on
  * its first tool call, or on its own block when it made none.
  */
+// A disregulator's label (/api/run agents[].disregulator, src/measures/disregulator_roles.py): its word on a chip, a
+// short reason on hover, then how it pushed and whether it told the team.
+const DISREG_TIPS = { carried_out: 'Moved toward its objective', filtered: 'The provider stopped its replies',
+  refused: 'Declined its role', dropped: 'Never acted on its role', unknown: 'A source the label needs is missing' };
+export const disregTip = d => [DISREG_TIPS[d.label] || d.label, d.mode ? `by ${d.mode}` : null,
+  d.disclosed === true ? 'disclosed' : null].filter(Boolean).join(', ');
+/** The chip of a disregulator's label; null for any other agent. */
+export function disregChip(d) {
+  if (!d || !d.label) return null;
+  return h('span', { class: ['badge', 'disreg-chip', 'disreg-' + d.label], title: disregTip(d) }, d.label.replace('_', ' '));
+}
 /** How an agent's turns ended (its episode's ended_by), in the strip's words. */
 const ENDED = { stop_working: 'stop_working', submit: 'submit', teammate_submit: 'teammate\'s submit', rounds: 'calls ran out',
   steps: 'calls ran out', time: 'timeout', time_limit: 'timeout', tokens: 'context limit', context: 'context limit', error: 'error' };
@@ -748,7 +760,7 @@ export function renderCase(t, ctx) {
     h('span', { class: 'cs-ladder', title: lv.ladders[L].name },
       h('span', { class: 'cs-ladder-mark', style: `color:${inkOf(L, lv.ladders[L])}` }, SHORT[L]),
       levelChip(L, lv.ladders[L], mine[L].level, false, { facts: mine[L].facts }))),
-  belief ? beliefChip(belief) : null) : null;
+  belief ? beliefChip(belief) : null, disregChip(ctx.disregulator)) : null;
   // A slider beside the strip, a row per call as the strip's: its handle at the call at the top of the steps, and a drag,
   // a click on its track or the arrow keys bring a call there.
   const thumb = h('div', { class: 'cs-thumb' });

@@ -46,7 +46,14 @@ from src.ui import (
     transcript_rounds,
     transcript_summary,
 )
-from src.ui.transcript_index import RunFiles, build_index, cheatbench_by_agent, folder_agents, served_index
+from src.ui.transcript_index import (
+    RunFiles,
+    build_index,
+    cheatbench_by_agent,
+    folder_agents,
+    read_stored,
+    served_index,
+)
 from src.utils import progress
 
 HERE = Path(__file__).resolve().parent
@@ -80,13 +87,15 @@ def run_detail(row: dict, run_dir: Path, measured: dict) -> dict:
     (transcript_rounds), None for a run before 2026-11-21, regulators: each regulator's measures as the code
     record holds them (signals.team.regulators, src/measures/regulator_measures.py), {} without, and beliefs: the
     workers' belief answers as run.json holds them (run_beliefs). Each agent carries the routes of its aimed reads
-    (signals.jsonl routes, SWE alone; None without)."""
+    (signals.jsonl routes, SWE alone; None without) and a disregulator its label, mode and disclosed (stored_roles;
+    None for any other agent and a run whose label is not stored)."""
     rf = RunFiles.read(run_dir)
     rj = rf.run_json
     folders = folder_agents(run_dir, rf.episodes)
     cheatbench = {judge: cheatbench_by_agent(rows, rf.episodes) for judge, rows in
                   sorted(measured["cheatbench"].items())}
     routes = {row.get("agent"): row.get("routes") for row in RunDir(run_dir).signals()}
+    disregulators = stored_roles(run_dir)
     agents = []
     for ep in rf.episodes:
         a = episode_agent(ep)
@@ -98,6 +107,7 @@ def run_detail(row: dict, run_dir: Path, measured: dict) -> dict:
             "episode": {k: ep.get(k) for k in EPISODE_KEYS if k in ep},
             "cheatbench": {judge: shown_verdict(rows[a]) for judge, rows in cheatbench.items() if a in rows},
             "routes": routes.get(a),
+            "disregulator": disregulators.get(a),
         })
     # Workers first, influencers last; then by agent id.
     agents.sort(key=lambda e: (e["role"] != "worker", e["agent"] or ""))
@@ -112,6 +122,16 @@ def run_detail(row: dict, run_dir: Path, measured: dict) -> dict:
             "rounds": transcript_rounds.rounds(rj),
             "regulators": ((rj.get("signals") or {}).get("team") or {}).get("regulators") or {},
             "beliefs": run_beliefs(rj)}
+
+
+def stored_roles(run_dir: Path) -> dict[str, dict]:
+    """{disregulator: {label, mode, disclosed}} from the run's stored analysis/labels/disregulator_roles.json
+    (src/measures/disregulator_roles.py); {} for a run without it."""
+    path = RunDir(run_dir).output("disregulator_roles")
+    if not path.is_file():
+        return {}
+    agents = read_stored(path).get("agents") or {}
+    return {agent: {k: record.get(k) for k in ("label", "mode", "disclosed")} for agent, record in agents.items()}
 
 
 def run_beliefs(rj: dict) -> dict | None:

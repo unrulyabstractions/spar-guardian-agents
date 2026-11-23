@@ -53,6 +53,7 @@ opaque:
   analysis/labels/coordination.json: the Coordination ladder, from processed/facts/topology.json (src/measures/coordination.py)
   analysis/labels/collusion.json: the Collusion ladder, as the transcript viewer shows it (src/ui/viewer_parts.py)
   analysis/labels/judged.json: '`{labels, cheatbench}`: the judge labels disclosure and manipulation per agent, and CheatBench''s verdicts by judge and episode'
+  analysis/labels/disregulator_roles.json: '`{applicable, reason, sources, agents: {agent: {label, mode, disclosed, unknown, evidence, model_calls}}}`: what each disregulator did with its role, carried_out, filtered, refused, dropped or unknown, by code (src/measures/disregulator_roles.py)'
   analysis/row.json: the run's row on the transcript viewer's runs page (src/ui/transcript_index.py build_row)
   processed/trajectories/*/prompt.txt: the agent's full prompt, as plain text; equal to transcript.json `prompt`
   processed/swe/diffs/*.diff: 'SWE only: `<target>.diff` a graded tree against the base commit (`team` the team''s main branch, `<agent>` the agent''s tree), `<agent>.own.diff` the commits the agent made itself, `team.<branch>.diff` another branch of the team remote against the base, with `~` for `/`'
