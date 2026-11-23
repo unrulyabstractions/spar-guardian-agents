@@ -414,10 +414,10 @@ def test_a_run_with_both_roles_takes_its_arm_from_the_table_and_counts_each_role
     assert (rec["regulator_posts"], rec["disregulator_posts"]) == (2, 3)
 
 
-def test_a_disregulator_that_never_posted_leaves_its_run_invalid_in_the_index(tmp_path, old_arms):
+def test_a_disregulator_that_never_posted_leaves_its_run_valid_in_the_index(tmp_path, old_arms):
     contested_run(tmp_path, posts={"regulator": 2})
     rec = records_by_run(tmp_path)[0][CONTEST]
-    assert not rec["valid"] and rec["reason"] == "disregulator_no_post" and rec["disregulator_posts"] == 0
+    assert rec["valid"] and rec["reason"] == "valid" and rec["disregulator_posts"] == 0
 
 
 @pytest.mark.parametrize(("change", "problem"), [

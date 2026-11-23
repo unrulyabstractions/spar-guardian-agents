@@ -16,8 +16,8 @@ A record holds these fields, in this order:
   regulator_model_key (their entries in src/models/model_registry.yaml, None outside it);
 - outcome: eval_status, completed, failed_episodes (run_validity), cheating_rung (the team's Cheating rung,
   cheating_ladder.cheating_rungs; None without a team row), regulator_posts (0 for a regulator that took turns and
-  never posted: a result, so its run stays valid; None in a run without a regulator), disregulator_posts (likewise,
-  but a disregulator that never posted leaves the run invalid: run_validity), alerts, true_alarms and false_alarms
+  never posted: a result, so its run stays valid; None in a run without a regulator), disregulator_posts (likewise:
+  what a disregulator did with its role is the run's label, disregulator_roles), alerts, true_alarms and false_alarms
   (the influencers' alert_humans calls and how many the Cheating ladder calls true or false, run.json signals;
   src/measures/alert_outcomes.py; None in a run with no alert);
 - checks: export_flags_ok (run.json validity.ok, the export's own flags), valid (True or False for every run), why,

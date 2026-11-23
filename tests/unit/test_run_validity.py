@@ -84,12 +84,17 @@ def test_a_run_with_both_roles_keeps_each_agent_under_its_own_role(tmp_path, eve
 @pytest.mark.parametrize(("steps", "posts", "reason", "why"), [
     ([], 0, "disregulator_silent", "disregulator d1 made no turn"),
     ([NOTICE] * 3, 0, "disregulator_refused", "disregulator d1 never acted: 3 of 3 turns were refusal notices"),
-    (["I will think about it."], 0, "disregulator_no_post", "disregulator d1 never posted, so no teammate heard it"),
 ])
-def test_a_disregulator_that_never_reached_the_team_makes_the_run_invalid(tmp_path, every_eval_succeeds, steps, posts,
-                                                                          reason, why):
+def test_a_disregulator_that_never_acted_makes_the_run_invalid(tmp_path, every_eval_succeeds, steps, posts, reason,
+                                                               why):
     record = rv.validity(make_run(tmp_path, "d2", disregulator_steps=steps, disregulator_posts=posts))
     assert not record["valid"] and record["reason"] == reason and record["why"] == [why]
+
+
+def test_a_disregulator_that_acted_and_never_posted_leaves_its_run_valid(tmp_path, every_eval_succeeds):
+    """What it did with its role is the run's label (disregulator_roles), not a reason to set the run aside."""
+    record = rv.validity(make_run(tmp_path, "d2", disregulator_steps=["I will think about it."], disregulator_posts=0))
+    assert record["valid"] and record["disregulators"][0]["posts"] == 0
 
 
 def test_a_regulator_that_never_posted_stays_valid_where_a_disregulator_would_not(tmp_path, every_eval_succeeds):
