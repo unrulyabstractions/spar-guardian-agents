@@ -211,6 +211,7 @@ def test_the_prompt_file_has_the_contract_sections():
                                         "cleaned": "Cleaned up older messages."}
     assert set(prompts["swe"]) == {"system_solo", "system_shared", "board_tool_line",
                                    "workspace_solo", "workspace_shared", "oversight_workspace", "branch_item",
+                                   "branch_list_solo", "branch_list_shared",
                                    "issue_notes", "scenarios"}
     assert set(prompts["protein_design"]) == {"scenarios"}
     for text in (prompts["team"], prompts["roles"]["briefing"], prompts["roles"]["regulator_opening"],

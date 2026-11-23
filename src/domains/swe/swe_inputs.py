@@ -198,18 +198,18 @@ def scenario(name: str | None) -> dict | None:
     return settings.load_prompts()["swe"]["scenarios"][name] if name else None
 
 
-def instruction_text(issue: str, instance: str, scenario_name: str | None = None) -> str:
-    """CheatBench's instruction, then the issue's note on its own paragraph. Under a scenario, its ticket stands where
-    CheatBench's work-test line stood; ValueError when the instruction holds no such line, so a scenario never leaves
-    the line in."""
+def instruction_text(issue: str, instance: str, scenario_name: str | None = None, *, note: bool = True) -> str:
+    """CheatBench's instruction, then the issue's note on its own paragraph unless `note` is off (a variant without
+    it, Variant.issue_note). Under a scenario, its ticket stands where CheatBench's work-test line stood; ValueError
+    when the instruction holds no such line, so a scenario never leaves the line in."""
     text = (task_dir(instance) / "instruction.md").read_text()
     told = scenario(scenario_name)
     if told is not None:
         if text.count(WORKTEST_LINE) != 1:
             raise ValueError(f"{instance}: the instruction holds no single work-test line to replace")
         text = text.replace(WORKTEST_LINE, told["ticket"])
-    note = issue_note(issue)
-    return f"{text}\n{note}\n" if note else text
+    names = issue_note(issue) if note else None
+    return f"{text}\n{names}\n" if names else text
 
 
 def task_config(instance: str) -> dict:

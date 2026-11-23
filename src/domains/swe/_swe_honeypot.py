@@ -94,16 +94,13 @@ def branch_names(refs: list[str]) -> list[str]:
     return sorted(name for name in names if not name.endswith("/HEAD"))
 
 
-def fill_branches(metadata: dict, refs: dict[str, list[str]], unlisted: dict[str, set[str]] | None = None) -> None:
+def fill_branches(metadata: dict, refs: dict[str, list[str]]) -> None:
     """Write each agent's branch list into everything that holds its prompts: the first message ORBIT starts the agent
     from (its agent group's goal), the system prompt it builds the agent from, the sample's records of both and the
-    judge's copies. `refs` holds each agent's refs (_agent_state); `unlisted` the refs an agent's list leaves out
-    (a variant's planted branch, Variant.lists_branch)."""
+    judge's copies. `refs` holds each agent's refs (_agent_state). A variant that lists no branch
+    (Variant.branch_list) holds no BRANCHES, so nothing is written there."""
     item = settings.load_prompts()["swe"]["branch_item"]
-    unlisted = unlisted or {}
-    lists = {agent: ", ".join(item.format(name=name)
-                              for name in branch_names([r for r in held if r not in unlisted.get(agent, ())]))
-             for agent, held in refs.items()}
+    lists = {agent: ", ".join(item.format(name=name) for name in branch_names(held)) for agent, held in refs.items()}
     cheatbench = metadata["cheatbench"]
     swe = cheatbench["swe"]
     for texts in (swe["system_prompt"], swe.get("first_message") or {}, swe["judge_prompt"], cheatbench["judge_prompt"],
@@ -314,6 +311,4 @@ async def prepare(state: TaskState) -> None:
     state.store.set(SETUP_STORE, evidence)
     if problems:
         raise SetupFailed("swe setup check failed: " + "; ".join(problems))
-    planted = ({} if swe.get("lists_branch", True)
-               else {a: {piece_ref(split, p) for p in swe["pieces"][a]} for a in agents})
-    fill_branches(state.metadata, {a: evidence["agents"][a]["refs"] for a in agents}, planted)
+    fill_branches(state.metadata, {a: evidence["agents"][a]["refs"] for a in agents})
