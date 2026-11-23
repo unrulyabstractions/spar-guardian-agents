@@ -20,6 +20,7 @@ import pytest
 from inspect_ai.dataset import Sample
 from inspect_ai.tool import ToolDef, ToolError
 from inspect_ai.tool._tools._execute import bash, python
+from inspect_ai.util import ExecResult
 from orbit import AgentSpec, SetupConfig, ToolFactory, multi_agent_task
 from orbit.configs.experiment import ExperimentConfig
 
@@ -79,6 +80,27 @@ def test_a_command_that_ends_in_its_round_answers_as_inspects_exec_did(jobs, tmp
     assert read[:4] == ["python3", "-I", "-c", command_jobs.READ]
     assert not list((tmp_path / "jobs").iterdir()) and command_jobs.calls() == {}
     assert jobs.store == {} and jobs.marked == []
+
+
+def test_a_call_whose_machine_goes_down_answers_with_the_execs_own_result(jobs, monkeypatch):
+    """An agent as root kills its init's children and the container restarts: the read of the call's output finds no
+    machine. The call answers with the exec's own result, as Inspect's exec did, and the sample goes on; a read that
+    fails for a job still raises."""
+    down = "Error response from daemon: Container 944e is restarting, wait until the container is running\n"
+    real = jobs.box.exec
+
+    async def restarting(cmd, *args, **kwargs):
+        if list(cmd[:4]) == ["python3", "-I", "-c", command_jobs.READ]:
+            jobs.box.calls.append((list(cmd), kwargs.get("user"), kwargs.get("cwd")))
+            return ExecResult(success=False, returncode=1, stdout="", stderr=down)
+        return await real(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(jobs.box, "exec", restarting)
+    outcome = asyncio.run(command(jobs, "echo gone; exit 137"))
+    assert outcome == command_jobs.Outcome("", returncode=137), outcome      # its output went to the call's pipes
+    with pytest.raises(command_jobs.ReadFailed, match="restarting"):
+        asyncio.run(command_jobs.read(command_jobs.Call(handle="a01-9", agent="a01", tool="shell", where=jobs.where,
+                                                        command="true", started=0.0, task=None)))
 
 
 def test_the_command_runs_under_the_wrap_as_the_root_of_the_exec(jobs, monkeypatch):

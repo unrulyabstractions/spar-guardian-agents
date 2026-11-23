@@ -12,8 +12,10 @@ SwarmConfig.round_time_s). Once that has passed, the round has one late wait of 
 first call past the deadline: that call and every later call of the round (the calls of one reply run one after another)
 wait only for what is left of it (late_wait), so a reply of k long calls ends its round at T plus one wait, not k. A
 command that ends in time returns as it did under Inspect's exec: stderr, a newline, then stdout, the last KEEP_BYTES of
-each stream, which the tool output cap then cuts. A command still running then becomes a job: it keeps running, the call
-returns its job id and its output so far (prompts.yaml jobs.kept) within the agent's cap, and the round ends on time.
+each stream, which the tool output cap then cuts; when the read of that output fails, as on a machine that restarts
+after an agent killed its processes, it returns the exec's own result. A command still running then becomes a job: it
+keeps running, the call returns its job id and its output so far (prompts.yaml jobs.kept) within the agent's cap, and
+the round ends on time.
 job_output returns the job's new output since the agent's last read and whether it still runs; once it has exited, the
 exit code. job_stop kills it and every process it started, those it left running after it exited included. Where a
 domain asks for it (SWE, whose agents are root on machines of their own), reap_round kills at the end of each of the
@@ -479,6 +481,10 @@ class Call:
         return self.task.result().returncode
 
 
+class ReadFailed(RuntimeError):
+    """READ gave no head: the machine did not run it, as while it restarts after its processes were killed."""
+
+
 @dataclass(frozen=True)
 class Outcome:
     """A command call's answer: text, and the job it became (None when the command ended in time). returncode is the
@@ -607,7 +613,7 @@ async def read(call: Call, *, wait_s: float = 0.0, final: bool = False, data: bo
     try:
         head = json.loads(line)
     except ValueError:
-        raise RuntimeError(f"command jobs: the read failed: {(r.stderr or r.stdout or '')[-500:]}") from None
+        raise ReadFailed(f"command jobs: the read failed: {(r.stderr or r.stdout or '')[-500:]}") from None
     if call.key:
         out, err = (seal(call.key, name, head[name]["at"], base64.b64decode(head[name].pop("data")))
                     .decode(errors="replace") if name in head else "" for name in ("out", "err"))
@@ -680,8 +686,11 @@ async def run_command(where: Where, agent: str, tool: str, command: str, argv: l
         result = task.result()
         if after is not None:
             await after(running_pid_files(where.service, but=handle))
-        stderr, stdout, head = await read(call, wait_s=SETTLE_S, final=True)
-        if not head.get("found"):       # the launch failed before its directory: the exec's own words
+        try:
+            stderr, stdout, head = await read(call, wait_s=SETTLE_S, final=True)
+        except ReadFailed:              # the machine went down under the call and is restarting
+            head = {}
+        if not head.get("found"):       # that, or the launch failed before its directory: the exec's own words
             stderr, stdout = result.stderr or "", result.stdout or ""
         return Outcome(joined(stderr, stdout), returncode=result.returncode)
     call.job = next_job_id()
