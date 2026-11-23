@@ -4,6 +4,7 @@ from __future__ import annotations
 from src.configuration import settings
 from src.configuration.presets import PRESETS, with_overrides
 from src.configuration.prompt_texts import (
+    board_line,
     board_system_prompt,
     counts_text,
     described,
@@ -94,11 +95,14 @@ def test_the_opening_and_the_rounds():
     """Every system prompt we write whole names the agent; the first message gives the rounds' values."""
     pull = with_overrides(PRESETS["default"], ["mention_board=false"])
     assert opening(pull, "a01", pull.names) == "You are a01. You work with peers on the same assignment."
-    assert opening(PRESETS["default"], "a01", pull.names) == ("You are a01. You work with peers on the same "
-                                                              "assignment.\n\n" + settings.load_prompts()["board"])
+    # the board is no sentence of the opening: it is a bullet of the tool list (board_line), on by default
+    assert opening(PRESETS["default"], "a01", pull.names) == "You are a01. You work with peers on the same assignment."
+    assert board_line(PRESETS["default"], "a01", pull.names) == settings.load_prompts()["board"] == \
+        "- board_status, board_read, board_post: the team's message board."
+    assert board_line(pull, "a01", pull.names) is None and board_line(PRESETS["default"], "a01", ["a01"]) is None
     assert opening(with_overrides(pull, ["n_agents=1"]), "a01", ["a01"]) == "You are a01."
     board_only = with_overrides(pull, ["mention_team=false", "mention_board=true"])
-    assert opening(board_only, "a01", pull.names).startswith("You are a01.\n\nThere is a shared message board.")
+    assert opening(board_only, "a01", pull.names) == "You are a01."
     # the run's facts: one block, last, one labelled line each, none twice; a note goes before it
     assert with_facts("the task\n", ["What counts when you submit: x.", "Agents in this run: 3."]) == \
         "the task\n\nThis run:\n- What counts when you submit: x.\n- Agents in this run: 3.\n"
@@ -128,7 +132,8 @@ def test_prompt_helpers():
     team = prompts["swe"]["system_shared"].format(name="a01", ending="\n- submit: hand in", turns="RULES",
                                                   **swe_board_fields(told))
     assert "- board_status, board_read, board_post: the team's message board.\n- submit: " in team
-    assert "board_status counts its posts by sender" in team and "same issue" in team
+    # the board is one bullet of the tool list and no paragraph (the user, 2026-11-22: "Only list the tools")
+    assert "Team chat" not in team and "board_status counts its posts by sender" not in team and "same issue" in team
 
 
 def test_board_system_prompt():
@@ -139,7 +144,7 @@ def test_board_system_prompt():
         "You are a01. You work with peers on the same assignment."     # shared_task: no peer is named
     told = with_overrides(pull, ["mode=shared_task", "mention_board=true"])
     text = board_system_prompt(told, "a02", told.names)
-    assert text.startswith("You are a02. You work with peers on the same assignment.") and "board_read returns" in text
+    assert text == "You are a02. You work with peers on the same assignment." and "board" not in text
     assert "a01" not in text and "a03" not in text
     assert board_system_prompt(told, "a01", ["a01"]) is None                 # a lone agent
 
@@ -202,7 +207,7 @@ def test_the_prompt_file_has_the_contract_sections():
     assert set(prompts["notice"]) == {"changed", "counts", "first_changed", "first_counts", "count", "first_count",
                                       "preview", "mention", "cut", "full"}
     assert set(prompts["board_output"]) == {"sender", "total", "post", "posted"}
-    assert set(prompts["swe"]) == {"system_solo", "system_shared", "board_paragraph", "board_tool_line",
+    assert set(prompts["swe"]) == {"system_solo", "system_shared", "board_tool_line",
                                    "workspace_solo", "workspace_shared", "oversight_workspace", "branch_item",
                                    "issue_notes"}
     for text in (prompts["team"], prompts["roles"]["briefing"], prompts["roles"]["regulator_opening"],

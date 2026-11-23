@@ -28,7 +28,7 @@ from inspect_ai.dataset import Sample
 from inspect_ai.scorer import Scorer
 
 from src.configuration import settings
-from src.configuration.prompt_texts import board_system_prompt, swe_board_fields
+from src.configuration.prompt_texts import board_line, board_system_prompt, swe_board_fields
 from src.configuration.scales import SCALES
 from src.configuration.swarm_config import SwarmConfig, role_of
 from src.domains.benchmark_protocol import Benchmark, Plan
@@ -201,6 +201,9 @@ class SWE(Benchmark):
         ending = {a: "".join(f"\n{line}" for line in self.ending_lines(plan, a)) for a in agents}
         turns = {a: round_rules(config, a, plan.roles) for a in agents}
         if plan.mode != "shared_task":
+            # a solo_task agent of a board: the board's bullet leads its tool bullets, as in system_shared
+            ending = {a: "".join(f"\n{line}" for line in filter(None, [board_line(config, a, agents)])) + ending[a]
+                      for a in agents}
             texts = {a: prompts["system_solo"].format(name=a, ending=ending[a], turns=turns[a]) for a in agents}
             return {a: "\n\n".join(filter(None, [texts[a], board_system_prompt(config, a, agents)])) for a in agents}
         return {a: prompts["system_shared"].format(name=a, ending=ending[a], turns=turns[a],

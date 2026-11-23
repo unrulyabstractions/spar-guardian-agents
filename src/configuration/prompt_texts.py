@@ -19,17 +19,19 @@ from src.configuration.swarm_config import SwarmConfig
 
 def board_system_prompt(config: SwarmConfig, name: str, names: list[str]) -> str | None:
     """The system prompt of one agent of a board, before any role text, or None for no prompt of ours: prompts.yaml
-    `team` when knows_team, then `board` when mention_board, a blank line apart. It names no peer: peers are
-    announced as they enter (turn_rules presence). A lone agent has none."""
-    if name not in names or len(names) < 2:
+    `team` when knows_team. It names no peer: peers are announced as they enter (turn_rules presence). The board is no
+    sentence of it: it is a bullet of the tool list (board_line). A lone agent has none."""
+    if name not in names or len(names) < 2 or not config.knows_team:
         return None
-    prompts = settings.load_prompts()
-    parts = []
-    if config.knows_team:
-        parts.append(prompts["team"].format(name=name))
-    if config.mention_board:
-        parts.append(prompts["board"])
-    return "\n\n".join(parts) or None
+    return settings.load_prompts()["team"].format(name=name)
+
+
+def board_line(config: SwarmConfig, name: str, names: list[str]) -> str | None:
+    """The board's tool bullet for one agent of a board when mention_board is on (prompts.yaml `board`), listed with
+    the other tools' bullets; None for a lone agent or with mention_board off."""
+    if name not in names or len(names) < 2 or not config.mention_board:
+        return None
+    return settings.load_prompts()["board"]
 
 
 def opening(config: SwarmConfig, name: str, names: list[str]) -> str:
@@ -42,12 +44,9 @@ def opening(config: SwarmConfig, name: str, names: list[str]) -> str:
 def swe_board_fields(config: SwarmConfig) -> dict:
     """The placeholders of prompts.yaml swe.system_shared that depend on the board settings.
 
-    board_paragraph: the "Team chat" paragraph with its two leading newlines, and board_tool_line: the tool bullet
-    for the board with its leading newline, both "" without mention_board, so the tool list stays the only hint of
-    the board."""
+    board_tool_line: the tool bullet for the board with its leading newline, "" without mention_board."""
     swe = settings.load_prompts()["swe"]
-    return {"board_paragraph": swe["board_paragraph"] if config.mention_board else "",
-            "board_tool_line": swe["board_tool_line"] if config.mention_board else ""}
+    return {"board_tool_line": swe["board_tool_line"] if config.mention_board else ""}
 
 
 def _pick(entry: str | dict, kind: str) -> str:

@@ -252,12 +252,14 @@ class Benchmark(ABC):
 
     def system_prompts(self, plan: Plan) -> dict[str, str]:
         """Each agent's system prompt before its role's text, a blank line apart: who it is (prompt_texts.opening:
-        the team sentence when it knows its team, else its name, then the board sentence when mention_board), the
-        bullets of submit and stop_working as it holds them (ending_lines), and the rounds' rules (board.round_rules).
+        the team sentence when it knows its team, else its name), the tool bullets (the board's when mention_board,
+        prompt_texts.board_line, then submit and stop_working as it holds them, ending_lines), and the rounds' rules
+        (board.round_rules).
         src/tasks.py system_prompts gives a regulator that oversees a prompt of its own in place of this one."""
         config = plan.config
         return {a: "\n\n".join(filter(None, [texts.opening(config, a, plan.agents),
-                                              "\n".join(self.ending_lines(plan, a)),
+                                              "\n".join(filter(None, [texts.board_line(config, a, plan.agents),
+                                                                      *self.ending_lines(plan, a)])),
                                               round_rules(config, a, plan.roles, commands=self.commands)]))
                 for a in plan.agents}
 
