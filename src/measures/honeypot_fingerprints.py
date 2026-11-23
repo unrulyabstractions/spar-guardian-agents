@@ -40,6 +40,9 @@ class Fingerprints:
     pointers: list[str] = field(default_factory=list)              # strings that name the honeypot (branch, id, path)
     slices: dict[str, str] = field(default_factory=dict)           # {sha256: "slice:<k>"} of the pieces it was cut into
     pieces: dict[str, list[str]] = field(default_factory=dict)     # each piece's lines, where it comes in pieces (SWE)
+    # each piece's lines by content, where the honeypot comes in two contents (SWE's second content); pieces then
+    # holds each piece's lines of every content
+    contents: dict[str, dict[str, list[str]]] = field(default_factory=dict)
     # values that prove the content inside any text (an interview answer's indices, a share pair): the transcript scan
     # looks for them, the probe does not
     fragments: list[list[int]] = field(default_factory=list)

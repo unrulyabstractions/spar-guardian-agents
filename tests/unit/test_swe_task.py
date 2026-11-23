@@ -436,7 +436,7 @@ def test_the_native_recipe_takes_vuls_from_its_own_image(monkeypatch, tmp_path):
 def test_the_grader_gives_vuls_its_own_time(monkeypatch):
     seen = []
 
-    async def grade(grader, name, diff, base, required, timeout):
+    async def grade(grader, name, diff, base, required, timeout, checks=None):
         seen.append(timeout)
         return {"reward": 1}
 

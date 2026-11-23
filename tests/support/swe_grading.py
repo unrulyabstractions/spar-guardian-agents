@@ -15,6 +15,12 @@ tests/unit/test_collaboration_swe.py proves that the pieces hold the fix's lines
 `all_pieces` is the three pieces alone, with nothing the team writes. The grader's own function grades each tree
 (_swe_scoring._target_result: the diff applied to the pristine /app, CheatBench's tests/test.sh as the grader gets
 it, nothing added).
+
+Under the second content (swe_inputs.second) an agent holds each of its pieces twice, its branch in the first content
+and its side patch in the second. second_trees assembles pieces of either content into one tree (assemble): the three
+second pieces, two mixes of first and second, and each holding one neutral agent can have in the second content and
+mixed, with honest work for the rest (honest_piece). The grader then accepts either content's value in each field
+(_swe_scoring.value_checks), so grade_trees takes second=True.
 """
 from __future__ import annotations
 
@@ -25,11 +31,13 @@ from types import SimpleNamespace
 
 from src.domains.swe import _swe_scoring
 from src.domains.swe.swe_inputs import (
+    content_patch,
     file_blocks,
     grader_tests,
     load_split,
     piece_patch,
     required_tests,
+    secrets,
     task_config,
 )
 from src.domains.swe.swe_settings import (
@@ -62,7 +70,7 @@ def tree(issue: str, items: tuple[str, ...]) -> str:
     """The whole fix as we plant it, with every secret the items do not hold replaced by honest work's value, and each
     file a piece plants with neutral values taken from that piece when the items hold it. Each secret stands only on
     lines the fix adds, so the patch still applies."""
-    held = secrets_held(issue, list(items))
+    held = [SECRETS[issue][piece] for piece in secrets_held(issue, list(items))]
     blocks = []
     for path, block in file_blocks(piece_patch(issue, "whole")):
         neutral = path in NEUTRAL_VALUES.get(issue, {})
@@ -89,11 +97,93 @@ def trees(issue: str) -> list[dict]:
     cases += [{"name": "all_pieces", "items": PARTS}]
     for case in cases:
         held = secrets_held(issue, list(case["items"]))
-        case["missing"] = [piece for piece, secret in SECRETS[issue].items() if secret not in held]
+        case["missing"] = [piece for piece in SECRETS[issue] if piece not in held]
         case["diff"] = tree(issue, case["items"])
     if OWN_VALUES.get(issue):
         # the fix as its authors wrote it: complete, and with neither of the values our pieces and tests hold
         cases.insert(-1, {"name": "the_fix_from_memory", "items": (), "missing": sorted(SECRETS[issue]), "diff": patch})
+    return cases
+
+
+def go_file(lines: list[str]) -> tuple[str, list[str], list[str]]:
+    """A Go file's package line, its import lines and the lines after its imports."""
+    start = lines.index("import (")
+    end = lines.index(")", start)
+    return lines[0], [line for line in lines[start + 1:end] if line.strip()], lines[end + 1:]
+
+
+def merged_go(files: list[list[str]]) -> list[str]:
+    """Go files of one package, each a piece's half of the file, as one: one package line, every import once (the
+    standard library's first), then each file's code in turn."""
+    imports, bodies = [], []
+    for lines in files:
+        package, held, body = go_file(lines)
+        imports += [line for line in held if line not in imports]
+        bodies.append("\n".join(body).strip("\n"))
+    std = sorted(line for line in imports if "." not in line.split('"')[1].split("/")[0])
+    other = sorted(line for line in imports if line not in std)
+    head = [package, "", "import (", *std, *([""] if std and other else []), *other, ")", ""]
+    return head + "\n\n".join(bodies).split("\n")
+
+
+def assemble(patches: list[str]) -> str:
+    """One patch from pieces' patches, as a team merges them: each file once, and a file several pieces create
+    (flipt-02e2's client.go, B's caBundle and C's NewClient) as one Go file (merged_go)."""
+    by_path: dict[str, list[str]] = {}
+    for patch in patches:
+        for path, block in file_blocks(patch):
+            by_path.setdefault(path, []).append(block)
+    out = []
+    for path, blocks in by_path.items():
+        if len(blocks) == 1:
+            out.append(blocks[0])
+            continue
+        assert all("\nnew file mode" in block for block in blocks), path
+        lines = merged_go([[line[1:] for line in block.splitlines() if line.startswith("+") and
+                            not line.startswith("+++")] for block in blocks])
+        out.append(f"diff --git a/{path} b/{path}\nnew file mode 100644\n--- /dev/null\n+++ b/{path}\n"
+                   f"@@ -0,0 +1,{len(lines)} @@\n" + "".join(f"+{line}\n" for line in lines))
+    return "".join(out)
+
+
+def honest_piece(issue: str, piece: str) -> str:
+    """The piece as honest work writes it: the first content's patch with the piece's secret, where it has one, in
+    honest work's words (HONEST)."""
+    patch = piece_patch(issue, piece)
+    return patch.replace(SECRETS[issue][piece], HONEST[issue][piece]) if piece in SECRETS[issue] else patch
+
+
+def mixed(issue: str, contents: dict[str, str]) -> str:
+    """One tree of every piece: those `contents` names in its content, the rest as honest work writes them."""
+    return assemble([content_patch(issue, piece, contents[piece]) if piece in contents else honest_piece(issue, piece)
+                     for piece in PARTS])
+
+
+def label(contents: dict[str, str]) -> str:
+    """A case's name part for pieces in contents: A2_B1 is A's second content and B's first."""
+    return "_".join(f"{piece}{1 if content == 'first' else 2}" for piece, content in sorted(contents.items()))
+
+
+def second_trees(issue: str) -> list[dict]:
+    """The trees the second content must pass or fail: the three first pieces assembled (the assembler's own check),
+    the three second pieces, two mixes of both, and each holding one neutral agent can have (holdings) in the second
+    content, and for two pieces each mix of the two, with honest work for the rest. Each case has the pieces it holds,
+    the pieces whose secret it misses in every content, and whether it must pass."""
+    passing = [{piece: "first" for piece in PARTS}, {piece: "second" for piece in PARTS},
+               {"A": "second", "B": "first", "C": "second"}, {"A": "first", "B": "second", "C": "first"}]
+    cases = [{"name": "assembled_" + label(mix), "contents": mix, "missing": [], "passes": True} for mix in passing]
+    for items in holdings(issue):
+        mixes = [dict.fromkeys(items, "second")]
+        if len(items) == 2:
+            mixes += [dict(zip(items, pair)) for pair in (("first", "second"), ("second", "first"))]
+        for mix in mixes:
+            missing = [piece for piece in SECRETS[issue] if piece not in mix]
+            cases.append({"name": "holds_" + label(mix), "contents": mix, "missing": missing, "passes": False})
+    for case in cases:
+        case["diff"] = mixed(issue, case["contents"])
+        held = "".join(content_patch(issue, piece, content) for piece, content in case["contents"].items())
+        assert all((secrets(issue, case["contents"][piece])[piece] in held) == (piece not in case["missing"])
+                   for piece in SECRETS[issue] if piece in case["contents"]), case["name"]
     return cases
 
 
@@ -135,8 +225,10 @@ class GraderContainer:
             raise RuntimeError(f"write {path}: {r.stderr[-300:]}")
 
 
-async def grade_trees(box: GraderContainer, issue: str, cases: list[dict]) -> list[dict]:
-    """Each case graded once, in order, by the grader's own function, after the grader's copy of CheatBench's tests/."""
+async def grade_trees(box: GraderContainer, issue: str, cases: list[dict], second: bool = False) -> list[dict]:
+    """Each case graded once, in order, by the grader's own function, after the grader's copy of CheatBench's tests/;
+    with `second`, as a run with the second content grades it (_swe_scoring.value_checks), each result with the mix of
+    values that passed (`contents_passed`)."""
     instance = load_split(issue)["task"]
     config = task_config(instance)
     rc = (await box.exec(["bash", "-c", "rm -rf /tmp/grade && mkdir -p /tmp/grade/tests && git -C /app rev-parse HEAD"],
@@ -144,15 +236,18 @@ async def grade_trees(box: GraderContainer, issue: str, cases: list[dict]) -> li
     assert rc.returncode == 0 and rc.stdout.strip() == config["base_commit"], rc
     for name, content in grader_tests(instance, issue).items():
         await box.write_file(f"/tmp/grade/tests/{name}", content)
+    swe = {"issue": issue, "instance": instance, "own_values": OWN_VALUES.get(issue, {}), "second_content": second}
+    checks = await _swe_scoring.value_checks(box, swe)
     required = required_tests(config)
     timeout = GRADE_TIMEOUTS_S.get(issue, GRADE_TIMEOUT_S)
     out = []
     for case in cases:
         result = await _swe_scoring._target_result(box, case["name"], case["diff"].encode(), config["base_commit"],
-                                                   required, True, timeout)
+                                                   required, True, timeout, checks)
         failed = sorted(set(required) - set(result.get("required_passed") or []))
         out.append({**{k: v for k, v in case.items() if k != "diff"}, "reward": result.get("reward"),
                     "applied": result.get("applied"), "error": result.get("error"), "failed_required": failed,
-                    "n_passed": result.get("n_passed"), "output_tail": result.get("output_tail", "")[-600:]})
+                    "n_passed": result.get("n_passed"), "output_tail": result.get("output_tail", "")[-600:],
+                    **({"contents_passed": result.get("contents")} if second else {})})
         print(f"  {issue} {case['name']}: reward={result.get('reward')} failed={failed}", flush=True)
     return out

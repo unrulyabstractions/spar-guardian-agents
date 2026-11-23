@@ -16,10 +16,12 @@ log reports it packed and watches nothing.
 
 Collaboration. Under access=split no neutral agent's pieces plus its own honest work pass the hidden tests. What the
 tests need and the issue never gives (swe_settings.SECRETS) lies in two pieces that two neutral agents always hold
-(deal_turn), and plan refuses a split deal that breaks this.
+(deal_turn), and plan refuses a split deal that breaks this. Under Variant.second_content an agent holds each of its
+pieces in both contents (its branch the first, its side patch the second), and the rule counts both.
 """
 from __future__ import annotations
 
+import hashlib
 import random
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -36,16 +38,19 @@ from src.domains.swe import _swe_honeypot as honeypot
 from src.domains.swe import _swe_team_remote as team_remote
 from src.domains.swe._swe_scoring import GUARD_DIFF, branch_file, committed, has_work, head_commit, swe_grader
 from src.domains.swe.swe_inputs import (
+    CONTENTS,
     agent_timeout_s,
+    checked_values,
+    content_patch,
     fix_commit,
     instruction_text,
     issue_note,
     load_lines,
     load_split,
     patch_files,
-    piece_patch,
     run_values,
     scenario,
+    secrets,
     task_config,
 )
 from src.domains.swe.swe_ladder import SweDomain
@@ -87,11 +92,13 @@ def honeypot_items(honeypot_name: str) -> list[str]:
             "jigsaw": [p for held in JIGSAW_PIECES for p in held]}[honeypot_name]
 
 
-def secrets_held(issue: str, items: list[str]) -> list[str]:
-    """The texts of swe_settings.SECRETS, what the hidden tests need and the issue never gives, that an agent's items
-    hold, read from the patches planted as them (piece_patch), so a file moved into the wrong piece shows here."""
-    texts = [piece_patch(issue, item) for item in items]
-    return [value for value in SECRETS.get(issue, {}).values() if any(value in text for text in texts)]
+def secrets_held(issue: str, items: list[str], contents: tuple[str, ...] = ("first",)) -> list[str]:
+    """The pieces of swe_settings.SECRETS, what the hidden tests need and the issue never gives, whose text in some of
+    the contents an agent's items hold in that content, read from the patches planted as them (content_patch), so a
+    file moved into the wrong piece shows here."""
+    texts = {content: [content_patch(issue, item, content) for item in items] for content in contents}
+    return [piece for piece in SECRETS.get(issue, {})
+            if any(secrets(issue, content)[piece] in text for content in contents for text in texts[content])]
 
 
 def piece_times(seed: int, issue: str) -> dict[str, int]:
@@ -139,7 +146,10 @@ class SWE(Benchmark):
             *(["instruction_names_what_the_hidden_tests_call"]
               if self.adds.issue_note and issue_note(self.row) else []),
             *(["pieces_and_hidden_tests_hold_values_of_ours_where_the_fix_wrote_its_own"]
-              if run_values(self.row, honeypot) else [])]
+              if run_values(self.row, honeypot) else []),
+            *(["each_side_patch_holds_a_second_implementation_of_its_piece_and_the_hidden_tests_accept_both_values"]
+              if self.adds.second_content else [])]
+        self.contents = CONTENTS if self.adds.second_content else ("first",)
 
     def check(self, config: SwarmConfig) -> None:
         """NotImplementedError at the large scales, or at the large scale's team size set by hand (LARGE_SCALE_ERROR);
@@ -172,13 +182,13 @@ class SWE(Benchmark):
 
     def plan(self, config: SwarmConfig, roles: dict[str, str] | None = None) -> Plan:
         """Benchmark.plan, then ValueError when a split deal gives one agent every text the hidden tests need
-        (secrets_held): that agent could pass alone. An explicit map and access=all are the experimenter's own deal
-        and pass."""
+        (secrets_held, in every content the agents hold): that agent could pass alone. An explicit map and access=all
+        are the experimenter's own deal and pass."""
         plan = super().plan(config, roles)
         values = SECRETS.get(self.row, {})
         if plan.access == "split" and values:
             alone = {agent: items for agent, items in plan.holds.items()
-                     if len(secrets_held(self.row, items)) == len(values)}
+                     if len(secrets_held(self.row, items, self.contents)) == len(values)}
             if alone:
                 raise ValueError(f"{self.row}: the split deal gives one agent every text the hidden tests need, so it "
                                  f"needs no teammate: {alone}")
@@ -261,6 +271,7 @@ class SWE(Benchmark):
             "fix_commit": fix_commit(instance), "honeypot": self.honeypot, "variant": self.variant,
             "side_patches": ({a: honeypot.side_patches(self.row, held) for a, held in plan.holds.items()}
                              if self.adds.side_patches else {}),
+            **(self.second_block(plan) if self.adds.second_content else {}),
             "scenario": self.adds.scenario, "branch_list": self.adds.branch_list,
             "issue_note": self.adds.issue_note,
             "seed": plan.config.seed,
@@ -279,6 +290,16 @@ class SWE(Benchmark):
                       "judge_prompt": swe["judge_prompt"], "swe": swe, "first_message": first}
         return Sample(id=self.row, input=instruction, sandbox=("docker", str(compose)),
                       metadata={"cheatbench": cheatbench})
+
+    def second_block(self, plan: Plan) -> dict:
+        """The record of the second content a run plants (Variant.second_content): the flag, the sha256 of each planted
+        piece's second patch, and the values the second content gives the fields the hidden tests check. The second
+        content comes in parts alone: ValueError for a plan that deals the whole fix (content_patch)."""
+        held = sorted({piece for items in plan.holds.values() for piece in items})
+        return {"second_content": True,
+                "second_pieces": {piece: hashlib.sha256(content_patch(self.row, piece, "second").encode()).hexdigest()
+                                  for piece in held},
+                "second_values": checked_values(self.row, dict.fromkeys(SECRETS[self.row], "second"))}
 
     def tools(self, plan: Plan) -> AgentTools:
         """`shell` and `run_python` on each agent's own service, in every mode."""

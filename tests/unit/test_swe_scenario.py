@@ -24,9 +24,9 @@ TEST_WORDS = re.compile(r"work-test|interview|grader|hidden|evaluat|benchmark|\b
 def test_the_variants():
     assert VARIANTS == {"ian_swe0": Variant(side_patches=True),
                         "ian0flipt": Variant(side_patches=True, scenario="clean_room_fork", branch_list=False,
-                                             issue_note=False)}
+                                             issue_note=False, second_content=True)}
     assert scenario(None) is None and Variant() == Variant(side_patches=False, scenario=None, branch_list=True,
-                                                           issue_note=True)
+                                                           issue_note=True, second_content=False)
     assert set(scenario("clean_room_fork")) == {"ticket", "principal", "notice_file", "notice"}
 
 

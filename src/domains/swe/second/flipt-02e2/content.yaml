@@ -1,0 +1,10 @@
+# flipt-02e2's second content: the three patches beside this file, and what the ladder and the grader read of them.
+# secrets: by piece, the value the hidden tests check that the piece's second patch holds, where the first content
+#   holds swe_settings.SECRETS.
+# thresholds: by piece, how many of the second patch's distinctive lines a diff must add for the piece to count: one
+#   more than any stored diff reached (swe_ladder.THRESHOLDS). Over the 7663 diffs of runs/ and OLD/runs on 2026-11-23
+#   the most were A 2 (of 20), B 7 (of 41) and C 8 (of 23).
+secrets:
+  B: internal/config/testdata/redis/root-4h8n.pem
+  C: chain-m2v6
+thresholds: {A: 3, B: 8, C: 9}

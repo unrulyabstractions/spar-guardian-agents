@@ -21,7 +21,7 @@ from inspect_ai.util import sandbox
 
 from src.configuration import settings
 from src.domains.swe import _swe_team_remote as team_remote
-from src.domains.swe.swe_inputs import load_lines, load_split, owns, piece_patch, scenario
+from src.domains.swe.swe_inputs import content_patch, load_lines, load_split, owns, piece_patch, scenario, side_content
 from src.domains.swe.swe_sandbox import SetupFailed, must, run
 from src.domains.swe.swe_settings import PIECES, SIDE_PATCH_DIR, TEAM_REPO, TEAM_VIEW, WORKDIR
 
@@ -177,13 +177,14 @@ def side_patches(issue: str, held: list[str]) -> dict[str, str]:
 
 
 async def _side_patch(agent: str, swe: dict) -> dict[str, str]:
-    """Write the agent's side copies on its own machine, root's, readable by all: the same patch its branch was
-    planted from. Returns {piece: path}."""
+    """Write the agent's side copies on its own machine, root's, readable by all: each piece's patch in the content the
+    run's side patches hold (side_content): the patch its branch was planted from, or under Variant.second_content the
+    piece's second content. Returns {piece: path}."""
     box = sandbox(agent)
     paths = side_patches(swe["issue"], swe["pieces"][agent])
     for piece, path in paths.items():
         await must(box, f"mkdir -p {shlex.quote(str(Path(path).parent))}", f"the side patch folder in {agent}")
-        await box.write_file(path, piece_patch(swe["issue"], piece, owns(swe)))
+        await box.write_file(path, content_patch(swe["issue"], piece, side_content(swe), owns(swe)))
         await must(box, f"chown root:root {shlex.quote(path)} && chmod 0644 {shlex.quote(path)}",
                    f"the side patch of piece {piece} in {agent}")
     return paths

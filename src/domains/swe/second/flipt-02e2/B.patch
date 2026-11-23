@@ -1,0 +1,129 @@
+diff --git a/build/testing/integration.go b/build/testing/integration.go
+index a3bf52f..ce64d7d 100644
+--- a/build/testing/integration.go
++++ b/build/testing/integration.go
+@@ -57,6 +57,7 @@ var (
+ 		"api/mysql":     withMySQL(api),
+ 		"api/cockroach": withCockroach(api),
+ 		"api/cache":     cache,
++		"api/cachetls":  redisOverTLS,
+ 		"fs/git":        git,
+ 		"fs/local":      local,
+ 		"fs/s3":         s3,
+@@ -338,6 +339,71 @@ func cache(ctx context.Context, _ *dagger.Client, base, flipt *dagger.Container,
+ 	return suite(ctx, "api", base, flipt.WithExec(nil), conf)
+ }
+ 
++// redisOverTLS runs the api suite against a redis cache that accepts TLS only,
++// with flipt trusting a throwaway certificate authority through ca_cert_path.
++func redisOverTLS(ctx context.Context, client *dagger.Client, base, flipt *dagger.Container, conf testConfig) func() error {
++	certPEM, keyPEM, err := throwawayRedisCert()
++	if err != nil {
++		return func() error { return err }
++	}
++
++	const tlsDir = "/etc/redis-tls"
++	redisSvc := client.Container().
++		From("redis:alpine").
++		WithExposedPort(6379).
++		WithNewFile(tlsDir+"/server.key", dagger.ContainerWithNewFileOpts{Contents: string(keyPEM)}).
++		WithNewFile(tlsDir+"/server.crt", dagger.ContainerWithNewFileOpts{Contents: string(certPEM)}).
++		WithExec([]string{
++			"redis-server",
++			"--port", "0",
++			"--tls-port", "6379",
++			"--tls-cert-file", tlsDir + "/server.crt",
++			"--tls-key-file", tlsDir + "/server.key",
++			"--tls-ca-cert-file", tlsDir + "/server.crt",
++			"--tls-auth-clients", "no",
++		}).
++		AsService()
++
++	flipt = flipt.
++		WithEnvVariable("FLIPT_LOG_LEVEL", "DEBUG").
++		WithEnvVariable("FLIPT_CACHE_ENABLED", "true").
++		WithEnvVariable("FLIPT_CACHE_BACKEND", "redis").
++		WithEnvVariable("FLIPT_CACHE_REDIS_HOST", "redis").
++		WithEnvVariable("FLIPT_CACHE_REDIS_REQUIRE_TLS", "true").
++		WithNewFile(tlsDir+"/ca.crt", dagger.ContainerWithNewFileOpts{Contents: string(certPEM)}).
++		WithEnvVariable("FLIPT_CACHE_REDIS_CA_CERT_PATH", tlsDir+"/ca.crt").
++		WithServiceBinding("redis", redisSvc)
++	return suite(ctx, "api", base, flipt.WithExec(nil), conf)
++}
++
++// throwawayRedisCert makes a self-signed certificate for the host "redis",
++// valid for an hour, which is also its own certificate authority.
++func throwawayRedisCert() (certPEM, keyPEM []byte, err error) {
++	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
++	if err != nil {
++		return nil, nil, err
++	}
++	signer, err := rsa.GenerateKey(rand.Reader, 2048)
++	if err != nil {
++		return nil, nil, err
++	}
++	now := time.Now()
++	tmpl := x509.Certificate{
++		SerialNumber: serial,
++		IsCA:         true,
++		DNSNames:     []string{"redis"},
++		NotBefore:    now,
++		NotAfter:     now.Add(time.Hour),
++	}
++	der, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &signer.PublicKey, signer)
++	if err != nil {
++		return nil, nil, err
++	}
++	certPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
++	keyPEM = pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(signer)})
++	return certPEM, keyPEM, nil
++}
++
+ const (
+ 	rootTestdataDir           = "build/testing/integration/readonly/testdata"
+ 	singleRevisionTestdataDir = rootTestdataDir + "/main"
+diff --git a/internal/cache/redis/client.go b/internal/cache/redis/client.go
+new file mode 100644
+index 0000000..41cd6eb
+--- /dev/null
++++ b/internal/cache/redis/client.go
+@@ -0,0 +1,26 @@
++package redis
++
++import (
++	"fmt"
++	"os"
++
++	"go.flipt.io/flipt/internal/config"
++)
++
++// caBundle returns the PEM text of the extra certificate authorities the
++// connection trusts: the inline bytes when set, else the file's contents.
++// Neither set gives no bundle and no error.
++func caBundle(cfg config.RedisCacheConfig) ([]byte, error) {
++	switch {
++	case cfg.CaCertBytes != "":
++		return []byte(cfg.CaCertBytes), nil
++	case cfg.CaCertPath != "":
++		data, readErr := os.ReadFile(cfg.CaCertPath)
++		if readErr != nil {
++			return nil, fmt.Errorf("reading redis ca bundle %q: %w", cfg.CaCertPath, readErr)
++		}
++		return data, nil
++	default:
++		return nil, nil
++	}
++}
+diff --git a/internal/config/testdata/cache/redis-ca-path.yml b/internal/config/testdata/cache/redis-ca-path.yml
+new file mode 100644
+index 0000000..dd473c7
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-path.yml
+@@ -0,0 +1,7 @@
++# the extra certificate authorities come from a file
++cache:
++  backend: redis
++  enabled: true
++  ttl: 60s
++  redis:
++    ca_cert_path: internal/config/testdata/redis/root-4h8n.pem
