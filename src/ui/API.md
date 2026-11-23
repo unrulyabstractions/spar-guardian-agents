@@ -665,9 +665,11 @@ turn rules withhold ORBIT's channel tools), so it serves only when no request wa
 the run has no eval log or the agent no model call. The run page shows them in the System box under its text, each
 tool folded to its name.
 ### `GET /api/tmp?id=<id>` → the run's `tmp_snapshots.json`, streamed as stored
-The temporary directories (/tmp, /var/tmp, /dev/shm) of every machine of the run before and after every recorded
-call, as `src/replay/tmp_snapshots.py` wrote them by replay (its docstring and DATA_AND_VIEWER.md give the schema).
-404 when the run is not in the index or has no such file; `BoardTab.tmp` says which. The Board tab's Temp dirs panel
+The listed folders of every machine of the run before and after every recorded call: the temporary directories
+(/tmp, /var/tmp, /dev/shm), and in a run's own capture also /team and /var/backups where the machine has them. A run
+made since d41f78a writes it itself (`src/sandbox/live_tmp_capture.py`); an older run's comes from the replay
+(`src/replay/tmp_snapshots.py`), which lists the temporary directories alone (DATA_AND_VIEWER.md gives the schema).
+404 when the run is not in the index or has no such file; `BoardTab.tmp` says which. The Board tab's Files panel
 (`tv_tmp_panel.js`, its state from `tv_tmp_state.js`) reads it only when `tmp` is true, and shows each machine's tree
 at the position: a step that ran is placed at its call's `t` on the board's clock (by `agent` and `k`), never before
 the step before it; a machine's state before its first call is that call's `before`. The entries a step added,

@@ -83,9 +83,9 @@ Without judge scores, the viewer shows "not judged" in the Judge labels columns.
 
 ### The temporary directories at every call
 
-A run made since d41f78a (2026-11-22) takes its own snapshots (`tmp_snapshots`, on by default): it lists /tmp, /var/tmp and /dev/shm of every agent machine as root before the first round and after each tool call that ran a command there, and the export writes `tmp_snapshots.json` with `"clock": "run"`. Each step that ran adds its shot's time `t`, its `window` (the machine's shot before and its own), `overlapping` (the other calls and `jobs` that ran on the machine in that window) and an `attribution`: `call` when the change is the call's own, `shared` when something else ran in the window, `unknown` with no shot before. run.json `tmp_snapshots` gives its `status` (`written`, `error`, `off` or `none`), the shots, the errors and the listing times. A failed listing is recorded and never fails the run, and a listing never opens a honeypot file.
+A run made since d41f78a (2026-11-22) takes its own snapshots (`tmp_snapshots`, on by default): it lists /tmp, /var/tmp, /dev/shm, /team and /var/backups (where the machine has them) of every agent machine as root before the first round and after each tool call that ran a command there, and the export writes `tmp_snapshots.json` with `"clock": "run"`. Each step that ran adds its shot's time `t`, its `window` (the machine's shot before and its own), `overlapping` (the other calls and `jobs` that ran on the machine in that window) and an `attribution`: `call` when the change is the call's own, `shared` when something else ran in the window, `unknown` with no shot before. run.json `tmp_snapshots` gives its `status` (`written`, `error`, `off` or `none`), the shots, the errors and the listing times. A failed listing is recorded and never fails the run, and a listing never opens a honeypot file.
 
-For an older run, `uv run python -m src.replay.tmp_snapshots runs/<study>/<run> --out <replay dir>` replays it and puts `tmp_snapshots.json` in its `processed/`, only when the replay is faithful. It holds the same directories before and after every recorded call. It needs Docker, makes no model call, and refuses to replace the file without `--force`. The keys below are both files'.
+For an older run, `uv run python -m src.replay.tmp_snapshots runs/<study>/<run> --out <replay dir>` replays it and puts `tmp_snapshots.json` in its `processed/`, only when the replay is faithful. It holds /tmp, /var/tmp and /dev/shm before and after every recorded call. It needs Docker, makes no model call, and refuses to replace the file without `--force`. The keys below are both files'.
 
 | Key | What it holds |
 |---|---|
@@ -98,7 +98,7 @@ For an older run, `uv run python -m src.replay.tmp_snapshots runs/<study>/<run> 
 
 An entry is `{type, size, mode, owner, uid, group, gid, mtime, acl, default_acl, sha256, text, target}`: type is file, dir, link, fifo, socket or other, mode as `ls` prints it, target for a link. `acl` and `default_acl` are the POSIX ACL lines as `getfacl` prints them (`user:s7m7z:r--`), present only when the entry has one. In creative writing each reference piece is root's `-rw-r-----` and its holder reads it through `acl`. Schema 1 files have no `group`, `gid`, `acl` or `users`. A call with `"ran": false` changed nothing. The full state at a call is every `before` and `after` applied in order up to it, per machine (`decode` and `state_at` in `src/replay/tmp_snapshots.py`). A replay's times are the replay's clock, not the run's.
 
-The viewer's Board tab shows the file in a Temp dirs panel under the timeline, only on runs that have it (`/api/tmp?id=`, src/ui/API.md).
+The viewer's Board tab shows the file in a Files panel under the timeline, only on runs that have it (`/api/tmp?id=`, src/ui/API.md).
 
 ### The network log
 

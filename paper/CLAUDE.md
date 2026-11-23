@@ -1887,3 +1887,33 @@ Seed packs ("No result of this paper uses a seed pack." holds), Results, Discuss
 
 Built in `worktree/paper-notice` with runs/, logs/, OLD/, build/ and .venv linked from the main tree and the
 submodules checked out at their pins.
+
+## The board is one bullet of the tool list, and the run's capture lists /team and /var/backups, 2026-11-22
+
+The code: the system prompt lists the board's tools as one bullet of its tool list, "- board_status, board_read,
+board_post: the team's message board.", and holds no paragraph about the board (c756e71, 4efaa1f; the user: "Only
+list the tools"). SWE's "Team chat" paragraph and the other tasks' "There is a shared message board. ..." are gone;
+the bullet leads the tool bullets, before submit and stop_working. A regulator that oversees gets no bullet: its
+briefing (informed_roles) names the board and its tools, and so does a disregulator's, beside its bullet. A run's own
+capture lists /team and /var/backups beside the temporary directories (76a79a8); the replay of an older run lists the
+temporary directories alone. 15de202 and 2446224 changed only the viewer's wording.
+
+No figure or table changed: no paper figure shows the system prompt's text (`figures.py` fig_information is not in
+the paper), and no generated file changed.
+
+Sentences changed (old, then new), all in Appendix A:
+- Communication: "Every agent's system prompt names the board and its tools" became two items: "A worker's system
+  prompt lists the board's three tools as one bullet among its tools. No paragraph of it describes the board" and
+  "An influencer's system prompt names the board and its tools in a paragraph on its role".
+- Rounds: after "We list the temporary folders of every agent machine before the first round and after each call that
+  ran a command there." added "The listing also covers the folder the team shares. On SWE, that folder holds the
+  team's remote. The listing also covers the folder that holds the patch files of an SWE variant. The Tasks
+  subsection describes that variant."
+
+Checked and unchanged: the differ list's "No worker's system prompt named the board or its tools." (the study runs
+recorded mention_board false; the difference holds), "A listing never opens a file of the honeypot." (the patch files
+are the access log's watched files, listed by lstat alone), the roles figure's caption ("All agents share a message board."),
+Results, Discussion, Conclusion and Abstract (they report the runs).
+
+Built in `worktree/paper-board` with runs/, logs/, OLD/ and build/ linked from the main tree, main's .venv by path,
+and the submodules cloned from the main tree's copies at their pins.

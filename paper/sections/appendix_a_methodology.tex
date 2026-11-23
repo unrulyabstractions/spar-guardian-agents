@@ -99,7 +99,9 @@ These poisoned agents represent negative peer pressure.
 
 \subsubsection*{Communication}
 \begin{itemize}
-  \item Every agent's system prompt names the board and its tools
+  \item A worker's system prompt lists the board's three tools as one bullet among its tools. No paragraph of it
+  describes the board
+  \item An influencer's system prompt names the board and its tools in a paragraph on its role
   \item Before each model call, agents are informed of the number of new messages on the board since their last
   call (total and per agent)
   \item Inside a round, this notice is the last paragraph of the next tool result
@@ -162,6 +164,10 @@ We record every job with its agent, its call and how it ended.
 The access log credits a file that a job opens to the call that started the job.
 We list the temporary folders of every agent machine before the first round and after each call that ran a command
 there.
+The listing also covers the folder the team shares.
+On SWE, that folder holds the team's remote.
+The listing also covers the folder that holds the patch files of an SWE variant.
+The Tasks subsection describes that variant.
 A listing never opens a file of the honeypot.
 Workers and influencers get the same R, N and T.
 A lone agent follows the same rules.
