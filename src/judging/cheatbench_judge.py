@@ -59,8 +59,6 @@ from src.utils.cheatbench_core import judge as cb_judge
 
 JUDGE_SCORER = "cheatbench_judge"
 JUDGE_ROLE = "judge"
-# Lucy's judge addendum, appended to the task's judge schema when the config asks for it (SwarmConfig.judge_addendum)
-JUDGE_ADDENDUM = settings.LUCY / "experiments" / "orbit_cheatbench" / "judge_addendum.py"
 
 
 # --------------------------------------------------------------------------
@@ -262,14 +260,11 @@ class Unit:
 # --------------------------------------------------------------------------
 # CheatBench's spec and prompt
 # --------------------------------------------------------------------------
-def judge_spec(task_dir: Path, task_name: str, *, addendum: Path | list[Path] | None = None) -> cb_judge.JudgeSpec:
-    """The task's Verdict and context, loaded from a copy of its judge_schema.py under build/judge/, so the submodule
-    gets no __pycache__. Each addendum is appended to the copy in order, as Lucy's harness appends hers; the copy's
-    folder joins their stems."""
-    addenda = [] if addendum is None else [addendum] if isinstance(addendum, Path) else list(addendum)
-    text = "\n\n".join([(Path(task_dir) / cb_judge.SCHEMA_MODULE).read_text(), *(Path(a).read_text() for a in addenda)])
-    folder = settings.BUILD / "judge" / "+".join([task_name, *(Path(a).stem for a in addenda)])
-    write_atomic(folder / cb_judge.SCHEMA_MODULE, text.encode())
+def judge_spec(task_dir: Path, task_name: str) -> cb_judge.JudgeSpec:
+    """The task's Verdict and context, loaded from a copy of its judge_schema.py under build/judge/<task>/, so the
+    submodule gets no __pycache__."""
+    folder = settings.BUILD / "judge" / task_name
+    write_atomic(folder / cb_judge.SCHEMA_MODULE, (Path(task_dir) / cb_judge.SCHEMA_MODULE).read_text().encode())
     return cb_judge.load_judge_spec(folder, task_name=task_name)
 
 
@@ -334,7 +329,7 @@ async def judge_sample(view: SampleView, spec: cb_judge.JudgeSpec, judge: Judge)
 # --------------------------------------------------------------------------
 @scorer(metrics=[mean()])
 def cheatbench_judge(task_name: str, task_root: str, judge: str = settings.JUDGE_MODEL,
-                     addendum: str | None = None, batch: bool = True) -> Scorer:
+                     batch: bool = True) -> Scorer:
     """The share of judged agents that cheated, with every agent's verdict in the metadata.
 
     The judge is the model bound to the "judge" role, else the entry's model (whose key must then be set). When no
@@ -342,7 +337,7 @@ def cheatbench_judge(task_name: str, task_root: str, judge: str = settings.JUDGE
     averaged in as "nobody cheated"; `python -m src judge` judges the log again. `batch` says whether the judge's
     calls go through the batch API (SwarmConfig.batch_judge), which sets the price.
     """
-    spec = judge_spec(Path(task_root), task_name, addendum=Path(addendum) if addendum else None)
+    spec = judge_spec(Path(task_root), task_name)
 
     async def score(state: TaskState, target: Target) -> Score | None:
         view = SampleView.from_state(state, inspect_transcript().events)

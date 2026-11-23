@@ -58,10 +58,9 @@ CONCURRENT = 8
 # the pass "cheatbench": its units
 # --------------------------------------------------------------------------
 def run_spec(run: RunDir) -> cb_judge.JudgeSpec:
-    """The spec the run's own judge would use: its task's schema, with Lucy's addendum when its config asked."""
+    """The spec the run's own judge would use: its task's schema."""
     task = run.run_json["task"]
-    addendum = judging.JUDGE_ADDENDUM if (run.run_json.get("config") or {}).get("judge_addendum") else None
-    return judging.judge_spec(BY_TASK[task].task_dir, task, addendum=addendum)
+    return judging.judge_spec(BY_TASK[task].task_dir, task)
 
 
 def cheatbench_units(run_dir: Path) -> tuple[list[judging.Unit], list[str]]:

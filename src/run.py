@@ -294,13 +294,12 @@ def tmp_line(block: dict | None) -> str:
 # judge an existing log
 # --------------------------------------------------------------------------
 async def _judge_views(views: list[SampleView], judge: judging.Judge) -> dict[str, dict]:
-    """Every agent of every sample judged again with the spec the sample was judged with (its task's schema, Lucy's
-    addendum when its config asked for it); by episode."""
+    """Every agent of every sample judged again with the spec the sample was judged with (its task's schema); by
+    episode."""
     verdicts = {}
     for view in views:
         cb = view.metadata["cheatbench"]
-        addendum = judging.JUDGE_ADDENDUM if (cb.get("config") or {}).get("judge_addendum") else None
-        spec = judging.judge_spec(BY_TASK[cb["task"]].task_dir, cb["task"], addendum=addendum)
+        spec = judging.judge_spec(BY_TASK[cb["task"]].task_dir, cb["task"])
         by_agent = await judging.judge_sample(view, spec, judge)
         verdicts |= {episode_id(view, agent): verdict for agent, verdict in by_agent.items()}
     return verdicts

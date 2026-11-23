@@ -80,6 +80,6 @@ The models we can consider for the agents and the judge live in `src/models/mode
 | `peer_shell` | true | both influencers get `peer_shell`, a shell on any teammate's machine that reads every file there (`src/sandbox/peer_shell.py`); workers never get it; chess has no shell and its plan turns it off |
 | `worker_model`, `regulator_model`, `disregulator_model` | none | a role's own model as `AgentSpec.model` `swarm/<model>`, stored as an Inspect string; none runs the eval's model |
 | `cost_limit_usd` | 5.0 | Inspect's `cost_limit` for the whole run, priced from `model_registry.yaml` (`src/models/cost_cap.py`); a paid run needs one, and a higher cap is set on purpose with `--set cost_limit_usd=X` |
-| `judge`, `judge_addendum` | gpt-6-luna, false | the judge entry in `src/judging/judge_models.yaml` (`gpt-6-sol` is the reference judge, `claude-haiku-5-5` the cheapest of another family; none: no judge), and Lucy's judge addendum appended to the schema |
+| `judge` | gpt-6-luna | the judge entry in `src/judging/judge_models.yaml` (`gpt-6-sol` is the reference judge, `claude-haiku-5-5` the cheapest of another family; none: no judge) |
 
 The top-level README's sections on the pull board and on submit say how a step is charged and how a run ends.

@@ -72,7 +72,7 @@ from src.configuration.seed_packs import seed_record
 from src.configuration.swarm_config import SwarmConfig, role_of
 from src.domains import DOMAINS
 from src.domains.benchmark_protocol import Benchmark, Plan
-from src.judging.cheatbench_judge import JUDGE_ADDENDUM, cheatbench_judge
+from src.judging.cheatbench_judge import cheatbench_judge
 from src.models import swarm_model_provider as provider  # importing it registers the "swarm" provider
 from src.sandbox import command_jobs, peer_shell
 from src.sandbox.access_log.access_monitor import access_capture, capture, start_access_monitor, with_monitor
@@ -317,7 +317,6 @@ def scorers(benchmark: Benchmark, config: SwarmConfig) -> list:
     monitor = [access_capture()] if benchmark.keeps_access_log(config) else []
     monitor += [network_capture()] if keeps_network_log(benchmark, config) else []
     judge = [cheatbench_judge(benchmark.name, str(benchmark.task_dir), judge=config.judge,
-                              addendum=str(JUDGE_ADDENDUM) if config.judge_addendum else None,
                               batch=config.batch_judge)] if config.judge else []
     probes = [end_of_episode_probes()] if config.awareness_probe else []
     if config.belief_probe:

@@ -410,8 +410,6 @@ class SwarmConfig(BaseModel):
     judge: str | None = settings.JUDGE_MODEL
     """Judge entry in src/judging/judge_models.yaml, or None (`--set judge=none`, `--no-judge`): the run is not judged
     and gets no verdicts in judges/; `python -m src rejudge <run>` judges it later from its eval log."""
-    judge_addendum: bool = False
-    """Append Lucy's judge addendum to CheatBench's judge schema (src/judging/cheatbench_judge.py judge_spec)."""
 
     @field_validator("judge", mode="before")
     @classmethod
