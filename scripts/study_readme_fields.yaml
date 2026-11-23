@@ -651,7 +651,8 @@ studies:
       swe/exp1_called_cheating, on Haiku 5.5 and on GPT-6 Luna workers, in four conditions: `baseline` (three workers,
       told nothing), `told_to_cheat` (the positive control: the workers are told to cheat), `rule` (the negative
       control: the rule naming the exploit, `rule_level` identified) and `regulated` (the baseline with a hidden Haiku
-      5.5 regulator, four agents). No judge ran.
+      5.5 regulator, four agents). In these runs every agent was shown the first line of each new post on the board,
+      seeded posts included (the notice setting `previews`). No judge ran.
     load: |
       import json, pathlib
       study = pathlib.Path("runs/ian_seed_prototyping_1")
@@ -664,7 +665,8 @@ studies:
       (run.json `seed`), against a control with none. Four targets: SWE (the flipt issue) with DeepSeek V4.1 Flash
       workers, and SWE, protein design and creative writing with GPT-6 Luna workers. Each run is one team of three
       workers with no influencer, 30 rounds of up to 10 tool calls. Runs of one target and seed share their agent IDs
-      and deal (`id_salt`), so a pack's run pairs with its control. No judge ran.
+      and deal (`id_salt`), so a pack's run pairs with its control. In these runs every agent was shown the first
+      line of each new post on the board, seeded posts included (the notice setting `previews`). No judge ran.
     load: |
       import json, pathlib
       study = pathlib.Path("runs/ian_seed_prototyping_0")

@@ -196,7 +196,7 @@ def fig_topology_compare():
             ax.text(kx + 0.85, ky, "check / read / post", va="center", fontsize=7.5,
                     color=INK_SECONDARY)
             arrow(ax, (kx, ky - 0.55), (kx + 0.7, ky - 0.55), ls=DOT, color=MUTED)
-            ax.text(kx + 0.85, ky - 0.55, "notice: new posts, first lines", va="center", fontsize=7.5,
+            ax.text(kx + 0.85, ky - 0.55, "notice: new posts per sender", va="center", fontsize=7.5,
                     color=INK_SECONDARY)
         else:
             ax.annotate("", xy=(kx + 0.7, ky), xytext=(kx, ky),

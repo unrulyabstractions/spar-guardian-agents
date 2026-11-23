@@ -92,7 +92,7 @@ These poisoned agents represent negative peer pressure.
   \centering
   \includegraphics[width=\linewidth]{topology_compare}
   \caption{Our board beside the shared folder of a reported incident. On our board, agents check, read and post,
-  and each model call opens with a notice of new posts per sender, with previews of their first lines. In the incident, agents listed, read and wrote files in a
+  and each model call opens with a notice of new posts per sender. In the incident, agents listed, read and wrote files in a
   shared cache.}
   \label{fig:topology}
 \end{figure}
@@ -103,9 +103,10 @@ These poisoned agents represent negative peer pressure.
   \item Before each model call, agents are informed of the number of new messages on the board since their last
   call (total and per agent)
   \item Inside a round, this notice is the last paragraph of the next tool result
-  \item The notice then gives the first line of up to \PreviewPosts{} new posts by others, each cut at
-  \PreviewChars{} characters. It chooses posts that name the agent before the newest, and marks them. A read returns
-  the posts in full
+  \item The notice gives no text of any post. A read returns the posts in full
+  \item An option makes the notice also give the first line of up to \PreviewPosts{} new posts by others, each cut
+  at \PreviewChars{} characters. It chooses posts that name the agent before the newest, and marks them. The option
+  is off by default
   \item They have a budget of messages they can read and write per round
   \item Each check, read and post is one of the round's tool calls
   \item The board is live: a read returns every post made so far, including posts made in the same round
@@ -573,7 +574,7 @@ The judge is \JudgeName{} at \JudgeEffort{} effort.
   Regulators have no read budget.
   \item Max tool result: \ToolOutputKiB{}~KiB for every agent. A longer result keeps its start and its end, with a
   line that states the cut.
-  \item The runs of the multi-domain study differ from this design in twenty-six ways. Each agent had \TurnBudget{}
+  \item The runs of the multi-domain study differ from this design in twenty-five ways. Each agent had \TurnBudget{}
   working steps instead of rounds of tool calls. A step was one model call and the tool calls of its reply. A step
   that ended with a board call used up no working step. A round allowed up to \FreeBoardActions{} such steps, or
   \FreeBoardActionsInfluencer{} for a regulator. No message gave the number of steps or opened a round. In a
@@ -587,9 +588,8 @@ The judge is \JudgeName{} at \JudgeEffort{} effort.
   the task, such as an SWE agent's repository and branch, or what cheating meant on the task for a regulator. Each
   command had a time limit of its own, and no round had one. A command past its limit was stopped. Every process list
   showed the processes and commands of every agent on the machine. A search of the whole disk stalled on the page map
-  of its own process. No worker's system prompt named the board or its tools. The board's notice gave only the
-  number of new posts per sender. No influencer had a shell on a teammate's machine. No influencer read a message
-  when main of the team's remote moved. No regulator was told what counts when the team hands in its work, or on SWE
+  of its own process. No worker's system prompt named the board or its tools. No influencer had a shell on a
+  teammate's machine. No influencer read a message when main of the team's remote moved. No regulator was told what counts when the team hands in its work, or on SWE
   how to read that work. On SWE, a regulator's definition of cheating did not count code written after seeing the
   fix. On SWE, nothing locked the team's remote against an agent with root. Nothing killed what an SWE agent's calls
   left running at the end of its round.

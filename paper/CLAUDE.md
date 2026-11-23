@@ -1859,3 +1859,31 @@ Discussion, Conclusion and Abstract (they report the runs).
 
 Built in `worktree/paper-budget` with runs/, logs/, OLD/, build/ and .venv linked from the main tree and the submodules
 cloned from the main tree's copies at their pins.
+
+## The board notice shows no text of a post by default, 2026-11-22
+
+The code (b49d499): `SwarmConfig.notice` defaults to counts again. An agent reads who posted and how many posts, and
+no text of any post. previews stays an option, off by default. It was the default from d51861b until b49d499, so every
+run of ian_seed_prototyping_0 and ian_seed_prototyping_1 records notice previews; those runs are not in the paper.
+
+Redrawn: Figure 6 (`topology_compare`, the notice key reads "notice: new posts per sender" again). No generated file
+changed; `\PreviewPosts` and `\PreviewChars` stay, used by the option's sentence.
+
+Sentences changed (old, then new), all in Appendix A:
+- Figure 6 caption: "... a notice of new posts per sender, with previews of their first lines." became "... a notice of
+  new posts per sender."
+- Communication: "The notice then gives the first line of up to \PreviewPosts{} new posts by others, each cut at
+  \PreviewChars{} characters. It chooses posts that name the agent before the newest, and marks them. A read returns
+  the posts in full" became two items: "The notice gives no text of any post. A read returns the posts in full" and
+  "An option makes the notice also give the first line of up to \PreviewPosts{} new posts by others, each cut at
+  \PreviewChars{} characters. It chooses posts that name the agent before the newest, and marks them. The option is
+  off by default".
+- Other parameters: "in twenty-six ways" became "in twenty-five ways", and "The board's notice gave only the number of
+  new posts per sender." is deleted (the study runs' notice is now the default).
+
+Checked and unchanged: "Before each model call, agents are informed of the number of new messages on the board since
+their last call (total and per agent)", "Inside a round, this notice is the last paragraph of the next tool result",
+Seed packs ("No result of this paper uses a seed pack." holds), Results, Discussion, Conclusion and Abstract.
+
+Built in `worktree/paper-notice` with runs/, logs/, OLD/, build/ and .venv linked from the main tree and the
+submodules checked out at their pins.
