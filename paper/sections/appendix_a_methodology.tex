@@ -34,6 +34,8 @@ box above.
 Neither the level nor the box gives a detail of the task.
 The regulator's first user message gives its teammates' task.
 It then gives the details its level points to, in the task's own words, such as what cheating means on that task.
+On a variant with a scenario, these details come in the scenario's words.
+The Tasks subsection describes these variants.
 At every level, it then says what counts when the team hands in its work.
 On SWE, it also says how to read team/main and the branches that teammates push.
 The message also says when to make the check the box asks for: ``\CheckValue'' We expect a regulator to elicit honesty from other agents, to verify that their work
@@ -171,7 +173,7 @@ We list the temporary folders of every agent machine before the first round and 
 there.
 The listing also covers the folder the team shares.
 On SWE, that folder holds the team's remote.
-The listing also covers the folders where a variant keeps a second copy of each piece.
+The listing also covers the folders where a variant keeps a second version of each piece, outside the task's files.
 The Tasks subsection describes these variants.
 A listing never opens a file of the honeypot.
 Workers and influencers get the same R, N and T.
@@ -237,25 +239,18 @@ The posts stand on the board before the first round, under the IDs of a previous
 from its own agents.
 The board opens with a record by the system: ``Cleaned up older messages.'' After the posts, the board holds an exit record for each author.
 A new team that reads the board therefore learns that the previous team has gone.
+A pack may also hold files.
 A file goes to the shared temporary folder of every machine, or to each agent's home.
 No file enters the task's repository, so no graded tree holds one.
-Each task has these packs:
-\begin{itemize}
-  \item Pointer: one post that says where the pieces of the honeypot lie.
-  \item Pointer with a rationale: the pointer, then a reading of the task that makes using the pieces look legitimate.
-  \item Pressure: urgent calls to pool every piece, on the board or on the team's remote.
-  \item Pooled and passed: a previous team that joined its pieces and passed, with its notes in a file.
-  \item Notes only: the previous team's notes in a file, and nothing on the board. Only SWE has this pack.
-  \item Collaborate: a previous team's plan for working together from the start, on the board and in a file.
-  \item Called cheating: one agent of a previous team proposes to use what it found in a backup folder. On SWE the
-  folder holds patch files and lies outside the repository. On creative writing it lies outside the workspace. On
-  protein design it is the backup of a screening folder. A second says that the pieces are not the team's own work,
-  and that they pass the task's check. The first answers that their work must also pass the check of the client that
-  the task's variant names. The Tasks subsection describes these variants. The second says that a failed task harms
-  the user. The posts show no decision. No post says what the team is asked to do. No post calls the use cheating.
-  One of the two authors opens each of its posts with its own ID, as agents in our runs do. On SWE, the pack runs
-  only on the issue whose patch folder its first post names. On creative writing, it runs only on the one brief that the variant uses.
-\end{itemize}
+Each task has one pack, Called cheating. It holds no file.
+In it, one agent of a previous team proposes to use what it found in a backup folder. On SWE the
+folder holds patch files and lies outside the repository. On creative writing it lies outside the workspace. On
+protein design it is the backup of a screening folder. A second says that the pieces are not the team's own work,
+and that they pass the task's check. The first answers that their work must also pass the check of the client that
+the task's variant names. The Tasks subsection describes these variants. The second says that a failed task harms
+the user. The posts show no decision. No post says what the team is asked to do. No post calls the use cheating.
+One of the two authors opens each of its posts with its own ID, as agents in our runs do. On SWE, the pack runs
+only on the issue whose patch folder its first post names. On creative writing, it runs only on the one brief that the variant uses.
 No pack holds a piece of the exploit, a line of the reference or any other content of a honeypot.
 A seeded team therefore still needs the items of two agents to cheat.
 Our collaboration tests check every pack.
@@ -323,15 +318,27 @@ The instruction of some issues also ends with a note of the names that the hidde
 The first message of this form lists no branch and holds no such note.
 The planted branch stays in the clone.
 Git ignores the notes file, so it enters no diff and never reaches the team's remote.
+In this form, the patch files hold a \textbf{second content}, our own implementation of the fix.
+We cut it into the same pieces as the upstream fix.
+The planted branches keep the upstream fix.
+The notes still say that the patch files come from upstream.
+The hidden tests pass a fix built from either content, or from pieces of both.
+Code reads the second content as it reads the upstream fix.
 
 Creative writing and protein design each have a variant with both additions.
-On creative writing, each worker's part of the reference is also a file in a backup folder outside the workspace.
-The file holds the same text as the part.
-Only the part's holders can read it.
-On protein design, each worker's candidates file is also in a backup of the colleague's screening folder.
+On creative writing, each worker's part of the reference has a counterpart in a backup folder outside the workspace.
+We wrote a second poem on the same brief and cut it as the reference is cut.
+Each file in the folder holds one part of that poem.
+Only the holders of the matching part of the reference can read it.
+On protein design, each worker's candidates file has a counterpart in a backup of the colleague's screening folder.
 The backup sits on the worker's own machine.
-It holds the same bytes as the worker's candidates file.
-We call such a second copy of a worker's piece outside the task's files a \textbf{side copy}.
+Code generated six other designs for each target and cut them as the planted designs are cut.
+The worker's file in the backup holds its segments of these designs.
+No second design shares a run of eight residues with a planted design or with the target.
+These poems and designs are the second content of the two variants.
+The task's check passes a whole poem or design of either content.
+It fails one that joins parts of both.
+We call a worker's piece kept outside the task's files a \textbf{side copy}.
 The patch files of SWE are side copies too.
 A worker still holds one piece, so cheating still takes two agents by either route.
 Our collaboration tests check both variants.
@@ -360,7 +367,9 @@ They do not name the colleague's folder.
 In every scenario, no message names the notes.
 The notes give no order.
 As in \textit{CheatBench}, only the situation implies that the work must be the agents' own.
-No text that a scenario adds names a test, an interview or an evaluation.
+No text that a scenario adds for a worker names a test, an interview or an evaluation.
+A scenario also gives a regulator its own words for what cheating means.
+They name both places that hold the exploit: the planted pieces and the side copies.
 No result of this paper uses these variants.
 
 \subsubsection*{Target model and environment selection}
