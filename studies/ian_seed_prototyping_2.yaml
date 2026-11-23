@@ -43,6 +43,79 @@ targets:
     module: examples.swe.ian0flipt_minimal_cheat
     model: claude-haiku-5-5-openrouter
     packs: [swe/exp1_called_cheating]
-# Three runs at a time: six SWE runs at once left 4 GB of Docker's disk free on 2026-11-22 (each agent's container
-# grows by 1 to 2 GB of Go build cache), and a baseline cell counts toward no task's own limit.
-limits: {max_runs: 3, max_per_task: {swe: 3}, spacing_s: 30}
+  ian0poem_deepseek_baseline:
+    module: examples.creative_writing.ian0poem_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+  ian0poem_deepseek_seeded:
+    module: examples.creative_writing.ian0poem_minimal
+    model: deepseek-flash-openrouter
+    packs: [creative_writing/exp1_called_cheating]
+  ian0poem_deepseek_positive_control:
+    module: examples.creative_writing.ian0poem_minimal_cheat
+    model: deepseek-flash-openrouter
+    packs: [creative_writing/exp1_called_cheating]
+  ian0poem_luna_baseline:
+    module: examples.creative_writing.ian0poem_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none]
+  ian0poem_luna_seeded:
+    module: examples.creative_writing.ian0poem_minimal
+    model: gpt-6-luna-openrouter
+    packs: [creative_writing/exp1_called_cheating]
+  ian0poem_luna_positive_control:
+    module: examples.creative_writing.ian0poem_minimal_cheat
+    model: gpt-6-luna-openrouter
+    packs: [creative_writing/exp1_called_cheating]
+  ian0poem_haiku_baseline:
+    module: examples.creative_writing.ian0poem_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [none]
+  ian0poem_haiku_seeded:
+    module: examples.creative_writing.ian0poem_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [creative_writing/exp1_called_cheating]
+  ian0poem_haiku_positive_control:
+    module: examples.creative_writing.ian0poem_minimal_cheat
+    model: claude-haiku-5-5-openrouter
+    packs: [creative_writing/exp1_called_cheating]
+  ian0binder_deepseek_baseline:
+    module: examples.protein_design.ian0binder_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+  ian0binder_deepseek_seeded:
+    module: examples.protein_design.ian0binder_minimal
+    model: deepseek-flash-openrouter
+    packs: [protein_design/exp1_called_cheating]
+  ian0binder_deepseek_positive_control:
+    module: examples.protein_design.ian0binder_minimal_cheat
+    model: deepseek-flash-openrouter
+    packs: [protein_design/exp1_called_cheating]
+  ian0binder_luna_baseline:
+    module: examples.protein_design.ian0binder_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none]
+  ian0binder_luna_seeded:
+    module: examples.protein_design.ian0binder_minimal
+    model: gpt-6-luna-openrouter
+    packs: [protein_design/exp1_called_cheating]
+  ian0binder_luna_positive_control:
+    module: examples.protein_design.ian0binder_minimal_cheat
+    model: gpt-6-luna-openrouter
+    packs: [protein_design/exp1_called_cheating]
+  ian0binder_haiku_baseline:
+    module: examples.protein_design.ian0binder_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [none]
+  ian0binder_haiku_seeded:
+    module: examples.protein_design.ian0binder_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [protein_design/exp1_called_cheating]
+  ian0binder_haiku_positive_control:
+    module: examples.protein_design.ian0binder_minimal_cheat
+    model: claude-haiku-5-5-openrouter
+    packs: [protein_design/exp1_called_cheating]
+# Six SWE runs at once left 4 GB of Docker's disk free on 2026-11-22 (each agent's container grows by 1 to 2 GB of Go
+# build cache), and a baseline cell counts toward no task's own limit: SWE ran three at a time. The creative and
+# protein machines write little, so four of those run at once.
+limits: {max_runs: 4, max_per_task: {swe: 3}, spacing_s: 30}
