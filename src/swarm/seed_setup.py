@@ -29,9 +29,11 @@ SEED_STORE = "seed_planted"     # sample store: [{agent, service, path, owner, n
 
 
 def seed_posts(record: dict, agents: list[str], board: str = BOARD_ID) -> list[str]:
-    """Put the record's posts on the board, oldest first, for every agent of the roster; their ids."""
+    """Put the record's posts on the board, oldest first, for every agent of the roster; their ids. The system's
+    record that older messages were cleaned up goes before them, and each author's exit record after them."""
     state = initialize_communication()
     ids = []
+    board_record("cleaned", "", agents, seeded=True)      # the board's first line: older messages were cleaned up
     for post in record["posts"]:
         message = CommunicationMessage(id=f"message-{uuid4().hex}", channel_id=board, sender=post["author"],
                                        recipients=tuple(agents), content=post["text"], sequence=state.sequence + 1,

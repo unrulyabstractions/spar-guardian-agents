@@ -125,6 +125,8 @@ tool_args:
 board_records:
   entered: "{agent} entered."
   exited: "{agent} exited."
+  # The first line of a board that holds a seed pack's posts, before them (the user, 2026-11-22).
+  cleaned: "Cleaned up older messages."
 board_output:
   sender: "{sender}: {total} posts ({new} new)"
   total: "total {total}, {new} new since your last read"

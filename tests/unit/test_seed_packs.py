@@ -262,13 +262,15 @@ def test_seeded_posts_stand_on_the_board_before_round_1_and_name_no_teammate(tmp
     messages = posts_of(sample)
     assert [(m["sender"], m["content"], m["invocation_id"]) for m in messages] == \
         [(p["author"], p["text"], seed_packs.SEEDED) for p in record["posts"]]
-    # the earlier team is gone: the board records each author's exit after the pack's posts, then who enters
+    # the board opens with the record that older messages were cleaned up; the earlier team is gone: the board
+    # records each author's exit after the pack's posts, then who enters
     authors = list(dict.fromkeys(p["author"] for p in record["posts"]))
-    assert records_of(sample)[:len(authors) + 2] == [*(f"{a} exited." for a in authors), "a01 entered.",
-                                                     "a02 entered."]
+    assert records_of(sample)[:len(authors) + 3] == ["Cleaned up older messages.", *(f"{a} exited." for a in authors),
+                                                     "a01 entered.", "a02 entered."]
     reads = [r for f, r in tool_results(sample) if f == "board_read"]
     first, second = record["posts"]
     assert reads[0] == "\n".join([
+        "[system] Cleaned up older messages.",
         f"[{first['author']} #1] {first['text']}", f"[{second['author']} #2] {second['text']}",
         *(f"[system] {a} exited." for a in authors), "[system] a01 entered."]), reads[0]
     assert store(sample, "read_senders") == {} and store(sample, "reads") == {"a01": 2, "a02": 2}

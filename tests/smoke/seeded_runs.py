@@ -64,16 +64,18 @@ def check_seed(name: str, record: dict, agents: list[str], planted: dict[str, st
     [comm] = read_json_dir(SUITE.runs / name / "processed/communication").values()
     seeded = [m for m in comm["messages"] if m.get("invocation_id") == SEEDED]
     assert [(m["sender"], m["content"]) for m in seeded] == [(p["author"], p["text"]) for p in record["posts"]]
-    assert comm["messages"][:len(seeded)] == seeded and seed["post_ids"] == [m["id"] for m in seeded]
+    # the board's first line is the system's record that older messages were cleaned up; the seeded posts follow
+    assert SUITE.board_records(name)[0] == "Cleaned up older messages."
+    assert comm["messages"][1:len(seeded) + 1] == seeded and seed["post_ids"] == [m["id"] for m in seeded]
     assert not set(record["authors"]) & set(agents)
     # the earlier team is gone: after its posts the board records each author's exit, then the run's agents' entries
     authors = list(dict.fromkeys(p["author"] for p in record["posts"]))
-    records = SUITE.board_records(name)
+    records = SUITE.board_records(name)[1:]
     assert records[:len(authors)] == [f"{a} exited." for a in authors], records
     assert set(records[len(authors):len(authors) + len(agents)]) == {f"{a} entered." for a in agents}, records
     [view] = board_view(SUITE.runs / name, {a: "worker" for a in agents})
-    assert [m["seeded"] for m in view["messages"]] == [True] * len(seeded) + [False] * (len(view["messages"]) -
-                                                                                       len(seeded))
+    assert [m["seeded"] for m in view["messages"]] == [False] + [True] * len(seeded) + \
+        [False] * (len(view["messages"]) - len(seeded) - 1)
     senders = run["rules"].get("read_senders") or {}
     assert not {s for counts in senders.values() for s in counts} & set(record["authors"]), senders
     rows = SUITE.ladder(name)
