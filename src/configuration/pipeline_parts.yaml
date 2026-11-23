@@ -81,7 +81,7 @@ parts:
       src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py]
     pins: []
     version: 2
-    fingerprint: sha256:0e14e652f10f69d6bd6e938b859a63c42c00564de62f98496285bb9c9bf48207
+    fingerprint: sha256:ed0c9bd6c40a2d2fd2b287fcbce665779cc5ce8b534ae1171b51307f4c2e085e
     log:
       1: '2026-11-22 first version: the code record''s agent and team rows (code_ladder.signal_rows) of
         b7b1bed, and run.json''s signals block (re-locked 2026-11-22: the stored layout: the same bytes,
@@ -95,7 +95,8 @@ parts:
         and python reads of a side patch, counters that hide it; SWE agent rows gain routes (branch, side_patch,
         fix_commit, network). On the 42 stored SWE runs of ian_seed_prototyping_0 and _1 the rows are
         byte-equal but for routes (re-locked 2026-11-22: before landing: routes read a planted commit
-        named by id as the branch route; routes feed no label)'
+        named by id as the branch route; routes feed no label) (re-locked 2026-11-22: ian0flipt''s scenario
+        (047132d): a run without swe.scenario reads as before, and no stored run has one)'
   topology:
     file: processed/facts/topology.json
     make: src.measures.topology_fact:topology_part
@@ -124,7 +125,7 @@ parts:
       src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py]
     pins: []
     version: 2
-    fingerprint: sha256:83542ef6b732d6a246063643d13fcb8e5c8277da707dba88404d31d324288693
+    fingerprint: sha256:da4b6b41faa95df5e1377ef6cae17d362359c2c78e2b14dfc9373aeb4dbdd662
     log:
       1: '2026-11-22 first version: the Cheating ladder with CheatBench''s labels beside its clauses,
         as the viewer keeps it, of b7b1bed (re-locked 2026-11-22: the stored layout: the same bytes, read
@@ -139,7 +140,8 @@ parts:
         2026-11-22: before landing: routes read a planted commit named by id as the branch route; routes
         feed no label) (re-locked 2026-11-22: a board record of who came and went takes no post number
         and is marked record; no stored run holds a record, and processing ian_seed_prototyping_0 and
-        _1 (87 runs) into a copy wrote the same bytes)'
+        _1 (87 runs) into a copy wrote the same bytes) (re-locked 2026-11-22: ian0flipt''s scenario (047132d):
+        a run without swe.scenario reads as before, and no stored run has one)'
   coordination:
     file: analysis/labels/coordination.json
     make: src.measures.coordination:coordination_part
@@ -165,7 +167,7 @@ parts:
       src/domains/*/*_settings.py]
     pins: []
     version: 2
-    fingerprint: sha256:e4e42721c2db7b12ce0ebf143617ac216cdd8cbd5dc7adcf209ac5d8bf74d8e1
+    fingerprint: sha256:d49a6a2be43cf1cb55a52acb9c12dfa6d6a5fd591dd209062b7d5e43b2470b2a
     log:
       1: '2026-11-22 first version: the Collusion ladder as the viewer keeps it, of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -178,7 +180,8 @@ parts:
         are byte-equal (re-locked 2026-11-22: before landing: routes read a planted commit named by id
         as the branch route; routes feed no label) (re-locked 2026-11-22: a board record of who came and
         went takes no post number and is marked record; no stored run holds a record, and processing ian_seed_prototyping_0
-        and _1 (87 runs) into a copy wrote the same bytes)'
+        and _1 (87 runs) into a copy wrote the same bytes) (re-locked 2026-11-22: ian0flipt''s scenario
+        (047132d): a run without swe.scenario reads as before, and no stored run has one)'
   judged:
     file: analysis/labels/judged.json
     make: src.ui.viewer_parts:judged_part
