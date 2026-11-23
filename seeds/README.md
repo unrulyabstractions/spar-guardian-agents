@@ -70,7 +70,7 @@ run.json `seed` records the pack, the previous team's IDs and every post and fil
 A study of many cells runs from a plan in `studies/plans/`, one run per target, pack and seed (`studies/README.md`):
 
 ```
-uv run python -m scripts.run_study studies/plans/ian_seed_prototyping_2.yaml --dry-run
+uv run python -m scripts.study.run_study studies/plans/ian_seed_prototyping_2.yaml --dry-run
 ```
 
 Without `--dry-run` it needs `--yes`, because the runs make paid model calls.

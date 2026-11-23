@@ -10,15 +10,17 @@ from scripts.study import archive_study
 
 
 def study(root, name="s1", age_s=3600):
-    run = root / "runs" / name / "run_a" / "processed"
+    """A study of one run with two files and one log; the names are no run file's, since the script reads none."""
+    run = root / "runs" / name / "run_a" / "kept"
     run.mkdir(parents=True)
-    (run / "run.json").write_text('{"a": 1}')
-    (run / "episodes.jsonl").write_text("x\n")
+    (run / "record.txt").write_text('{"a": 1}')
+    (run / "rows.txt").write_text("x\n")
     log = root / "logs" / name / "run_a"
     log.mkdir(parents=True)
     (log / "a.eval").write_bytes(b"\x00" * 100)
     old = time.time() - age_s
-    os.utime(run / "run.json", (old, old))
+    for path in (run / "record.txt", run / "rows.txt"):
+        os.utime(path, (old, old))
     return root
 
 
@@ -29,13 +31,12 @@ def test_a_dry_run_moves_nothing_and_apply_moves_records_and_verifies(tmp_path, 
     assert "dry run: nothing moved" in capsys.readouterr().out
     assert archive_study.main(["s1", "--apply"], root) == 0
     assert not (root / "runs" / "s1").exists() and not (root / "logs" / "s1").exists()
-    assert (root / "OLD" / "runs" / "s1" / "run_a" / "processed" / "run.json").read_text() == '{"a": 1}'
+    assert (root / "OLD" / "runs" / "s1" / "run_a" / "kept" / "record.txt").read_text() == '{"a": 1}'
     assert (root / "OLD" / "logs" / "s1" / "run_a" / "a.eval").stat().st_size == 100
     [record] = (root / "logs" / "moves").glob("*_archive_s1.jsonl")
     rows = [json.loads(line) for line in record.read_text().splitlines()]
     assert rows[-1] == {"verified": True, "files": 3, "bytes": sum(r["size"] for r in rows[:-1]), "mismatches": []}
-    assert {r["target"] for r in rows[:-1]} == {"OLD/runs/s1/run_a/processed/run.json",
-                                               "OLD/runs/s1/run_a/processed/episodes.jsonl",
+    assert {r["target"] for r in rows[:-1]} == {"OLD/runs/s1/run_a/kept/record.txt", "OLD/runs/s1/run_a/kept/rows.txt",
                                                "OLD/logs/s1/run_a/a.eval"}
     assert "verified: every file arrived" in capsys.readouterr().out
 

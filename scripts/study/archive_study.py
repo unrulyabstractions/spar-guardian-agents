@@ -7,7 +7,7 @@ A study goes to OLD/ only on the user's word (CLAUDE.md, section 5). Its runs go
 and console logs to OLD/logs/<study>, where a run still finds its log (RunDir.eval_log reads the logs/ beside its
 runs/). The study's plan is closed by hand afterwards (`closed: true` in studies/plans/<study>.yaml).
 
-It refuses a study with no runs folder, a target that exists, and a study one of whose run.json changed in the last
+It refuses a study with no runs folder, a target that exists, and a study one of whose files changed in the last
 10 minutes (a run may still be writing). Without --apply it writes nothing. With it, it records every file under
 logs/moves/<UTC stamp>_archive_<study>.jsonl (source, target, byte size, sha256), moves each folder with one rename,
 checks that every file arrived with the same size and sha256 and that no source file is left, and exits 1 on any
@@ -32,7 +32,7 @@ def moves_of(study: str, root: Path, now: float) -> list[Move]:
     runs = root / "runs" / study
     if not runs.is_dir():
         raise ValueError(f"{study}: no folder runs/{study}")
-    young = [p for p in runs.rglob("run.json") if now - p.stat().st_mtime < YOUNG_S]
+    young = [p for p in files_of(runs) if now - p.stat().st_mtime < YOUNG_S]
     if young:
         raise ValueError(f"{study}: {young[0].relative_to(root)} changed in the last {YOUNG_S // 60} minutes")
     moves = [Move(study, None, kind, root / kind / study, root / ARCHIVE / kind / study)
