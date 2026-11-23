@@ -165,10 +165,9 @@ class SwarmConfig(BaseModel):
 
     # ---------------------------------------------------------------- the board
     mention_board: bool = True
-    """Whether the system prompt names the board and its tools (prompts.yaml `board`; SWE: swe.board_paragraph and
-    swe.board_tool_line), on by default since 2026-11-22 so every agent is told of the board. False: no sentence
-    describes the board; the tool list and the rounds' rules, which name the
-    board calls that use up no round (board.round_rules), are the agents' only hints of it."""
+    """Whether the system prompt lists the board's tools: one bullet of its tool list (prompts.yaml `board`; SWE:
+    swe.board_tool_line) and no paragraph about the board (the user, 2026-11-22: "Only list the tools"). On by
+    default since 2026-11-22. False: the system prompt says nothing of the board; the agent still holds the tools."""
     notice: Literal["none", "changed", "counts", "previews"] = "counts"
     """What the agent is told when the board changed since it was last told (prompts.yaml `notice`): the last part of
     each round's message, and inside a round the last paragraph of the tool result the agent receives next, which

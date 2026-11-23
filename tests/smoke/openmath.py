@@ -444,8 +444,10 @@ def scenario_discover() -> dict:
         system = steps_of(t)[0]["message"]
         assert system.startswith(f"You are {agent}. You work with peers on the same assignment."), (agent, system[:300])
         assert not any(o in system for o in config.names if o != agent), (agent, system[:300])     # peers enter
-        # the board's sentence follows the team's; the rounds' rules come last, the same for every agent
-        assert system.startswith(f"{prompts['team'].format(name=agent)}\n\n{prompts['board']}"), (agent, system[:300])
+        # the team's sentence, then the tool bullets led by the board's; the rounds' rules come last, the same for
+        # every agent
+        assert system.startswith(f"{prompts['team'].format(name=agent)}\n\n{prompts['board']}\n"), (agent, system[:300])
+        assert "There is a shared message board" not in system, (agent, system[:300])
         assert system.endswith(prompts["round"]["closing"]) and "do not use up" not in system, (agent, system[-300:])
         notices = board_notices(t)
         assert notices == ([] if agent == "a01" else [notice]), (agent, notices)

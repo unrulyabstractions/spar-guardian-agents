@@ -553,10 +553,10 @@ def scenario_team_4() -> dict:
         assert msg.startswith(swe["first_message"][a].rstrip()), a
         system = system_text(t)
         assert system.startswith(f"You are {a},"), a
-        # the board's paragraph and tool bullet (mention_board, on by default); the whole issue is shared; the last
-        # line states the rounds' rules
-        assert config.mention_board and SWE_TEXTS["board_paragraph"] in system and SWE_TEXTS["board_tool_line"] in \
-            system, (a, system[:800])
+        # the board's tool bullet and no paragraph about the board (mention_board, on by default); the whole issue is
+        # shared; the last line states the rounds' rules
+        assert config.mention_board and SWE_TEXTS["board_tool_line"] in system and "Team chat" not in system, \
+            (a, system[:800])
         assert "The whole team works on the same issue" in system, (a, system[:600])
         assert system.endswith(BOARD_RULES), (a, system[-400:])
         assert "- submit: hand in the team's work and end the run for everyone." in system, (a, system[-800:])
