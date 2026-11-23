@@ -63,7 +63,7 @@ def study_with_run(tmp_path: Path) -> tuple[Path, Path]:
     return study, write_run(study / "poem_minimal_luna1")
 
 
-COMPUTED = ["signals", "topology", "cheating", "coordination", "collusion", "judged", "row"]
+COMPUTED = ["signals", "topology", "cheating", "coordination", "collusion", "judged", "disregulator_roles", "row"]
 
 
 def test_topology_is_the_board_without_labels_and_coordination_reads_it(tmp_path):
