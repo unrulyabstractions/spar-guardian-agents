@@ -70,7 +70,7 @@ class Cell:
     seed: int
     module: str
     model: str
-    task: str | None        # the pack's task; None for a control
+    task: str | None        # the packs' task, or the folder of examples/ its module is in (a cell without a pack)
     settings: tuple[str, ...] = ()   # the target's own settings, after the plan's
 
     @property
@@ -116,10 +116,19 @@ def cells(plan: dict) -> list[Cell]:
     for seed in plan["seeds"]:
         for target, spec in plan["targets"].items():
             tasks = {seed_packs.pack_of(p)["task"] for p in spec["packs"] if p != "none"}
+            task = next(iter(tasks), None) or module_task(spec["module"])
             for pack in spec["packs"]:
-                out.append(Cell(target, pack, seed, spec["module"], spec["model"], next(iter(tasks), None),
+                out.append(Cell(target, pack, seed, spec["module"], spec["model"], task,
                                 tuple(spec.get("settings") or ())))
     return out
+
+
+def module_task(module: str) -> str | None:
+    """The task of a target without a pack: the folder of examples/ its module is in (examples.swe.x is swe's), so
+    a baseline cell counts toward its task's limit. On 2026-11-22 three baselines went uncounted and six SWE runs
+    ran at once, which left Docker's disk 4 GB free."""
+    parts = module.split(".")
+    return parts[1] if len(parts) == 3 and parts[0] == "examples" else None
 
 
 def command(cell: Cell, study: str, extra: list[str], replace: bool) -> str:

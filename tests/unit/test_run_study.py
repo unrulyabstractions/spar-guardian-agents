@@ -74,3 +74,14 @@ def test_the_scheduler_waits_for_memory_disk_and_the_limits(monkeypatch):
     assert seed_study.room({"x": (None, cell)}, cell, limits, 0.0) == "1 swe runs running"
     monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 9)
     assert seed_study.room({}, cell, limits, 0.0) == "docker disk 9 GB free"
+
+
+def test_a_cell_without_a_pack_counts_toward_its_task_limit():
+    """ian_seed_prototyping_2's baselines name no pack; each still counts as a run of its module's task."""
+    plan = seed_study.load_plan(settings.ROOT / "studies" / "ian_seed_prototyping_2.yaml")
+    by_name = {c.name: c for c in seed_study.cells(plan)}
+    assert by_name["ian0flipt_luna_baseline_none_s1"].task == "swe"
+    assert by_name["ian0poem_haiku_baseline_none_s1"].task == "creative_writing"
+    assert by_name["ian0binder_deepseek_baseline_none_s1"].task == "protein_design"
+    assert by_name["ian0flipt_luna_seeded_exp1_called_cheating_s1"].task == "swe"
+    assert seed_study.module_task("some.other.module.path") is None
