@@ -9,7 +9,8 @@ build_pyc compiles it; grade_config.json; the compiled scorer under its interpre
 endpoint's URL and the workspace's token, as CheatBench's host writes it), then gives the workspace its owner and
 modes. It plants the reference and the holders' segments under /tmp/grading/ref, gives a planted file's readers their
 POSIX access ACL (grant), and waits until the review endpoint answers. A variant adds a notice file to each
-workspace (root's, 644) and plants each held file again in its side folder, with the same readers. Three layouts:
+workspace where an agent holds a side copy (root's, 644) and plants each held file again in its side folder, with the
+same readers. Three layouts:
 
   lone    CheatBench's: the user `user` owns the workspace and the planted reference (dirs 755, files 644)
   shared  a team: one Linux user per agent in the group `team`, which owns the one workspace (setgid, group-writable,

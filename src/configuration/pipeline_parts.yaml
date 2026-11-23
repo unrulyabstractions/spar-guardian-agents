@@ -89,7 +89,7 @@ parts:
       src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*]
     pins: []
     version: 2
-    fingerprint: sha256:bb47ac93dcaadf2a4e0ada7759b4067e05245a46b98dd1834d781e33afc4be34
+    fingerprint: sha256:2a02b8c5cf1fd43f49b5485a11da3a4962658795caaed5dcdb7c772994e755c4
     log:
       1: '2026-11-22 first version: the code record''s agent and team rows (code_ladder.signal_rows) of
         b7b1bed, and run.json''s signals block (re-locked 2026-11-22: the stored layout: the same bytes,
@@ -132,7 +132,11 @@ parts:
         patches, the grader''s value mixes, each content''s lines against its own threshold, read only
         for a run whose swe block says second_content; src/domains/*/second/**/* in the fingerprint):
         ian_seed_prototyping_2 copied from main and reprocessed in a scratch copy with --force signals,
-        cheating and collusion at 97f4c6d, 783 files byte-equal but the 27 versions.json)'
+        cheating and collusion at 97f4c6d, 783 files byte-equal but the 27 versions.json) (re-locked 2026-11-23:
+        2026-11-23: the ian0 notes file only on a machine or workspace that holds a side copy (_swe_honeypot._side_copies)
+        changes how a new run is built, not what a ladder reads: ian_seed_prototyping_2 copied from OLD/
+        and reprocessed in a scratch copy with --force signals, cheating and collusion, 783 files byte-equal
+        but the 27 versions.json, logs unchanged)'
   topology:
     file: processed/facts/topology.json
     make: src.measures.topology_fact:topology_part
@@ -167,7 +171,7 @@ parts:
       src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*]
     pins: []
     version: 2
-    fingerprint: sha256:460a54eac35f14bb32aed12cbba3b491a62445d34082f1c4cde0994a4c7908e6
+    fingerprint: sha256:3abb7c5fc551e6b72574191c414b17073179946b442eed430de5cb1b6f7e767a
     log:
       1: '2026-11-22 first version: the Cheating ladder with CheatBench''s labels beside its clauses,
         as the viewer keeps it, of b7b1bed (re-locked 2026-11-22: the stored layout: the same bytes, read
@@ -211,7 +215,11 @@ parts:
         patches, the grader''s value mixes, each content''s lines against its own threshold, read only
         for a run whose swe block says second_content; src/domains/*/second/**/* in the fingerprint):
         ian_seed_prototyping_2 copied from main and reprocessed in a scratch copy with --force signals,
-        cheating and collusion at 97f4c6d, 783 files byte-equal but the 27 versions.json)'
+        cheating and collusion at 97f4c6d, 783 files byte-equal but the 27 versions.json) (re-locked 2026-11-23:
+        2026-11-23: the ian0 notes file only on a machine or workspace that holds a side copy (_swe_honeypot._side_copies)
+        changes how a new run is built, not what a ladder reads: ian_seed_prototyping_2 copied from OLD/
+        and reprocessed in a scratch copy with --force signals, cheating and collusion, 783 files byte-equal
+        but the 27 versions.json, logs unchanged)'
   coordination:
     file: analysis/labels/coordination.json
     make: src.measures.coordination:coordination_part
@@ -237,7 +245,7 @@ parts:
       src/domains/*/*_settings.py, src/domains/*/second/**/*]
     pins: []
     version: 2
-    fingerprint: sha256:caa12ac67ba7df8768708ec3c231483485ce3ba43872a1976decc72efe0bd81f
+    fingerprint: sha256:7ae599171a188b362f7c70365809f3fa3541189ba1a972c6c1fbc6bb1871d0e4
     log:
       1: '2026-11-22 first version: the Collusion ladder as the viewer keeps it, of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -279,7 +287,11 @@ parts:
         patches, the grader''s value mixes, each content''s lines against its own threshold, read only
         for a run whose swe block says second_content; src/domains/*/second/**/* in the fingerprint):
         ian_seed_prototyping_2 copied from main and reprocessed in a scratch copy with --force signals,
-        cheating and collusion at 97f4c6d, 783 files byte-equal but the 27 versions.json)'
+        cheating and collusion at 97f4c6d, 783 files byte-equal but the 27 versions.json) (re-locked 2026-11-23:
+        2026-11-23: the ian0 notes file only on a machine or workspace that holds a side copy (_swe_honeypot._side_copies)
+        changes how a new run is built, not what a ladder reads: ian_seed_prototyping_2 copied from OLD/
+        and reprocessed in a scratch copy with --force signals, cheating and collusion, 783 files byte-equal
+        but the 27 versions.json, logs unchanged)'
   judged:
     file: analysis/labels/judged.json
     make: src.ui.viewer_parts:judged_part
@@ -303,11 +315,15 @@ parts:
       src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*]
     pins: []
     version: 1
-    fingerprint: sha256:94ee02876c76291cb4ecbb7a0d93351c25f2d9cba2a0057e6fdef83fec35b2a9
+    fingerprint: sha256:1191233db9bc122422ef79a4276b714227790d2117bdd4acf5db30885c4a370d
     log:
       1: '2026-11-23 first version: what each disregulator did with its role (carried_out, filtered, refused,
         dropped, unknown), with mode, disclosed and the evidence, by code from the board, the code record''s
-        agent row, the transcript and the eval log''s stop reasons'
+        agent row, the transcript and the eval log''s stop reasons (re-locked 2026-11-23: 2026-11-23:
+        the ian0 notes file only on a machine that holds a side patch (_swe_honeypot._side_copies, called
+        by the SWE setup alone; no measure reads it): ian_seed_prototyping_2 copied from OLD/ twice and
+        processed with --force signals, cheating, collusion and disregulator_roles by main''s code (fe38d76)
+        and by this code: the two copies byte-equal but the 27 versions.json)'
   row:
     file: analysis/row.json
     make: src.ui.viewer_parts:row_part

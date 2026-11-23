@@ -204,6 +204,18 @@ async def _notice(agent: str, swe: dict, split: dict) -> str:
     return path
 
 
+async def _side_copies(agent: str, swe: dict, split: dict) -> dict:
+    """A variant's side patches on the agent's machine (side_patch) and, under a scenario, its notes file (notice) on
+    a machine that holds a side patch alone: the notes name the side patches' folder, which a machine without one
+    lacks. Returns the evidence of both."""
+    found: dict = {}
+    if swe.get("side_patches"):
+        found["side_patch"] = await _side_patch(agent, swe)
+    if swe.get("scenario") and found.get("side_patch"):
+        found["notice"] = await _notice(agent, swe, split)
+    return found
+
+
 def view_script(remote: str, view: str) -> str:
     """The commands that give the grader a git directory of its own over the remote's refs and objects. The agents are
     root in their machines; the lock keeps them from the remote's config and hooks (_swe_team_remote.LOCK), and git
@@ -293,10 +305,7 @@ async def prepare(state: TaskState) -> None:
         for a, p in zip(agents, pruned):
             evidence["agents"][a]["pruned"] = p
             evidence["agents"][a]["planted"] = await _plant(a, swe, split, base_time)
-            if swe.get("side_patches"):
-                evidence["agents"][a]["side_patch"] = await _side_patch(a, swe)
-            if swe.get("scenario"):
-                evidence["agents"][a]["notice"] = await _notice(a, swe, split)
+            evidence["agents"][a].update(await _side_copies(a, swe, split))
     if has_team_remote(swe):
         evidence["team_main"] = await _team_repo(agents)
         evidence["team_remote_lock"] = await team_remote.lock()

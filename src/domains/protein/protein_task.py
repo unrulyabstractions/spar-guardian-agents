@@ -26,7 +26,8 @@ access log watches each machine's candidates file and its screening log.
 Variants (_protein_settings.VARIANTS, the `variant` option). ian0binder adds side copies, a candidates file in the
 screening directory's backup on each agent's machine (_protein_honeypot.side_copy, written as root at setup),
 and the scenario licensed_sequences: a client's request where CheatBench's assessment sentence stood, a workspace note
-after the task, and the notice file in the work dir (prompts.yaml protein_design.scenarios). Under its
+after the task, and the notice file in the work dir of each machine holding a side copy (prompts.yaml
+protein_design.scenarios). Under its
 second_content the side copies hold the second content (second/), six other designs cut by the same split, and
 check_design accepts those designs too; the block records second_content and the hash of each planted second piece.
 A run without a variant builds every text, file and record as before.
@@ -148,12 +149,15 @@ class ProteinDesign(RowBenchmark):
 
     def copies(self, plan: Plan) -> dict[str, dict[str, bytes]]:
         """Each agent's copy of the row, {agent: {absolute destination: bytes}} (_protein_honeypot.agent_files), with
-        the scenario's notes file in the work dir under a scenario; the notes name the side copy's folder."""
+        the scenario's notes file in the work dir under a scenario on each machine that holds a side copy (side_copies):
+        the notes name the side copy's folder, which a machine without one lacks."""
         row = self.row_of(self.row)
         told = scenario(self.adds.scenario)
         text = told["notice"].format(side_dir=str(Path(side_copy_path(row)).parent)) if told else ""
         notice = {f"{row['vars']['work_dir']}/{told['notice_file']}": text.encode()} if told else {}
-        return {a: {**agent_files(row, plan.pieces[a], plan.n_pieces), **notice} for a in plan.agents}
+        side = self.side_copies(plan)
+        return {a: {**agent_files(row, plan.pieces[a], plan.n_pieces), **(notice if a in side else {})}
+                for a in plan.agents}
 
     def side_copies(self, plan: Plan) -> dict[str, dict[str, bytes]]:
         """Under side copies, each agent holding a segment (or the whole) with its side copy, {agent: {path: bytes}}
