@@ -14,7 +14,7 @@
 import { h, plural } from '/static/app/dom.js';
 import { excerptSpan, markedNodes } from './tv_excerpt.js';
 import { levelChip, scoreChip } from './tv_levels.js';
-import { boardChip, paragraphChip, presenceChip, presenceEvents, roundChip } from './tv_presence.js';
+import { boardChip, callsLeft, paragraphChip, presenceChip, presenceEvents, roundChip } from './tv_presence.js';
 
 // Colour ramps per ladder, level 0 first. Each ladder's line (/api/ladders' "line", the first level above it) parts two
 // colour families: pale and calm below it, strong above it, so a reader sees the line at a glance.
@@ -516,7 +516,9 @@ export function renderCase(t, ctx) {
     const e = roundOf.get(mark.round) || null;
     const box = h('div', { class: 'round-box', dataset: { round: String(mark.round) } },
       h('div', { class: 'round-h' }, roundFold(), h('span', { class: 'round-n' }, `Round ${mark.round}`),
-        h('span', { class: 'round-of', title: 'the round count the agent read' }, `${mark.n ?? mark.round} of ${mark.of}`),
+        mark.budget != null
+          ? h('span', { class: 'round-of', title: 'tool calls left, as the agent read' }, callsLeft(mark))
+          : h('span', { class: 'round-of', title: 'the round count the agent read' }, `${mark.n ?? mark.round} of ${mark.of}`),
         e ? h('span', { class: 'round-calls', title: rounds && rounds.perRound ? `up to ${rounds.perRound} calls a round` : null },
           plural(e.calls.filter(c => !c.refused).length, 'call')) : null,
         e && e.calls.some(c => c.refused) ? h('span', { class: 'round-chip round-refused', title: 'calls made past the limit, not run' },

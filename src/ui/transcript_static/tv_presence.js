@@ -72,11 +72,21 @@ export function presenceChip(p) {
   title: p.round != null ? `round ${p.round}` : null }, words, p.round != null ? h('span', { class: 'pr-round' }, `r${p.round}`) : null);
 }
 
-/** A round's message's round chip (its extra.swarm_round): the round of R, its rounds left and calls on hover. */
+/** A round's message's round chip (its extra.swarm_round). A run from ec68304 tags the agent's own budget: the chip
+ * is the run's round and its hover the calls the agent has left of its budget. An older run tags rounds: the round of
+ * R, its rounds left and calls on hover. */
 export function roundChip(r) {
   if (!r || r.round == null) return null;
+  if (r.budget != null) {
+    return h('span', { class: ['pr-chip', 'pr-chip-round'], title: callsLeft(r) }, `round ${r.round}`);
+  }
   const tip = r.left != null ? `${plural(r.left, 'round')} left · up to ${plural(r.calls, 'call')}` : null;
   return h('span', { class: ['pr-chip', 'pr-chip-round'], title: tip }, `round ${r.round}${r.of != null ? ` of ${r.of}` : ''}`);
+}
+
+/** "280 of 300 tool calls left" for a round tag that holds the agent's own budget (from ec68304), else null. */
+export function callsLeft(r) {
+  return r && r.budget != null && r.left != null ? `${r.left} of ${plural(r.budget, 'tool call')} left` : null;
 }
 
 /** A round's message's board chip (its extra.swarm_notice): the posts by others since the agent was last told, every
