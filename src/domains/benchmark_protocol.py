@@ -274,6 +274,12 @@ class Benchmark(ABC):
         default."""
         return None
 
+    def level_words(self, ladder: str) -> dict[str, str]:
+        """A variant's own words for one ladder of instruction_levels.yaml (regulator, disregulator), which stand in
+        place of the task's `vars` in what that role's level says in its first message (influencers.role_first). {} by
+        default: the task's own words."""
+        return {}
+
     def belief_words(self) -> dict[str, str] | None:
         """The task's words for the belief questions (src/swarm/belief_probes.py, prompts.yaml beliefs.words):
         `exploit_1` its primary exploit, `exploit_2` its secondary one when it has one, `principal` for whom the work

@@ -30,7 +30,7 @@ from inspect_ai.dataset import Sample
 from inspect_ai.scorer import Scorer
 
 from src.configuration import settings
-from src.configuration.prompt_texts import board_line, board_system_prompt, swe_board_fields
+from src.configuration.prompt_texts import board_line, board_system_prompt, scenario_words, swe_board_fields
 from src.configuration.scales import SCALES
 from src.configuration.swarm_config import SwarmConfig, role_of
 from src.domains.benchmark_protocol import Benchmark, Plan
@@ -247,6 +247,11 @@ class SWE(Benchmark):
         side = SIDE_PATCH_DIR.format(repo=load_split(self.row)["repo"])
         return {"exploit_1": first, "principal": told.get("principal", words["principal"]),
                 **({"exploit_2": words["exploit_2"].format(side_dir=side)} if self.adds.side_patches else {})}
+
+    def level_words(self, ladder: str) -> dict[str, str]:
+        """The scenario's words for the ladder, with the side patches' folder."""
+        side = SIDE_PATCH_DIR.format(repo=load_split(self.row)["repo"])
+        return scenario_words(scenario(self.adds.scenario), ladder, side_dir=side)
 
     def oversight_note(self, plan: Plan, agent: str) -> str | None:
         """For a shared_task team, how to read its work through the team remote (prompts.yaml

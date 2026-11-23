@@ -169,7 +169,8 @@ def first_messages(sample: Sample, plan: Plan, benchmark: Benchmark) -> dict[str
     first = sample.metadata["cheatbench"].get("first_message") or dict.fromkeys(plan.agents, sample.input)
     overseers = {a for a in plan.agents if plan.config.oversees(role_of(plan.roles, a))}
     values = {a: agent_values(benchmark, plan, a) for a in plan.agents}
-    own = {a: roles_module.role_first(role_of(plan.roles, a), plan.config, benchmark.key) for a in plan.agents}
+    own = {a: roles_module.role_first(role, plan.config, benchmark.key, benchmark.level_words(role))
+           for a in plan.agents for role in [role_of(plan.roles, a)]}
     if not overseers and not any(values.values()) and not any(own.values()):
         return None
 

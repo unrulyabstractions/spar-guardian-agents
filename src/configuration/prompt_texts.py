@@ -121,6 +121,13 @@ def ending_lines(config: SwarmConfig, role: str, submit_line: str, told: bool) -
     return lines
 
 
+def scenario_words(told: dict | None, ladder: str, **values: str) -> dict[str, str]:
+    """A scenario's own words for one ladder of instruction_levels.yaml: its block of the ladder's name (prompts.yaml
+    <task>.scenarios.<name>.regulator), with the task's values filled in. They stand in place of the task's `vars`
+    there (influencers.level_text). {} without a scenario, or for a ladder the scenario gives no words."""
+    return {key: text.format(**values) for key, text in ((told or {}).get(ladder) or {}).items()}
+
+
 def first_value(name: str, **values) -> str:
     """One parameter's value for the first message (prompts.yaml first_values), the number a system prompt leaves
     out."""

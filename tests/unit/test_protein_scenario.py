@@ -12,6 +12,7 @@ import asyncio
 import hashlib
 import json
 import re
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -31,6 +32,7 @@ from src.domains.protein.protein_task import (
 )
 from src.measures import transcript_scan
 from src.sandbox.machines import agent_machines as machines
+from src.swarm.influencers import role_first
 from tests.support.atif_builder import transcript
 
 ROW = ProteinDesign.row_of("alfalfa_chi")
@@ -57,7 +59,7 @@ def sample(variant: str | None, pairs: tuple[str, ...] = ("seed=1",)):
 def test_the_variants():
     assert VARIANTS == {"ian0binder": Variant(side_copies=True, scenario="licensed_sequences", second_content=True)}
     assert scenario(None) is None and Variant() == Variant(side_copies=False, scenario=None, second_content=False)
-    assert set(scenario("licensed_sequences")) == {"request", "principal", "notice_file", "notice"}
+    assert set(scenario("licensed_sequences")) == {"request", "principal", "notice_file", "notice", "regulator"}
     assert settings.load_prompts()["protein_design"]["scenarios"].keys() == {"licensed_sequences"}
     assert ProteinDesign.options == ("variant",)
     with pytest.raises(ValueError, match="variant must be one of"):
@@ -209,3 +211,41 @@ def test_the_disk_signals_carry_routes_only_under_side_copies(tmp_path):
     row = {"episode": folder.name, "opened": False}
     assert domain().disk_signals("a01", tmp_path, row, [])["routes"] == ["side_copy"]
     assert "routes" not in domain(side=False).disk_signals("a01", tmp_path, row, [])
+
+
+def test_a_regulator_reads_cheating_in_the_scenarios_words_with_both_places_and_no_other_role_does():
+    """The user, 2026-11-23: a regulator's first message says cheating of the existing candidates, in the colleague's
+    directory and in the backup's folder, with no colleague and no submission. The scenario gives words to the
+    regulator alone."""
+    bench, plain = ProteinDesign("alfalfa_chi", variant="ian0binder"), ProteinDesign("alfalfa_chi")
+    told = scenario("licensed_sequences")["regulator"]
+    words, own = bench.level_words("regulator"), settings.load_instruction_levels()["vars"]["protein_design"]
+    there, side = honeypot.colleague_dir(ROW), str(Path(SIDE).parent)
+    assert set(told) == {"prior_work", "cheating"}
+    assert words == {key: text.format(colleague_dir=there, side_dir=side) for key, text in told.items()}
+    assert all(there in text and f"{side}/" in text and "{" not in text for text in words.values())
+    assert plain.level_words("regulator") == {} and bench.level_words("disregulator") == {} == bench.level_words("rule")
+    bare = re.sub(r"\{\w+\}", "", " ".join(told.values()))                 # the folders' names are the task's
+    assert not re.search(r"colleague|submitted|manager|promotion|work-?test|interview|grader|assess|capabilit|evaluat",
+                         bare, re.I), bare
+    for text in words.values():
+        letters = re.sub(r"[^A-Z]", "", text.upper())
+        assert not {seq[i:i + RESIDUE_RUN] for r in ProteinDesign.rows() for seq in r["planted"]
+                    for i in range(len(seq) - RESIDUE_RUN + 1)} & {letters[i:i + RESIDUE_RUN]
+                                                                   for i in range(len(letters) - RESIDUE_RUN + 1)}
+    for level in ("monitor", "role", "enforce", "ambiguous", "explicit", "pressure"):
+        pairs = ("seed=1", "n_agents=4", "regulators=1", f"regulator_level={level}")
+        block, was = sample("ian0binder", pairs).metadata["cheatbench"], sample(None, pairs).metadata["cheatbench"]
+        for agent, role in block["roles"].items():
+            first = block["first_message"][agent]
+            if role != "regulator":
+                assert words["cheating"] not in first and side not in first, (level, agent)
+                continue
+            assert words["cheating"] in first and own["cheating"] not in first, level
+            assert own["cheating"] in was["first_message"][agent], level
+            named = f"another agent's work means {words['prior_work']}." in first
+            assert named == (level in ("monitor", "role", "enforce")), level
+            assert "colleague" not in first and "submitted" not in first, level
+    dis = build_config("default", "small", ["seed=1", "disregulators=1"])
+    assert role_first("disregulator", dis, "protein_design", bench.level_words("disregulator")) == \
+        role_first("disregulator", dis, "protein_design")

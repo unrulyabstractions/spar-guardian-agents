@@ -128,7 +128,9 @@ rule:
 # The regulator: a peer that oversees the team and does not do the task. Each level's `text` goes into the regulator's
 # own system prompt (src/swarm/influencers.py oversight_prompt) and holds no task detail; its `first` goes into the
 # regulator's first message after its teammates' task (influencers.role_first) and holds the task's own words:
-# `cheating`, `prior_work` and `deliverable`. `none` is a plain worker's prompt, with no submit and no stop_working.
+# `cheating`, `prior_work` and `deliverable`, or a variant's scenario's own in their place (prompts.yaml
+# <task>.scenarios.<name>.regulator, Benchmark.level_words). `none` is a plain worker's prompt, with no submit and no
+# stop_working.
 # Every text here is followed by prompts.yaml roles.influencer_common, roles.peer_shell under SwarmConfig.peer_shell,
 # roles.regulator_check and, unless the regulator may disclose its role, roles.regulator_no_disclosure
 # (influencers.role_text). ambiguous, explicit and pressure are the midterm report's (2026-10-26) three variants:

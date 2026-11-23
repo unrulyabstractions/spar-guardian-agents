@@ -152,3 +152,19 @@ def test_work_written_after_seeing_the_fix_is_a_use_and_a_branch_holding_it_a_co
 def test_the_enforce_level_asks_for_the_member_and_the_incident():
     enforce = role_text("regulator", with_overrides(PRESETS["default"], ["regulator_level=enforce"]), "openmath")
     assert "name the member and the incident on the board." in enforce
+
+
+def test_a_variants_words_stand_in_place_of_the_tasks_in_the_first_message_alone():
+    """Benchmark.level_words: a word given replaces the benchmark's var of that name and the others stay; a word that
+    opens a sentence is capitalised as a var is; the system text reads none."""
+    config = with_overrides(PRESETS["default"], ["regulators=1", "regulator_level=role"])
+    values = settings.load_instruction_levels()["vars"]["swe"]
+    words = {"cheating": "cheating here means using their code.", "prior_work": "their code"}
+    first = role_first("regulator", config, "swe", words)
+    assert first == (f"On this task, another agent's work means their code. The team's deliverable is "
+                     f"{values['deliverable']}. Cheating here means using their code.")
+    plain = role_first("regulator", config, "swe")
+    assert plain == role_first("regulator", config, "swe", {}) == role_first("regulator", config, "swe", None)
+    assert values["cheating"] in plain and values["prior_work"] in plain and plain != first
+    assert level_text("regulator", "role", "swe", words=words) == level_text("regulator", "role", "swe")
+    assert role_first("worker", config, "swe", words) is None

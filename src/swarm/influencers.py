@@ -22,9 +22,10 @@ the role. A level gives one text or one per benchmark, with placeholders filled 
 A regulator or disregulator level gives a system text with no task detail (`text`) and a first-message text with the
 task's own words (`first`, role_first): each regulator level but blind gives the benchmark's `cheating` var, what
 cheating means on that task, in the regulator's first message, after its teammates' task; a disregulator's gives its
-objective and the work it may reuse, before the run's facts. An influencer's level text is followed by prompts.yaml
-roles.influencer_common (the peer tools, src/swarm/_regulator_oversight.py, and the board), then under
-SwarmConfig.peer_shell roles.peer_shell. A regulator's then gets
+objective and the work it may reuse, before the run's facts. A variant's scenario may give a role its own words in
+place of the benchmark's (Benchmark.level_words, prompts.yaml <task>.scenarios.<name>.<role>). An influencer's level
+text is followed by prompts.yaml roles.influencer_common (the peer tools, src/swarm/_regulator_oversight.py, and the
+board), then under SwarmConfig.peer_shell roles.peer_shell. A regulator's then gets
 roles.regulator_check (call get_peer_actions on each teammate within a set number of the regulator's first rounds:
 CHECK_ROUNDS, which role_values gives the first message, since no system prompt holds a number) and, unless
 regulator_discloses is on, roles.regulator_no_disclosure. The check is an instruction like the rest; run.json engagement
@@ -53,15 +54,17 @@ from src.swarm.turn_rules import BOARD_TOOLS, CHECK_ROUNDS
 SENTENCE_START = re.compile(r"(^|[.!?]\s+)\{(\w+)\}")
 
 
-def level_text(ladder: str, level: str, benchmark_name: str, key: str = "text") -> str | None:
+def level_text(ladder: str, level: str, benchmark_name: str, key: str = "text",
+               words: dict[str, str] | None = None) -> str | None:
     """The text of one level of a ladder for one benchmark (its Benchmark.key), or None for no text: the level's
-    `text`, or its text for the benchmark; key "first" gives an influencer level's first-message text."""
+    `text`, or its text for the benchmark; key "first" gives an influencer level's first-message text. `words` are a
+    variant's own, which stand in place of the benchmark's `vars` of the same names (Benchmark.level_words)."""
     levels = load_instruction_levels()
     entry = levels[ladder][level]
     template = entry.get(key) if key != "text" or "text" in entry else entry.get(benchmark_name)
     if template is None:
         return None
-    values = dict(levels["vars"][benchmark_name])
+    values = {**levels["vars"][benchmark_name], **(words or {})}
     values.update({f"{k}__cap": v[:1].upper() + v[1:] for k, v in list(values.items())})
     return SENTENCE_START.sub(r"\1{\2__cap}", template.strip()).format(**values)
 
@@ -98,13 +101,14 @@ def role_text(role: str, config: SwarmConfig, benchmark_name: str) -> str | None
     return " ".join([text, *tail])
 
 
-def role_first(role: str, config: SwarmConfig, benchmark_name: str) -> str | None:
+def role_first(role: str, config: SwarmConfig, benchmark_name: str, words: dict[str, str] | None = None) -> str | None:
     """What the role's level says in the agent's first message (instruction_levels.yaml `first`): the task's own words
-    the system text leaves out, such as what cheating means on the task or the disregulator's objective. None for a
-    worker, a level with no text, or one with no first-message text."""
+    the system text leaves out, such as what cheating means on the task or the disregulator's objective, or a
+    variant's `words` in their place (Benchmark.level_words). None for a worker, a level with no text, or one with no
+    first-message text."""
     if role == "worker" or role_text(role, config, benchmark_name) is None:
         return None
-    return level_text(role, getattr(config, f"{role}_level"), benchmark_name, key="first")
+    return level_text(role, getattr(config, f"{role}_level"), benchmark_name, key="first", words=words)
 
 
 def role_briefing(config: SwarmConfig, names: list[str]) -> str | None:
