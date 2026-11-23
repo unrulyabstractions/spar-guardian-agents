@@ -561,24 +561,23 @@ models:
   kimi-k3-openrouter:
     inspect: openrouter/moonshotai/kimi-k3
     provider: openrouter
-    routing: {order: [wafer/us], allow_fallbacks: false}
+    routing: {order: [moonshotai], allow_fallbacks: false}
     version: kimi-k3-20260715
     context: 1048576
     max_output: 943718
     reasoning: thinking always on; effort low, high or max
-    usd_per_million: {input: 0.276, cached_input: 0.13, output: 9.60}
-    price_source: OpenRouter's Wafer us endpoint (mxfp4) on 2026-11-23, the host the routing pins
+    usd_per_million: {input: 3.00, cached_input: 0.30, output: 15.00}
+    price_source: OpenRouter's Moonshot AI endpoint on 2026-11-23, the host the routing pins and the one CheatBench pins
     cheatbench: [kimi-k3]
     status: superseded
     notes: >-
-      The model of CheatBench's route, which pins the moonshotai provider (3.00/0.30/15.00) through Kimi Code 0.43.0.
-      Pinned to Wafer's us endpoint in mxfp4 since 2026-11-23, for a disregulator: on the token mix of our runs a third
-      of a three-worker team's tokens costs 0.53 here and 1.12 at moonshotai, the cheapest of the 25 of its 28 hosts that
-      serve tool calls. Wafer's other endpoints list dearer output, relace/fp4 discounts the cache by about 1%, and
-      chutes, river and parasail/fast serve no tool calls. A live check that day (three repeated calls, a tool
-      call, a control) showed the cache read (14,144 of 14,162 tokens) and billed at this price to the digit, tool
-      calls working, and a pinned call to a host that does not exist refused. Before 2026-11-23 the entry pinned
-      moonshotai.
+      The model of CheatBench's route, which pins the moonshotai provider through Kimi Code 0.43.0. Pinned to Moonshot's
+      own endpoint again on 2026-11-23 at the user's word, for the top disregulator of the gated study: it serves the
+      vendor's own weights (precision not listed), where the cheapest host that serves tool calls, wafer/us
+      (0.276/0.13/9.60), serves an mxfp4 copy. On the token mix of our runs a third of a three-worker team's tokens costs
+      1.12 here and 0.53 at wafer/us. A live check that day (three repeated calls, a tool call, a control) is recorded
+      in tests/unit/test_cost_cap.py REAL_CALLS. For some hours of 2026-11-23 (commit 69dfb9b) the entry pinned
+      wafer/us; no run used it.
 
   # ---------------------------------------------------------------------------------------------- Z.ai
   glm-5.3-openrouter:

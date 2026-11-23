@@ -160,7 +160,8 @@ REAL_CALLS = [
     ("gpt-6.1-terra-openrouter", 3, 4355, 0, 5, 0.00024575, 0.000479),         # its repeat: the prefix read
     ("claude-opus-5-5-openrouter", 392, 0, 0, 49, 0.002548, 0.002548),         # a tool call
     ("grok-4.7-openrouter", 43, 5632, 0, 235, 0.004312, 0.008624),             # a repeat with x-session-id
-    ("kimi-k3-openrouter", 18, 14144, 0, 14, 0.001978088, 0.001978088),        # a repeat on wafer/us
+    ("kimi-k3-openrouter", 15241, 0, 0, 29, 0.046158, 0.046158),               # the first call on moonshotai
+    ("kimi-k3-openrouter", 137, 15104, 0, 32, 0.0054222, 0.0054222),           # a repeat: the cache read
 ]
 
 
