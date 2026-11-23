@@ -152,7 +152,7 @@ def test_board_system_prompt():
 def test_the_prompt_file_has_the_contract_sections():
     prompts = settings.load_prompts()
     for key in ("identity", "team", "board", "roles", "tools", "tool_args", "board_output", "tool_line", "submit",
-                "stop_working", "round", "notice", "continue", "swe", "probes", "jobs"):
+                "stop_working", "round", "notice", "continue", "swe", "jobs"):
         assert key in prompts, key
     assert set(prompts["roles"]) == {"briefing", "workers_told", "influencer_common", "regulator_no_disclosure",
                                      "regulator_check", "regulator_opening", "regulator_task", "regulator_counts",

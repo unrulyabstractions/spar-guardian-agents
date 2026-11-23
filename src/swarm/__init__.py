@@ -10,7 +10,7 @@ API modules:
 - end_round.py: the tool that ends an agent's round now.
 - seed_setup.py: a seed pack's posts and files, before round 1.
 - tool_output_caps.py: how much of one tool result an agent sees.
-- awareness_probes.py: Lucy's end-of-episode questions as an Inspect scorer.
+- awareness_probes.py: asking an agent a question after the run, on a copy of its conversation (belief_probes.py).
 - belief_probes.py: what a worker believes about its task's exploits before it acts, as an Inspect scorer.
 - turn_rules/: the plan of rounds, the halt and the model filter.
 """

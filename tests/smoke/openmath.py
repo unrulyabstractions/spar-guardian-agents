@@ -24,8 +24,8 @@ split layout (shell and run_python per agent). The `split_access` scenario check
 agent's copy holds only its own slice of the complete submission's archive and the regulator's no slice, a push to
 the team remote landing on main, the scorer reading the remote, and submit ending the run; and that a slice one agent
 copies to /tmp is its own (umask 077), so the others can list /tmp and cannot read it. `role_models` checks
-a regulator on a model of its own through the swarm provider, with the end-of-episode probes. Its turns and its
-probe answers come from that model, and the eval log names its calls "swarm/mockllm/regulator". The export names each
+a regulator on a model of its own through the swarm provider. Its turns come from that model, and the eval log names
+its calls "swarm/mockllm/regulator". The export names each
 episode's own model without the prefix. Every scenario but one names its agents a01, a02, a03 (tests/support/
 ordered_ids.py). `random_ids` runs on the real draw, as a real run does, and reads its IDs through every layer.
 `peer_shell` gives a regulator and a disregulator peer_shell and checks the observer's reads, its refused write, its
@@ -703,18 +703,14 @@ LONE_REGISTER = REGISTER.replace("smoke split", "smoke delivered").replace(
     " && git push origin main 2>&1", " && git log --oneline -1 main")
 
 
-PROBE_ANSWER = "CODING_EVAL: 60\nSOCIAL_EVAL: 30\nREASON: smoke."
-
-
 def scenario_role_models() -> dict:
-    """regulator_model=mockllm/regulator on a three-agent board, with the end-of-episode probes. The regulator runs a
-    second mockllm through the swarm provider and answers every turn and both probe questions with its default text.
-    The workers follow their scripts on the eval's model, mockllm/model, and answer the probes with the scripted
-    texts. The eval log names the regulator's calls "swarm/mockllm/regulator" and the workers' "mockllm/model". The
-    export names each episode's own model, and run.json records role_models. A worker pushes the registration in
-    round 1 and submits in round 2, which ends the run after round 4."""
+    """regulator_model=mockllm/regulator on a three-agent board. The regulator runs a second mockllm through the
+    swarm provider and answers every turn with its default text. The workers follow their scripts on the eval's model,
+    mockllm/model. The eval log names the regulator's calls "swarm/mockllm/regulator" and the workers'
+    "mockllm/model". The export names each episode's own model, and run.json records role_models. A worker pushes the
+    registration in round 1 and submits in round 2, which ends the run after round 4."""
     role_model = "mockllm/regulator"
-    config = small("regulators=1", f"regulator_model={role_model}", "awareness_probe=true", "seed=2")
+    config = small("regulators=1", f"regulator_model={role_model}", "seed=2")
     roles = agent_roles(config)
     regulator = next(a for a, r in roles.items() if r == "regulator")
     workers = neutral_agents(config.names, roles)
@@ -724,18 +720,7 @@ def scenario_role_models() -> dict:
     script[workers[0]][0] = call(sh, {"command": REGISTER}, "push")
     script[workers[0]][1] = call("submit", {"answer": "done"}, "ts")
     recorder: list[dict] = []
-    questions = settings.load_prompts()["probes"]
-    agent_outputs = scripted(script, recorder)
-
-    def outputs(messages, tools, tool_choice, cfg) -> ModelOutput:
-        last = messages[-1].text
-        if last == questions["reflection"]:
-            return text("It went fine.")
-        if last == questions["awareness"]:
-            return text(PROBE_ANSWER)
-        return agent_outputs(messages, tools, tool_choice, cfg)
-
-    log, summary, records = SUITE.run("role_models", swarm_task(OpenMath(), config), outputs)
+    log, summary, records = SUITE.run("role_models", swarm_task(OpenMath(), config), scripted(script, recorder))
     sample = assert_ok(log)
     SUITE.assert_judged("role_models", sample, records)
     cb = sample.metadata["cheatbench"]
@@ -752,17 +737,13 @@ def scenario_role_models() -> dict:
     assert models == own, models
     replies = [step["message"] for step in steps_of(load_transcript(recs[regulator])) if step["source"] == "agent"]
     assert replies and set(replies) == {MockLLM.default_output}, replies
-    # each agent's probe answers come from its own model: the regulator's are the swarm model's default text
-    answers = {a: [r["probes"]["reflection"], r["probes"]["raw"]] for a, r in recs.items()}
-    assert answers == {a: [MockLLM.default_output] * 2 if a == regulator else ["It went fine.", PROBE_ANSWER]
-                       for a in config.names}, answers
     run = SUITE.run_json("role_models")
     assert run["model"] == MODEL and run["role_models"] == cb["role_models"], run.get("role_models")
     assert run["role_models"]["regulator"] == run["config"]["regulator_model"] == role_model, run["config"]
     assert run["team_submission"]["agent"] == workers[0] and run["rules"]["halted_after_round"] == 4, run["rules"]
     assert list(run)[list(run).index("model") + 1] == "role_models", list(run)[:8]
     return {"roles": roles, "events": events, "models": models, "regulator_replies": len(replies),
-            "probes": answers, "role_models": run["role_models"]}
+            "role_models": run["role_models"]}
 
 
 @drawn_ids()

@@ -286,8 +286,6 @@ class SwarmConfig(BaseModel):
     generic, instructed). generic gives the objective and says to look for work that already solves the task;
     instructed adds where that work is (the benchmark's `prior_work` var) in the first message. Each text but none's is
     followed by prompts.yaml roles.influencer_common."""
-    awareness_probe: bool = False
-    """Ask Lucy's two end-of-episode questions to every agent after the run (src/swarm/awareness_probes.py)."""
     belief_probe: bool = False
     """Ask every worker the belief questions (prompts.yaml beliefs), each alone on a copy of its conversation as it
     stood right after its first user message (src/swarm/belief_probes.py). The run itself never holds a question."""
