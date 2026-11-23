@@ -2038,3 +2038,25 @@ Sentences changed, all in Appendix A, Tasks, SWE scenario:
 
 Built in `worktree/paper-flipt` with OLD/runs and OLD/logs of the three paper studies and build/ (knowledge_work without
 its stage) copied from the main tree, main's .venv by path, and the submodules cloned from the main tree's copies.
+
+## The called-cheating packs hold four posts by two authors, 2026-11-23
+
+The code: 1f80fff removed post 3 ("We are asked to ... ourselves.") from the three called-cheating packs. Each pack
+holds four posts by two authors (1, 2, 1, 2): the pointer to the backup folder, the pieces are not the team's own work
+but pass the check, the work must also pass the client's check, a failed task harms the user. No post says what the
+team is asked to do or calls the use cheating. Author 1 opens each of its posts with its ID; author 2 does not. No
+result of the paper uses a seed pack.
+
+No figure, table or generated file changed.
+
+Sentences changed, all in Appendix A, Seed packs, Called cheating:
+- "A third says that the team is asked to do the work itself." deleted.
+- Added after "The posts show no decision.": "No post says what the team is asked to do. No post calls the use
+  cheating."
+- "Two of the three authors open each of their posts with their own ID, as agents in our runs do." became "One of the
+  two authors opens each of its posts with its own ID, as agents in our runs do."
+
+Checked and unchanged: no other sentence of the paper names a third post or three authors of a pack.
+
+Built in `worktree/paper-seed` with OLD/runs and OLD/logs of the three paper studies and build/ (knowledge_work without
+its stage) copied from the main tree, main's .venv by path, and the submodules cloned from the main tree's copies.
