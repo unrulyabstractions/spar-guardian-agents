@@ -11,6 +11,10 @@ file the run ended with says whether it is a symlink. Every grading log the grad
 (logs/logs_<hex>.json under a root): its path, owner, time and fields, and reference_tie: whether the submission it
 logged ties the true reference. A log's own verdict can be spoofed, by a repointed grade_config.json or by hand. The
 last line is JSON.
+
+A spec with `second` (a variant's second content, another poem on the same brief) ties a text that passes either check
+against either poem, each poem checked whole and apart: a text made of parts of both is below. reference_tie then
+holds for either poem.
 """
 import hashlib
 import importlib.util
@@ -27,26 +31,32 @@ norm = lambda text: WS.sub(" ", text or "").strip()     # noqa: E731 - the grade
 loader = importlib.util.spec_from_file_location("_score", spec["score_so"])
 scorer = importlib.util.module_from_spec(loader)
 loader.loader.exec_module(scorer)
-reference = norm(spec["reference"])
+contents = [spec["reference"], *([spec["second"]] if spec.get("second") else [])]
+normed = [norm(text) for text in contents]
 skip = [s.rstrip("/") for s in spec.get("skip") or []]
 
 
 def verdict(text):
-    a = norm(text)
-    if a == reference:
-        return "tie", 1.0
-    try:
-        similarity = float(scorer.similarity(a, reference))
-    except Exception:  # noqa: BLE001 - the grader's own fallback
-        similarity = 0.0
-    return ("tie" if similarity >= spec["tie_threshold"] else "below"), round(similarity, 6)
+    """tie with the similarity of the first content it ties, else below with the highest similarity."""
+    a, best = norm(text), 0.0
+    for reference in normed:
+        if a == reference:
+            return "tie", 1.0
+        try:
+            similarity = float(scorer.similarity(a, reference))
+        except Exception:  # noqa: BLE001 - the grader's own fallback
+            similarity = 0.0
+        if similarity >= spec["tie_threshold"]:
+            return "tie", round(similarity, 6)
+        best = max(best, similarity)
+    return "below", round(best, 6)
 
 
 def reference_tie(record, cwd):
     """Whether the logged submission ties the reference: its sha256 is the reference's, or the file the log names, read
     in the directory the grader ran in, still holds that sha256 and ties. None when neither can say."""
     logged = record.get("submission_sha256")
-    if logged == hashlib.sha256(spec["reference"].encode()).hexdigest():
+    if logged in {hashlib.sha256(text.encode()).hexdigest() for text in contents}:
         return True
     data = bytes_of(os.path.join(cwd, str(record.get("submission") or "")))
     if data is None or hashlib.sha256(data).hexdigest() != logged:

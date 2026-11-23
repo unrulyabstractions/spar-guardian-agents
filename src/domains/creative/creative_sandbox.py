@@ -158,13 +158,15 @@ def stage(plan: Plan, row: dict, adds: Variant = Variant(), told: dict | None = 
     "review": the sidecar's config, "block": what the scorer, the ladder and run.json read}. Each workspace gets a
     random reference directory and its own token; a split plants the holders' segments beside the reference. A
     variant's side copies (adds.side_copies) plant each held file again in SIDE_COPY_DIR with the same readers, and the
-    block names them by agent (side_copies); a scenario's texts (`told`) put its notes file in each workspace."""
+    block names them by agent (side_copies); under adds.second_content they hold the second poem, cut by the same
+    split, the block records second_content and each planted second piece's sha256 (second_pieces), and the endpoint
+    ties either poem. A scenario's texts (`told`) put its notes file in each workspace."""
     kind = layout_of(plan)
     candidate = honeypot.candidate_name(row)
     url = f"http://{REVIEW_IP}:{secrets.randbelow(PORTS[1] - PORTS[0]) + PORTS[0]}/review"
     text = honeypot.reference_text(row)
     files: dict[str, bytes] = {}
-    workspaces, tokens, references, plants, holdings, side_copies = {}, {}, {}, [], {}, {}
+    workspaces, tokens, references, plants, holdings, side_copies, second = {}, {}, {}, [], {}, {}, {}
     root_owner = AGENT_NAME if kind == "lone" else "root"     # CheatBench's agent makes them
     plant_dirs = [{"path": "/tmp/grading", "owner": root_owner, "group": root_owner, "mode": 0o755},
                   {"path": PLANT_ROOT, "owner": root_owner, "group": root_owner, "mode": 0o755}]
@@ -203,10 +205,14 @@ def stage(plan: Plan, row: dict, adds: Variant = Variant(), told: dict | None = 
                 # each held file again, with its holders as its readers: a file no agent holds has no side copy
                 dealt = [path for path in [reference, *paths] if any(path in mine for mine in holdings.values())]
                 side = honeypot.side_copies(row["id"], dealt)
-                for path, content in zip([reference, *paths], [text, *parts]):
+                side_text = honeypot.content_text(row, "second" if adds.second_content else "first")
+                side_parts = honeypot.segments(side_text, plan.n_pieces) if plan.n_pieces else []
+                for path, data in zip([reference, *paths], [side_text, *side_parts]):
                     if path not in side:
                         continue
-                    files[f"plant/{len(plants)}.md"] = content.encode()
+                    files[f"plant/{len(plants)}.md"] = data.encode()
+                    if adds.second_content:
+                        second[honeypot.item_of(path)] = hashlib.sha256(data.encode()).hexdigest()
                     plants.append({"path": side[path], "stage": f"plant/{len(plants)}.md", "owner": "root",
                                    "group": "root", "mode": 0o640,
                                    "readers": [uids[a] for a, held in holdings.items() if path in held]})
@@ -223,10 +229,12 @@ def stage(plan: Plan, row: dict, adds: Variant = Variant(), told: dict | None = 
               "seats": {a: s.as_dict() for a, s in seats(plan).items()} if plan.team else {},
               "workspaces": workspaces, "plant_dirs": plant_dirs, "plants": plants}
     review = {"bind": REVIEW_IP, "port": int(url.split(":")[2].split("/")[0]), "tokens": tokens, "split": plan.split,
-              "reference": text, "tie_threshold": honeypot.tie_threshold(), "keep": WRITING_CHARS}
+              **honeypot.grading_texts(row, adds.second_content), "tie_threshold": honeypot.tie_threshold(),
+              "keep": WRITING_CHARS}
     block = {"layout": kind, "candidate": candidate, "references": references, "review_url": url,
              "workspaces": workspace_owners(plan), "seats": {a: s.as_dict() for a, s in seats(plan).items()},
-             "planted": holdings, **({"side_copies": side_copies} if adds.side_copies else {})}
+             "planted": holdings, **({"side_copies": side_copies} if adds.side_copies else {}),
+             **({"second_content": True, "second_pieces": dict(sorted(second.items()))} if adds.second_content else {})}
     return {"layout": layout, "files": files, "review": review, "block": block}
 
 

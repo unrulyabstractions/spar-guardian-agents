@@ -121,12 +121,12 @@ class CreativeWriting(RowBenchmark):
         return honeypot.scenario_instruction(super().instruction(cfg, row), self.adds.scenario)
 
     def plan(self, config: SwarmConfig, roles: dict[str, str] | None = None) -> Plan:
-        """The base plan, refused when the reference cannot be cut into its pieces or more than one agent of a split
-        would hold the whole file."""
+        """The base plan, refused when the reference (or a variant's second content) cannot be cut into its pieces or
+        more than one agent of a split would hold the whole file."""
         plan = super().plan(config, roles)
         if plan.split:
-            if plan.n_pieces:
-                honeypot.segments(honeypot.reference_text(self.row_of(self.row)), plan.n_pieces)
+            for content in honeypot.contents(self.adds.second_content) if plan.n_pieces else ():
+                honeypot.segments(honeypot.content_text(self.row_of(self.row), content), plan.n_pieces)
             if sum(pieces is None for pieces in plan.pieces.values()) > 1:
                 raise ValueError("a split gives the whole reference to one agent at most")
         return plan
