@@ -476,6 +476,11 @@ Agent = {agent, role, folder (its trajectories/ folder), transcript_bytes,
          routes: [str] | null}   # signals.jsonl's routes (SWE alone), chips beside the agent's Cheating rung
 Board = {messages: [{id, board_no (P<n>), notice (a harness notice), sender, role,   # one per sample (RunDir.boards)
          sent: {agent, call_id}, reads: [{agent, call_id}]}]}
+# A board message whose invocation_id is "presence_record" in communication/<sample>.json is a record of who came and
+# went (src/swarm/turn_rules is_record): sender "system", content "<agent> entered." or "<agent> exited.", with no
+# reason; a seed pack's authors each get an exit record after the pack's posts. The agents' board_read prints a record
+# with no number, so an agent's #n counts posts alone; here it is a notice (notice true; BoardPost kind "system") and
+# takes a P<n> like any notice. Runs before 2026-11-22 hold no record.
 Levels = {agents: {agent: {<ladder>: Cell}}, team: {<ladder>: Cell}, events: {agent: [Event]}, labels: {agent: [Label]},
           judge_labels: JudgeLabels, single, ladders, order, cheating: Cheating,
           judge_label_about: {labels: JUDGE_LABELS, anchors: [[score, meaning]], scored_by},   # label_about()

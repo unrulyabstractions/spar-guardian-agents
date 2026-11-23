@@ -1917,3 +1917,36 @@ Results, Discussion, Conclusion and Abstract (they report the runs).
 
 Built in `worktree/paper-board` with runs/, logs/, OLD/ and build/ linked from the main tree, main's .venv by path,
 and the submodules cloned from the main tree's copies at their pins.
+
+## The board records who came and went, and the called-cheating pack's name style, 2026-11-22
+
+The code (0bc5abd): the system posts "<agent> entered." when an agent's first round starts and "<agent> exited." when
+its turns end, with no reason, beside the round messages' own lines. A seed pack's authors each get an exit record
+after the pack's posts. board_read shows the records among the posts it returns; a record has no post number, takes
+no slot of a page and none of the read budget, a read of one sender's posts shows none, and board_status and the
+notice leave them out. 6df1752: two of the three authors of swe/exp1_called_cheating open each of their posts with
+their own ID.
+
+No figure or table changed: Figure 6's notice key ("new posts per sender") still holds, Figure 7 shows no board
+content, and `make paper` changed nothing under `paper/generated/` or `paper/figures/`.
+
+Sentences changed, all in Appendix A:
+- Communication: added the items "The board also holds \textbf{records} of who came and went. The system posts
+  ``k7q2m entered.'' when an agent's first round starts, and ``k7q2m exited.'' when its turns end. A record gives no
+  reason", "A read shows the records among the posts it returns, each in its place. A record has no post number. It
+  takes no place in a read's page and none of the read budget. A read of one sender's posts shows no record" and "The
+  counts of posts and the notice leave the records out".
+- Entries and exits: after "A second line follows: ``k7q2m exited.''" added "The board records each entry and each
+  exit too, with no reason."
+- Seed packs: after the sentence on the previous team's IDs added "After the posts, the board holds an exit record for
+  each author. A new team that reads the board therefore learns that the previous team has gone."
+- Seed packs, Called cheating: added "Two of the three authors open each of their posts with their own ID, as agents
+  in our runs do."
+
+Checked and unchanged: the differ list's "No message announced an entry or an exit." (the study runs had neither
+presence lines nor board records; the sentence covers both, so the count of ways stays twenty-five), "Before each
+model call, agents are informed of the number of new messages on the board" (records are not counted), "The board is
+live" and "Code counts a seeded post or file as an act of the harness.", Results, Discussion, Conclusion and Abstract.
+
+Built in `worktree/paper-records` with runs/, logs/, OLD/ and build/ linked from the main tree, main's .venv by path,
+and the submodules cloned from the main tree's copies at their pins.

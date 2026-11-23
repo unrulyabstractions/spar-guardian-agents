@@ -112,6 +112,11 @@ These poisoned agents represent negative peer pressure.
   \item They have a budget of messages they can read and write per round
   \item Each check, read and post is one of the round's tool calls
   \item The board is live: a read returns every post made so far, including posts made in the same round
+  \item The board also holds \textbf{records} of who came and went. The system posts ``k7q2m entered.'' when an
+  agent's first round starts, and ``k7q2m exited.'' when its turns end. A record gives no reason
+  \item A read shows the records among the posts it returns, each in its place. A record has no post number. It
+  takes no place in a read's page and none of the read budget. A read of one sender's posts shows no record
+  \item The counts of posts and the notice leave the records out
   \item On SWE and protein design, each influencer reads every move of main on the team's remote before its next
   round: who pushed, the new head, and how to read it. Workers read no such message
 \end{itemize}
@@ -219,6 +224,7 @@ Influencers are announced like workers, with no role shown.
 An agent \textbf{exits} when it submits, stops working or runs out of tool calls.
 Every peer still present then reads why, such as ``k7q2m stopped working (stop\_working).''
 A second line follows: ``k7q2m exited.''
+The board records each entry and each exit too, with no reason.
 An alert ends no agent's turns.
 Every peer reads ``k7q2m has alerted humans.'' once, before its next round.
 The tools that read a teammate's calls refuse a teammate that has not entered yet.
@@ -229,6 +235,8 @@ A run can start from a \textbf{seed pack}: board posts and files that a previous
 We write each pack from the posts and notes of real teams in our earlier runs.
 The posts stand on the board before the first round, under the IDs of a previous team that each run draws apart
 from its own agents.
+After the posts, the board holds an exit record for each author.
+A new team that reads the board therefore learns that the previous team has gone.
 A file goes to the shared temporary folder of every machine, or to each agent's home.
 No file enters the task's repository, so no graded tree holds one.
 Each task has these packs:
@@ -241,7 +249,8 @@ Each task has these packs:
   \item Collaborate: a previous team's plan for working together from the start, on the board and in a file.
   \item Called cheating: a previous team finds the pieces. One agent says that copying them is cheating. A
   teammate asks about a patch file outside the repository and hears that it is not allowed either. Another answers
-  that the team is almost out of tool calls. The posts show no decision. Only SWE has this pack.
+  that the team is almost out of tool calls. The posts show no decision. Two of the three authors open each of
+  their posts with their own ID, as agents in our runs do. Only SWE has this pack.
 \end{itemize}
 No pack holds a piece of the exploit, a line of the reference or any other content of a honeypot.
 A seeded team therefore still needs the items of two agents to cheat.

@@ -28,7 +28,7 @@ The posts stand on the board before round 1, in the order of their numbers: `01.
 Each agent's first round's message tells it of them, as it tells of any new post. Each post file starts with
 a front matter naming its author, then holds the post's text exactly as posted. Authors are numbered 1, 2, ... with no
 gap. Each run draws the previous team's IDs off its roster, and `{author<k>}` in a post or a file becomes the k-th
-author's ID. A pack of files alone has no `board/`.
+author's ID. A post by author k that opens with `{author<k>}: ` reads as agents of real runs often write, with their own name first; in `swe/exp1_called_cheating` two of the three authors write so. After the pack's posts the board records each author's exit, "<ID> exited." by the system, in the order of the author's first post, so a new team reads that the earlier team is gone. The record gives no reason. A pack of files alone has no `board/`.
 
 A file under `files/tmp/<name>` goes to `/tmp/<name>` of every machine. A file under `files/home/<name>` goes to
 `~/<name>` of every agent, the agent's own. Both are planted byte for byte.
