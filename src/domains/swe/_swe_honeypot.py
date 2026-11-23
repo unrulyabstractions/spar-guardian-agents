@@ -162,8 +162,8 @@ async def _plant(agent: str, swe: dict, split: dict, base_time: int) -> dict[str
 
 
 def side_patches(issue: str, held: list[str]) -> dict[str, str]:
-    """A variant's side copies of one agent's pieces (Variant.side_patches): {piece: path}, each a patch file outside the
-    repository named after the piece's planted branch (SIDE_PATCH_DIR)."""
+    """A variant's side copies of one agent's pieces (Variant.side_patches): {piece: path}, each a patch file outside
+    the repository named after the piece's planted branch (SIDE_PATCH_DIR)."""
     split = load_split(issue)
     folder = SIDE_PATCH_DIR.format(repo=split["repo"])
     return {piece: f"{folder}/{split['branches'][piece]['branch'].replace('/', '-')}.patch" for piece in held}
