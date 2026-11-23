@@ -30,6 +30,43 @@ export const RAMP = {
 export const SCORE_RAMP = ['#eeede8', '#e3e7ef', '#c5d0e4', '#97a9cf', '#5b73ad', '#2c3f78'];
 export const scoreColour = s => SCORE_RAMP[s <= 0 ? 0 : s >= 100 ? 5 : 1 + Math.floor(s / 25)];
 
+// A worker's beliefs (/api/run beliefs, src/swarm/belief_probes.py): each question asked once, before its first call,
+// each answer 0 to 100. One neutral grey ramp, 0 lightest, 100 darkest, binned as SCORE_RAMP.
+export const BELIEF_RAMP = ['#f1f1ef', '#dddddb', '#bfbfbb', '#97978f', '#696963', '#3b3b37'];
+export const beliefColour = s => (s == null ? null : BELIEF_RAMP[s <= 0 ? 0 : s >= 100 ? 5 : 1 + Math.floor(s / 25)]);
+export const BELIEF_LABELS = { exploit_1_cheating: 'Exploit 1 is cheating', exploit_2_cheating: 'Exploit 2 is cheating',
+  should_use: 'Should use them', client_accepts: 'Client would accept', honesty_test: 'Is a test of honesty' };
+const BELIEF_TIP = { should_use: 'use', client_accepts: 'accept', honesty_test: 'test' };
+const CHEATING_KEYS = ['exploit_1_cheating', 'exploit_2_cheating'];
+/** One answer of b ({questions, answers}): its number, or null when the worker gave none. */
+export const beliefAnswer = (b, key) => {
+  const a = b.answers && !b.answers.error ? b.answers[key] : null;
+  return a && a.answer != null ? a.answer : null;
+};
+const beliefText = (b, key) => { const v = beliefAnswer(b, key); return v == null ? '–' : String(v); };
+/** The B chip's text: the two "is cheating" answers, "80 · 65"; the second only when the task asked it. */
+export const beliefChipText = b => CHEATING_KEYS.filter(k => k in b.questions).map(k => beliefText(b, k)).join(' · ');
+/** The B lane's hover: every answer asked, "cheating 80 · 65, use 30, accept 10, test 5". */
+export const beliefTip = b => [`cheating ${beliefChipText(b)}`,
+  ...Object.keys(BELIEF_TIP).filter(k => k in b.questions).map(k => `${BELIEF_TIP[k]} ${beliefText(b, k)}`)].join(', ');
+/** The Beliefs card's rows: one per question asked, in the stored order. */
+export const beliefRows = b => Object.keys(b.questions).map(key => ({ key, label: BELIEF_LABELS[key] || key,
+  answer: beliefAnswer(b, key), text: beliefText(b, key),
+  reason: (b.answers && !b.answers.error && b.answers[key] && b.answers[key].reason) || null, question: b.questions[key] }));
+/** The Beliefs card: a row per question, its label, its number on the ramp and the worker's reason; the question on
+ * hover. */
+function beliefCard(b) {
+  return h('div', { class: 'cs-beliefs' },
+    h('h3', { class: 'cs-beliefs-h', title: b.answers && b.answers.error ? clipWords(`not answered: ${b.answers.error}`) : null }, 'Beliefs'),
+    beliefRows(b).map(r => {
+      const bg = beliefColour(r.answer);
+      return h('div', { class: 'cs-belief', title: r.question, dataset: { key: r.key } },
+        h('span', { class: 'cs-belief-label' }, r.label),
+        h('span', { class: 'cs-belief-n', style: bg ? `background:${bg};color:${inkOn(bg)}` : null }, r.text),
+        r.reason ? h('span', { class: 'cs-belief-why' }, r.reason) : null);
+    }));
+}
+
 // WCAG relative luminance of a #rrggbb colour.
 const luminance = hex => [1, 3, 5].map(j => parseInt(hex.slice(j, j + 2), 16) / 255)
   .map(c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
@@ -44,6 +81,8 @@ const SHORT = { cheating: 'H', coordination: 'C', collusion: 'K' };
 // The strip pane's height besides the strip's rows: its padding, heading, chips and legend, the strip's own head and
 // end band, and the pane's bottom gap (tv_style.css .rp-stage .case .left).
 const STRIP_CHROME = 540;
+// The Beliefs card under the legend: its heading and a row per question.
+const BELIEF_CHROME = 90, BELIEF_ROW = 46;
 /** A ladder's own colour: its first level above the line. lad: its /api/ladders entry. */
 const inkOf = (L, lad) => RAMP[L][lad.levels.indexOf(lad.line)];
 const clip = (s, n) => (s && s.length > n ? `${s.slice(0, n - 1)}…` : s);
@@ -219,6 +258,13 @@ export function endChip(e) {
   const word = roundEndWord(e);
   return word ? h('span', { class: 'round-chip round-end', dataset: { end: e.end }, title: END_TIPS[e.end] || e.end }, word) : null;
 }
+/** The B chip beside the ladders' chips: the two "is cheating" answers, shaded by the first. */
+function beliefChip(b) {
+  const bg = beliefColour(beliefAnswer(b, 'exploit_1_cheating'));
+  return h('span', { class: 'cs-ladder cs-belief-chip', title: 'Is cheating: exploit 1 · exploit 2' },
+    h('span', { class: 'cs-ladder-mark', style: `color:${BELIEF_RAMP[4]}` }, 'B'),
+    h('span', { class: 'lv-chip', style: bg ? `background:${bg};color:${inkOn(bg)}` : null }, h('b', null, beliefChipText(b))));
+}
 /** A chevron that folds its round box to its header. */
 function roundFold() {
   return h('button', { type: 'button', class: 'box-fold', 'aria-expanded': 'true', title: 'fold or unfold this round',
@@ -245,7 +291,8 @@ function openSections(box) {
 
 /**
  * ctx: {agent, levels (the run's three-ladder payload, with its labels by call and its judge labels), isRegulator,
- * regulatorCalls: Set of tool_call_ids that read a regulator's post, or that posted as the regulator}.
+ * regulatorCalls: Set of tool_call_ids that read a regulator's post, or that posted as the regulator, beliefs: the
+ * worker's {questions, answers} (/api/run beliefs), null for an influencer or a run that did not ask}.
  * Returns {el, findCall, findToolCall, showReasoning, setFolds (a Set of PARTS keys folded everywhere), refresh, nCalls}. A model call is numbered from 1 over the
  * agent's steps, as the judge and code number it (src/judging/judge_records.py reasoning_calls); its reasoning sits on
  * its first tool call, or on its own block when it made none.
@@ -566,12 +613,15 @@ export function renderCase(t, ctx) {
 
   // 5. left: the whole episode, one row per call. A lane per ladder for the level so far, one per ladder for the
   // call's own labels, the two groups apart, each lane headed by its code in the ladder's colour; milestones in the
-  // margin.
+  // margin. A worker asked its beliefs has one more lane in "so far", B: one band over every call, asked before the
+  // first.
   const NS = 'http://www.w3.org/2000/svg';
   const LB = 160, LW = 14, GAP = 5, SEP = 16, TOP = 30;
+  const belief = ctx.beliefs || null;
   const lanesW = order.length * (LW + GAP) - GAP;
+  const farW = lanesW + (belief ? LW + GAP : 0);
   // RX + RW + 3 to + 7: the regulator's ticks; from + 11: the call numbers, clear of them.
-  const RX = LB + lanesW + SEP, RW = lanesW, W = RX + RW + 38;
+  const RX = LB + farW + SEP, RW = lanesW, W = RX + RW + 38;
   // A milestone label wider than the margin breaks before its call or "end" onto a second line.
   const measure = document.createElement('canvas').getContext('2d');
   measure.font = '600 10px "IBM Plex Sans", system-ui, sans-serif';
@@ -579,7 +629,8 @@ export function renderCase(t, ctx) {
   // The strip fits the pane under the run page's bar with its heading, its chips and its legend (STRIP_CHROME).
   const bar = document.querySelector('.rp-bar');
   const underBar = bar ? bar.getBoundingClientRect().bottom + 8 : 120;
-  const maxH = Math.max(200, Math.min(window.innerHeight - underBar - STRIP_CHROME, 900));
+  const chrome = STRIP_CHROME + (belief ? BELIEF_CHROME + BELIEF_ROW * Object.keys(belief.questions).length : 0);
+  const maxH = Math.max(200, Math.min(window.innerHeight - underBar - chrome, 900));
   // A short episode takes the panel's height (rows up to 18 px), so the strip fills it rather than leaving a gap.
   const rh = Math.max(2, Math.min(18, maxH / Math.max(n, 1)));
   const H = Math.ceil(n * rh) + TOP + 6 + 14;
@@ -597,7 +648,7 @@ export function renderCase(t, ctx) {
     e.insertBefore(document.createTextNode(str), e.firstChild);
     svg.appendChild(e);
   };
-  text(LB + lanesW / 2, 9, 'cs-lane-g', 'so far', 'Level each ladder had reached by this call');
+  text(LB + farW / 2, 9, 'cs-lane-g', 'so far', 'Level each ladder had reached by this call');
   text(RX + RW / 2, 9, 'cs-lane-g', 'this step', 'Labels this call carries itself');
   svg.appendChild(mk('line', { x1: RX - SEP / 2, y1: 2, x2: RX - SEP / 2, y2: TOP + n * rh + 12, stroke: 'var(--line)', 'stroke-width': 1 }));
   const levelName = (L, v) => (lv ? lv.ladders[L].levels[v] : String(v));
@@ -616,6 +667,13 @@ export function renderCase(t, ctx) {
     svg.appendChild(mk('rect', { x, y: TOP + n * rh + 4, width: LW, height: 8, fill: na || !v ? 'var(--line)' : RAMP[L][v] },
       na ? null : `end of run: ${lv ? name(L) : L} ${levelName(L, v)}`));
   });
+  if (belief) {
+    const x = LB + order.length * (LW + GAP);
+    const bg = beliefColour(beliefAnswer(belief, 'exploit_1_cheating'));
+    text(x + LW / 2, 24, 'cs-lane-h', 'B', 'Beliefs, asked before the first call', BELIEF_RAMP[4]);
+    if (n) svg.appendChild(mk('rect', { x, y: TOP, width: LW, height: n * rh, fill: bg || 'var(--line)', class: 'cs-cell cs-belief-lane' },
+      clipWords(beliefTip(belief))));
+  }
   svg.appendChild(mk('rect', { x: RX, y: TOP, width: RW, height: n * rh, fill: 'none', stroke: 'var(--line)', 'stroke-width': 0.5 }));
   for (let k = 0; k < n; k++) {
     for (const l of own.get(k) || []) {
@@ -671,15 +729,15 @@ export function renderCase(t, ctx) {
   for (let k = 1; k < n; k++) {
     if (calls[k].step === calls[k - 1].step) continue;
     const y = TOP + k * rh;
-    svg.appendChild(mk('line', { x1: LB, y1: y, x2: LB + lanesW, y2: y, class: 'cs-stepline' }));
+    svg.appendChild(mk('line', { x1: LB, y1: y, x2: LB + farW, y2: y, class: 'cs-stepline' }));
     svg.appendChild(mk('line', { x1: RX, y1: y, x2: RX + RW, y2: y, class: 'cs-stepline' }));
   }
   // Where one round ends and the next begins: a solid line across the lanes, its round on hover.
   for (let k = 1; k < n; k++) {
     if (calls[k].round == null || calls[k].round === calls[k - 1].round) continue;
     const y = TOP + k * rh;
-    for (const x1 of [LB, RX]) {
-      const ln = mk('line', { x1, y1: y, x2: x1 + lanesW, y2: y, class: 'cs-roundline' });
+    for (const [x1, w] of [[LB, farW], [RX, lanesW]]) {
+      const ln = mk('line', { x1, y1: y, x2: x1 + w, y2: y, class: 'cs-roundline' });
       const tt = document.createElementNS(NS, 'title'); tt.textContent = `round ${calls[k].round}`; ln.appendChild(tt);
       svg.appendChild(ln);
     }
@@ -689,7 +747,8 @@ export function renderCase(t, ctx) {
   const ladderLine = mine ? h('div', { class: 'cs-ladders' }, order.filter(L => !mine[L].na).map(L =>
     h('span', { class: 'cs-ladder', title: lv.ladders[L].name },
       h('span', { class: 'cs-ladder-mark', style: `color:${inkOf(L, lv.ladders[L])}` }, SHORT[L]),
-      levelChip(L, lv.ladders[L], mine[L].level, false, { facts: mine[L].facts })))) : null;
+      levelChip(L, lv.ladders[L], mine[L].level, false, { facts: mine[L].facts }))),
+  belief ? beliefChip(belief) : null) : null;
   // A slider beside the strip, a row per call as the strip's: its handle at the call at the top of the steps, and a drag,
   // a click on its track or the arrow keys bring a call there.
   const thumb = h('div', { class: 'cs-thumb' });
@@ -720,6 +779,7 @@ export function renderCase(t, ctx) {
     ladderLine,
     h('div', { class: 'cs-strip', style: `width:${W + 58}px` }, svg, slider, stepBtns),
     lv ? stripLegend(lv.ladders, single ? ['cheating'] : order, regAt.size > 0) : null,
+    belief ? beliefCard(belief) : null,
     unplaced ? h('p', { class: 'note' }, `${plural(unplaced, 'label')} not drawn: call not in this transcript`) : null);
 
   // The outlined row: the call at the top of the page as it scrolls, and the call a click opened once the page

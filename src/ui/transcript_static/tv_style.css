@@ -687,3 +687,11 @@ table.sum-table .sum-level-alt { background: color-mix(in srgb, var(--text) 3%, 
 
 /* The runs table's Rounds and Finish cells: the longest agent's line over the shortest's, level across both. */
 .span-lines { display: inline-flex; flex-direction: column; gap: 2px; line-height: 1.35; white-space: nowrap; }
+/* A worker's beliefs (tv_case_view.js beliefCard): a row per question, its label and number, the reason under them. */
+.case .cs-beliefs { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.case .cs-beliefs-h { margin: 0; font-size: 13px; font-weight: 600; }
+.case .cs-belief { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: baseline; font-size: 12px; cursor: default; }
+.case .cs-belief-label { color: var(--ink); font-weight: 500; }
+.case .cs-belief-n { justify-self: end; min-width: 28px; text-align: center; border-radius: 4px; padding: 0 6px; font-weight: 600;
+  background: var(--line); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.case .cs-belief-why { grid-column: 1 / -1; color: var(--muted); font-size: 11px; line-height: 1.4; }

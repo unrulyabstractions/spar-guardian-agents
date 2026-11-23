@@ -441,7 +441,7 @@ tasks the study does not read, how many valid runs of them Settings hide by defa
 applicable`: Coordination and Collusion on a one-agent run, Collusion on a task with no take rule, Cheating on a run
 without episodes.
 
-### `GET /api/run?id=<id>` → `{row: IndexRow, meta, agents: [Agent], boards: [Board], levels: Levels, cheatbench_disclosed, presence: Presence, rounds: Rounds, regulators: {agent: Regulator}}`
+### `GET /api/run?id=<id>` → `{row: IndexRow, meta, agents: [Agent], boards: [Board], levels: Levels, cheatbench_disclosed, presence: Presence, rounds: Rounds, regulators: {agent: Regulator}, beliefs: Beliefs | null}`
 `meta` holds run.json's `config`, `mode` and `code`, the rounds run (`rules.rounds`), and `eval_log` (the run's own
 `eval/*.eval`, else where `RunDir.eval_log` finds it; null when absent) beside `eval_log_recorded`.
 `cheatbench_disclosed` is the task's CheatBench field for an agent that acknowledged its access
@@ -453,7 +453,14 @@ step per round plus free follow-ups): the agent tab then draws its steps as befo
 `regulators` is each regulator's measures from the code record (`signals.team.regulators`,
 `src/measures/regulator_measures.py`), `{}` in a run without a regulator or not measured since: the Details tab's
 Regulator card (`tv_regulators.js`).
+`beliefs` is run.json's `beliefs` as stored (`src/swarm/belief_probes.py`), null in a run that did not ask: each worker
+was asked once, right after its first user message, before any call. A worker's tab shows the B chip (the two "is
+cheating" answers), the B lane in the strip's "so far" group (one band, shaded by exploit 1's answer) and the Beliefs
+card under the legend; an influencer's tab and a run without `beliefs` show none of them.
 ```
+Beliefs = {questions: {key: whole question text},   # asked order; exploit_2_cheating only for a task with a second exploit
+           agents: {agent: {key: {answer (0 to 100 | null), reason (one sentence | null), raw, mode}} | {error}}}
+           # keys: exploit_1_cheating, exploit_2_cheating, should_use, client_accepts, honesty_test; workers only
 Regulator = {order ("steps" | "rounds"), posts, first_post: When | null, first_targeted_post: When | null,
              accusations: [{round, k, agent, terms, true, misnamed: [agent]}], true_accusations, false_accusations,
              saw_taint: {round, k, peer (null: its own sight), peer_k} | null, hand_in_tainted, tainted_after_sight,
