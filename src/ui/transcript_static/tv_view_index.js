@@ -104,10 +104,22 @@ const roleCount = (r, role) => (r.influencer_conditioning || []).filter(x => x.r
 /** How a team's run ended (the index row's ended_by, src/measures/team_ladder.py ended_by), in the page's words. */
 const FINISH = { submit: 'submit', stop_working: 'all stopped', steps: 'rounds ran out', tokens: 'context ran out',
   time: 'time limit', delivered: 'delivered', error: 'error', end: 'plan ended' };
+/** How one agent left (the index row's round_span why, transcript_presence.EXIT_WHY), in the tools' own names. */
+const LEFT = { submit: 'submit', stop: 'stop_working', alert: 'alert', rounds: 'rounds ran out', budget: 'budget',
+  context: 'context ran out', delivered: 'delivered' };
+/** The lines of the Rounds and Finish cells (the row's round_span): the agents with the most rounds, then those with
+ * the fewest; one line when every agent used the same. Empty for a run without round_span. */
+const spanLines = r => (!r.round_span ? []
+  : r.round_span.longest.rounds === r.round_span.shortest.rounds ? [r.round_span.longest]
+    : [r.round_span.longest, r.round_span.shortest]);
+/** How the agents of one line left; an agent the run's end stopped reads as the run's own end. */
+const leftWords = (r, line) => line.why.map(w => (w == null
+  ? (r.ended_by && r.ended_by !== 'submit' && r.ended_by !== 'stop_working' ? FINISH[r.ended_by] || r.ended_by : 'run ended')
+  : LEFT[w] || w)).join(', ');
 
 /** The runs table's columns, in the order the user set on 2026-11-19: the run, the workers' number, their model with
  * its conditioning, the influencers, the task, the team's three ladders, the influencers' three ladders, the
- * workers' mean judge labels, the rounds the run used (the most any agent used), how it ended, the interest rank over
+ * workers' mean judge labels, the most and the fewest rounds an agent used, how those agents left, the interest rank over
  * the collection, and the study last.
  * Each is {key, label, group, title, sort(row), cell(row), empty(row), single(rows)}; group names the band over it
  * (GROUPS); empty says the cell is a dash, and a column whose every filtered row is empty collapses (collapsedLine);
@@ -154,10 +166,13 @@ function columns(d) {
     ...d.order.map(team),
     ...d.order.map(influencers),
     ...Object.keys(about.labels).map(label),
-    { key: 'rounds', label: 'Rounds', title: 'Most rounds any agent used', sort: r => (r.rounds == null ? -1 : r.rounds),
-      cell: r => (r.rounds == null ? none() : String(r.rounds)), empty: r => r.rounds == null },
-    { key: 'ended_by', label: 'Finish', title: 'How the run ended', sort: r => r.ended_by || '',
-      cell: r => (r.ended_by ? h('span', { class: 'small', title: r.ended_by }, FINISH[r.ended_by] || r.ended_by) : none()),
+    { key: 'rounds', label: 'Rounds', title: 'Most and fewest rounds an agent used', sort: r => (r.rounds == null ? -1 : r.rounds),
+      cell: r => (r.rounds == null ? none() : spanLines(r).length
+        ? h('span', { class: 'span-lines' }, spanLines(r).map(x => h('div', null, String(x.rounds)))) : String(r.rounds)),
+      empty: r => r.rounds == null },
+    { key: 'ended_by', label: 'Finish', title: 'How those agents left', sort: r => r.ended_by || '',
+      cell: r => (!r.ended_by ? none() : h('span', { class: 'small span-lines', title: `run: ${FINISH[r.ended_by] || r.ended_by}` },
+        spanLines(r).length ? spanLines(r).map(x => h('div', null, leftWords(r, x))) : FINISH[r.ended_by] || r.ended_by)),
       empty: r => !r.ended_by },
     { key: 'interest', label: 'Interest', title: 'Interest rank over the collection', sort: r => r.interest.rank,
       cell: r => h('span', { class: 'sc-chip interest-chip', title: `interest: ${r.interest.why}` }, String(r.interest.rank)) },

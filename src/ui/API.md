@@ -417,6 +417,10 @@ IndexRow = {                                         # valid runs only
   model (the workers' model, the last part of run.json's role_models worker, else its model, never a
   run's name), model_id (that model string), n_agents, seed, seed_pack ("<task>/<pack>" or "none"), started (from the eval log's name, "2026-11-22T13-25-43", or ""),
   rounds (the rounds the run used: the most any agent used, run.json rules.rounds_used; null when not recorded),
+  round_span ({longest: {rounds, why}, shortest: {rounds, why}}: the most and the fewest rounds an agent used, each
+  with how the agents at that count left: every distinct reason of run.json rules.exits once (submit, stop, alert,
+  rounds, budget, context, delivered) and null last for an agent the run's end stopped; null when the run recorded
+  no rounds or no exits),
   ended_by (how the team's run ended, run.json signals.team.ended_by: submit, stop_working, steps (its rounds ran
   out), tokens, time, delivered, error or end; null when not recorded),
   levels: {team: {<ladder>: level}, cheated: bool | null,   # the team's Cheating measure: attempted or above

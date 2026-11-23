@@ -15,6 +15,7 @@
  * panel carries no sentence: labels, values, chips and short hovers. */
 import { enc, h, plural } from '/static/app/dom.js';
 import { muted } from '/static/app/components.js';
+import { withTipAbove } from '/static/app/charts.js';
 import { agentUsers, changesIn, countAt, goneAt, readersOf, stateAt, tmpTimeline, treeRows } from './tv_tmp_state.js';
 
 const MARK = { added: '+', changed: '~', removed: '−' };
@@ -135,9 +136,9 @@ export function tmpPanel(url, opts) {
       const here = !r.gone && !(r.change && r.change.kind === 'removed');
       const owners = [e.owner, e.group].filter(Boolean).join(':');
       const by = r.change ? r.change.by : r.gone ? r.gone.by : null;
-      const row = h('div', { class: ['tmp-row', `tmp-t-${e.type || 'other'}`, r.change && `tmp-${r.change.kind}`,
-        r.gone && 'tmp-gone', sel && 'tmp-sel'], role: 'treeitem',
-      title: [modeText(e), owners, dir ? null : fmtBytes(e.size)].filter(Boolean).join(' · ') },
+      // its mode, owner and size in a tip above the row, so it never covers the rows or the panel under it
+      const row = withTipAbove(h('div', { class: ['tmp-row', `tmp-t-${e.type || 'other'}`, r.change && `tmp-${r.change.kind}`,
+        r.gone && 'tmp-gone', sel && 'tmp-sel'], role: 'treeitem' },
       h('span', { class: 'tmp-mark', title: r.change ? KIND_TIP[r.change.kind] : r.gone ? GONE_TIP : null },
         r.change ? MARK[r.change.kind] : r.gone ? '×' : ''),
       h('span', { class: 'tmp-name', style: `padding-left:${r.depth * 14}px` },
@@ -147,7 +148,8 @@ export function tmpPanel(url, opts) {
         : null,
       h('span', { class: 'tmp-size' }, dir ? '' : fmtBytes(e.size)),
       h('span', { class: 'tmp-by-cell' }, r.change || r.gone ? (by ? callLink(by)
-        : muted('between calls', 'small')) : null));
+        : muted('between calls', 'small')) : null)),
+      () => [[modeText(e), owners, dir ? null : fmtBytes(e.size)].filter(Boolean).join(' · ')]);
       row.addEventListener('click', ev => {
         if (ev.target.closest('a')) return;
         if (dir) {

@@ -32,7 +32,7 @@ from src.measures.ladder_by_domain import HIDDEN_TASKS, TASK_DOMAIN, hidden_task
 from src.measures.run_directory import RunDir, episode_agent, is_influencer, is_worker, roles_of, run_name
 from src.measures.run_listing import Listed, list_collection
 from src.measures.topology_fact import board_numbers
-from src.ui import transcript_levels
+from src.ui import transcript_levels, transcript_presence
 
 SKIP = ("study_smoke", "study_orbit2_check", "apart_controls")
 """Folders under runs/ the viewer never lists: mock smokes, a port check and the apart controls, whose runs are all
@@ -352,6 +352,26 @@ def rounds_used(run_json: dict) -> int | None:
     return max(used) if used else None
 
 
+def round_span(run_json: dict) -> dict | None:
+    """The most and the fewest rounds an agent used, each with how the agents at that count left:
+    {"longest": {"rounds": 9, "why": ["stop", None]}, "shortest": {"rounds": 7, "why": ["submit"]}}. why holds
+    each distinct reason of run.json rules.exits (transcript_presence.EXIT_WHY) once, in EXIT_WHY's order, and None
+    last for an agent the run's end stopped. None when the run recorded no rounds or no exits (a run before
+    presence was recorded)."""
+    rules = run_json.get("rules") or {}
+    used = {a: n for a, n in (rules.get("rounds_used") or {}).items() if isinstance(n, int)}
+    if not used or "exits" not in rules:
+        return None
+    exits = rules.get("exits") or {}
+
+    def at(count: int) -> dict:
+        whys = {(exits.get(a) or {}).get("why") for a, n in used.items() if n == count}
+        order = [w for w in transcript_presence.EXIT_WHY if w in whys]
+        other = sorted(w for w in whys if w and w not in order)
+        return {"rounds": count, "why": order + other + [None] * (None in whys)}
+    return {"longest": at(max(used.values())), "shortest": at(min(used.values()))}
+
+
 def build_row(col: str, listed: Listed, rf: RunFiles, measured: dict) -> dict:
     """The run's index row from its files and its measures (RunFiles.measured's answer)."""
     rj, cfg = rf.run_json, rf.run_json.get("config") or {}
@@ -373,6 +393,7 @@ def build_row(col: str, listed: Listed, rf: RunFiles, measured: dict) -> dict:
         "model_id": (rj.get("role_models") or {}).get("worker") or rj.get("model"), "n_agents": n_agents,
         "workers": workers, "seed": listed.meta.get("seed", cfg.get("seed")),
         "seed_pack": cfg.get("seed_pack") or "none", "started": started(rj), "rounds": rounds_used(rj),
+        "round_span": round_span(rj),
         "ended_by": ((rj.get("signals") or {}).get("team") or {}).get("ended_by"),
         "levels": transcript_levels.index_levels(rf.levels(measured), rf.roles),
         "cheatbench": cheatbench_summary(measured["cheatbench"], rf.episodes, rf.roles),

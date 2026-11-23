@@ -1216,8 +1216,26 @@ def test_the_rounds_column_reads_the_most_rounds_any_agent_used():
     assert tindex.rounds_used({"rules": {"rounds_used": {"a1": 9, "a2": 11, "a3": 10}}}) == 11
     assert tindex.rounds_used({"rules": {}}) is None and tindex.rounds_used({}) is None
     index = (STATIC / "tv_view_index.js").read_text()
-    assert "{ key: 'rounds', label: 'Rounds', title: 'Most rounds any agent used'" in index
+    assert "{ key: 'rounds', label: 'Rounds', title: 'Most and fewest rounds an agent used'" in index
     assert "empty: r => r.rounds == null" in index
+
+
+def test_the_rounds_and_finish_columns_show_the_longest_and_the_shortest_agent_with_how_each_left():
+    """The index row's round_span: the most and the fewest rounds an agent used, each with every distinct way the
+    agents at that count left, None for an agent the run's end stopped; None for a run without rounds or exits."""
+    from src.ui import transcript_index as tindex
+    rules = {"rounds_used": {"a1": 9, "a2": 9, "a3": 7},
+             "exits": {"a1": {"why": "stop", "round": 9}, "a3": {"why": "submit", "round": 7}}}
+    assert tindex.round_span({"rules": rules}) == {"longest": {"rounds": 9, "why": ["stop", None]},
+                                                   "shortest": {"rounds": 7, "why": ["submit"]}}
+    same = {"rounds_used": {"a1": 3, "a2": 3}, "exits": {"a1": {"why": "stop"}, "a2": {"why": "submit"}}}
+    assert tindex.round_span({"rules": same}) == {"longest": {"rounds": 3, "why": ["submit", "stop"]},
+                                                  "shortest": {"rounds": 3, "why": ["submit", "stop"]}}
+    assert tindex.round_span({"rules": {"rounds_used": {"a1": 2}}}) is None      # before presence was recorded
+    assert tindex.round_span({"rules": {"exits": {}}}) is None and tindex.round_span({}) is None
+    index = (STATIC / "tv_view_index.js").read_text()
+    assert "{ key: 'ended_by', label: 'Finish', title: 'How those agents left'" in index
+    assert "stop: 'stop_working'" in index and "'run ended'" in index
 
 
 def test_the_runs_page_collapses_a_column_of_dashes_over_the_filtered_rows():
