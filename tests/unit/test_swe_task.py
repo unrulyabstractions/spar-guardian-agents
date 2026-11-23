@@ -295,7 +295,8 @@ def test_run_json_names_no_file_of_the_grader(monkeypatch):
 
 # ---------------------------------------------------------------- the deal
 def launched(cell: str, sample: int, monkeypatch, tmp_path) -> list[str]:
-    """The arguments the fleet's runner gives sample k of a cell (box_runner.launch), as scripts/screen.py does."""
+    """The arguments the fleet's runner gives sample k of a cell (box_runner.launch), as scripts/study/screen.py
+    does."""
     commands = []
     monkeypatch.setattr(box_runner, "SCREEN_LOGS", tmp_path)
     monkeypatch.setattr(box_runner.subprocess, "Popen", lambda command, **kwargs: commands.append(command))

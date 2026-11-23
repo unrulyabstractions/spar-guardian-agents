@@ -1,4 +1,4 @@
-"""scripts/screen.py's resume over a study's groups: a finished run in a group is skipped, and a run started again
+"""scripts/study/screen.py's resume over a study's groups: a finished run in a group is skipped, and a run started again
 moves its earlier attempt into attempts/<name>.<n> first, so its export finds an empty folder. No model runs: the
 subprocess is a stand-in."""
 from __future__ import annotations
@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts import screen
+from scripts.study import screen
 from src.configuration import settings
 from tests.support.run_files import write_text
 

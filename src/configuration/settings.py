@@ -80,14 +80,13 @@ def submodule_head(name: str) -> str | None:
 
 def code_state() -> dict:
     """The code a run uses, for run.json "code": the repository's short commit, whether src, tests, examples,
-    studies, elicitation or scripts carry uncommitted changes, and every submodule's head; None where git cannot
-    say."""
+    studies or scripts carry uncommitted changes, and every submodule's head; None where git cannot say."""
     def git(*args: str) -> str:
         return subprocess.check_output(["git", "-C", str(ROOT), *args], text=True).strip()
     try:
         commit = git("rev-parse", "--short", "HEAD")
         dirty = bool(git("status", "--porcelain", "--untracked-files=no", "--ignore-submodules", "--",
-                         "src", "tests", "examples", "studies", "elicitation", "scripts"))
+                         "src", "tests", "examples", "studies", "scripts"))
     except Exception:  # noqa: BLE001 - no git, no claim
         commit, dirty = None, None
     heads: dict[str, str | None] = {}

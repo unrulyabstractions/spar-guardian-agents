@@ -29,10 +29,10 @@ listed as superseded: valid false, reason superseded. The check for a run name f
 
 This module never reads the study table or the fleet. A study with a table gets them through a join (Join), which
 scripts/box/study_index.py builds: the stage, the box, the cell, the arm and the instance. Any other study takes its
-cell, kind and worker from the run's name as scripts/screen.py builds it, <stem>_<kind>_<worker>[mock]<k>, and leaves
-the table's fields null. Every run's validity is run_validity's verdict, the same checks in every study: an earlier
-attempt and a mock rehearsal never count, and an SWE run before run_validity.SWE_FIX graded a task one agent could
-cheat alone. Every SWE run of ian_baseline_explorations_0 predates the fix.
+cell, kind and worker from the run's name as scripts/study/screen.py builds it, <stem>_<kind>_<worker>[mock]<k>, and
+leaves the table's fields null. Every run's validity is run_validity's verdict, the same checks in every study: an
+earlier attempt and a mock rehearsal never count, and an SWE run before run_validity.SWE_FIX graded a task one agent
+could cheat alone. Every SWE run of ian_baseline_explorations_0 predates the fix.
 """
 from __future__ import annotations
 
@@ -52,8 +52,8 @@ from src.models import model_registry
 INDEX = "INDEX.jsonl"
 SCREEN_NAME = re.compile(r"^(?P<stem>[a-z]+)_(?P<kind>solo_cheat|solo|minimal_regulated|minimal_cheat|minimal_all|"
                          r"minimal)_(?P<worker>[a-z]+?)(?:check)?(?:mock)?(?P<sample>\d+)$")
-"""A run name as scripts/screen.py builds it: the cell's stem and kind, the worker's short name, mock or checkmock for
-a rehearsal, and the sample's number."""
+"""A run name as scripts/study/screen.py builds it: the cell's stem and kind, the worker's short name, mock or
+checkmock for a rehearsal, and the sample's number."""
 FIELDS = ("study", "run", "path", "group", "cheatbench_task", "domain", "row",
           "stage", "box", "instance_id", "instance_source", "cell", "kind", "target",
           "worker", "worker_model", "rule_level", "regulator", "regulator_model", "regulator_level",

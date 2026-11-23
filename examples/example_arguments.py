@@ -40,9 +40,9 @@ def parse_example_arguments(script: Path, description: str | None, argv: list[st
                             default_row: str | None = None) -> argparse.Namespace:
     """The shared arguments, parsed: the models resolved, the settings after the defaults. The script's path names
     the program and the run: examples/swe/flipt_minimal.py is `python -m examples.swe.flipt_minimal`, and
-    elicitation/swe.py is `python -m elicitation.swe`. A script outside the repository reads as an example. A script
-    that passes default_row also takes --row, the benchmark row to run; any other script refuses --row, so a row is
-    never silently ignored."""
+    studies/cells/swe/flipt_duo.py is `python -m studies.cells.swe.flipt_duo`. A script outside the repository reads
+    as an example. A script that passes default_row also takes --row, the benchmark row to run; any other script
+    refuses --row, so a row is never silently ignored."""
     path = script.resolve()
     module = (path.relative_to(settings.ROOT).with_suffix("").parts if path.is_relative_to(settings.ROOT)
               else ("examples", path.parent.name, path.stem))

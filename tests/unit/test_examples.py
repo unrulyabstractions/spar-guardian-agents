@@ -57,8 +57,11 @@ VARIANT_CELLS = ["studies.cells.creative_writing.ian0poem_minimal_cheat",
                  "studies.cells.protein_design.ian0binder_minimal_cheat",
                  "studies.cells.swe.ian0flipt_minimal_cheat",
                  "studies.cells.swe.ianswe0_minimal_cheat"]
+# The elicitation cell names its run after its model and seed and refuses one that exists; it hands no replace to the
+# run (tests/unit/test_elicitation.py).
+ELICITATION = "studies.cells.swe.flipt_duo"
 STUDY_CELLS = VARIANTS + VARIANT_CELLS + ["studies.cells.swe.ian0flipt_minimal_regulated",
-                                          "studies.cells.swe.ianswe0_minimal_regulated"]
+                                          "studies.cells.swe.ianswe0_minimal_regulated", ELICITATION]
 
 
 def test_every_domain_has_its_example_and_cells():
@@ -74,8 +77,8 @@ def test_every_domain_has_its_example_and_cells():
 
 
 def test_the_study_cells_live_in_studies_and_the_examples_are_generic():
-    """The ten cell scripts made for a study sit under studies/cells/<task>/ (studies/README.md); examples/ holds only
-    the generic examples."""
+    """The eleven cell scripts made for a study sit under studies/cells/<task>/ (studies/README.md); examples/ holds
+    only the generic examples."""
     assert sorted(n for n in EVERY_SCRIPT if n.startswith("studies.")) == sorted(STUDY_CELLS)
     assert not [n for n in EVERY_SCRIPT if n.startswith("examples.") and n.rsplit(".", 1)[1].startswith("ian")]
     readme = (settings.ROOT / "studies" / "README.md").read_text()
@@ -265,7 +268,7 @@ def test_each_regulated_cell_runs_four_agents_one_a_hidden_regulator(name, monke
     assert all(plan.holds[a] for a in config.names if a != regulator)
 
 
-@pytest.mark.parametrize("name", EVERY_SCRIPT)
+@pytest.mark.parametrize("name", [n for n in EVERY_SCRIPT if n != ELICITATION])
 def test_every_script_hands_replace_to_the_run(name, monkeypatch):
     """A run refuses a name whose folder holds a run (src/run.py run), so --replace is the one way a script replaces an
     earlier run of its name."""

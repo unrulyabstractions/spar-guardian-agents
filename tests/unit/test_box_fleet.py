@@ -25,7 +25,6 @@ from pathlib import Path
 
 import pytest
 
-from scripts import screen
 from scripts.box import (
     box_capture,
     box_runner,
@@ -42,6 +41,7 @@ from scripts.box import (
 )
 from scripts.box.box_sweep import Sweep
 from scripts.box.study_table import Arm, Box, box_jobs, find_box, jobs_sha256, stage_boxes
+from scripts.study import screen
 from src import cli, run
 from src.configuration import settings
 from tests.support.run_files import write_text

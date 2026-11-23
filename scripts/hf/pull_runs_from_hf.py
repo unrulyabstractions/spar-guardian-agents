@@ -12,25 +12,25 @@ import os
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:  # run as a file, `python scripts/pull_runs_from_hf.py`, as well as with -m
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:  # run as a file, `python scripts/hf/pull_runs_from_hf.py`, as well as with -m
     sys.path.insert(0, str(ROOT))
 
 from huggingface_hub import HfApi, RepoFile, RepoFolder, snapshot_download  # noqa: E402
 from huggingface_hub.errors import EntryNotFoundError, RepositoryNotFoundError  # noqa: E402
 
-from elicitation.publish import same  # noqa: E402
-from scripts.upload_runs_to_hf import REPO, find_token, junk  # noqa: E402
+from scripts.hf.publish_arena_capstone import same  # noqa: E402
+from scripts.hf.upload_runs_to_hf import REPO, find_token, junk  # noqa: E402
 from src.utils import progress  # noqa: E402
 
-PROG = "python scripts/pull_runs_from_hf.py"
+PROG = "python scripts/hf/pull_runs_from_hf.py"
 MANIFEST = "apart_controls"
 """The manifest collection: its index is runs/manifest.jsonl, not runs/INDEX.jsonl."""
 EXACT_PATTERNS = 500
 """Up to this many files, the download asks for each file by name; past it, for each run's folder."""
 EPILOG = """\
 <study>/runs/<run>/ in the dataset comes to runs/<study>/<run>/, <study>/logs/<run>/ to logs/<study>/<run>/ and
-<study>/logs/screen/<run>.log to logs/<study>/screen/<run>.log, the reverse of scripts/upload_runs_to_hf.py. A run of
+<study>/logs/screen/<run>.log to logs/<study>/screen/<run>.log, the reverse of scripts/hf/upload_runs_to_hf.py. A run of
 the apart controls is <model>/<task>/<cell>/s<seed>, e.g. --run ds/binder/cheat/s1. A run's folder holds processed/ and
 analysis/. A run comes with its study's INDEX.jsonl (manifest.jsonl for the apart controls) when that
 file is not here yet, since the viewer reads each run's valid flag from it. A study's own documents (its README,

@@ -81,8 +81,8 @@ def test_a_run_in_a_group_finds_its_log_at_the_mirrored_path(tmp_path, elsewhere
 
 
 def test_a_log_left_behind_when_its_run_moved_is_not_found(tmp_path, elsewhere):
-    """A run and its log move together (scripts/sort_study_runs.py): a log left at the study's top level is not the
-    log of the run now in a group."""
+    """A run and its log move together (scripts/study/sort_study_runs.py): a log left at the study's top level is not
+    the log of the run now in a group."""
     run = make_run(tmp_path / "runs" / "study_x" / "mock" / "a_lunamock1")
     make_log(tmp_path / "logs" / "study_x" / "a_lunamock1")
     assert RunDir(run).eval_log is None

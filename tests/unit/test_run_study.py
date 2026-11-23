@@ -1,12 +1,12 @@
-"""scripts/run_study.py: a plan's cells, their commands in the pilot's order, and a launch that needs --yes. Nothing
-launches: no Docker, no model call."""
+"""scripts/study/run_study.py: a plan's cells, their commands in the pilot's order, and a launch that needs --yes.
+Nothing launches: no Docker, no model call."""
 from __future__ import annotations
 
 import subprocess
 
 import pytest
 
-from scripts import run_study as seed_study
+from scripts.study import run_study as seed_study
 from src.configuration import settings
 
 PLANS = settings.ROOT / "studies" / "plans"

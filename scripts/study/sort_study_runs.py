@@ -1,7 +1,7 @@
 """Sort a study's runs into its groups, each with its eval log, and prove every file arrived.
 
-    uv run python -m scripts.sort_study_runs runs/ian_baseline_explorations_1            # dry run: what would move
-    uv run python -m scripts.sort_study_runs runs/ian_baseline_explorations_1 --apply    # move, record and verify
+    uv run python -m scripts.study.sort_study_runs runs/ian_baseline_explorations_1           # dry run: what would move
+    uv run python -m scripts.study.sort_study_runs runs/ian_baseline_explorations_1 --apply   # move, record and verify
 
 A run at the study's top level goes into a group by its index record (src/measures/run_index.py, joined with the study
 table for the study the table states), which carries run_validity's verdict as the study applies it:

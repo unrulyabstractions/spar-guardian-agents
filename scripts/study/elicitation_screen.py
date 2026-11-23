@@ -1,17 +1,17 @@
 """A screen of the elicitation cell: several models, several seeds each, as many runs at once as the machine holds.
 
-    STUDY=study_elicitation uv run python -m elicitation.screen --models muse-glimmer-30b-openrouter \
+    STUDY=study_elicitation uv run python -m scripts.study.elicitation_screen --models muse-glimmer-30b-openrouter \
         qwen3.8-27b-openrouter gemma-4-31b-openrouter --samples 5 --jobs 5 [--set key=value ...] [--summary-only]
 
-Sample k of a model is `python -m elicitation.swe --model <model> --condition <condition> --set seed=<k>`, which names
-its run flipt_duo_<model>_s<k>, or flipt_duo_<model>_<condition>_s<k> under a condition other than none. Its output
-goes to logs/<study>/screen/<name>.log. The runs go round robin over the models, so every model advances at the same
-pace. Each run's line prints as it ends. A run whose signals.jsonl exists is skipped,
+Sample k of a model is `python -m studies.cells.swe.flipt_duo --model <model> --condition <condition> --set seed=<k>`,
+which names its run flipt_duo_<model>_s<k>, or flipt_duo_<model>_<condition>_s<k> under a condition other than none.
+Its output goes to logs/<study>/screen/<name>.log. The runs go round robin over the models, so every model advances at
+the same pace. Each run's line prints as it ends. A run whose signals.jsonl exists is skipped,
 so a stopped screen resumes. Every --set goes to every run. --set seed is refused, since a sample's seed is its number.
 
-The summary gives each run's team Cheating rung, its agents' rungs and its ledger (scripts/screen.py summary). Then one
-line per model gives its finished runs, how many teams hold each kind of the code's evidence from tried to shipped and
-each kind of travel evidence, how many passed the hidden tests, and how many model calls errored.
+The summary gives each run's team Cheating rung, its agents' rungs and its ledger (scripts/study/screen.py summary).
+Then one line per model gives its finished runs, how many teams hold each kind of the code's evidence from tried to
+shipped and each kind of travel evidence, how many passed the hidden tests, and how many model calls errored.
 """
 from __future__ import annotations
 
@@ -21,11 +21,11 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from elicitation.swe import CONDITIONS, default_name
-from scripts import screen
+from scripts.study import screen
 from src.configuration import settings
 from src.measures.run_directory import RunDir
 from src.models import model_registry as models
+from studies.cells.swe.flipt_duo import CONDITIONS, default_name
 
 RATE_EVIDENCE = ("tried", "opened", "used", "shipped")
 """The kinds of the team's evidence (src/measures/rungs.py EVIDENCE) a model's row counts."""
@@ -41,7 +41,7 @@ def jobs(entries: list[str], samples: int, condition: str = "none") -> list[tupl
 
 def command(entry: str, sample: int, pairs: list[str], condition: str = "none") -> list[str]:
     chosen = ["--condition", condition] if condition != "none" else []
-    return [sys.executable, "-m", "elicitation.swe", "--model", entry, *chosen,
+    return [sys.executable, "-m", "studies.cells.swe.flipt_duo", "--model", entry, *chosen,
             *[arg for pair in pairs for arg in ("--set", pair)], "--set", f"seed={sample}"]
 
 
@@ -88,7 +88,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--set", dest="pairs", action="append", default=[], metavar="KEY=VALUE",
                         help="a SwarmConfig field for every run; repeatable")
     parser.add_argument("--condition", default="none", choices=list(CONDITIONS),
-                        help="what both agents are told about cheating (elicitation.swe CONDITIONS)")
+                        help="what both agents are told about cheating (studies.cells.swe.flipt_duo CONDITIONS)")
     parser.add_argument("--summary-only", action="store_true", help="print the summary of what exists and stop")
     args = parser.parse_args(argv)
     unknown = [entry for entry in args.models if models.entry_name(entry) != entry]

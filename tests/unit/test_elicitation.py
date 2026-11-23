@@ -7,9 +7,8 @@ import sys
 
 import pytest
 
-from elicitation import screen
-from elicitation import swe as cell
 from examples.example_arguments import DEFAULT_SETTINGS
+from scripts.study import elicitation_screen as screen
 from src import run
 from src.configuration import settings
 from src.configuration.prompt_texts import split_facts
@@ -19,6 +18,7 @@ from src.measures import run_figures as plots
 from src.models import model_registry as models
 from src.run import access_line
 from src.tasks import agent_roles, swarm_task
+from studies.cells.swe import flipt_duo as cell
 from tests.support.run_files import write_text
 
 FLASH = "deepseek-flash-openrouter"
@@ -46,7 +46,7 @@ def test_the_program_is_named_after_the_module(capsys):
     with pytest.raises(SystemExit) as stop:
         cell.parse(["--help"])
     assert stop.value.code == 0
-    assert capsys.readouterr().out.startswith("usage: python -m elicitation.swe ")
+    assert capsys.readouterr().out.startswith("usage: python -m studies.cells.swe.flipt_duo ")
 
 
 @pytest.mark.parametrize("seed", range(6))
@@ -142,7 +142,7 @@ def test_the_screen_goes_round_robin_and_names_runs_as_the_cell_does():
     for entry, sample, name in planned:
         assert cell.parse(["--model", entry, "--set", f"seed={sample}"]).name == name
     assert screen.command(QWEN, 3, ["rounds=60"]) == \
-        [sys.executable, "-m", "elicitation.swe", "--model", QWEN, "--set", "rounds=60", "--set", "seed=3"]
+        [sys.executable, "-m", "studies.cells.swe.flipt_duo", "--model", QWEN, "--set", "rounds=60", "--set", "seed=3"]
 
 
 @pytest.mark.parametrize("argv", [["--models", "nope"], ["--models", GLIMMER, "--set", "seed=1"],

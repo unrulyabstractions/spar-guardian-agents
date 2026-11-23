@@ -1,7 +1,7 @@
-"""scripts/sort_study_runs.py on a study built under tmp_path: the dry run writes nothing; --apply moves each run into
-its group with its eval log and its figures, renames a hand-made earlier attempt into attempts/, records every file with
-its size and sha256 and checks each one after the move; it refuses live boxes, young runs, names two folders hold and
-taken targets, and a mismatch exits 1. Every run keeps every index field but its path and its group."""
+"""scripts/study/sort_study_runs.py on a study built under tmp_path: the dry run writes nothing; --apply moves each run
+into its group with its eval log and its figures, renames a hand-made earlier attempt into attempts/, records every
+file with its size and sha256 and checks each one after the move; it refuses live boxes, young runs, names two folders
+hold and taken targets, and a mismatch exits 1. Every run keeps every index field but its path and its group."""
 from __future__ import annotations
 
 import hashlib
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts import sort_study_runs as sort
+from scripts.study import sort_study_runs as sort
 from src.measures.run_index import FIELDS, build
 from tests.support.run_builder import write_status_log
 from tests.support.run_files import write_text

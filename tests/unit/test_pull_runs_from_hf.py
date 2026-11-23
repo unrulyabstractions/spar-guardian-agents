@@ -1,6 +1,6 @@
-"""scripts/pull_runs_from_hf.py with no network: its mapping is the upload's reversed, a local file that differs stops
-the pull without --force, --dry-run writes nothing, a study or run the Hub lacks is refused in one line, and a pull
-places each file with the Hub's bytes."""
+"""scripts/hf/pull_runs_from_hf.py with no network: its mapping is the upload's reversed, a local file that differs
+stops the pull without --force, --dry-run writes nothing, a study or run the Hub lacks is refused in one line, and a
+pull places each file with the Hub's bytes."""
 from __future__ import annotations
 
 import hashlib
@@ -10,8 +10,8 @@ from pathlib import Path
 import pytest
 from huggingface_hub import RepoFile, RepoFolder
 
-from scripts import pull_runs_from_hf as pull
-from scripts import upload_runs_to_hf as upload
+from scripts.hf import pull_runs_from_hf as pull
+from scripts.hf import upload_runs_to_hf as upload
 from tests.support.run_files import write_text
 
 FAKE = "hf_FAKEtokenFAKEtoken0123456789abcd"

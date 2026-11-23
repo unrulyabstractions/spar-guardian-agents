@@ -1,5 +1,5 @@
-"""elicitation/publish.py with no network: what it refuses to publish, what it would publish, and how it compares the
-Hub's files with the local ones."""
+"""scripts/hf/publish_arena_capstone.py with no network: what it refuses to publish, what it would publish, and how it
+compares the Hub's files with the local ones."""
 from __future__ import annotations
 
 import hashlib
@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import huggingface_hub
 import pytest
 
-from elicitation import publish
+from scripts.hf import publish_arena_capstone as publish
 from tests.support.run_files import write_text
 
 KEY = "sk-or-v1-" + "0123456789abcdef" * 4
@@ -66,11 +66,12 @@ def test_a_key_in_a_zstandard_member_is_found_and_an_unreadable_member_blocks(tm
 
 
 def test_a_fresh_interpreter_reads_the_zstandard_members_through_the_script_alone(tmp_path):
-    # other test modules teach zipfile Zstandard in this process; `python -m elicitation.publish` starts clean
+    # other test modules teach zipfile Zstandard in this process;
+    # `python -m scripts.hf.publish_arena_capstone` starts clean
     path = tmp_path / "z.eval"
     with zipfile.ZipFile(path, "w", compression=93) as archive:
         archive.writestr("samples/1.json", '{"text": "clean"}')
-    code = ("import sys; from elicitation import publish; "
+    code = ("import sys; from scripts.hf import publish_arena_capstone as publish; "
             "print(publish.findings([publish.Path(sys.argv[1])], {}))")
     run = subprocess.run([sys.executable, "-c", code, str(path)], cwd=publish.settings.ROOT, capture_output=True,
                          text=True, timeout=120)

@@ -1,6 +1,6 @@
 """Publish a study's runs and logs to the private Hugging Face dataset unrulyabstractions/arena-capstone.
 
-    uv run python -m elicitation.publish study_elicitation_2 [--dry-run]
+    uv run python -m scripts.hf.publish_arena_capstone study_elicitation_2 [--dry-run]
 
 runs/<study>/ and logs/<study>/ go to spar-guardian-agents/runs/<study>/ and spar-guardian-agents/logs/<study>/ in the
 dataset, in one commit. Before it uploads, the script refuses when the dataset is not private, or when any file, or any
@@ -54,7 +54,7 @@ SHAPES = {
 
 
 def refuse(message: str) -> None:
-    print(f"python -m elicitation.publish: error: {message}", file=sys.stderr)
+    print(f"python -m scripts.hf.publish_arena_capstone: error: {message}", file=sys.stderr)
     raise SystemExit(2)
 
 
@@ -151,7 +151,7 @@ def remote_files(api, study: str) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="python -m elicitation.publish", description=__doc__,
+    parser = argparse.ArgumentParser(prog="python -m scripts.hf.publish_arena_capstone", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("study", help="a folder of runs/ and logs/, e.g. study_elicitation_2")
     parser.add_argument("--dry-run", action="store_true", help="check everything, upload nothing")

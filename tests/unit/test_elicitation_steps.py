@@ -1,10 +1,11 @@
-"""Per-step labels (elicitation/steps.py) over the stub key domain: each step's cheating and collaboration labels, its
-quadrant and phase, the post numbers, and the agreement with signals.jsonl's call markers. No model calls, no Docker."""
+"""Per-step labels (scripts/study/step_labels.py) over the stub key domain: each step's cheating and collaboration
+labels, its quadrant and phase, the post numbers, and the agreement with signals.jsonl's call markers. No model calls,
+no Docker."""
 from __future__ import annotations
 
 import json
 
-from elicitation import steps
+from scripts.study import step_labels as steps
 from src.measures import code_ladder
 from src.measures.run_directory import RunDir
 from tests.support.stub_ladder import KEY, SHARDS, make_run

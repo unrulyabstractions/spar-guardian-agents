@@ -12,19 +12,22 @@ import sys
 import zipfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:  # run as a file, `python scripts/upload_runs_to_hf.py`, as well as with -m
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:  # run as a file, `python scripts/hf/upload_runs_to_hf.py`, as well as with -m
     sys.path.insert(0, str(ROOT))
 
 from huggingface_hub import CommitOperationAdd, CommitOperationDelete, HfApi, RepoFile, get_token  # noqa: E402
 from huggingface_hub.errors import EntryNotFoundError  # noqa: E402
 
-from elicitation.publish import same, secrets  # noqa: E402  (publish also teaches zipfile Inspect's zstd members)
+from scripts.hf.publish_arena_capstone import (  # noqa: E402  (publish also teaches zipfile Inspect's zstd members)
+    same,
+    secrets,
+)
 from src.measures.run_directory import RunDir  # noqa: E402
 from src.utils import progress  # noqa: E402
 
 REPO = "unrulyabstractions/spar-swarm"
-PROG = "python scripts/upload_runs_to_hf.py"
+PROG = "python scripts/hf/upload_runs_to_hf.py"
 OLD_LAYOUT = "set_aside_"
 """logs/<study>/set_aside_*/ hold old-layout copies of runs made again (a run folder and its log side by side). They
 never go, and --delete-stale deletes the Hub's copies of them when no local file of runs/<study>/ names them."""

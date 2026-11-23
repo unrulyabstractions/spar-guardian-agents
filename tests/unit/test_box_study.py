@@ -11,7 +11,6 @@ from pathlib import Path
 import pytest
 
 from examples.example_arguments import parse_example_arguments
-from scripts import screen
 from scripts.box import fleet, fleet_layout, study_table, vast_api
 from scripts.box.fleet_layout import BOX_KEY, MODELS, REGULATORS, capacity_of
 from scripts.box.study_table import (
@@ -31,6 +30,7 @@ from scripts.box.study_table import (
     pack,
     stage_boxes,
 )
+from scripts.study import screen
 from src.configuration import settings
 from src.configuration.presets import build_config
 from src.models import model_registry as models

@@ -23,7 +23,7 @@ src/configuration/pipeline_parts.yaml, every other path in NOT_PARTS. FILES name
 layout is runs/<study>/[<group>/]<run>/processed/ (what the eval log gives, no label) and analysis/ (what is made from
 processed/). A run folder holds only these two folders, and any run nested inside it (OLD/runs/smoke). Every reader
 and writer reaches a run's files through FILES, RunDir.file and RunDir.output; tests/unit/test_run_paths.py fails on a
-run file's name joined to a path anywhere else. scripts/migrate_run_layout.py moved the older layout's folders here.
+run file's name joined to a path anywhere else. A one-time move of 2026-11-22 put the older layout's folders here.
 
 run.json is read once per RunDir and again after write_run_json_block. The JSON Lines files are read on every call, so
 a measure that rewrites one (the code record's signals.jsonl) reads its own rows back. A missing file reads as empty.
@@ -68,8 +68,8 @@ NOT_PARTS = {
     "step_labels.jsonl": "analysis/step_labels.jsonl",
 }
 """The stored paths no part of the registry owns: Lucy's SWE measures, the tools' board cache,
-the judges' folder, the tools' outputs, the run's figures and elicitation's labels per step (elicitation/steps.py). A
-folder ends in "/"."""
+the judges' folder, the tools' outputs, the run's figures and elicitation's labels per step
+(scripts/study/step_labels.py). A folder ends in "/"."""
 
 
 def files_table(registry: pipeline_parts.Registry) -> dict[str, str]:
@@ -151,11 +151,12 @@ def run_places(study: Path, name: str) -> list[Path]:
 
 def find_run(study: Path, name: str) -> Path | None:
     """The folder of the run of this name, at the study's top level or in the one group that holds it; None when no
-    folder holds it. Raises ValueError when two folders hold it: scripts/sort_study_runs.py sets the earlier aside."""
+    folder holds it. Raises ValueError when two folders hold it: scripts/study/sort_study_runs.py sets the earlier
+    aside."""
     places = run_places(study, name)
     if len(places) > 1:
         raise ValueError(f"{len(places)} folders hold a run named {name}: {', '.join(map(str, places))}. Set the "
-                         f"earlier aside with `uv run python -m scripts.sort_study_runs {study}`")
+                         f"earlier aside with `uv run python -m scripts.study.sort_study_runs {study}`")
     return places[0] if places else None
 
 

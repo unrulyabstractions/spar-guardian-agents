@@ -1,11 +1,12 @@
-"""scripts/archive_study.py: a study's runs and logs move into OLD/ with a record, and nothing moves when it refuses."""
+"""scripts/study/archive_study.py: a study's runs and logs move into OLD/ with a record, and nothing moves when it
+refuses."""
 from __future__ import annotations
 
 import json
 import os
 import time
 
-from scripts import archive_study
+from scripts.study import archive_study
 
 
 def study(root, name="s1", age_s=3600):

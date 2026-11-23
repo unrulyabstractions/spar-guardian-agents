@@ -16,10 +16,9 @@ from pathlib import Path
 from src.configuration import settings
 from src.measures.run_directory import FILES
 
-FOLDERS_SCANNED = ("src", "scripts", "elicitation", "tools", "examples", "studies", "tests")
-EXEMPT = {"src/measures/run_directory.py", "scripts/migrate_run_layout.py", "tests/unit/test_run_paths.py",
-          "tests/unit/test_migrate_run_layout.py"}
-"""The path table itself, the move from the older layout (which must name it) and its test, and this test."""
+FOLDERS_SCANNED = ("src", "scripts", "tools", "examples", "studies", "tests")
+EXEMPT = {"src/measures/run_directory.py", "tests/unit/test_run_paths.py"}
+"""The path table itself and this test."""
 OLDER = ("judge.jsonl", "ladder.jsonl", "ladder_actions.jsonl", "rungs.json", "smoke_results.json")
 """The archive's older ladders' files, which no code reads any more."""
 DOTTED = {name for name in FILES if "." in name} | set(OLDER)

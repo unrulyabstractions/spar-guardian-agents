@@ -1,4 +1,4 @@
-"""scripts/upload_runs_to_hf.py with no network: where the token comes from and that it is never shown, which files
+"""scripts/hf/upload_runs_to_hf.py with no network: where the token comes from and that it is never shown, which files
 go and which stay, what it refuses, that --dry-run uploads nothing, what --delete-stale deletes and what it never
 touches, and the apart controls as a study."""
 from __future__ import annotations
@@ -11,8 +11,8 @@ import pytest
 from huggingface_hub import CommitOperationAdd, CommitOperationDelete, RepoFile
 from huggingface_hub.errors import EntryNotFoundError
 
-from scripts import pull_runs_from_hf as pull
-from scripts import upload_runs_to_hf as upload
+from scripts.hf import pull_runs_from_hf as pull
+from scripts.hf import upload_runs_to_hf as upload
 from tests.support.run_files import write_bytes, write_text
 
 FAKE = "hf_FAKEtokenFAKEtoken0123456789abcd"

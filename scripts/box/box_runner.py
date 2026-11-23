@@ -53,7 +53,7 @@ from inspect_ai.log import read_eval_log
 
 from scripts.box.fleet_layout import BOX_KEY, TASKS, now_iso
 from scripts.box.study_table import SWE_ISSUES, Box, Job, box_jobs, find_box, jobs_sha256, key_problems
-from scripts.screen import summary
+from scripts.study.screen import summary
 from src.configuration import settings
 from src.configuration.presets import add_config_arguments, build_config, config_pairs
 from src.configuration.settings import INCOMPLETE_FAILURES

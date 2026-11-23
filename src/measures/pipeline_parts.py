@@ -50,7 +50,7 @@ HEADER = """\
 #
 # To add a part: write its module, write its entry below with file, make, needs, files and pins, run
 # `python -m src pipeline add <part> "<what the first version does>"`, and describe its file and fields in
-# scripts/study_readme_fields.yaml.
+# scripts/study/study_readme_fields.yaml.
 # When a part's code changes its output: `python -m src pipeline bump <part> "<what changed>"`.
 # When it changes no stored byte: `python -m src pipeline re-lock <part> "<why no output changes>"`.
 # `python -m src pipeline status` lists every part and whether its code moved since it was locked.

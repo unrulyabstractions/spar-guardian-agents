@@ -1,5 +1,5 @@
-"""Each study's README.md (scripts/study_readme.py) is current against its own files and the code, every study folder
-has an entry, and the generator refuses a field or a file it has no meaning for."""
+"""Each study's README.md (scripts/study/study_readme.py) is current against its own files and the code, every study
+folder has an entry, and the generator refuses a field or a file it has no meaning for."""
 from __future__ import annotations
 
 import json
@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts import study_readme
+from scripts.study import study_readme
 from src.configuration.settings import ROOT
 from src.measures.run_directory import FILES
 from tests.support.run_files import write_text
@@ -31,7 +31,7 @@ def test_readme_is_current(study):
     if study_readme.data_mtime(folder) > written:
         pytest.skip(f"runs/{study} changed after its README: make study-readmes writes it")
     assert readme.read_text() == text, (
-        f"runs/{study}/README.md is stale against the code: uv run python -m scripts.study_readme runs/{study}")
+        f"runs/{study}/README.md is stale against the code: uv run python -m scripts.study.study_readme runs/{study}")
 
 
 def test_a_readme_is_checked_only_against_data_older_than_it(tmp_path, monkeypatch):

@@ -13,7 +13,7 @@ budgets; regulators with the oversight tools and unbounded reads, at the `ambigu
 every agent's rounds and calls per round (SwarmConfig.rounds, calls_per_round); split access to the exploit.
 
 The command line applies the preset, then the scale, then every `key=value` pair. `src/cli.py`, the example scripts
-(examples/example_arguments.py) and the screen (`python -m scripts.screen`) take the same flags through
+(examples/example_arguments.py) and the screen (`python -m scripts.study.screen`) take the same flags through
 add_config_arguments.
 """
 from __future__ import annotations

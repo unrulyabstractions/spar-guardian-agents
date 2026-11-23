@@ -16,7 +16,7 @@ import yaml
 from pydantic import ValidationError
 
 from examples.example_arguments import parse_example_arguments
-from scripts import screen
+from scripts.study import screen
 from src import cli, run
 from src.configuration import settings
 from src.configuration.presets import build_config
@@ -294,7 +294,7 @@ def test_a_real_process_can_only_draw():
 
 
 def test_nothing_a_real_run_imports_reaches_the_ordered_names():
-    for root in ("src", "examples", "studies", "elicitation", "scripts", "tools"):
+    for root in ("src", "examples", "studies", "scripts", "tools"):
         for path in (settings.ROOT / root).rglob("*.py"):
             if ".venv" not in path.parts:
                 assert not re.search(r"^\s*(?:from|import)\s+tests\b", path.read_text(), re.M), path

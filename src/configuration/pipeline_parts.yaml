@@ -3,7 +3,7 @@
 #
 # To add a part: write its module, write its entry below with file, make, needs, files and pins, run
 # `python -m src pipeline add <part> "<what the first version does>"`, and describe its file and fields in
-# scripts/study_readme_fields.yaml.
+# scripts/study/study_readme_fields.yaml.
 # When a part's code changes its output: `python -m src pipeline bump <part> "<what changed>"`.
 # When it changes no stored byte: `python -m src pipeline re-lock <part> "<why no output changes>"`.
 # `python -m src pipeline status` lists every part and whether its code moved since it was locked.
@@ -35,16 +35,18 @@ parts:
     file: [processed/replay/steps.jsonl, processed/replay/replay.json, processed/tmp_snapshots.json]
     make: null
     needs: [export]
-    files: [src/replay/*.py, src/domains/*/*_replay.py, scripts/replay_study.py]
+    files: [src/replay/*.py, src/domains/*/*_replay.py, scripts/study/replay_study.py]
     pins: []
     version: 2
-    fingerprint: sha256:a6c1a337e5bf1df794e7e70b74d701f3fc8424084895317ad89444e8809af33c
+    fingerprint: sha256:8ff7a19716a34bd940b72ce1d61a3d8801ef8a60877ae606dfc77b877dc0154a
     log:
       1: '2026-11-22 first version: the faithful replay''s steps.jsonl and replay.json, and its tmp_snapshots.json
         of c619e3d'
       2: '2026-11-22 2026-11-22: a call the turn rules refused is never replayed, and the seed pack''s
         files are planted (c061891, c5a04b6) (re-locked 2026-11-22: the stored layout: the same bytes,
-        read and written under processed/ and analysis/ through run_directory.FILES)'
+        read and written under processed/ and analysis/ through run_directory.FILES) (re-locked 2026-11-23:
+        scripts/replay_study.py moved to scripts/study/replay_study.py; its one changed line
+        finds the repository two folders up instead of one, the same root (replay_study.ROOT == settings.ROOT))'
   judge_cheatbench:
     file: analysis/judges/cheatbench.*.jsonl
     make: null
@@ -127,7 +129,7 @@ parts:
     files: [src/measures/stored_json.py, src/measures/topology_fact.py, src/configuration/seed_packs.py]
     pins: []
     version: 1
-    fingerprint: sha256:8e286eb814a3f18d2dde827b9269b12e625be6305b7d3fe5b3af283a1104b612
+    fingerprint: sha256:88b90e6de4d4c1d69404fa9cb7093254876e955d74b69a27032909abc14cdede
     log:
       1: '2026-11-22 first version: who posted, read, was shown and named whom, per board, from communication/
         (re-locked 2026-11-22: 9c48ea6 changed seed_packs.authors only; is_seeded, which topology reads,
@@ -135,9 +137,12 @@ parts:
         processed/ and analysis/ through run_directory.FILES) (re-locked 2026-11-22: a board record of
         who came and went takes no post number and is marked record; no stored run holds a record, and
         processing ian_seed_prototyping_0 and _1 (87 runs) into a copy wrote the same bytes) (re-locked
-        2026-11-23: seed_packs.py''s docstrings name swe/exp1_called_cheating in place of
-        the removed exp0_ packs; the 8 runs of OLD/runs/ian_seed_prototyping_1, copied and processed with
-        --force topology by 1029e9e''s code and by this code, are byte-equal but versions.json)'
+        2026-11-23: seed_packs.py''s docstrings name swe/exp1_called_cheating in place of the removed
+        exp0_ packs; the 8 runs of OLD/runs/ian_seed_prototyping_1, copied and processed with --force
+        topology by 1029e9e''s code and by this code, are byte-equal but versions.json) (re-locked 2026-11-23:
+        seed_packs.py''s docstring names scripts/study/run_study.py; the 8 runs of OLD/runs/ian_seed_prototyping_1,
+        copied and processed with --force topology by 508d2c2''s code and by this code, are byte-equal
+        but versions.json)'
   cheating:
     file: analysis/labels/cheating.json
     make: src.ui.viewer_parts:cheating_part

@@ -13,9 +13,9 @@ goes into the run's name, flipt_duo_<model>_<condition>_s<seed>, and run.json "e
 --name names a run otherwise, and replaces a run of that name as the examples do. A --set that changes the team (two
 agents, no regulator, no disregulator) is refused.
 
-    uv run python -m elicitation.swe --model deepseek-flash-openrouter
-    uv run python -m elicitation.swe --model deepseek-flash-openrouter --set seed=1
-    uv run python -m elicitation.swe --model qwen3.8-27b-openrouter --condition cheat_explicit --set seed=1
+    uv run python -m studies.cells.swe.flipt_duo --model deepseek-flash-openrouter
+    uv run python -m studies.cells.swe.flipt_duo --model deepseek-flash-openrouter --set seed=1
+    uv run python -m studies.cells.swe.flipt_duo --model qwen3.8-27b-openrouter --condition cheat_explicit --set seed=1
 """
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ CONDITIONS = {
 
 def refuse(message: str) -> None:
     """An argument error, as argparse gives one: the message on stderr and exit code 2."""
-    print(f"python -m elicitation.swe: error: {message}", file=sys.stderr)
+    print(f"python -m studies.cells.swe.flipt_duo: error: {message}", file=sys.stderr)
     raise SystemExit(2)
 
 

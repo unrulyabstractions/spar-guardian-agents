@@ -274,7 +274,7 @@ The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the mo
 |---|---|
 | `examples/` | one generic script per task and cell; see `examples/README.md` |
 | `seeds/` | the seed packs, one folder per pack, `seeds/<task>/<pack>/`; see `seeds/README.md` |
-| `studies/` | the studies: `plans/` (the plans of `scripts/run_study.py`) and `cells/<task>/` (the cell scripts made for a study); see `studies/README.md` |
+| `studies/` | the studies: `plans/` (the plans of `scripts/study/run_study.py`) and `cells/<task>/` (the cell scripts made for a study); see `studies/README.md` |
 | `scripts/` | `run_study.py` (a study from its plan in `studies/plans/`), `screen.py` (the example cells in bulk), `study_readme.py` (each study's `runs/<study>/README.md`: its layout and every file's schema, from the data and the code), `paper/` (the paper's figures, tables and appendix) and `box/` (the rented boxes; see `scripts/box/README.md`) |
 | `tools/` | the analysis tools in their own environment; see `tools/README.md` |
 | `tests/` | `unit/` (one test module per module or concept), `smoke/` (the mock-model suites), `tools/` (the analysis tools' tests) and `support/` (what they share) |

@@ -29,7 +29,7 @@ lines joined by a space, is the pack's `about`; its second paragraph names the k
 numbered from 01 with no gap: a front matter of one line `author: k`, then the post's text, its surrounding blank
 lines dropped. A file's text is its bytes as UTF-8, planted as they are. "{author<k>}" in a text becomes the k-th
 author's ID. A seed record before 2026-11-22's folder layout also lists `harvest`, the ids of the posts its pack was
-written from; a newer one has none. studies/ holds the plans of scripts/run_study.py, not packs.
+written from; a newer one has none. studies/ holds the plans of scripts/study/run_study.py, not packs.
 
 How the ladders read a seed (the decision of 2026-11-22): a seeded post or file is the harness's, never a teammate's
 act. The transcript scan counts it as exposure only when its own text names the honeypot's location, the domain's

@@ -100,7 +100,7 @@ def is_fleet_label(label: str | None) -> bool:
 
 
 def run_name(cell: str, suffix: str, sample: int) -> str:
-    """The run name of sample k of a cell: <stem>_<suffix><k>, as scripts.screen names its runs."""
+    """The run name of sample k of a cell: <stem>_<suffix><k>, as scripts.study.screen names its runs."""
     return f"{cell.split('.', 1)[1]}_{suffix}{sample}"
 
 

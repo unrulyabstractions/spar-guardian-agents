@@ -608,7 +608,7 @@ models:
       Alibaba's open-weight flagship, Qwen/Qwen3.8-2.4T-A95B on Hugging Face; CheatBench has not run it.
 
   # ---------------------------------------------------------------------------------------------- open-weight targets
-  # Small open-weight models whose activations one GPU can read, for the screen in elicitation/ (elicitation/README.md).
+  # Small open-weight models whose activations one GPU can read, for the elicitation screen (studies/README.md).
   # Each pins a host that serves the Hugging Face weights at the precision the activation study reads, where one exists.
   qwen3.8-27b-openrouter:
     inspect: openrouter/qwen/qwen3.8-27b

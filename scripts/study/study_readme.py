@@ -1,12 +1,12 @@
 """Each study's README.md, generated from its own files and the code: runs/<study>/README.md.
 
-    uv run python -m scripts.study_readme runs/ian_baseline_explorations_1           # write the README
-    uv run python -m scripts.study_readme runs/ian_baseline_explorations_1 --check  # write nothing; 1 when it differs
-    uv run python -m scripts.study_readme --all [--check]                    # every study in STUDIES that is here
+    uv run python -m scripts.study.study_readme runs/ian_baseline_explorations_1          # write the README
+    uv run python -m scripts.study.study_readme runs/ian_baseline_explorations_1 --check  # write nothing; 1 if stale
+    uv run python -m scripts.study.study_readme --all [--check]                           # every study in STUDIES here
 
-A README holds what the study is (its `about` in scripts/study_readme_fields.yaml), its layout as a tree with counts,
-every file type a run holds with its schema (each field, the JSON types it takes in this study, and one line on what it
-means), how the files link (with how many links resolve), the three ladders' levels (src/ui/transcript_levels.py
+A README holds what the study is (its `about` in scripts/study/study_readme_fields.yaml), its layout as a tree with
+counts, every file type a run holds with its schema (each field, the JSON types it takes in this study, and one line on
+what it means), how the files link (with how many links resolve), the three ladders' levels (src/ui/transcript_levels.py
 LADDERS) and the judge labels' anchors (src/measures/judge_labels.py SCORE_ANCHORS), and five lines that load the study
 in Python.
 
@@ -116,7 +116,7 @@ SPECS = (
 # reading
 # --------------------------------------------------------------------------
 def meanings() -> dict:
-    """scripts/study_readme_fields.yaml: {files, opaque, study_files, links, studies}."""
+    """scripts/study/study_readme_fields.yaml: {files, opaque, study_files, links, studies}."""
     return yaml.safe_load(FIELDS_FILE.read_text())
 
 

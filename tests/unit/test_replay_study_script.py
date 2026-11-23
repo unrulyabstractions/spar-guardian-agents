@@ -1,5 +1,5 @@
-"""scripts/replay_study.py: only a faithful replay's steps.jsonl and replay.json reach the run's folder; an unfaithful
-one, a run that already holds a replay, and a replay with no run folder change nothing."""
+"""scripts/study/replay_study.py: only a faithful replay's steps.jsonl and replay.json reach the run's folder; an
+unfaithful one, a run that already holds a replay, and a replay with no run folder change nothing."""
 import importlib.util
 import json
 from pathlib import Path
@@ -7,7 +7,7 @@ from pathlib import Path
 from src.replay.replay_report import REPORT, SCHEMA, STEPS
 from tests.support.run_files import write_text
 
-SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "replay_study.py"
+SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "study" / "replay_study.py"
 spec = importlib.util.spec_from_file_location("replay_study", SCRIPT)
 rs = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(rs)

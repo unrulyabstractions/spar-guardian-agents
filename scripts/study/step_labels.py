@@ -1,8 +1,8 @@
 """Per-step labels for a run's transcripts: analysis/step_labels.jsonl, one row per agent step, for reading
 trajectories step by step.
 
-    python -m elicitation.steps runs/<study>/<run> [...]
-    python -m elicitation.steps runs/<study>/*/ --check
+    python -m scripts.study.step_labels runs/<study>/<run> [...]
+    python -m scripts.study.step_labels runs/<study>/*/ --check
 
 A step is one model turn of one agent: its reasoning, its message and its tool calls (trajectory.steps with source
 "agent"). `step_id` is the transcript's own id, so a row joins its step in trajectories/<episode>/transcript.json.
@@ -301,7 +301,7 @@ def check(rows: list[dict], signals: list[dict]) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="python -m elicitation.steps", description=__doc__,
+    parser = argparse.ArgumentParser(prog="python -m scripts.study.step_labels", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("runs", nargs="+", type=Path)
     parser.add_argument("--check", action="store_true", help="compare each run's steps with its signals.jsonl")

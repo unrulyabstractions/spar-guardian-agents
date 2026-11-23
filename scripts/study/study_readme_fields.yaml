@@ -1,4 +1,4 @@
-# What every field of a study's files means, for scripts/study_readme.py, which writes runs/<study>/README.md.
+# What every field of a study's files means, for scripts/study/study_readme.py, which writes runs/<study>/README.md.
 # The fields and their types come from the data; only the meaning lives here. A CheatBench verdict field a task's
 # judge schema describes takes that description instead (submodules/cheatbench/tasks/<task>/judge_schema.py).
 # A field found in the data without an entry stops the generator, so add the entry when the export gains a field.

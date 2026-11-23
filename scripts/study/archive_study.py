@@ -1,7 +1,7 @@
 """Archive a study: move runs/<study> and logs/<study> into OLD/, and prove every file arrived.
 
-    uv run python -m scripts.archive_study ian_seed_prototyping_0            # dry run: what would move
-    uv run python -m scripts.archive_study ian_seed_prototyping_0 --apply    # move, record and verify
+    uv run python -m scripts.study.archive_study ian_seed_prototyping_0            # dry run: what would move
+    uv run python -m scripts.study.archive_study ian_seed_prototyping_0 --apply    # move, record and verify
 
 A study goes to OLD/ only on the user's word (CLAUDE.md, section 5). Its runs go to OLD/runs/<study> and its eval logs
 and console logs to OLD/logs/<study>, where a run still finds its log (RunDir.eval_log reads the logs/ beside its
@@ -20,7 +20,7 @@ import datetime as dt
 import time
 from pathlib import Path
 
-from scripts.sort_study_runs import YOUNG_S, Move, apply, files_of
+from scripts.study.sort_study_runs import YOUNG_S, Move, apply, files_of
 from src.configuration.settings import ROOT
 
 ARCHIVE = "OLD"
