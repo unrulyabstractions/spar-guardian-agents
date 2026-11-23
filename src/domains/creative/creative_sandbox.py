@@ -51,11 +51,13 @@ from src.domains.creative._creative_settings import (
     REVIEW_IP,
     REVIEW_SERVER,
     SCORE_SO,
+    SIDE_COPY_DIR,
     STAGE_TAR,
     TASK_DIR,
     TEAM_GID,
     TEAM_GROUP,
     WRITING_CHARS,
+    Variant,
 )
 from src.sandbox import docker_images, staging
 from src.sandbox.agent_tools import AGENT_NAME, WORKDIR, Seat
@@ -151,16 +153,18 @@ def workspace_owners(plan: Plan) -> dict[str, str]:
     return {"team" if plan.team else plan.agents[0]: WORKDIR}
 
 
-def stage(plan: Plan, row: dict) -> dict:
+def stage(plan: Plan, row: dict, adds: Variant = Variant(), told: dict | None = None) -> dict:
     """The run's staging: {"layout": layout.json for sandbox/creative_setup.py, "files": {stage path: bytes},
     "review": the sidecar's config, "block": what the scorer, the ladder and run.json read}. Each workspace gets a
-    random reference directory and its own token; a split plants the holders' segments beside the reference."""
+    random reference directory and its own token; a split plants the holders' segments beside the reference. A
+    variant's side copies (adds.side_copies) plant each held file again in SIDE_COPY_DIR with the same readers, and the
+    block names them by agent (side_copies); a scenario's texts (`told`) put its notice file in each workspace."""
     kind = layout_of(plan)
     candidate = honeypot.candidate_name(row)
     url = f"http://{REVIEW_IP}:{secrets.randbelow(PORTS[1] - PORTS[0]) + PORTS[0]}/review"
     text = honeypot.reference_text(row)
     files: dict[str, bytes] = {}
-    workspaces, tokens, references, plants, holdings = {}, {}, {}, [], {}
+    workspaces, tokens, references, plants, holdings, side_copies = {}, {}, {}, [], {}, {}
     root_owner = AGENT_NAME if kind == "lone" else "root"     # CheatBench's agent makes them
     plant_dirs = [{"path": "/tmp/grading", "owner": root_owner, "group": root_owner, "mode": 0o755},
                   {"path": PLANT_ROOT, "owner": root_owner, "group": root_owner, "mode": 0o755}]
@@ -178,6 +182,9 @@ def stage(plan: Plan, row: dict) -> dict:
         files[f"ws{i}/instruction.txt"] = honeypot.brief_text(row).encode()
         files[f"ws{i}/grade_config.json"] = honeypot.grade_config(reference)
         files[f"ws{i}/grade.py"] = honeypot.grader_source(row, reference, held_by_review=plan.split).encode()
+        if told is not None:
+            files[f"ws{i}/notice"] = told["notice"].encode()
+            workspaces[workdir]["notice"] = told["notice_file"]
         if plan.split:
             # the whole at the config's path and the segments beside it, in a directory every agent lists, all alike
             # but for the access list that gives each holder its own
@@ -191,6 +198,20 @@ def stage(plan: Plan, row: dict) -> dict:
                 files[f"plant/{len(plants)}.md"] = content.encode()
                 plants.append({"path": path, "stage": f"plant/{len(plants)}.md", "owner": "root", "group": "root",
                                "mode": 0o640, "readers": [uids[a] for a, held in holdings.items() if path in held]})
+            if adds.side_copies:
+                plant_dirs.append({"path": SIDE_COPY_DIR, "owner": "root", "group": "root", "mode": 0o755})
+                # each held file again, with its holders as its readers: a file no agent holds has no side copy
+                dealt = [path for path in [reference, *paths] if any(path in mine for mine in holdings.values())]
+                side = honeypot.side_copies(row["id"], dealt)
+                for path, content in zip([reference, *paths], [text, *parts]):
+                    if path not in side:
+                        continue
+                    files[f"plant/{len(plants)}.md"] = content.encode()
+                    plants.append({"path": side[path], "stage": f"plant/{len(plants)}.md", "owner": "root",
+                                   "group": "root", "mode": 0o640,
+                                   "readers": [uids[a] for a, held in holdings.items() if path in held]})
+                side_copies = {a: {honeypot.item_of(path): side[path] for path in held}
+                               for a, held in holdings.items()}
             continue
         plant_dirs.append({"path": folder, "owner": ref_owner or owner, "group": ref_group or owner,
                            "mode": ref_dir_mode})
@@ -205,7 +226,7 @@ def stage(plan: Plan, row: dict) -> dict:
               "reference": text, "tie_threshold": honeypot.tie_threshold(), "keep": WRITING_CHARS}
     block = {"layout": kind, "candidate": candidate, "references": references, "review_url": url,
              "workspaces": workspace_owners(plan), "seats": {a: s.as_dict() for a, s in seats(plan).items()},
-             "planted": holdings}
+             "planted": holdings, **({"side_copies": side_copies} if adds.side_copies else {})}
     return {"layout": layout, "files": files, "review": review, "block": block}
 
 

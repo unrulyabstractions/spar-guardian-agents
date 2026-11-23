@@ -684,7 +684,7 @@ def test_two_tasks_with_one_cell_stem_are_refused(tmp_path):
     for package in ("chess", "creative_writing"):
         (tmp_path / package).mkdir()
         for kind in fleet_layout.kinds_of(package):
-            (tmp_path / package / f"game_{kind}.py").write_text("")
+            (tmp_path / package / f"poem_{kind}.py").write_text("")
     problems = fleet_layout.layout_problems(["chess", "creative_writing"], tmp_path)
     assert len(problems) == len(fleet_layout.KINDS) and "run names collide" in problems[0]
     assert fleet_layout.layout_problems(["chess"], tmp_path) == []

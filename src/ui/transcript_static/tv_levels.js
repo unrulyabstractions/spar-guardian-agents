@@ -291,6 +291,8 @@ const ROUTE_TITLES = {
   side_patch: 'Aimed reads of the side patch files outside the repository',
   fix_commit: 'Aimed reads naming the fix commit by id',
   network: 'Aimed fetches from the network',
+  reference: 'Aimed reads of the reference or its part files',
+  side_copy: 'Aimed reads of the side copies outside the workspace',
 };
 const routeChips = routes => ((routes || []).length
   ? h('div', { class: 'route-chips' }, routes.map(r => badge(r, 'plain', ROUTE_TITLES[r] || r))) : null);

@@ -81,7 +81,7 @@ parts:
       src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py]
     pins: []
     version: 2
-    fingerprint: sha256:8bf690f3c48be6fbf4c1086d1246fabb053d847273d6467f9953a8ce722c1f9a
+    fingerprint: sha256:37f4e145c694555e209b38995a07ed9866b7d60362efaf6c6ca164e94d82ea1a
     log:
       1: '2026-11-22 first version: the code record''s agent and team rows (code_ladder.signal_rows) of
         b7b1bed, and run.json''s signals block (re-locked 2026-11-22: the stored layout: the same bytes,
@@ -98,7 +98,10 @@ parts:
         named by id as the branch route; routes feed no label) (re-locked 2026-11-22: ian0flipt''s scenario
         (047132d): a run without swe.scenario reads as before, and no stored run has one) (re-locked 2026-11-22:
         one table of SWE variants; a run without swe.scenario reads as before, and no stored run has one)
-        (re-locked 2026-11-22: a docstring''s line wrap in _swe_honeypot.py; no code changed)'
+        (re-locked 2026-11-22: a docstring''s line wrap in _swe_honeypot.py; no code changed) (re-locked
+        2026-11-22: ian0poem''s side copies and scenario: a run without creative.side_copies or creative.variant
+        reads as before; the 151 stored runs of ian_seed_prototyping_0 and the OLD poem runs, processed
+        into two copies with main''s code and this branch, are byte-equal but for versions.json)'
   topology:
     file: processed/facts/topology.json
     make: src.measures.topology_fact:topology_part
@@ -127,7 +130,7 @@ parts:
       src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py]
     pins: []
     version: 2
-    fingerprint: sha256:25c32eafa69049c073477eece23130a48a5f7d105fd71b7a3762dabb6202b2cb
+    fingerprint: sha256:7fe6d41c81ba17e5dc8a9adc4307d15648badd9fe1bbc0cbd0b42caba409e7f3
     log:
       1: '2026-11-22 first version: the Cheating ladder with CheatBench''s labels beside its clauses,
         as the viewer keeps it, of b7b1bed (re-locked 2026-11-22: the stored layout: the same bytes, read
@@ -145,7 +148,10 @@ parts:
         _1 (87 runs) into a copy wrote the same bytes) (re-locked 2026-11-22: ian0flipt''s scenario (047132d):
         a run without swe.scenario reads as before, and no stored run has one) (re-locked 2026-11-22:
         one table of SWE variants; a run without swe.scenario reads as before, and no stored run has one)
-        (re-locked 2026-11-22: a docstring''s line wrap in _swe_honeypot.py; no code changed)'
+        (re-locked 2026-11-22: a docstring''s line wrap in _swe_honeypot.py; no code changed) (re-locked
+        2026-11-22: ian0poem''s side copies and scenario: a run without creative.side_copies or creative.variant
+        reads as before; the 151 stored runs of ian_seed_prototyping_0 and the OLD poem runs, processed
+        into two copies with main''s code and this branch, are byte-equal but for versions.json)'
   coordination:
     file: analysis/labels/coordination.json
     make: src.measures.coordination:coordination_part
@@ -171,7 +177,7 @@ parts:
       src/domains/*/*_settings.py]
     pins: []
     version: 2
-    fingerprint: sha256:c4fee6f4202f7d5e550026321a474f72c9a49af72122e2baab8955bdc514dfd4
+    fingerprint: sha256:60ea5b4ea177cfd23765145a5c8c014894334d7f9f9fe55ddc2855ba3c703f2f
     log:
       1: '2026-11-22 first version: the Collusion ladder as the viewer keeps it, of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -187,7 +193,10 @@ parts:
         and _1 (87 runs) into a copy wrote the same bytes) (re-locked 2026-11-22: ian0flipt''s scenario
         (047132d): a run without swe.scenario reads as before, and no stored run has one) (re-locked 2026-11-22:
         one table of SWE variants; a run without swe.scenario reads as before, and no stored run has one)
-        (re-locked 2026-11-22: a docstring''s line wrap in _swe_honeypot.py; no code changed)'
+        (re-locked 2026-11-22: a docstring''s line wrap in _swe_honeypot.py; no code changed) (re-locked
+        2026-11-22: ian0poem''s side copies and scenario: a run without creative.side_copies or creative.variant
+        reads as before; the 151 stored runs of ian_seed_prototyping_0 and the OLD poem runs, processed
+        into two copies with main''s code and this branch, are byte-equal but for versions.json)'
   judged:
     file: analysis/labels/judged.json
     make: src.ui.viewer_parts:judged_part
@@ -209,7 +218,7 @@ parts:
       src/ui/transcript_index.py, src/ui/transcript_levels.py, src/ui/viewer_parts.py]
     pins: []
     version: 2
-    fingerprint: sha256:72c4cf8c4cfeb085198b91d40bbe48b9ef33a9e27885add1c447d4becb7ea3a3
+    fingerprint: sha256:3ea71d0bed9e20f7fc953c4f129d9e81ae82131a8ee9cd3e2d54b6e4635103b6
     log:
       1: '2026-11-22 first version: the runs page''s row (transcript_index.build_row) of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -221,4 +230,7 @@ parts:
         it (run.json launch.module): the told-to-cheat runs of a study plan no longer read as baseline
         (re-locked 2026-11-22: a board record of who came and went takes no post number and is marked
         record; no stored run holds a record, and processing ian_seed_prototyping_0 and _1 (87 runs) into
-        a copy wrote the same bytes)'
+        a copy wrote the same bytes) (re-locked 2026-11-22: ian0poem''s side copies and scenario: a run
+        without creative.side_copies or creative.variant reads as before; the 151 stored runs of ian_seed_prototyping_0
+        and the OLD poem runs, processed into two copies with main''s code and this branch, are byte-equal
+        but for versions.json)'

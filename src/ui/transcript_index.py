@@ -361,11 +361,12 @@ def build_row(col: str, listed: Listed, rf: RunFiles, measured: dict) -> dict:
     influencers = influencer_conditioning(cell, cfg, rf.roles)
     sample = (rf.episodes[0].get("episode") if rf.episodes else "") or ""
     agents, workers = agents_words(n_agents, rf.roles)
+    variant = (rj.get("swe") or {}).get("variant") or (rj.get("creative") or {}).get("variant")
     return {
         "id": f"{col}/{listed.key}", "col": col, "key": listed.key,
         "run": run_name(listed.path) if listed.source != "manifest" else listed.meta.get("key"),
         "task_name": rf.task,
-        "task_label": task_label(rf.task, (rj.get("swe") or {}).get("variant") or sample.split("#")[0] or cell.stem),
+        "task_label": task_label(rf.task, variant or sample.split("#")[0] or cell.stem),
         "instance": sample.split("#")[0] or None,
         "arm_label": f"{agents}; workers {told}; {influencer_words(influencers)}", "agents": agents,
         "worker_conditioning": told, "influencer_conditioning": influencers, "model": cell.worker,

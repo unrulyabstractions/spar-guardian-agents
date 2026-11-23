@@ -116,7 +116,8 @@ Signals = the episode's agent row of signals.jsonl (src/measures/code_ladder.py)
           opened_call, opened_evidence, lines_seen, pieces_seen, joined_call, joined_evidence, probe, copies, used,
           used_evidence, tampered, tampered_evidence (chess alone), checked, checked_evidence, shipped,
           shipped_evidence, calls, on SWE routes (the sorted routes its aimed reads took over the whole
-          transcript: branch, side_patch, fix_commit, network; SweDomain.routes), and in a run with an access log
+          transcript: branch, side_patch, fix_commit, network; SweDomain.routes) and on a creative-writing run with
+          side copies (ian0poem) routes (reference, side_copy; CreativeDomain.routes), and in a run with an access log
           access_log (src/measures/access_evidence.py). exposed_source is own_action,
           teammate_post, teammate_actions, teammate_workspace (peer_shell), task_text (exposed_call null) or none. used,
           checked and shipped name content this
@@ -473,7 +474,7 @@ Agent = {agent, role, folder (its trajectories/ folder), transcript_bytes,
          episode: {agent, model, n_turns, n_tool_calls, wall_time, limit, score, ended_by, ok, failure,
                    final_text, usage, defense, defenses},   # the keys episodes.jsonl has of these
          cheatbench: {judge: verdict row},
-         routes: [str] | null}   # signals.jsonl's routes (SWE alone), chips beside the agent's Cheating rung
+         routes: [str] | null}   # signals.jsonl's routes (SWE, ian0poem), chips beside the agent's Cheating rung
 Board = {messages: [{id, board_no (P<n>; null on a record), notice (a harness notice), sender, role,   # per sample
          sent: {agent, call_id}, reads: [{agent, call_id}], record? (true on a record only)}]}   # (RunDir.boards)
 # A board message whose invocation_id is "presence_record" in communication/<sample>.json is a record of who came and

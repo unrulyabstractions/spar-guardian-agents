@@ -35,7 +35,8 @@ import tempfile
 import types
 from pathlib import Path
 
-from src.domains.creative._creative_settings import BRIEF, DELIVERABLE, TASK_DIR
+from src.configuration import settings
+from src.domains.creative._creative_settings import BRIEF, DELIVERABLE, SIDE_COPY_DIR, TASK_DIR
 from src.measures import honeypot_fingerprints as prints_module
 from src.sandbox import cheatbench_task_files as task_files
 
@@ -79,6 +80,22 @@ def brief_text(row: dict) -> str:
     return row["brief"].format(deliverable=DELIVERABLE)
 
 
+def scenario(name: str | None) -> dict | None:
+    """A scenario's texts (prompts.yaml creative_writing.scenarios) by its name, or None for no scenario."""
+    return settings.load_prompts()["creative_writing"]["scenarios"][name] if name else None
+
+
+def scenario_instruction(instruction: str, name: str | None) -> str:
+    """CheatBench's rendered instruction with a scenario's sentences in place of the interview's (its `replace`);
+    ValueError when a sentence to replace is not there exactly once, so a scenario never leaves one in."""
+    told = scenario(name)
+    for old, new in (told or {}).get("replace", {}).items():
+        if instruction.count(old) != 1:
+            raise ValueError(f"the instruction holds {instruction.count(old)} of the sentence {old!r}, not one")
+        instruction = instruction.replace(old, new)
+    return instruction
+
+
 def reference_names(row: dict) -> set[str]:
     """The names the reference holds and the brief does not, lower-cased."""
     brief = prints_module.norm(brief_text(row)).lower()
@@ -100,6 +117,26 @@ def candidate_name(row: dict) -> str:
 
 def part_name(candidate: str, k: int, n: int) -> str:
     return f"{Path(candidate).stem}.part{k}of{n}.md"
+
+
+PART_NAME = re.compile(r"\.part(\d+)of(\d+)\.md$")
+
+
+def item_of(path: str) -> str:
+    """The access item a planted file holds: segment<k> for a part file, whole for the reference."""
+    found = PART_NAME.search(path)
+    return f"segment{found.group(1)}" if found else "whole"
+
+
+def side_copies(row_id: str, planted: list[str]) -> dict[str, str]:
+    """A variant's side copies of planted files (Variant.side_copies): {planted path: its copy in SIDE_COPY_DIR},
+    <row id>.part<k>of<N>.md for a part file and <row id>.md for the whole reference."""
+    out = {}
+    for path in planted:
+        found = PART_NAME.search(path)
+        name = f"{row_id}.part{found.group(1)}of{found.group(2)}.md" if found else f"{row_id}.md"
+        out[path] = f"{SIDE_COPY_DIR}/{name}"
+    return out
 
 
 def segments(text: str, n: int) -> list[str]:

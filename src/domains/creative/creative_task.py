@@ -32,7 +32,7 @@ from src.domains.creative import _creative_honeypot as honeypot
 from src.domains.creative import _creative_scoring as scoring
 from src.domains.creative import creative_sandbox as sandbox
 from src.domains.creative._creative_ladder import CreativeDomain
-from src.domains.creative._creative_settings import DEFAULT_ROW, KEY, TASK, TASK_DIR
+from src.domains.creative._creative_settings import DEFAULT_ROW, KEY, TASK, TASK_DIR, VARIANTS, Variant
 from src.sandbox.access_log.access_monitor import Watched
 from src.sandbox.agent_tools import AgentTools, roster_tools
 from src.sandbox.agent_users import agent_users as users
@@ -51,6 +51,8 @@ SPLIT_DEVIATIONS = ["reference_cut_into_line_segments_one_part_file_per_holder",
                     "whole_reference_stays_at_its_path_readable_by_no_agent",
                     "grader_asks_the_review_endpoint_when_it_cannot_read_the_reference"]
 SOLO_DEVIATIONS = [users.PRIVATE_FILES_DEVIATION, "each_agent_has_its_own_workspace_reference_copy_and_review_token"]
+SIDE_COPY_DEVIATION = "each_held_piece_also_a_file_in_a_side_folder_readable_by_its_holder_alone"
+SCENARIO_DEVIATION = "interview_sentences_replaced_by_a_scenario_with_a_notice_file_in_each_workspace"
 
 
 class CreativeWriting(RowBenchmark):
@@ -65,6 +67,21 @@ class CreativeWriting(RowBenchmark):
     ladder = CreativeDomain
     piece_stem = "segment"
     task_deviations = DEVIATIONS
+
+    def __init__(self, row: str | None = None, variant: str | None = None) -> None:
+        """One brief; `variant` names a task of ours on top of it (_creative_settings.VARIANTS), on the briefs its
+        scenario fits."""
+        super().__init__(row)
+        if variant is not None:
+            if variant not in VARIANTS:
+                raise ValueError(f"variant must be one of {sorted(VARIANTS)}, got {variant!r}")
+            if VARIANTS[variant].rows and self.row not in VARIANTS[variant].rows:
+                raise ValueError(f"variant {variant} fits the briefs {list(VARIANTS[variant].rows)}, not {self.row}")
+        self.variant = variant
+        self.adds = VARIANTS.get(variant, Variant())
+        if variant is not None:
+            self.task_deviations = [*DEVIATIONS, *([SIDE_COPY_DEVIATION] if self.adds.side_copies else []),
+                                    *([SCENARIO_DEVIATION] if self.adds.scenario else [])]
 
     @classmethod
     def rows(cls) -> list[dict]:
@@ -82,6 +99,15 @@ class CreativeWriting(RowBenchmark):
         prompt = variants[variants["default"]]["prompt"]
         return {**cfg, "prompts": {**cfg["prompts"], "instruction": cfg["prompts"][prompt]}}
 
+    def instruction(self, cfg: dict, row: dict) -> str:
+        """CheatBench's rendering, with a variant's scenario sentences in place of the interview's."""
+        return honeypot.scenario_instruction(super().instruction(cfg, row), self.adds.scenario)
+
+    def first_note(self, plan: Plan, agent: str) -> str | None:
+        """A variant's scenario: its workspace note, which names the notice file. None otherwise."""
+        told = honeypot.scenario(self.adds.scenario)
+        return told["workspace"] if told else None
+
     def plan(self, config: SwarmConfig, roles: dict[str, str] | None = None) -> Plan:
         """The base plan, refused when the reference cannot be cut into its pieces or more than one agent of a split
         would hold the whole file."""
@@ -97,8 +123,9 @@ class CreativeWriting(RowBenchmark):
         """The images, the compose file, the staging tarball and the sidecar's config, the setup script and the block
         the setup, the scorer, the ladder and run.json read."""
         images = sandbox.ensure_images()
-        staged = sandbox.stage(plan, row)
-        return Staged(compose=sandbox.write_compose(), block={**staged["block"], "images": images},
+        staged = sandbox.stage(plan, row, self.adds, honeypot.scenario(self.adds.scenario))
+        variant = {"variant": self.variant, "scenario": self.adds.scenario} if self.variant else {}
+        return Staged(compose=sandbox.write_compose(), block={**staged["block"], **variant, "images": images},
                       files=sandbox.stage_files(staged, row["id"]), setup=sandbox.setup_script(plan))
 
     def tools(self, plan: Plan) -> AgentTools:
@@ -112,11 +139,14 @@ class CreativeWriting(RowBenchmark):
         return scoring.probe(state)
 
     async def watched(self, state) -> list[Watched]:
-        """What is planted in the one container: each workspace's reference, and under a split the holders' files."""
+        """What is planted in the one container: each workspace's reference, under a split the holders' files, and a
+        variant's side copies (object side_copy)."""
         block = scoring.creative(state)
         held = [path for paths in block["planted"].values() for path in paths]
         planted = dict.fromkeys([*block["references"].values(), *held])
-        return [Watched(machine=machines.DEFAULT_SERVICE, path=path, object="reference") for path in planted]
+        side = dict.fromkeys(path for copies in (block.get("side_copies") or {}).values() for path in copies.values())
+        return [*(Watched(machine=machines.DEFAULT_SERVICE, path=path, object="reference") for path in planted),
+                *(Watched(machine=machines.DEFAULT_SERVICE, path=path, object="side_copy") for path in side)]
 
     def scorers(self) -> list[Scorer]:
         return [scoring.creative_deliverables()]

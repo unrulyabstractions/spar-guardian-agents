@@ -42,7 +42,7 @@ from src.domains.creative import CreativeWriting
 from src.domains.creative import _creative_honeypot as honeypot
 from src.domains.creative import _creative_scoring as scoring
 from src.domains.creative import creative_sandbox as sandbox
-from src.domains.creative._creative_settings import DELIVERABLE, TASK_DIR, WRITING_CHARS
+from src.domains.creative._creative_settings import DELIVERABLE, TASK_DIR, VARIANTS, WRITING_CHARS, Variant
 from src.measures import honeypot_fingerprints as prints_module
 from src.sandbox.agent_tools import WORKDIR
 from tests.support.ordered_ids import drawn_ids
@@ -157,27 +157,29 @@ def bound(row: dict, part: str, workspace: list[str]) -> float:
     return len(reference & found) / len(reference)
 
 
-def plan_of(row_id: str, neutral: int, seed: int, roles: bool):
+def plan_of(row_id: str, neutral: int, seed: int, roles: bool, variant: str | None = None):
     """The run's plan as swarm_task builds it: `neutral` neutral agents, and with roles a regulator and a disregulator
     beside them."""
     pairs = [f"n_agents={neutral + 2 * roles}", f"seed={seed}", *(["regulators=1", "disregulators=1"] if roles else [])]
     config = build_config("default", "small", pairs)
-    return CreativeWriting(row_id).plan(config, tasks.agent_roles(config))
+    return CreativeWriting(row_id, variant=variant).plan(config, tasks.agent_roles(config))
 
 
-def audit(row: dict, neutral: int, seed: int, roles: bool, grade) -> list[str]:
+def audit(row: dict, neutral: int, seed: int, roles: bool, grade, variant: str | None = None) -> list[str]:
     """What breaks the rule in one run: a seat that reads the whole reference or another's part, a workspace file that
     holds the reference's lines, an agent that ties alone or whose bound reaches the tie, or a team whose parts put
-    together do not tie."""
-    run = f"{row['id']} n={neutral} seed={seed} roles={roles}"
+    together do not tie. Under a variant with side copies a seat reads each of its parts twice, the part file and its
+    side copy, the same text; any other count, or two texts for one part, breaks the rule."""
+    run = f"{row['id']} n={neutral} seed={seed} roles={roles} variant={variant}"
+    adds = VARIANTS[variant] if variant else Variant()
     try:
-        plan = plan_of(row["id"], neutral, seed, roles)
+        plan = plan_of(row["id"], neutral, seed, roles, variant)
     except ValueError as error:
         cut = "cannot cut" in str(error) or "leaves one blank" in str(error)
         return [] if cut and (row["id"], neutral) in REFUSED else [f"{run}: refused: {error}"]
     if (row["id"], neutral) in REFUSED:
         return [f"{run}: planned, though the reference cannot be cut"]
-    staged = sandbox.stage(plan, row)
+    staged = sandbox.stage(plan, row, adds)
     files, plants = staged["files"], staged["layout"]["plants"]
     reference, whole = honeypot.reference_text(row), staged["block"]["references"][WORKDIR]
     workspace = [files[f"ws0/{name}"].decode() for name in WORKSPACE_FILES]
@@ -190,19 +192,24 @@ def audit(row: dict, neutral: int, seed: int, roles: bool, grade) -> list[str]:
     for agent in plan.agents:
         held = {p["path"]: files[p["stage"]].decode() for p in plants if uids[agent] in p["readers"]}
         pieces = plan.pieces[agent]
-        if pieces is None or whole in held:
+        if pieces is None or whole in held or not all(PART.search(path) for path in held):
             problems.append(f"{run}: {agent} reads the whole reference")
             continue
         if not pieces:
             problems += [f"{run}: {agent} holds nothing and reads {sorted(held)}"] if held else []
             continue
         numbers = {path: tuple(map(int, PART.search(path).groups())) for path in held}
-        if sorted(k for k, _ in numbers.values()) != pieces or {n for _, n in numbers.values()} != {plan.n_pieces}:
+        if sorted({k for k, _ in numbers.values()}) != pieces or {n for _, n in numbers.values()} != {plan.n_pieces}:
             problems.append(f"{run}: {agent} reads parts {sorted(numbers.values())}, dealt {pieces}")
+        if len(held) != len(pieces) * (2 if adds.side_copies else 1):
+            problems.append(f"{run}: {agent} reads {len(held)} files for its {len(pieces)} part(s)")
+        texts = {k: {text for path, text in held.items() if numbers[path][0] == k} for k in pieces}
+        if any(len(found) != 1 for found in texts.values()):
+            problems.append(f"{run}: {agent} reads two texts for one part")
         if len(pieces) != 1:
             problems.append(f"{run}: neutral agent {agent} holds {len(pieces)} parts")
         pooled.update({numbers[path][0]: text for path, text in held.items()})
-        mine = "".join(held[path] for path in sorted(held, key=numbers.get))
+        mine = "".join(min(texts[k]) for k in sorted(texts) if texts[k])
         for draft in (mine, f"{mine}\n{brief}"):
             if grade(row, draft) == "tie":
                 problems.append(f"{run}: {agent} ties alone")
@@ -221,6 +228,17 @@ def audit(row: dict, neutral: int, seed: int, roles: bool, grade) -> list[str]:
 @pytest.mark.parametrize("neutral", SIZES)
 def test_no_agent_ties_alone_and_the_team_ties_together(neutral, roles, grade):
     problems = [problem for row in ROWS for seed in SEEDS for problem in audit(row, neutral, seed, roles, grade)]
+    assert not problems, f"{len(problems)} problem(s):\n" + "\n".join(problems[:40])
+
+
+@pytest.mark.parametrize("roles", [False, True], ids=["neutral", "with_roles"])
+@pytest.mark.parametrize("neutral", SIZES)
+def test_ian0poem_no_agent_ties_alone_by_either_route_and_the_team_ties_together(neutral, roles, grade):
+    """ian0poem's side copies (Variant.side_copies) give each agent its own parts again, the same text under the same
+    access list, so an agent reads nothing by the side route that its part file did not give it, and the audit's rule
+    holds by either route on the variant's brief."""
+    problems = [problem for seed in SEEDS
+                for problem in audit(honeypot.row_of(STUDY_ROW), neutral, seed, roles, grade, "ian0poem")]
     assert not problems, f"{len(problems)} problem(s):\n" + "\n".join(problems[:40])
 
 
