@@ -1,5 +1,5 @@
 # The study ian_seed_prototyping_0, stage 1 (2026-11-22): one run per pack on every target, seed 1, 3 workers, the default preset at
-# the small scale. Its 22 runs are in runs/ian_seed_prototyping_0 (launched as study_seeds, renamed). Protein Luna
+# the small scale. Its 22 runs are in OLD/runs/ian_seed_prototyping_0 (launched as study_seeds, renamed; archived 2026-11-23). Protein Luna
 # comes first: it is the cheapest. scripts/run_study.py runs it; --study <new study> runs it again elsewhere.
 # Closed: its runs were named before the packs got their exp0_ prefix (swe_deepseek_pointer_s1 ran swe/exp0_pointer).
 study: ian_seed_prototyping_0

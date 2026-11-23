@@ -18,7 +18,7 @@ example's `CHEAT` text. The generic examples stay in `examples/`. A plan may nam
 
 | study | plan | status | tasks | cells | runs |
 |---|---|---|---|---|---|
-| `ian_seed_prototyping_0` | `plans/ian_seed_prototyping_0.yaml` | closed | SWE, protein design, creative writing | 22 | `runs/ian_seed_prototyping_0` |
+| `ian_seed_prototyping_0` | `plans/ian_seed_prototyping_0.yaml` | closed | SWE, protein design, creative writing | 22 | `OLD/runs/ian_seed_prototyping_0` |
 | `ian_seed_prototyping_1` | `plans/ian_seed_prototyping_1.yaml` | closed | SWE | 8 | `OLD/runs/ian_seed_prototyping_1` |
 | `ian_seed_prototyping_2` | `plans/ian_seed_prototyping_2.yaml` | open | SWE, protein design, creative writing | 27 | `runs/ian_seed_prototyping_2` |
 
