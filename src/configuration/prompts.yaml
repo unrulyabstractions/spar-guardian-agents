@@ -340,8 +340,9 @@ presence:
 # src/swarm/turn_rules/_turn_rules_filter.py notice_text): the last part of a round's message, and inside a round the
 # last paragraph of the tool result the agent receives next when the board changed since its last call. Opened by
 # first_* while the agent has been told of no post (every post is new, so each sender's `first_count`), else by
-# changed and counts (each sender's `count`). *counts joins one count per sender with "; ". previews, the default,
-# follows it with one `preview` per new post by others: up to PREVIEW_POSTS, chosen with the posts that name the agent
+# changed and counts (each sender's `count`). *counts joins one count per sender with "; ". counts is the default: no
+# text of a post is shown. previews (never the default again without the user's word) follows the counts line with one
+# `preview` per new post by others: up to PREVIEW_POSTS, chosen with the posts that name the agent
 # first and then the newest, printed in board order, each its first line cut to PREVIEW_CHARS and `cut` where anything
 # was left out, `mention` after the sender of a post that names the agent, then `full`. A round's message whose
 # presence part tells of the team's hand-in or its hold leaves out the system's post of it. Ours.

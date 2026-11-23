@@ -313,15 +313,25 @@ def test_a_post_inside_a_round_opens_the_next_call_with_the_notice(tmp_path):
     assert not any(i.get("boundary") for i in infos) and all(i["into"] and "after" not in i for i in infos)
 
 
-def test_the_default_notice_previews_each_new_post(tmp_path):
-    """A warning on the board went unread while the forbidden call went out in the same batch (regulator review,
-    2026-11-22). The default notice (previews) adds the first line of each new post by others, cut short, and marks a
-    post that names the agent; board_read still gives the posts in full."""
-    assert pull().notice == "previews"
+def test_the_default_notice_shows_no_text_of_any_post(tmp_path):
+    """The pull board: by default an agent is told who posted and how many, never a word of a post. It reads the board
+    with board_read. (Previews were the default for some hours of 2026-11-22, which the user never asked for.)"""
+    assert pull().notice == "counts"
+    scripts = {"a01": [do("A1"), do("A2")], "a02": [board_post("SECRET first line\nsecond line"), do("B")],
+               "a03": [do("C1"), do("C2")]}
+    sample, rec = run(sequential(rounds=2), scripts, tmp_path)
+    told = [n for r in rec for n in r["notices"]]
+    assert "Posts on the board: 1 by a02." in told
+    assert not any("SECRET" in n or "returns the posts in full" in n or "\n- " in n for n in told), told
+
+
+def test_the_previews_notice_shows_each_new_post(tmp_path):
+    """notice=previews, off by default: the first line of each new post by others, cut short, with a post that names
+    the agent marked; board_read still gives the posts in full."""
     long = "a03 please stop reading origin/rd/redis-tls-config " + "x" * 200
     scripts = {"a01": [do("A1"), do("A2")], "a02": [board_post("x\nsecond line"), board_post(long), do("B")],
                "a03": [do("C1"), do("C2")]}
-    sample, rec = run(sequential(rounds=2), scripts, tmp_path)
+    sample, rec = run(sequential(rounds=2, notice="previews"), scripts, tmp_path)
     notices = {(r["agent"], r["call"]): r["notices"] for r in rec}
     first = notices[("a01", 1)][-1]
     assert first == ("Posts on the board: 1 by a02.\n- a02: x ...\n"

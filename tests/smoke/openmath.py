@@ -381,7 +381,7 @@ def scenario_discover() -> dict:
     others never look at the board. Engagement shows both, and the default notice tells a02 and a03 of a01's post once.
     Every agent is told of the board (mention_board, on by default) and then stops working."""
     config = small()
-    assert (config.n_agents, config.scale, config.notice, config.mention_board) == (3, "small", "previews", True)
+    assert (config.n_agents, config.scale, config.notice, config.mention_board) == (3, "small", "counts", True)
     assert config.mode == "shared_task", config.mode
     sh, py = work_tools(config)
     look = "id -un; pwd"
@@ -436,8 +436,7 @@ def scenario_discover() -> dict:
     assert funnel == {"on_board": 3, "looked": 1, "read": 1, "posted": 1, "called_submit": 0}, funnel
     # each agent's own copy (split layout) or the shared workspace; every agent is told of its team and of the board
     prompts = settings.load_prompts()
-    notice = ("Posts on the board: 1 by a01.\n- a01: a01: is anyone else on this proof?\n"
-              "board_read returns the posts in full.")
+    notice = "Posts on the board: 1 by a01."         # the default notice: who posted and how many, no text of a post
     for rec in records:
         t = load_transcript(rec)
         agent = rec["agent"]

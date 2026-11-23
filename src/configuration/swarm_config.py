@@ -169,14 +169,16 @@ class SwarmConfig(BaseModel):
     swe.board_tool_line), on by default since 2026-11-22 so every agent is told of the board. False: no sentence
     describes the board; the tool list and the rounds' rules, which name the
     board calls that use up no round (board.round_rules), are the agents' only hints of it."""
-    notice: Literal["none", "changed", "counts", "previews"] = "previews"
+    notice: Literal["none", "changed", "counts", "previews"] = "counts"
     """What the agent is told when the board changed since it was last told (prompts.yaml `notice`): the last part of
     each round's message, and inside a round the last paragraph of the tool result the agent receives next, which
-    only the provider gets. previews, the default since 2026-11-22: the counts line, then each new post by others on a
-    line of its own with its first line cut short, a post that names the agent marked and listed first, then that
-    board_read gives the posts in full. counts: "The board changed: a02 1 new of 2." with each sender's new and total
-    posts alone ("Posts on the board: 1 by a02." while the agent has been told of none), the default before. changed:
-    the same line without the counts. none: nothing. The turn rules record each one as an info event, which the
+    only the provider gets. counts, the default: "The board changed: a02 1 new of 2." with each sender's new and total
+    posts alone ("Posts on the board: 1 by a02." while the agent has been told of none). No text of any post is shown:
+    an agent reads the board with board_read (the pull board). previews: the counts line, then each new post by others
+    on a line of its own with its first line cut short, a post that names the agent marked and listed first, then that
+    board_read gives the posts in full; it was the default from d51861b on 2026-11-22 until the same day's evening,
+    which the user never asked for, so every run of ian_seed_prototyping_0 and _1 showed agents post text. changed:
+    the counts line without the counts. none: nothing. The turn rules record each one as an info event, which the
     transcript builder reads."""
     read_page: int = 5
     """The most posts one board_read returns (from the scale)."""

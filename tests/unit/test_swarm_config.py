@@ -16,7 +16,7 @@ DOMAINS = sorted(REGISTRY)      # instruction_levels.yaml's benchmark keys are t
 def test_defaults_and_properties():
     c = SwarmConfig()
     assert (c.n_agents, c.shutdown, c.turn_order) == (1, True, "random")
-    assert (c.mention_board, c.mention_team, c.notice, c.concurrent_rounds) == (True, None, "previews", True)
+    assert (c.mention_board, c.mention_team, c.notice, c.concurrent_rounds) == (True, None, "counts", True)
     assert (c.informed_roles, c.submit, c.batch_judge, c.mode, c.scale) == (True, None, True, "shared_task", None)
     assert c.submit_delay_rounds == 2
     assert (c.rule_level, c.regulator_level, c.disregulator_level) == ("none", "ambiguous", "persuade")

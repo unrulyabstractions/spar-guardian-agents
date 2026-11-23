@@ -135,12 +135,13 @@ def test_a_new_label_version_redoes_that_label_and_the_row_only(tmp_path, stood_
     process_runs.process_job(job)
     topology = RunDir(run).output("topology").read_bytes()
     registry = copy.deepcopy(pipeline_parts.registry())
+    was = registry.parts["cheating"].version
     registry.parts["cheating"].version += 1
-    assert stored_versions.behind(job.run, registry) == {"cheating": "v1 → v2", "row": "cheating behind"}
+    assert stored_versions.behind(job.run, registry) == {"cheating": f"v{was} → v{was + 1}", "row": "cheating behind"}
     report = process_runs.process_job(job, registry)
     assert set(report.done) == {"cheating", "row"}
     assert RunDir(run).output("topology").read_bytes() == topology
-    assert stored_versions.entry(job.run, "cheating")["version"] == 2
+    assert stored_versions.entry(job.run, "cheating")["version"] == was + 1
 
 
 def test_the_signals_block_restamps_the_export_it_changes(tmp_path, stood_in):

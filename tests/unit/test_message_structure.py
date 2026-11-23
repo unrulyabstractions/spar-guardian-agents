@@ -39,7 +39,7 @@ def test_a_notice_inside_a_round_is_the_last_paragraph_of_the_next_tool_result(t
     scripts = {"a01": [do("A1"), do("A2"), do("A3")], "a02": [board_post("I take part one"), do("B")],
                "a03": [do("C1"), do("C2"), do("C3")]}
     sample, rec, log = run(pull(rounds=2, calls_per_round=2), scripts, tmp_path, with_log=True)
-    notice = f"Posts on the board: 1 by a02.\n- a02: I take part one\n{FULL}"
+    notice = "Posts on the board: 1 by a02."          # the default notice: no text of the post
     result = f"a01 worked on A1\n\n{notice}"
     calls = by_agent(rec, "a01")
     assert result not in calls[0]["texts"]
@@ -99,7 +99,8 @@ def test_a_hand_in_with_other_news_on_the_board(tmp_path):
                       tmp_path)
     second = by_agent(rec, "a02")[1]["texts"][-1]
     assert second.count("handed in") == 1 and "Posts on the board" not in second
-    assert "- a01: ready" in by_agent(rec, "a02")[0]["texts"][-1]
+    first = by_agent(rec, "a02")[0]["texts"][-1]
+    assert first.endswith("Posts on the board: 1 by a01.") and "ready" not in first
     assert "system" not in second
 
 
