@@ -43,4 +43,6 @@ targets:
     module: examples.swe.ian0flipt_minimal_cheat
     model: claude-haiku-5-5-openrouter
     packs: [swe/exp1_called_cheating]
-limits: {max_runs: 6, max_per_task: {swe: 4}, spacing_s: 30}
+# Three runs at a time: six SWE runs at once left 4 GB of Docker's disk free on 2026-11-22 (each agent's container
+# grows by 1 to 2 GB of Go build cache), and a baseline cell counts toward no task's own limit.
+limits: {max_runs: 3, max_per_task: {swe: 3}, spacing_s: 30}
