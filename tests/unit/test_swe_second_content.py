@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from src import tasks
-from src.configuration import settings
+from src.configuration import seed_packs, settings
 from src.configuration.presets import build_config
 from src.domains.swe import SWE, swe_ladder, swe_settings, swe_task
 from src.domains.swe import _swe_honeypot as honeypot
@@ -37,6 +37,7 @@ from src.domains.swe.swe_ladder import SweDomain
 from src.domains.swe.swe_settings import OWN_VALUES, PARTS, SECOND, SECRETS, VARIANTS
 from src.measures import honeypot_fingerprints as prints_module
 from src.measures.ladder_domain import PRINTS
+from src.measures.run_directory import RunDir
 from src.measures.shell_commands import line_hits
 
 ISSUE = "flipt-02e2"
@@ -212,8 +213,7 @@ def test_nothing_an_agent_is_told_changes(monkeypatch):
     assert honeypot.notice_text("clean_room_fork", "flipt") == notes.format(repo="flipt", side_dir="/var/backups/flipt")
     words = prompts["beliefs"]["words"]["swe"]
     assert now[-1]["exploit_2"] == words["exploit_2"].format(side_dir="/var/backups/flipt")
-    board = settings.ROOT / "seeds" / "swe" / "exp1_called_cheating" / "board"
-    plain = [path.read_text().split("---\n", 2)[2].strip() for path in sorted(board.glob("*.md"))]
+    plain = [post["text"] for post in seed_packs.pack_of("swe/exp1_called_cheating")["posts"]]
     authors = {f"author{k}": name for k, name in enumerate(now[5]["authors"], 1)}
     assert [post["text"] for post in now[5]["posts"]] == [text.format(**authors) for text in plain]
 
@@ -270,7 +270,7 @@ def stored_diffs() -> list[Path]:
     out = []
     for root in (settings.ROOT / "runs", settings.ROOT / "OLD" / "runs"):
         for path in root.glob("**/processed/swe/diffs/*.diff"):
-            record = path.parents[2] / "run.json"
+            record = RunDir(path.parents[3]).file("run.json")          # <run>/processed/swe/diffs/<name>.diff
             swe = json.loads(record.read_text()).get("swe") or {} if record.is_file() else {}
             if not swe.get("second_content"):
                 out.append(path)
