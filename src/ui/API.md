@@ -464,7 +464,7 @@ Rounds = {rounds (R, rules.round_budget), calls_per_round (N), agents: {agent: [
 Round = {turn, round (the run's, the same for every agent), end, ending, used, ended, t0, t1,
          calls: [{id, tool, pos (its place in the round, from 1; null for wait, end_round before c632292), refused, error, t0, t1, job}],
          n, charge, charged (a run before 2026-11-22; null since), calls' free (likewise)}
-         # end: end_round (a call to wait, or to end_round before c632292) | calls (the call limit reached) | ending |
+         # end: end_round (a call to wait, or to end_round before c632292) | calls (the round held its N calls) | ending |
          # time | round_time | no_tool_call | context | null;
          # ending: stop | submit | alert | null; every round uses one of R; times in UTC seconds
 Presence = {agents: {agent: {entered: round | null,                 # rules.entry_rounds
@@ -664,7 +664,7 @@ and on the alerting agent's lane.
 
 ### `GET /api/transcript?id=<id>&agent=<agent>` → the agent's `transcript.json`, streamed as stored
 The agent tab groups its steps by round in a run of rounds of calls: a box per round, headed `Round {round}` with the
-agent's own count `n of R`, its calls, its end as a chip (`end_round`, `call limit reached`, `no tool call`, `time limit`,
+agent's own count `n of R`, its calls, its end as a chip (`end_round`, `no tool call`, `time limit`,
 `context limit`, or the tool that ended its turns: `stop_working`, `submit`, `alert_humans`), `board only` for a round
 that used up none, and its time. Each call's head carries its place in the round, `pos/N` (a refused call in the bad
 colour), and the strip draws a solid line where a round begins.

@@ -200,16 +200,18 @@ function foldButton(kind) {
     } }, h('span', { class: 'sec-chev', 'aria-hidden': 'true' }));
 }
 // Why a round ended (src/swarm/turn_rules/_turn_rounds.py END_REASONS), as its chip says it; "ending" names the tool
-// that ended the agent's turns by the round's ending (its charge in a run before 2026-11-22).
-const END_WORDS = { end_round: 'end_round', calls: 'call limit reached', no_tool_call: 'no tool call', time: 'time limit',
+// that ended the agent's turns by the round's ending (its charge in a run before 2026-11-22). A round that closed
+// because it held its calls ("calls") has no word: that is every full round, and no limit stopped the agent.
+const END_WORDS = { end_round: 'end_round', no_tool_call: 'no tool call', time: 'time limit',
   round_time: 'round time', context: 'context limit' };
 const ENDING_TOOL = { stop: 'stop_working', submit: 'submit', alert: 'alert_humans' };
-const END_TIPS = { end_round: 'the agent called end_round', calls: 'the round used all its tool calls',
+const END_TIPS = { end_round: 'the agent called end_round',
   no_tool_call: 'a reply with no tool call', time: 'the run\'s time limit passed', context: 'the reply hit the context limit',
   ending: 'the agent\'s turns ended', round_time: 'the round\'s time limit passed' };
-/** A round's end in a word or two; null when the round recorded none. e: the round's entry ({end, ending, charge}). */
+/** A round's end in a word or two; null when the round recorded none or was simply full. e: the round's entry
+ * ({end, ending, charge}). */
 export function roundEndWord(e) {
-  if (!e || !e.end) return null;
+  if (!e || !e.end || e.end === 'calls') return null;
   return e.end === 'ending' ? (ENDING_TOOL[e.ending || e.charge] || 'ended') : (END_WORDS[e.end] || e.end);
 }
 /** A round's end as a chip; null when the round recorded none. e: the round's entry (/api/run rounds). */

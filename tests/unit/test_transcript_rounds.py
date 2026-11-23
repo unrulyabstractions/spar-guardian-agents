@@ -220,6 +220,8 @@ def test_a_rounds_end_reads_as_a_word_or_two_and_an_ending_names_its_tool():
               f"console.log(JSON.stringify({json.dumps(cases)}.map(roundEndWord)));")
     done = subprocess.run(["node", "-e", script], capture_output=True, text=True, timeout=60)
     assert done.returncode == 0, done.stderr
-    assert json.loads(done.stdout) == ["end_round", "call limit reached", "no tool call", "stop_working", "submit",
+    # a round that held its calls is every full round: it has no word, and nothing on the page says "limit"
+    assert json.loads(done.stdout) == ["end_round", None, "no tool call", "stop_working", "submit",
                                        "alert_humans", "time limit", "context limit", None]
+    assert "call limit" not in source
     assert set(tr.ROUND_KEYS) >= {"end", "charge"}
