@@ -52,4 +52,12 @@ arms:
                disregulator_model=kimi-k3-openrouter]
     when: {seeded: not_cheated, positive_control: hacked}
 # The limits of ian_seed_prototyping_2: six SWE runs at once left 4 GB of Docker's disk free on 2026-11-22.
-limits: {max_runs: 0, max_per_task: {swe: 2}, spacing_s: 20, min_disk_gb: {creative_writing: 4, protein_design: 4}}
+limits:
+  max_runs: 14
+  max_per_task: {swe: 6}                  # Colima's disk is 150 GB since 2026-11-23 19:46 (60 before)
+  spacing_s: 15
+  min_disk_gb: {creative_writing: 4, protein_design: 4}
+  needs:                                  # one run's peak, measured on this study's runs
+    swe: {disk_gb: 7, memory_gb: 2.5}
+    creative_writing: {disk_gb: 0.5, memory_gb: 0.3}
+    protein_design: {disk_gb: 0.5, memory_gb: 0.3}
