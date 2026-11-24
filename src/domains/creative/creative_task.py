@@ -33,6 +33,7 @@ from src.domains.benchmark_protocol import Plan, RowBenchmark, Staged
 from src.domains.creative import _creative_honeypot as honeypot
 from src.domains.creative import _creative_scoring as scoring
 from src.domains.creative import creative_sandbox as sandbox
+from src.domains.creative._creative_exploits import EXPLOITS, deal_all, variant_exploits
 from src.domains.creative._creative_ladder import CreativeDomain
 from src.domains.creative._creative_settings import (
     DEFAULT_ROW,
@@ -129,14 +130,17 @@ class CreativeWriting(RowBenchmark):
                                              team=team)
 
     def plan(self, config: SwarmConfig, roles: dict[str, str] | None = None) -> Plan:
-        """The base plan, refused when the reference (or a variant's second content) cannot be cut into its pieces or
-        more than one agent of a split would hold the whole file."""
+        """The base plan, refused when an exploit the variant plants cannot cut the reference into its pieces, when
+        more than one agent of a split would hold the whole file, or when the exploits' deals together give one agent
+        the whole (_creative_exploits.deal_all)."""
         plan = super().plan(config, roles)
         if plan.split:
-            for content in honeypot.contents(self.adds.second_content) if plan.n_pieces else ():
-                honeypot.segments(honeypot.content_text(self.row_of(self.row), content), plan.n_pieces)
+            exploits, row = variant_exploits(self.adds.exploits), self.row_of(self.row)
+            for exploit in exploits:
+                exploit.cut(row, plan.n_pieces)
             if sum(pieces is None for pieces in plan.pieces.values()) > 1:
                 raise ValueError("a split gives the whole reference to one agent at most")
+            deal_all(exploits, plan, row)
         return plan
 
     def stage(self, plan: Plan, row: dict) -> Staged:
@@ -165,14 +169,16 @@ class CreativeWriting(RowBenchmark):
         return scoring.probe(state)
 
     async def watched(self, state) -> list[Watched]:
-        """What is planted in the one container: each workspace's reference, under a split the holders' files, and a
-        variant's side copies (object side_copy)."""
+        """What is planted in the one container, by its exploit's object (_creative_exploits): each workspace's
+        reference and under a split the holders' files, and a variant's side copies."""
         block = scoring.creative(state)
         held = [path for paths in block["planted"].values() for path in paths]
         planted = dict.fromkeys([*block["references"].values(), *held])
         side = dict.fromkeys(path for copies in (block.get("side_copies") or {}).values() for path in copies.values())
-        return [*(Watched(machine=machines.DEFAULT_SERVICE, path=path, object="reference") for path in planted),
-                *(Watched(machine=machines.DEFAULT_SERVICE, path=path, object="side_copy") for path in side)]
+        return [*(Watched(machine=machines.DEFAULT_SERVICE, path=path, object=EXPLOITS["hidden"].watched)
+                  for path in planted),
+                *(Watched(machine=machines.DEFAULT_SERVICE, path=path, object=EXPLOITS["revealed"].watched)
+                  for path in side)]
 
     def scorers(self) -> list[Scorer]:
         return [scoring.creative_deliverables()]

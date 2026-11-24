@@ -94,10 +94,10 @@ parts:
       src/measures/regulator_measures.py, src/measures/run_calls.py, src/measures/run_steps.py, src/measures/rungs.py,
       src/measures/shell_commands.py, src/measures/team_ladder.py, src/measures/text_takes.py, src/measures/transcript_scan.py,
       src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*,
-      src/domains/swe/swe_exploits.py, src/domains/*/revealed/**/*]
+      src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 6
-    fingerprint: sha256:b4bb8b1a235014d06187417a456bd314fa54887f88cbe1d60f9bbc4359c3ece1
+    fingerprint: sha256:f196c2fc8e4cea0df14d1624af5e790a9bfbc72ef59da43c53e54485c1d678e3
     log:
       1: '2026-11-22 first version: the code record''s agent and team rows (code_ladder.signal_rows) of
         b7b1bed, and run.json''s signals block (re-locked 2026-11-22: the stored layout: the same bytes,
@@ -199,7 +199,13 @@ parts:
         has, then the givers'' routes and access-log reads; ian_influencers_0 and ian_env_prototyping_0
         copied from main and reprocessed in a scratch copy with --force signals, cheating, collusion and
         topology by main''s code (f322672) and by this: all 2244 run files and 146 log files byte-equal
-        but the 140 versions.json)'
+        but the 140 versions.json) (re-locked 2026-11-24: 2026-11-24: one content in both copies of ian_poem
+        and ian_binder (each exploit a unit in _creative_exploits.py and _protein_exploits.py, fingerprinted
+        with swe_exploits.py as src/domains/*/*_exploits.py; exploit_used on a one-content run read from
+        the givers'' routes and the access log''s objects in their clauses'' evidence, in Domain.by_routes
+        for every task; the stored runs'' second content still read by what they recorded): ian_influencers_0
+        (64 runs) and ian_env_prototyping_0 (6 runs) copied and reprocessed in scratch with this code,
+        2244 files byte-equal by sha256 but the 140 versions.json, logs unchanged)'
   topology:
     file: processed/facts/topology.json
     make: src.measures.topology_fact:topology_part
@@ -237,11 +243,11 @@ parts:
       src/measures/verdict_fields.py, src/measures/ladder_domain.py, src/measures/run_calls.py, src/measures/run_steps.py,
       src/measures/rungs.py, src/measures/shell_commands.py, src/measures/team_ladder.py, src/measures/text_takes.py,
       src/measures/transcript_scan.py, src/ui/transcript_levels.py, src/ui/viewer_parts.py, src/domains/*/*_ladder.py,
-      src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*, src/domains/swe/swe_exploits.py,
+      src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*, src/domains/*/*_exploits.py,
       src/domains/*/revealed/**/*]
     pins: []
     version: 7
-    fingerprint: sha256:226ee64c09bfd000d071bfca34274cd8e83b4a3ab0b1ee90c642b8ba7ae5e712
+    fingerprint: sha256:74fb9a5aea383b4fbb624fc86a5fea363e59246b317db74f71f3be6cba0f1631
     log:
       1: '2026-11-22 first version: the Cheating ladder with CheatBench''s labels beside its clauses,
         as the viewer keeps it, of b7b1bed (re-locked 2026-11-22: the stored layout: the same bytes, read
@@ -342,7 +348,14 @@ parts:
         gone, and exploit_used on the files route reads the content only one exploit has, then the givers''
         routes and access-log reads; ian_influencers_0 and ian_env_prototyping_0 copied from main and
         reprocessed in a scratch copy with --force signals, cheating, collusion and topology by main''s
-        code (f322672) and by this: all 2244 run files and 146 log files byte-equal but the 140 versions.json)'
+        code (f322672) and by this: all 2244 run files and 146 log files byte-equal but the 140 versions.json)
+        (re-locked 2026-11-24: 2026-11-24: one content in both copies of ian_poem and ian_binder (each
+        exploit a unit in _creative_exploits.py and _protein_exploits.py, fingerprinted with swe_exploits.py
+        as src/domains/*/*_exploits.py; exploit_used on a one-content run read from the givers'' routes
+        and the access log''s objects in their clauses'' evidence, in Domain.by_routes for every task;
+        the stored runs'' second content still read by what they recorded): ian_influencers_0 (64 runs)
+        and ian_env_prototyping_0 (6 runs) copied and reprocessed in scratch with this code, 2244 files
+        byte-equal by sha256 but the 140 versions.json, logs unchanged)'
   coordination:
     file: analysis/labels/coordination.json
     make: src.measures.coordination:coordination_part
@@ -369,10 +382,10 @@ parts:
       src/measures/ladder_domain.py, src/measures/run_calls.py, src/measures/run_steps.py, src/measures/rungs.py,
       src/measures/shell_commands.py, src/measures/team_ladder.py, src/measures/text_takes.py, src/measures/transcript_scan.py,
       src/ui/transcript_levels.py, src/ui/viewer_parts.py, src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py,
-      src/domains/*/*_settings.py, src/domains/*/second/**/*, src/domains/swe/swe_exploits.py, src/domains/*/revealed/**/*]
+      src/domains/*/*_settings.py, src/domains/*/second/**/*, src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 6
-    fingerprint: sha256:1c3b6d2f9bae32e68a21c2f9e41472c3a7672766c1548a214965fc55884c4624
+    fingerprint: sha256:c4e327dc53b083f37279933b55e577c92ec07203a73dbf2558be3cbe27b7ec3d
     log:
       1: '2026-11-22 first version: the Collusion ladder as the viewer keeps it, of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -470,7 +483,13 @@ parts:
         the content only one exploit has, then the givers'' routes and access-log reads; ian_influencers_0
         and ian_env_prototyping_0 copied from main and reprocessed in a scratch copy with --force signals,
         cheating, collusion and topology by main''s code (f322672) and by this: all 2244 run files and
-        146 log files byte-equal but the 140 versions.json)'
+        146 log files byte-equal but the 140 versions.json) (re-locked 2026-11-24: 2026-11-24: one content
+        in both copies of ian_poem and ian_binder (each exploit a unit in _creative_exploits.py and _protein_exploits.py,
+        fingerprinted with swe_exploits.py as src/domains/*/*_exploits.py; exploit_used on a one-content
+        run read from the givers'' routes and the access log''s objects in their clauses'' evidence, in
+        Domain.by_routes for every task; the stored runs'' second content still read by what they recorded):
+        ian_influencers_0 (64 runs) and ian_env_prototyping_0 (6 runs) copied and reprocessed in scratch
+        with this code, 2244 files byte-equal by sha256 but the 140 versions.json, logs unchanged)'
   judged:
     file: analysis/labels/judged.json
     make: src.ui.viewer_parts:judged_part
@@ -498,10 +517,10 @@ parts:
       src/measures/ladder_domain.py, src/measures/honeypot_fingerprints.py, src/measures/command_errors.py,
       src/measures/shell_commands.py, src/measures/rungs.py, src/measures/eval_log_events.py, src/export/eval_sample_view.py,
       src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*,
-      src/domains/swe/swe_exploits.py, src/domains/*/revealed/**/*]
+      src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 1
-    fingerprint: sha256:bed5df3bed537af835d8c8ed12d0b9b357c5a68d44abed2d5e3273bc8900d45b
+    fingerprint: sha256:e43b96cecf3865e612646a8c1e5b8d9385131e761b67c7786368b6deb45695e8
     log:
       1: '2026-11-23 first version: what each disregulator did with its role (carried_out, filtered, refused,
         dropped, unknown), with mode, disclosed and the evidence, by code from the board, the code record''s
@@ -555,7 +574,13 @@ parts:
         the content only one exploit has, then the givers'' routes and access-log reads; ian_influencers_0
         and ian_env_prototyping_0 copied from main and reprocessed in a scratch copy with --force signals,
         cheating, collusion and topology by main''s code (f322672) and by this: all 2244 run files and
-        146 log files byte-equal but the 140 versions.json)'
+        146 log files byte-equal but the 140 versions.json) (re-locked 2026-11-24: 2026-11-24: one content
+        in both copies of ian_poem and ian_binder (each exploit a unit in _creative_exploits.py and _protein_exploits.py,
+        fingerprinted with swe_exploits.py as src/domains/*/*_exploits.py; exploit_used on a one-content
+        run read from the givers'' routes and the access log''s objects in their clauses'' evidence, in
+        Domain.by_routes for every task; the stored runs'' second content still read by what they recorded):
+        ian_influencers_0 (64 runs) and ian_env_prototyping_0 (6 runs) copied and reprocessed in scratch
+        with this code, 2244 files byte-equal by sha256 but the 140 versions.json, logs unchanged)'
   row:
     file: analysis/row.json
     make: src.ui.viewer_parts:row_part

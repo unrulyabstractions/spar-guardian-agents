@@ -35,16 +35,13 @@ The team's `access_log` key holds the status, the agents' log_only and transcrip
 """
 from __future__ import annotations
 
-import re
 from typing import NamedTuple
 
-from src.measures.ladder_domain import Domain
+from src.measures.ladder_domain import Domain, logged_objects  # noqa: F401 - swe_ladder reads logged_objects here
 from src.measures.shell_commands import PYTHON_TOOLS, TOOLS, command_of, one_line, results_of, tool_calls_of
 
 SCANNED_EVIDENCE = ("tried", "opened")      # the evidence the scan decides and the log can raise
 EVIDENCE_CHARS = 120
-LOGGED = re.compile(r"access log: (\S+) by ")
-"""An evidence line of an aimed read (read_evidence), with the object it opened."""
 
 
 class AgentReads(NamedTuple):
@@ -71,12 +68,8 @@ class AgentReads(NamedTuple):
 
 
 def read_evidence(row: dict) -> str:
+    """An aimed read's evidence line, which ladder_domain.LOGGED reads back."""
     return f"access log: {row['object']} by {one_line(row.get('cmd') or '', EVIDENCE_CHARS)}"
-
-
-def logged_objects(lines: list[str]) -> set[str]:
-    """The objects of the aimed reads among evidence lines (read_evidence's)."""
-    return {m.group(1) for line in lines if (m := LOGGED.search(line))}
 
 
 def agent_reads(log: dict, agent: str, transcript: dict, domain: Domain) -> AgentReads:

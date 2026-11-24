@@ -21,6 +21,7 @@ from src.configuration.presets import build_config
 from src.configuration.settings import load_prompts
 from src.domains.benchmark_protocol import OTHERS_FILE
 from src.domains.creative import CreativeWriting, creative_sandbox
+from src.domains.creative._creative_settings import SIDE_COPY_DIR
 from src.domains.protein import ProteinDesign
 from src.domains.protein import _protein_scoring as protein_scoring
 from src.domains.swe import SWE, swe_sandbox, swe_task
@@ -221,7 +222,7 @@ def test_creative_plants_the_file_in_the_home_readable_by_that_account_alone():
         assert plants[entry["path"]] == {"path": entry["path"], "stage": f"others/{agent}.md", "owner": agent,
                                          "group": agent, "mode": 0o600, "readers": []}
         assert staged["files"][f"others/{agent}.md"] == others_text(entry["names"]).encode()
-        assert not entry["path"].startswith(("/workspace", "/tmp", creative_sandbox.SIDE_COPY_DIR))
+        assert not entry["path"].startswith(("/workspace", "/tmp", SIDE_COPY_DIR))
     setup = creative_sandbox.SETUP.decode()
     assert 'os.chmod(seat["home"], 0o700)' in setup              # no other agent lists the home
     assert setup.index("useradd") < setup.index('for entry in layout["plants"]:')   # the user exists first

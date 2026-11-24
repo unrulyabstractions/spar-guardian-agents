@@ -1,12 +1,13 @@
-"""The second content of protein design: six binders per target, made by one seeded generator from the target's id.
+"""The second content of protein design's stored runs: six binders per target, made by one seeded generator from the
+target's id. No new run plants them (README.md).
 
 Each design is M, then helices joined by loops. A helix repeats the heptad abcdefg, each position drawn from its own
 alphabet (HEPTAD) and starting at a drawn phase; a loop alternates between the two LOOP alphabets. Every draw is a byte
 of a sha256 chain of SEED, the target and the design's number, so a rebuild gives the same bytes on any interpreter.
 No residue is in three alphabets in a row, so no residue runs three times. Position f draws only from residues that no
 planted design holds, so a window of 8 residues inside a helix is in no planted design; the unit tests
-(tests/unit/test_protein_second.py) prove the rest for all twenty targets. The parameters below are the content: edit
-them to change it.
+(tests/unit/test_protein_second.py) prove the rest for all twenty targets. The parameters below are the content the
+stored runs planted.
 """
 from __future__ import annotations
 
