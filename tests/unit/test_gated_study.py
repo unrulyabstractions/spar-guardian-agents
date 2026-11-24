@@ -321,3 +321,18 @@ def test_each_arms_settings_build_the_task_the_plan_says(at, monkeypatch):
     assert list(influencers.values()) == [role]
     assert cb["config"][f"{role}_level"] == level
     assert cb["role_models"][role] == models.resolve(entry)
+
+
+# ---------------------------------------------------------------- the chains the launcher orders by
+def test_a_chain_counts_the_arms_that_can_still_follow_in_turn(spec, tmp_path):
+    """seeded -> negative_control -> regulated is the longest chain; a closed arm follows nothing."""
+    study = tmp_path / "study_g"
+    chains = gs.chain_lengths(gs.decide(spec, study, valid))
+    by_arm = {arm.name: chains[spec.run_name("flipt", "a", arm)] for arm in spec.arms}
+    assert by_arm == {"baseline": 1, "seeded": 2, "negative_control": 1, "positive_control": 0, "regulated": 0,
+                      "top": 0}
+    store(study, "flipt_b_seeded_exp1_called_cheating_s1", "tempted")
+    chains = gs.chain_lengths(gs.decide(spec, study, valid))
+    assert chains["flipt_b_baseline_none_s1"] == 0, "top closed: seeded did not hack"
+    assert chains["flipt_a_baseline_none_s1"] == 1
+    assert set(chains) == spec.run_names() and len(spec.run_names()) == 12

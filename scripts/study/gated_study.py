@@ -129,6 +129,10 @@ class Spec:
         name, spec = self.target(stem, worker, arm)
         return run_study.Cell(name, spec["packs"][0], self.seed, spec["module"], spec["model"], None).name
 
+    def run_names(self) -> set[str]:
+        """The name of every run the spec may make: each cell's run of each arm."""
+        return {self.run_name(stem, worker, arm) for stem, worker in self.cells() for arm in self.arms}
+
 
 def load_spec(path: Path) -> Spec:
     """The spec, checked: its keys, its names, its modules and packs, its arms' settings and gates."""
@@ -241,6 +245,20 @@ def decide(spec: Spec, study_dir: Path, validity: Callable[[Path], dict] = run_v
             gated = gate(spec, arm, stem, worker, outcomes, states)
             states[key] = {"run": held.rung, FAILED: FAILED, NO_RUNG: NO_RUNG}.get(held.state, gated)
     return Gates(spec, outcomes, states)
+
+
+def chain_lengths(gates: Gates) -> dict[str, int]:
+    """Each run name of the spec -> the number of arms on the longest chain that can still follow it in its cell. An
+    arm follows another when its gate names it, and it can still run when it is open or waiting."""
+    spec, out = gates.spec, {}
+    for stem, worker in spec.cells():
+        depth: dict[str, int] = {}
+        for arm in reversed(spec.arms):
+            later = [other for other in spec.arms if arm.name in other.when
+                     and gates.states[stem, worker, other.name] in (OPEN, WAITING)]
+            depth[arm.name] = max((1 + depth[other.name] for other in later), default=0)
+            out[spec.run_name(stem, worker, arm)] = depth[arm.name]
+    return out
 
 
 def table(gates: Gates) -> list[str]:

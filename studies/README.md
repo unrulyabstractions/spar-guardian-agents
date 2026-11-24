@@ -160,6 +160,36 @@ nothing. `--yes` launches the cells that are not done, on this Mac's Docker, and
 A closed plan never launches. `--study <name>` runs a plan into another study. The rules of `CLAUDE.md` hold for
 every launch: a spend check before it, the cost per cell to the user, and live pricing in the first 10 minutes.
 
+The launcher runs the longest expected chain first. A cell's expected time is the mean wall time of the study's
+stored runs of its task and worker model, or of its task, or 15 minutes. Its chain is that time times one plus the
+number of gated arms that can still follow it. Each limit still holds: a cell that does not fit is passed over. A
+live run that has written nothing for 10 minutes prints `STALL <name> <minutes>` once. Its console log, its eval log
+folder and Inspect's sample buffer count as writing. The launcher kills nothing.
+
+### Check the Mac first
+
+```
+uv run python -m scripts.study.preflight studies/plans/ian_influencers_0.yaml
+uv run python -m scripts.study.preflight studies/plans/ian_influencers_0.yaml --gates studies/gated/ian_influencers_0.yaml
+```
+
+The preflight launches nothing and makes no model call. It prints Docker's disk size and free space beside the Mac's
+free disk, and the Mac's free memory over the launcher's floor of 40%. It prints the **peak**, the most runs the
+limits let run at once, and what the peak needs. When Docker's disk is short it prints the command that grows it,
+`colima stop && colima start --disk <N>`. That command ends every container, so never run it while runs are live. It
+ends with an estimate of the wall time and names the cell where the critical path starts. It exits 1 when the peak
+needs more disk than Docker has free or more memory than the Mac has over its floor.
+
+A plan's `limits` take these keys:
+
+| key | means | default |
+|---|---|---|
+| `max_runs` | runs at once | 10 |
+| `max_per_task` | `{<task>: N}`, runs of one task at once | none |
+| `spacing_s` | seconds between two launches | 60 |
+| `min_disk_gb` | `{<task>: GB}`, the task's own floor of free Docker disk | 10 GB |
+| `needs` | `{<task>: {disk_gb: X, memory_gb: Y}}`, what one run takes, for the preflight | swe 7 GB and 1.5 GB, any other task 0.5 GB and 0.2 GB, measured on 2026-11-23 |
+
 ## A gated study
 
 In a **gated study** an arm runs only on the cells whose earlier arms came out a given way. A cell is a task and a
@@ -192,6 +222,17 @@ The table has the cells down and the arms across. Each entry is the team's rung 
 has a run, under a header with the date and the table. The tool launches nothing. `run_study --yes` launches what is
 missing. Run the gate tool again after those runs, and it opens the next arms. Never edit the written plan by hand:
 change the spec and write the plan again.
+
+The launcher can open the gates itself:
+
+```
+uv run python -m scripts.study.run_study studies/plans/ian_influencers_0.yaml --yes \
+    --gates studies/gated/ian_influencers_0.yaml
+```
+
+With `--gates`, the launcher decides the gates and writes the plan at its start and after each run ends. It queues
+the newly open cells at once and prints one `GATES` line each time. It queues no cell outside the spec. Each cell
+keeps its arm's settings and the pilot's dollar cap. Without `--gates` the launcher writes nothing.
 
 ## Add a study
 

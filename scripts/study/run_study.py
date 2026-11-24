@@ -17,9 +17,18 @@ packs:
     limits: {max_runs: 10, max_per_task: {swe: 4}, spacing_s: 60}
 
 The launcher takes the first queued cell with room: a cell whose task is full (max_per_task) is passed over, so light
-cells do not wait behind SWE cells. Every 20 seconds it reads the plan again: new limits apply at once, and targets
-added since the start (scripts.study.gated_study --write, as gates open) join the queue. A launcher started while
-runs of the plan are live adopts them by their `--name` and never launches them again.
+cells do not wait behind SWE cells. The queue is ordered by expected remaining chain time, longest first: a cell's
+expected minutes (the mean wall time of the study's stored runs of its task and worker model, DEFAULT_RUN_MINUTES
+without one) times one plus the number of gated arms that can still follow it. Every 20 seconds it reads the plan
+again: new limits apply at once, and targets added since the start (scripts.study.gated_study --write, as gates
+open) join the queue. A launcher started while runs of the plan are live adopts them by their `--name` and never
+launches them again.
+
+With `--gates <spec.yaml>` the launcher opens the gates itself: at the start and after each run ends it decides the
+spec's gates on the stored runs, writes the plan (gated_study's write_plan) and queues the newly open cells at once,
+with one GATES line each time. It queues no cell outside the spec. A live run whose console log, eval log folder and
+Inspect sample buffer have not changed for STALL_MINUTES is printed once as `STALL <name> <minutes>`; nothing is
+killed.
 
 Each cell runs the pilot's command (the scratchpad's launch.sh of 2026-11-22), under `zsh -lic` so the key comes from
 ~/.zshrc and never from a command line:
@@ -52,7 +61,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
+from inspect_ai._util.appdirs import inspect_data_dir
 
+from scripts.study import gated_study
 from src.configuration import seed_packs, settings
 from src.measures.run_directory import RunDir
 
@@ -60,9 +71,16 @@ PILOT_SETTINGS = ["rounds=30", "calls_per_round=10", "round_time_s=600", "time_l
 """The pilot's settings, after the seed and before the salt and the pack."""
 MIN_FREE_MEMORY_PCT = 40
 MIN_FREE_DISK_GB = 10
-LIMITS = {"max_runs": 10, "max_per_task": {}, "spacing_s": 60, "min_disk_gb": {}}
+LIMITS = {"max_runs": 10, "max_per_task": {}, "spacing_s": 60, "min_disk_gb": {}, "needs": {}}
 """min_disk_gb: {task: GB} is a task's own floor of free Docker disk in place of MIN_FREE_DISK_GB: a task whose
-containers write little (a poem, a binder) may launch where an SWE run, whose agents each build 1 to 2 GB, may not."""
+containers write little (a poem, a binder) may launch where an SWE run, whose agents each build 1 to 2 GB, may not.
+needs: {task: {disk_gb: X, memory_gb: Y}} is what one run of the task takes; scripts.study.preflight reads it."""
+DEFAULT_RUN_MINUTES = 15.0
+"""A run's expected wall time when the study stores no run of its task."""
+STALL_MINUTES = 10
+RUNS = settings.ROOT / "runs"
+LOGS = settings.ROOT / "logs"
+"""Where a study's runs and logs go: runs/<study>/ and logs/<study>/."""
 PLAN_KEYS = {"study", "seeds", "targets", "settings", "limits", "closed"}
 """closed: true marks a study that is over: its plan is kept as a record, lists its cells with --dry-run and never
 launches (its runs may be named after packs that were renamed since)."""
@@ -157,16 +175,23 @@ def free_memory_pct() -> int | None:
     return int(found.group(1)) if found else None
 
 
-def free_disk_gb() -> int | None:
-    """Free GB on Colima's docker disk, None when it cannot say."""
+def docker_disk() -> tuple[int, int] | None:
+    """(size, free) in GB of Colima's docker disk, None when it cannot say."""
     try:
         out = subprocess.run(["colima", "ssh", "--", "df", "-BG", "/var/lib/docker"], capture_output=True, text=True,
                              timeout=60).stdout
     except (OSError, subprocess.TimeoutExpired):
         return None
     lines = out.strip().splitlines()
-    fields = lines[-1].split() if len(lines) > 1 else []
-    return int(fields[3].rstrip("G")) if len(fields) >= 4 and fields[3].rstrip("G").isdigit() else None
+    fields = [field.rstrip("G") for field in lines[-1].split()] if len(lines) > 1 else []
+    return (int(fields[1]), int(fields[3])) if len(fields) >= 4 and fields[1].isdigit() and fields[3].isdigit() \
+        else None
+
+
+def free_disk_gb() -> int | None:
+    """Free GB on Colima's docker disk, None when it cannot say."""
+    disk = docker_disk()
+    return disk[1] if disk else None
 
 
 def task_full(running: dict[str, tuple], cell: Cell, limits: dict) -> str | None:
@@ -237,6 +262,100 @@ def live_names() -> set[str]:
     return {m[1] for line in out.splitlines() if (m := LIVE.match(line.strip()))}
 
 
+def run_minutes(run: RunDir) -> float | None:
+    """A stored run's wall time in minutes: its longest episode's wall_time. None when no episode records one."""
+    walls = [e["wall_time"] for e in run.episodes() if isinstance(e.get("wall_time"), (int, float))]
+    return max(walls) / 60 if walls else None
+
+
+def run_key(run: RunDir) -> tuple[str | None, str | None]:
+    """(task, worker model) of a stored run: its launch module's task folder and its model entry."""
+    return module_task((run.run_json.get("launch") or {}).get("module") or ""), run.run_json.get("model_key")
+
+
+def stored_minutes(study_dir: Path) -> dict[tuple[str | None, str | None], float]:
+    """The mean wall time in minutes of the study's stored runs at its top level, by (task, worker model)."""
+    found: dict[tuple, list[float]] = {}
+    for path in sorted(Path(study_dir).iterdir()) if Path(study_dir).is_dir() else []:
+        run = RunDir(path)
+        if run.is_run() and (minutes := run_minutes(run)) is not None:
+            found.setdefault(run_key(run), []).append(minutes)
+    return {key: sum(values) / len(values) for key, values in found.items()}
+
+
+def expected_minutes(timings: dict, cell: Cell) -> float:
+    """A cell's expected wall time: its task and model's mean, else its task's mean, else DEFAULT_RUN_MINUTES."""
+    if (cell.task, cell.model) in timings:
+        return timings[cell.task, cell.model]
+    same_task = [minutes for (task, _), minutes in timings.items() if task == cell.task]
+    return sum(same_task) / len(same_task) if same_task else DEFAULT_RUN_MINUTES
+
+
+def chain_minutes(cell: Cell, timings: dict, chains: dict[str, int]) -> float:
+    """The cell's expected remaining chain time: its run and every arm that can still follow it, one after another."""
+    return expected_minutes(timings, cell) * (1 + chains.get(cell.name, 0))
+
+
+def by_critical_path(queue: list[Cell], timings: dict, chains: dict[str, int]) -> list[Cell]:
+    """The queue, longest expected remaining chain first; equal chains keep their order."""
+    return sorted(queue, key=lambda cell: -chain_minutes(cell, timings, chains))
+
+
+def gate_step(spec_path: Path, plan_path: Path, study_dir: Path) -> tuple[dict[str, int], str]:
+    """Decide the spec's gates on the stored runs and write the plan: the chain lengths and a line to print."""
+    spec = gated_study.load_spec(spec_path)
+    gates = gated_study.decide(spec, study_dir)
+    gated_study.write_plan(gates, plan_path)
+    opened = sum(1 for state in gates.states.values() if state == gated_study.OPEN)
+    waiting = sum(1 for state in gates.states.values() if state == gated_study.WAITING)
+    return gated_study.chain_lengths(gates), f"{opened} open, {waiting} waiting; wrote {plan_path}"
+
+
+def new_cells(plan: dict, known: set[str], study: str, replace: bool, allowed: set[str] | None) -> list[Cell]:
+    """The plan's cells not seen before and not done (or every one with replace), in allowed when it is given.
+    Each is added to known."""
+    out = []
+    for cell in cells(plan):
+        if cell.name in known or (allowed is not None and cell.name not in allowed):
+            continue
+        known.add(cell.name)
+        if replace or not RunDir(RUNS / study / cell.name).is_run():
+            out.append(cell)
+    return out
+
+
+def progress_files(study: str, name: str) -> list[Path]:
+    """What a live run writes as it works: its console log, its eval log folder's files and the Inspect sample buffer
+    of each eval log there. Inspect writes the .eval file only at the start and the end, the buffer all along."""
+    logs = LOGS / study
+    folder = [path for path in (logs / name).rglob("*") if path.is_file()] if (logs / name).is_dir() else []
+    buffer = inspect_data_dir("samplebuffer")
+    buffered = [path for log in folder if log.suffix == ".eval" for path in buffer.glob(f"*/{log.name}.*")]
+    return [logs / "run_study" / f"{name}.log", *folder, *buffered]
+
+
+def stall_minutes(study: str, name: str, now: float) -> int | None:
+    """The minutes since a live run last wrote anything, when that is at least STALL_MINUTES. None otherwise, and
+    None when it has written nothing yet."""
+    times = [path.stat().st_mtime for path in progress_files(study, name) if path.is_file()]
+    minutes = int((now - max(times)) // 60) if times else 0
+    return minutes if minutes >= STALL_MINUTES else None
+
+
+def stamp() -> str:
+    """The time of day for the launcher's lines."""
+    return time.strftime("%H:%M:%S")
+
+
+def reload_plan(path: Path, plan: dict) -> dict:
+    """The plan file read again, or the last plan read when the file is caught mid-write or closed."""
+    try:
+        fresh = load_plan(path)
+    except (OSError, ValueError, yaml.YAMLError):
+        return plan
+    return plan if fresh.get("closed") else fresh
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m scripts.study.run_study", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -246,12 +365,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--yes", action="store_true", help="launch: the runs make paid model calls")
     parser.add_argument("--replace", action="store_true", help="run a cell whose run exists again (the example's "
                                                                  "--replace sets the old one aside)")
+    parser.add_argument("--gates", type=Path, help="a gated spec whose gates the launcher opens itself after each run")
     args = parser.parse_args(argv)
     plan = load_plan(args.plan)
     study = args.study or plan["study"]
+    allowed = None                                              # with --gates: the spec's run names alone
+    if args.gates:
+        spec = gated_study.load_spec(args.gates)
+        if spec.study != study:
+            print(f"--gates {args.gates} is of study {spec.study}, the launch of {study}", file=sys.stderr)
+            return 2
+        allowed = spec.run_names()
     todo, skipped = [], []
     for cell in cells(plan):
-        done = RunDir(settings.ROOT / "runs" / study / cell.name).is_run()
+        if allowed is not None and cell.name not in allowed:
+            continue
+        done = RunDir(RUNS / study / cell.name).is_run()
         (skipped if done and not args.replace else todo).append(cell)
     cap = float(next((p.split("=", 1)[1] for p in [*PILOT_SETTINGS, *plan["settings"]][::-1]
                       if p.startswith("cost_limit_usd=")), 5))
@@ -273,46 +402,69 @@ def main(argv: list[str] | None = None) -> int:
     if not args.yes:
         print("a launch makes paid model calls: add --yes, or --dry-run to look", file=sys.stderr)
         return 2
-    logs = settings.ROOT / "logs" / study / "run_study"
+    study_dir = RUNS / study
+    chains: dict[str, int] = {}
+    if args.gates:
+        try:
+            chains, said_gates = gate_step(args.gates, args.plan, study_dir)
+        except (OSError, ValueError, yaml.YAMLError) as error:
+            print(f"--gates: {error}", file=sys.stderr)
+            return 2
+        print(f"{stamp()} GATES  {said_gates}", flush=True)
+    logs = LOGS / study / "run_study"
     logs.mkdir(parents=True, exist_ok=True)
     running: dict[str, tuple[subprocess.Popen | None, Cell]] = {}      # None: a run an earlier launcher started
     failed, last, said = [], 0.0, 0.0
     queue = list(todo)
     known = {cell.name for cell in [*todo, *skipped]}
+    timings = stored_minutes(study_dir)
+    stalled: set[str] = set()
     while queue or running:
-        try:                                                    # the plan may gain targets and change its limits
-            fresh = load_plan(args.plan)
-        except (OSError, ValueError, yaml.YAMLError):
-            fresh = None                                        # caught mid-write: the last plan read stands
-        if fresh is not None and not fresh.get("closed"):
-            plan = fresh
-            for cell in cells(plan):
-                if cell.name not in known:
-                    known.add(cell.name)
-                    if args.replace or not RunDir(settings.ROOT / "runs" / study / cell.name).is_run():
-                        queue.append(cell)
-                        todo.append(cell)
-                        print(f"{time.strftime('%H:%M:%S')} QUEUE  {cell.name} (new in the plan)", flush=True)
+        ended = False
+        plan = reload_plan(args.plan, plan)                    # the plan may gain targets and change its limits
+        for cell in new_cells(plan, known, study, args.replace, allowed):
+            queue.append(cell)
+            todo.append(cell)
+            print(f"{stamp()} QUEUE  {cell.name} (new in the plan)", flush=True)
         alive = live_names()
         for cell in [c for c in queue if c.name in alive]:      # an earlier launcher's run: adopt it
             queue.remove(cell)
             running[cell.name] = (None, cell)
-            print(f"{time.strftime('%H:%M:%S')} ADOPT  {cell.name} ({len(running)} running, {len(queue)} queued)",
-                  flush=True)
+            print(f"{stamp()} ADOPT  {cell.name} ({len(running)} running, {len(queue)} queued)", flush=True)
         for name, (proc, cell) in list(running.items()):
             if proc is None and name not in alive:
                 del running[name]
-                made = RunDir(settings.ROOT / "runs" / study / name).is_run()
-                print(f"{time.strftime('%H:%M:%S')} END    {name} adopted, {'its run is stored' if made else 'no run'}",
-                      flush=True)
+                made = RunDir(study_dir / name).is_run()
+                print(f"{stamp()} END    {name} adopted, {'its run is stored' if made else 'no run'}", flush=True)
                 if not made:
                     failed.append(name)
+                ended = True
             elif proc is not None and proc.poll() is not None:
                 del running[name]
-                print(f"{time.strftime('%H:%M:%S')} END    {name} exit {proc.returncode}", flush=True)
+                print(f"{stamp()} END    {name} exit {proc.returncode}", flush=True)
                 if proc.returncode:
                     failed.append(name)
+                ended = True
+        if ended:
+            timings = stored_minutes(study_dir)
+        if ended and args.gates:                                # open the gates now, and queue what they opened
+            try:
+                chains, said_gates = gate_step(args.gates, args.plan, study_dir)
+                print(f"{stamp()} GATES  {said_gates}", flush=True)
+            except (OSError, ValueError, yaml.YAMLError) as error:
+                print(f"{stamp()} GATES  not written: {error}", flush=True)
+            plan = reload_plan(args.plan, plan)
+            for cell in new_cells(plan, known, study, args.replace, allowed):
+                queue.append(cell)
+                todo.append(cell)
+                print(f"{stamp()} QUEUE  {cell.name} (opened by its gate)", flush=True)
+        for name in running:
+            minutes = stall_minutes(study, name, time.time())
+            if minutes is not None and name not in stalled:
+                print(f"{stamp()} STALL  {name} {minutes}", flush=True)
+            (stalled.add if minutes is not None else stalled.discard)(name)
         if queue:
+            queue = by_critical_path(queue, timings, chains)
             cell, why = next_cell(running, queue, plan["limits"], last)
             if cell is not None:
                 queue.remove(cell)
@@ -322,10 +474,9 @@ def main(argv: list[str] | None = None) -> int:
                                                        stdin=subprocess.DEVNULL), cell)
                 log.close()
                 last = time.time()
-                print(f"{time.strftime('%H:%M:%S')} LAUNCH {cell.name} ({len(running)} running, {len(queue)} queued)",
-                      flush=True)
+                print(f"{stamp()} LAUNCH {cell.name} ({len(running)} running, {len(queue)} queued)", flush=True)
             elif time.time() - said >= 60:
-                print(f"{time.strftime('%H:%M:%S')} wait   {queue[0].name}: {why} ({len(running)} running)", flush=True)
+                print(f"{stamp()} wait   {queue[0].name}: {why} ({len(running)} running)", flush=True)
                 said = time.time()
         time.sleep(20)
     print(f"done: {len(todo) - len(failed)} of {len(todo)} runs ended with exit 0"
