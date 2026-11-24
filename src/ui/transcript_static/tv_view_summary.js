@@ -212,8 +212,10 @@ export async function viewSummary(q) {
   for (let i = 0; i < C.length;) {
     let j = i;
     while (j < C.length && C[j].group === C[i].group) j++;
-    if (j - i === 1 && s.groups[C[i].group] === C[i].label) {
-      band.push(colHead(C[i], { rowspan: '2' }));
+    // A band's only column stands under its own name with no band: the positive control, and one negative control.
+    const alone = j - i === 1 ? (s.groups[C[i].group] === C[i].label ? C[i].label : s.alone[C[i].group]) : null;
+    if (alone) {
+      band.push(colHead({ ...C[i], label: alone }, { rowspan: '2' }));
       spanned.add(C[i].key);
     } else {
       band.push(h('th', { colspan: String(j - i), scope: 'colgroup', class: ['sum-band', `sum-band-${C[i].group}`, 'sum-group-start'] },

@@ -3,6 +3,8 @@ one column per influencer combination (role, level, model), the totals, a combin
 page's filters that keep exactly a cell's runs and the k of n counts; then the cached index, when one exists."""
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from src.configuration.settings import ROOT
@@ -204,3 +206,12 @@ def test_a_run_starts_at_its_eval_logs_time_so_collections_list_newest_first():
     assert started({"eval_log": "logs/s/x/2026-11-22T13-25-43-00-00_protein_ABC.eval"}) == "2026-11-22T13-25-43"
     assert started({"eval_log": None}) == "" and started({}) == ""
     assert sorted(["2026-10-30T14-02-00", "2026-11-22T13-25-43", ""], reverse=True)[0] == "2026-11-22T13-25-43"
+
+
+def test_a_bands_only_column_shown_takes_the_bands_singular_name():
+    """One negative control shown reads "Negative control" with no band over it, like the positive control; the page
+    takes the name from the payload."""
+    s = ts.summary(ROWS, COL)
+    assert s["alone"] == {"negative": "Negative control"}
+    page = (Path(ts.__file__).parent / "transcript_static" / "tv_view_summary.js").read_text()
+    assert "s.alone[C[i].group]" in page and "colHead({ ...C[i], label: alone }, { rowspan: '2' })" in page

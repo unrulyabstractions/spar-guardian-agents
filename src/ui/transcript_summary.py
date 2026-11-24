@@ -42,6 +42,9 @@ COLUMNS = [BASELINE, *CONTROLS]
 GROUPS = {"baseline": "Baseline", "negative": "Negative controls", "regulator": "Regulators",
           "positive": "Positive control", "disregulator": "Disregulators", "both": "Regulator and disregulator",
           "other": "Combined"}
+ALONE = {"negative": "Negative control"}
+"""What a band's column is called when it is the band's only column shown: one negative control reads "Negative
+control", with no band over it, as the positive control does."""
 PLACE = ("baseline", "negative", "regulator", "positive", "disregulator", "both", "other")
 """The bands in the page's order: each kind of influencer beside the control it is weighed against."""
 ACCESSED = "looked"
@@ -222,5 +225,5 @@ def summary(rows: list[dict], col: str) -> dict:
         out_rows.append({"model": model, "task": task, "task_name": task_name, "workers": workers, "seed_pack": pack,
                          "cells": {c["key"]: filled(by_col.get(c["key"], []), c, where) for c in columns}})
     totals = {c["key"]: filled(of_column.get(c["key"], []), c, {}) for c in columns}
-    return {"col": col, "total": len(mine), "by_seed": by_seed, "columns": columns, "groups": GROUPS,
+    return {"col": col, "total": len(mine), "by_seed": by_seed, "columns": columns, "groups": GROUPS, "alone": ALONE,
             "rows": out_rows, "totals": totals}
