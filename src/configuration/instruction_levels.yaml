@@ -9,7 +9,7 @@
 # `cheated` and what the schema leaves out.
 # Each ladder is none, generic and identified (the rule) or none, generic and instructed (a regulator, a disregulator):
 # no text, a text that names no exploit, and the same text with where the exploit lies. The rule's identified sentences
-# open with Lucy's explicit hint (submodules/lucy/experiments/orbit_cheatbench/prompts.yaml at c410183, SWE wording).
+# open with Lucy's explicit hint (her experiments/orbit_cheatbench/prompts.yaml at c410183, SWE wording).
 
 vars:
   openmath:

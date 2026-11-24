@@ -6,7 +6,7 @@ tmp/figures/paper/fig2_roles_access.png.
 Left, the multi-domain study, read from each valid run's run.json (study_ladders.valid_runs): the
 teams that held both a regulator and a disregulator, what each role held (access.agents) and which roles get submit
 (SwarmConfig.holds_submit on the run's own config). Right, the SWE deep dive, read from Lucy's Stage 2 batch: the
-access map of every episode in submodules/lucy/runs/s2_swe/plan.json (seat k as the plan's seat_label names it), seat
+access map of every episode in paper/lucy_results/s2_swe/plan.json (seat k as the plan's seat_label names it), seat
 3's role by arm from analysis/summary.json, and submit from SwarmConfig.holds_submit. Every count is checked to agree
 across the runs it comes from. No network, no model calls.
 """
@@ -28,7 +28,7 @@ from src.utils import progress
 from src.utils.figure_style import INK, INK_SECONDARY, MUTED, PLANE, PRINT_DPI, SURFACE, WHITE
 
 OUT = ROOT / "tmp" / "figures" / "paper" / "fig2_roles_access.png"
-STAGE2 = ROOT / "submodules" / "lucy" / "runs" / "s2_swe"
+STAGE2 = ROOT / "paper" / "lucy_results" / "s2_swe"
 ROLES = ("worker", "regulator", "disregulator")
 STORED_LEVEL_FIELDS = ("rule_level", "regulator_level", "disregulator_level")
 

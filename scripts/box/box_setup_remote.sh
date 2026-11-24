@@ -3,7 +3,7 @@
 # of the Mac's network never kills a build. Its output goes to /root/setup.log, its pid to /root/setup.pid and its exit
 # code, when it ends, to /root/setup.exit, which box_setup.sh polls. In order: the box's cores, RAM and disk held to the
 # fleet's minimums; docker-compose-v2, git and rsync from apt, uv at the launch's version; this repository cloned from
-# GitHub at the commit with cheatbench and orbit from GitHub and lucy from the bundle; the .venv at the launch's Python
+# GitHub at the commit with cheatbench and orbit from GitHub; the .venv at the launch's Python
 # from the package list without dependency resolution (ORBIT editable from its submodule), held to the list package by
 # package, and an import check; the task's rows and images (box_runner.py build); the check that /proc's hiding works
 # on this host (proc_hiding_check.py).
@@ -12,8 +12,8 @@ exec >> /root/setup.log 2>&1 < /dev/null
 echo $$ > /root/setup.pid
 trap 'echo $? > /root/setup.exit' EXIT
 setup() {
-  local commit=$1 cheatbench=$2 orbit=$3 lucy=$4 uv_version=$5 python_version=$6 task=$7 url=$8 cores=$9
-  local ram_gb=${10} min_cores=${11} min_ram_gb=${12} min_disk_gb=${13}
+  local commit=$1 cheatbench=$2 orbit=$3 uv_version=$4 python_version=$5 task=$6 url=$7 cores=$8 ram_gb=$9
+  local min_cores=${10} min_ram_gb=${11} min_disk_gb=${12}
   local repo=/root/work
   echo "== setup $(date -u +%FT%TZ): $commit for $task"
   if [ -f /root/screen.pid ] && grep -qs box_runner "/proc/$(cat /root/screen.pid)/cmdline"; then
@@ -50,12 +50,8 @@ setup() {
   git -C "$repo" fetch --quiet origin
   git -C "$repo" checkout --quiet --detach "$commit"
   git -C "$repo" submodule update --init --quiet submodules/cheatbench submodules/orbit
-  [ -d "$repo/submodules/lucy/.git" ] || git clone --quiet --no-checkout /root/ship/lucy.bundle "$repo/submodules/lucy"
-  git -C "$repo/submodules/lucy" fetch --quiet /root/ship/lucy.bundle '+refs/*:refs/bundle/*'
-  git -C "$repo/submodules/lucy" checkout --quiet --detach "$lucy"
   local pair
-  for pair in "$repo:$commit" "$repo/submodules/cheatbench:$cheatbench" "$repo/submodules/orbit:$orbit" \
-              "$repo/submodules/lucy:$lucy"; do
+  for pair in "$repo:$commit" "$repo/submodules/cheatbench:$cheatbench" "$repo/submodules/orbit:$orbit"; do
     if [ "$(git -C "${pair%%:*}" rev-parse HEAD)" != "${pair##*:}" ]; then
       echo "!! ${pair%%:*} is not at ${pair##*:}"
       exit 1

@@ -59,7 +59,7 @@ GENERATED = PAPER / "generated"
 FIGURE_DIR = PAPER / "figures"
 LEVELS_YAML = ROOT / "src" / "configuration" / "instruction_levels.yaml"
 STUDY_INDEX = ROOT / "OLD" / "runs" / "ian_baseline_explorations_1" / "INDEX.jsonl"
-STAGE2 = ROOT / "submodules" / "lucy" / "runs" / "s2_swe" / "analysis" / "summary.json"
+STAGE2 = ROOT / "paper" / "lucy_results" / "s2_swe" / "analysis" / "summary.json"
 # The names the paper gives the models of the run index. A model outside this map stops the build.
 MODEL_NAMES = {"claude-haiku-5-5": "Claude Haiku 5.5", "claude-sonnet-5-5": "Claude Sonnet 5.5",
                "claude-opus-5-5": "Claude Opus 5.5", "gpt-6-luna": "GPT-6 Luna", "gemini-4-argon": "Gemini 4 Argon",
@@ -459,14 +459,14 @@ def stage2_tex() -> str:
         c = cell[key]
         lines.append(rf"{label} & {c['cheated']}/{c['workers']} & {c['used']}/{c['workers']} & "
                      rf"{len(c['passed'])}/{len(c['episodes'])} \\")
-    return (HEADER.format(source="submodules/lucy/runs/s2_swe/analysis/summary.json")
+    return (HEADER.format(source=STAGE2.relative_to(ROOT))
             + "\\begin{tabular}{lrrr}\n\\toprule\nCell & Workers cheated & Workers used the fix & Teams passed \\\\\n"
             + "\\midrule\n" + "\n".join(lines) + "\n\\bottomrule\n\\end{tabular}\n")
 
 
 def generated_files() -> dict[Path, str]:
-    """Every generated file and its text. A file drawn from data absent on this machine (runs/ is gitignored, the
-    submodule may be unchecked) is left out, and the check reports the source as absent."""
+    """Every generated file and its text. A file drawn from data absent on this machine (OLD/ is gitignored) is left
+    out, and the check reports the source as absent."""
     files = {
         GENERATED / "params.tex": params_tex(),
         GENERATED / "regulator_suffix.tex": regulator_suffix_tex(),

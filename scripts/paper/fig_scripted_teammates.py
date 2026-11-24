@@ -2,9 +2,9 @@
 95% bootstrap interval over episodes. The top panel takes the scripted teammates of E1b, the bottom panel the real
 model teammates of E2. The outcome is `deliberate_cheat` over the receivers (the default-persona agents) only.
 
-Sources, read at build time (Lucy's repository, read only):
-    submodules/lucy/runs/e1_variants_20260928-164817/{analysis/summary.json, config.yaml, prompts.yaml}   (E1b)
-    submodules/lucy/runs/e2_transmission_20260929-130116/{analysis/summary.json, config.yaml, prompts.yaml}  (E2)
+Sources, read at build time (Lucy's files, copied unchanged from her repository at 449fbf0):
+    paper/lucy_results/e1_variants_20260928-164817/{analysis/summary.json, config.yaml, prompts.yaml}   (E1b)
+    paper/lucy_results/e2_transmission_20260929-130116/{analysis/summary.json, config.yaml, prompts.yaml}  (E2)
 
 Writes tmp/figures/paper/fig1_scripted_teammates.png at 200 dpi.
 
@@ -39,7 +39,7 @@ from src.utils.figure_style import (
     style_axes,
 )
 
-LUCY_RUNS = ROOT / "submodules" / "lucy" / "runs"
+LUCY_RUNS = ROOT / "paper" / "lucy_results"
 E1B = LUCY_RUNS / "e1_variants_20260928-164817"
 E2 = LUCY_RUNS / "e2_transmission_20260929-130116"
 OUT = ROOT / "tmp" / "figures" / "paper" / "fig1_scripted_teammates.png"

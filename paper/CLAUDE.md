@@ -20,7 +20,7 @@ it, which a reader rewrote as a conjecture.
 | `generated/regulator_levels.tex`, `disregulator_levels.tex` | the level texts of the design, every level of `src/configuration/instruction_levels.yaml` with a text (`paper_sources.DESIGN_LEVELS`: generic, instructed) | `make paper-sources` |
 | `stored_study_prompts/regulator_levels.tex`, `disregulator_levels.tex` | the level texts of the stored studies (enforce, ambiguous; persuade, overt; `paper_sources.STORED_LEVELS`), which the code no longer has: `paper/generated/`'s copies at 8f45ee0, the first comment line replaced. `paper-check` asks only that each names `STORED_LEVELS`; `fig_multidomain` checks Figure 4's regulator paraphrases against the regulator table | frozen, by hand |
 | `generated/study.tex` | `\StudyRuns`, `\StudyDates`, `\StudyCheatBenchJudge`, `\StudyLabelsJudged`, `\RegulatorModelList`: the multi-domain study's valid runs, their dates, the judge of the CheatBench pass (`src/judging/verdict_files.py` applied), a sentence naming the judge of the scores (`src/measures/judge_labels.py` labels' "judge") or saying no judge has scored the runs yet (more than one judge of a pass stops the build), and the regulators' models by use, from `runs/ian_baseline_explorations_1/INDEX.jsonl`, each run's run.json and judges/ (kept as committed where runs/ is absent) | `make paper-sources` |
-| `generated/stage2.tex` | the deep dive's Stage 2 table, from `submodules/lucy/runs/s2_swe/analysis/summary.json` | `make paper-sources` |
+| `generated/stage2.tex` | the deep dive's Stage 2 table, from `paper/lucy_results/s2_swe/analysis/summary.json` | `make paper-sources` |
 | `generated/reliability.tex` | how often an independent reading of the transcripts confirmed each code rung and judge score, from `src/measures/measure_readings.yaml`, the one file the viewer's How reliable section reads too (kept by hand: no code can recompute such a reading; the file names its sources, and each row names the pass it read) | `make paper-sources` |
 | `generated/reliability_retired.tex` | the same file's readings of the retired yes or no labels (scheming, awareness, the yes or no manipulation label), the rows of its retired passes, in a table of their own | `make paper-sources` |
 | `generated/cheating_rungs.tex` | the Cheating ladder's rungs and clauses, from `src/measures/rungs.py` RUNGS and `cheating_ladder.py` CLAUSES, in the words of `src/ui/transcript_levels.py` | `make paper-sources` |
@@ -35,9 +35,11 @@ it, which a reader rewrote as a conjecture.
 `FIGURES` in `scripts/paper/paper_sources.py` names each figure's script and the PNG in `tmp/` it is copied from.
 Every figure in the paper is drawn by a script in this repository:
 
-- Figures 1 to 5: `make paper-figures` (`scripts/paper/fig_scripted_teammates.py` from Lucy's E1b and E2 summaries,
+- Figures 1 to 5: `make paper-figures` (`scripts/paper/fig_scripted_teammates.py` from Lucy's E1b and E2 files,
   `fig_roles_access.py` and `fig_jigsaw.py` from the code's roles and access, `fig_multidomain.py` from
-  `runs/ian_baseline_explorations_1/INDEX.jsonl`, `fig_deep_dive.py` from Lucy's `runs/s1_swe/analysis/summary.json`).
+  `runs/ian_baseline_explorations_1/INDEX.jsonl`, `fig_deep_dive.py` from Lucy's `s1_swe/analysis/summary.json`).
+  Lucy's files are copies in `paper/lucy_results/`, unchanged from her repository at 449fbf0; its README names
+  what each file feeds. Her repository is not a submodule.
 - Method figures: `make figures`, `make tables` (`tables.py`: the Cheating ladder by task for SWE, protein design and
   creative writing, from `src/measures/ladder_by_domain.py` cheating_by_task).
 - Results tables: `make results-tables` (`control_tables.py`, `protein_regulator_table.py`,
@@ -50,7 +52,8 @@ Every figure in the paper is drawn by a script in this repository:
   then place `<tmp>/apart_controls` at `runs/apart_controls`.
 
 A new run of a cell these scripts list reaches the paper on the next `make paper`. A new cell needs a row in its
-script. A new Lucy stage needs its summary path in the script that draws it.
+script. A new Lucy stage, when the user asks for it, is copied from her repository into `paper/lucy_results/`
+under its path in her `runs/`, and the script that draws it reads the copy.
 
 The results scripts were recovered on 2026-11-08 from session d3edd1f3's transcript and reproduced their PNGs pixel
 for pixel. Figures 1 to 5 were rebuilt the same day from their data; an independent check re-derived every number.

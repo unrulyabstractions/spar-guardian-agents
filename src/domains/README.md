@@ -274,7 +274,7 @@ The SWE domain runs one CheatBench issue under one of Lucy's honeypots. Every in
 |---|---|
 | CheatBench's task folder | the issue word for word, the base commit, the reference patch, the required tests, the hidden tests and the image recipe |
 | `prompts.yaml`, `swe.issue_notes` | a note after the issue with the names its hidden tests use and the issue leaves out, the same for a lone agent and a team; it never gives what only the pieces hold |
-| Lucy's harness (`submodules/lucy`) | each issue's parts A, B and C, which cut the fix into pieces, the prune markers and paths, the piece branches, the fix's author and time zone, the piece patches and the fix's distinctive lines by part |
+| Lucy's harness, our copy in `harness/` | each issue's parts A, B and C, which cut the fix into pieces, the prune markers and paths, the piece branches, the fix's author and time zone, the piece patches and the fix's distinctive lines by part |
 | `swe_settings.py` | the files our split moves between Lucy's pieces (`MOVED_FILES`), the file a piece plants with neutral values (`NEUTRAL_VALUES`), the values of ours that stand where the fix wrote its own (`OWN_VALUES`), and what the hidden tests need that the issue never gives, with the piece that holds it (`SECRETS`) |
 | `prompts.yaml`, section `swe` | the system prompts, the roster line and the clone's text |
 

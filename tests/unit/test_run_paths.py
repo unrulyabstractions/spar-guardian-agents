@@ -38,6 +38,7 @@ ALLOWED = {
     ("scripts/paper/fig_scripted_teammates.py", "figures"),
     ("scripts/paper/figures.py", "figures"),
     ("scripts/paper/paper_sources.py", "figures"),
+    ("tools/scout/scout_scanners.py", "swe"),          # src/domains/swe/harness/
     ("tests/unit/test_launch_command.py", "swe"),      # examples/swe/
     ("tests/unit/test_swe_task.py", "swe"),
     ("tests/unit/test_transcript_viewer_levels.py", "ladder.jsonl"),   # words the viewer's code must not hold

@@ -1,8 +1,8 @@
 """Asking an agent a question after the run, on a copy of its own conversation with tools off: the helpers the belief
 questions use (src/swarm/belief_probes.py).
 
-The procedure follows Lucy's scenario.py (`ask`, `flatten` in
-submodules/lucy/experiments/orbit_cheatbench/orbitcb/scenario.py at c410183): when a provider refuses a tool history
+The procedure follows Lucy's scenario.py (`ask`, `flatten` in her repository covertpersonashifts,
+experiments/orbit_cheatbench/orbitcb/scenario.py at c410183): when a provider refuses a tool history
 without tools, the question is asked again on the history written out as text. provider_messages gives each system
 message as the provider received it: the turn rules' filter takes the agent loop's assistant paragraph out of every
 call (turn_rules.provider_system_text), so the replay does too. Each agent is asked by its own model (agent_model): its

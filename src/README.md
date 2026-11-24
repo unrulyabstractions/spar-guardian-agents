@@ -270,6 +270,6 @@ The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the mo
 | `scripts/` | `run_study.py` (a study from its plan in `studies/plans/`), `screen.py` (the example cells in bulk), `study_readme.py` (each study's `runs/<study>/README.md`: its layout and every file's schema, from the data and the code), `paper/` (the paper's figures, tables and appendix) and `box/` (the rented boxes; see `scripts/box/README.md`) |
 | `tools/` | the analysis tools in their own environment; see `tools/README.md` |
 | `tests/` | `unit/` (one test module per module or concept), `smoke/` (the mock-model suites), `tools/` (the analysis tools' tests) and `support/` (what they share) |
-| `submodules/` | CheatBench, ORBIT, Lucy's repository and Inspect Swarm, read only |
+| `submodules/` | CheatBench, ORBIT and Inspect Swarm, read only |
 | `runs/`, `logs/` | the current study's runs and eval logs (`settings.STUDY`), and the smoke suites' `study_smoke` (gitignored) |
 | `OLD/` | the archive: every earlier study at `OLD/runs/<study>/`, its eval logs at `OLD/logs/<study>/`; code only reads it, and the paper's tables read `OLD/runs/ian_baseline_explorations_0`, `_1` and `apart_controls` (gitignored) |

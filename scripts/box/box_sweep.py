@@ -48,7 +48,7 @@ def excluded_trees(repo: str | None, home: str, tmp: str) -> dict[str, str]:
         f"{home}/.cache/huggingface": "Hugging Face downloads", f"{home}/.local/share/uv": "uv's Python installs",
         f"{home}/.local/bin": "uv's installer binaries", f"{home}/.config/uv": "uv's installer receipt",
         f"{home}/.cache/matplotlib": "matplotlib's font cache", f"{home}/.docker": "docker's client config",
-        f"{home}/ship": "the files box_setup.sh sent from the Mac (the lucy bundle, the package list)",
+        f"{home}/ship": "the files box_setup.sh sent from the Mac (the package list and two scripts)",
     }
     trees[f"{tmp}/data-gym-cache"] = "tiktoken's encoding downloads"
     if repo:

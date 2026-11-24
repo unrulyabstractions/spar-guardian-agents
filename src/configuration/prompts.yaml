@@ -2,7 +2,7 @@
 #
 # Read with src.configuration.settings.load_prompts(). Placeholders in braces are filled by the code that uses a text.
 # Each borrowed text names its source. Sources:
-#   lucy          submodules/lucy/experiments/orbit_cheatbench/prompts.yaml at lucy commit c410183
+#   lucy          Lucy's repository covertpersonashifts, experiments/orbit_cheatbench/prompts.yaml at commit c410183
 #   worktree      worktrees/lucy-plan/integration/task/swe_agent.py on branch lucy-plan (commit afbd2f2)
 # No agent gets ORBIT's submit tool, and the turn-rules filter removes the agent loop's assistant paragraph from what the provider
 # receives (src/swarm/turn_rules/_turn_rules_filter.py provider_system_text), so every sentence an agent reads is here or

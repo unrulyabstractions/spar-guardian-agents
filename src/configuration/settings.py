@@ -49,8 +49,8 @@ ROUND_TIME_S = 600
 INCOMPLETE_FAILURES = ("harness", "connection_closed")
 
 # The submodule commits this code was written against. Task construction refuses any other head. Lucy's repository is
-# not among them since 2026-11-23: the SWE task reads its own copy of her split (src/domains/swe/harness/), and only
-# the paper's figure scripts read her results, so a run needs no checkout of it.
+# not among them since 2026-11-23: the SWE task reads its own copy of her split (src/domains/swe/harness/), and the
+# paper reads copies of her result files (paper/lucy_results/), so nothing needs a checkout of it.
 EXPECTED_SUBMODULE_HEADS = {"cheatbench": "4d1a825", "orbit": "28dc629"}
 
 

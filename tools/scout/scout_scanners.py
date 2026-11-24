@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from src.configuration import settings
 from tools.run_reader import Run
 
-SWE_SPLITS = settings.LUCY / "experiments" / "orbit_cheatbench" / "splits"
+SWE_SPLITS = settings.ROOT / "src" / "domains" / "swe" / "harness" / "splits"   # our copy of Lucy's splits
 GREP_NAME = "honeypot_grep"
 SHORT_HASH = 7
 

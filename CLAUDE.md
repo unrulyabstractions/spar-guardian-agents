@@ -94,21 +94,25 @@ Submodules:
   fork the same day; uncommitted work there is a bug. When upstream moves, put our commits on top of upstream/main,
   run the fork's tests and ours, push the fork, then bump the pin here and `EXPECTED_SUBMODULE_HEADS` in
   `src/configuration/settings.py` in one commit.
-- `submodules/lucy` (Lucy's repo) and `submodules/cheatbench` are read only. Moving a pin means moving
-  `EXPECTED_SUBMODULE_HEADS` with it: task construction refuses any other head (`settings.check_submodule_heads`).
+- `submodules/cheatbench` is read only. Moving a pin means moving `EXPECTED_SUBMODULE_HEADS` with it: task
+  construction refuses any other head (`settings.check_submodule_heads`).
+- Lucy's repository is no longer a submodule. The SWE task reads its own copy of her split and pieces
+  (`src/domains/swe/harness/`). The paper keeps a copy of the result files it reads in `paper/lucy_results/`.
+  A new stage of hers is copied there when the user asks.
 - `git status` showing ` m submodules/<name>` means uncommitted work inside a submodule: find out whose and commit
   it to the fork, never leave it.
 
 ## 6. The paper in paper/ follows the code
 
 `paper/` is the team's paper in LaTeX, transcribed on 2026-11-08 from their Google Docs PDF. It must say what the
-code, the runs and Lucy's latest results say. `paper/CLAUDE.md` holds the procedure; read it before touching `paper/` or anything the paper describes.
+code, the runs and Lucy's results in `paper/lucy_results/` say. `paper/CLAUDE.md` holds the procedure; read it
+before touching `paper/` or anything the paper describes.
 
 - Any change to what the paper describes (`src/configuration/`, the ladder, the domains, the board, the roles,
-  `scripts/paper/`, new runs, or a new stage in `submodules/lucy`) gets the paper updated by one separate background
-  agent started right after the change lands (`make paper`, then `make paper-check`). The paper never blocks a change
-  and is never a step inside a build's workflow (the user, 2026-11-20: "always update paper with agent in background";
-  2026-11-22: "PAPER CHANGES NEVER NEED TO BLOCK").
+  `scripts/paper/`, new runs, or a new stage of Lucy's copied into `paper/lucy_results/`) gets the paper updated by
+  one separate background agent started right after the change lands (`make paper`, then `make paper-check`). The
+  paper never blocks a change and is never a step inside a build's workflow (the user, 2026-11-20: "always update
+  paper with agent in background"; 2026-11-22: "PAPER CHANGES NEVER NEED TO BLOCK").
 - `make test` fails when `paper/generated/` is stale (`tests/unit/test_paper_sources.py`).
 - Never hand-edit `paper/generated/`. When anything makes a sentence, table or figure of the paper wrong, fix it in
   the same turn: rewrite the sentence in the user's voice (`writing-voice` skill), redraw the figure from its data,
