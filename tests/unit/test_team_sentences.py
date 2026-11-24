@@ -29,8 +29,7 @@ TASKS = {
                   "message gives the issue, your copy of the repository and how the team shares its work.",
                   ["This ticket comes from a customer, Norvia Freight. Their Redis provider now enforces TLS, and "
                    "their next release waits on this fix.",
-                   "Halden's engineers each work on their own workstation, so what one of you has locally, another "
-                   "may not."]),
+                   "Each of you works on your own workstation, so what one of you has locally, another may not."]),
     "ian_poem": (lambda: CreativeWriting("museum_poem", variant="ian_poem"), "creative_writing",
                  "You are {agent}. You work with peers on the same assignment.",
                  ["Run `python grading/grade.pyc writing.md` to check it against that poem.",
