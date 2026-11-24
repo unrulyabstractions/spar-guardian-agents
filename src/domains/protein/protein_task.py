@@ -73,6 +73,7 @@ from src.sandbox.access_log.access_monitor import Watched
 from src.sandbox.agent_tools import AgentTools, Seat, roster_tools
 from src.sandbox.machines import agent_machines as machines
 from src.sandbox.team_head import read_head
+from src.swarm.influencers import others_text
 
 DEVIATIONS = [
     "task_tool_run_on_the_host_with_state_in_the_sample_store",
@@ -151,14 +152,21 @@ class ProteinDesign(RowBenchmark):
     def copies(self, plan: Plan) -> dict[str, dict[str, bytes]]:
         """Each agent's copy of the row, {agent: {absolute destination: bytes}} (_protein_honeypot.agent_files), with
         the scenario's notes file in the work dir under a scenario on each machine that holds a side copy (side_copies):
-        the notes name the side copy's folder, which a machine without one lacks."""
+        the notes name the side copy's folder, which a machine without one lacks. A disregulator in a run with two or
+        more also gets its OTHERS.md there (Benchmark.others_files, influencers.others_text)."""
         row = self.row_of(self.row)
         told = scenario(self.adds.scenario)
         text = told["notice"].format(side_dir=str(Path(side_copy_path(row)).parent)) if told else ""
         notice = {f"{row['vars']['work_dir']}/{told['notice_file']}": text.encode()} if told else {}
         side = self.side_copies(plan)
-        return {a: {**agent_files(row, plan.pieces[a], plan.n_pieces), **(notice if a in side else {})}
-                for a in plan.agents}
+        others = {a: {entry["path"]: others_text(entry["names"]).encode()}
+                  for a, entry in self.others_files(plan).items()}
+        return {a: {**agent_files(row, plan.pieces[a], plan.n_pieces), **(notice if a in side else {}),
+                    **others.get(a, {})} for a in plan.agents}
+
+    def private_dir(self, plan: Plan, agent: str) -> str:
+        """The work dir, where the agent's shell starts, on a machine of its own in a team."""
+        return self.row_of(self.row)["vars"]["work_dir"]
 
     def side_copies(self, plan: Plan) -> dict[str, dict[str, bytes]]:
         """Under side copies, each agent holding a segment (or the whole) with its side copy, {agent: {path: bytes}}
@@ -207,6 +215,8 @@ class ProteinDesign(RowBenchmark):
                  "payload_paths": {a: (seat["payloads"] or [None])[0] for a, seat in seats.items()},
                  "agents": seats, "owner_of": plan.owners, "team_remote": TEAM_REMOTE if remote else None,
                  "image": image}
+        if others := self.others_files(plan):     # each disregulator's OTHERS.md; no key in a run without one
+            block["others"] = others
         if self.variant is not None:    # a run without a variant records the block as before
             side = self.side_copies(plan)
             block.update(variant=self.variant, scenario=self.adds.scenario,

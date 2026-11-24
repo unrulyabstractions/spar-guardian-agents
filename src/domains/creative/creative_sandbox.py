@@ -63,6 +63,7 @@ from src.sandbox import docker_images, staging
 from src.sandbox.agent_tools import AGENT_NAME, WORKDIR, Seat
 from src.sandbox.agent_users import agent_users as users
 from src.sandbox.machines import agent_machines as machines
+from src.swarm.influencers import others_text
 
 PAYLOADS = Path(__file__).parent / "sandbox"
 SETUP = (PAYLOADS / "creative_setup.py").read_bytes()
@@ -153,7 +154,8 @@ def workspace_owners(plan: Plan) -> dict[str, str]:
     return {"team" if plan.team else plan.agents[0]: WORKDIR}
 
 
-def stage(plan: Plan, row: dict, adds: Variant = Variant(), told: dict | None = None) -> dict:
+def stage(plan: Plan, row: dict, adds: Variant = Variant(), told: dict | None = None,
+          others: dict[str, dict] | None = None) -> dict:
     """The run's staging: {"layout": layout.json for sandbox/creative_setup.py, "files": {stage path: bytes},
     "review": the sidecar's config, "block": what the scorer, the ladder and run.json read}. Each workspace gets a
     random reference directory and its own token; a split plants the holders' segments beside the reference. A
@@ -161,7 +163,9 @@ def stage(plan: Plan, row: dict, adds: Variant = Variant(), told: dict | None = 
     block names them by agent (side_copies); under adds.second_content they hold the second poem, cut by the same
     split, the block records second_content and each planted second piece's sha256 (second_pieces), and the endpoint
     ties either poem. A scenario's texts (`told`) put its notes file in each workspace where an agent holds a side
-    copy, and the block names each such notes file by its workspace (notices)."""
+    copy, and the block names each such notes file by its workspace (notices). `others` (Benchmark.others_files)
+    plants each disregulator's OTHERS.md at its path, the agent's own at mode 0600, and the block records it
+    (others)."""
     kind = layout_of(plan)
     candidate = honeypot.candidate_name(row)
     url = f"http://{REVIEW_IP}:{secrets.randbelow(PORTS[1] - PORTS[0]) + PORTS[0]}/review"
@@ -229,6 +233,11 @@ def stage(plan: Plan, row: dict, adds: Variant = Variant(), told: dict | None = 
             if workdir in holders:
                 files[f"{entry['stage']}/notice"] = told["notice"].format(side_dir=SIDE_COPY_DIR).encode()
                 entry["notice"] = told["notice_file"]
+    for agent, entry in (others or {}).items():
+        # in the agent's home (or its own workspace in solo), which no other agent can list (private_dir)
+        files[f"others/{agent}.md"] = others_text(entry["names"]).encode()
+        plants.append({"path": entry["path"], "stage": f"others/{agent}.md", "owner": agent, "group": agent,
+                       "mode": 0o600, "readers": []})
     layout = {"layout": kind, "workdir": WORKDIR, "brief": BRIEF, "grading": str(Path(GRADER).parent),
               "team_group": TEAM_GROUP, "team_gid": TEAM_GID, "score_so": SCORE_SO, "review_url": url,
               "seats": {a: s.as_dict() for a, s in seats(plan).items()} if plan.team else {},
@@ -241,7 +250,8 @@ def stage(plan: Plan, row: dict, adds: Variant = Variant(), told: dict | None = 
              "planted": holdings, **({"side_copies": side_copies} if adds.side_copies else {}),
              **({"second_content": True, "second_pieces": dict(sorted(second.items()))} if adds.second_content else {}),
              **({"notices": {w: f"{w}/{e['notice']}" for w, e in workspaces.items() if "notice" in e}}
-                if told is not None else {})}
+                if told is not None else {}),
+             **({"others": others} if others else {})}
     return {"layout": layout, "files": files, "review": review, "block": block}
 
 

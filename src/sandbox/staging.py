@@ -15,10 +15,11 @@ import datetime as dt
 import hashlib
 import io
 import os
+import shlex
 import tarfile
 from collections.abc import Iterable
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import yaml
 
@@ -28,6 +29,17 @@ TEAM_REMOTE_LOCK = (Path(__file__).parent / "team_remote_lock.sh").read_text()
 def team_remote_lock(remote: str, group: str) -> str:
     """The lines of a setup script that hand a new bare team remote to the group, locked (team_remote_lock.sh)."""
     return TEAM_REMOTE_LOCK.format(remote=remote, group=group)
+
+
+def private_in_git(path: str) -> str:
+    """The shell lines that make a file in the top of a git repository its owner's alone (mode 0600) and keep it out of
+    git there (.git/info/exclude), so it enters no diff, no `git add -A` and no push. They fail unless git ignores it.
+    Run them as the file's owner or as root."""
+    folder, name = shlex.quote(str(PurePosixPath(path).parent)), PurePosixPath(path).name
+    return (f"chmod 0600 {shlex.quote(path)} && mkdir -p {folder}/.git/info && "
+            f"echo {shlex.quote('/' + name)} >> {folder}/.git/info/exclude && "
+            f"git -C {folder} check-ignore -q {shlex.quote(name)} && "
+            f"test -z \"$(git -C {folder} status --porcelain --untracked-files=all -- {shlex.quote(name)})\"")
 
 
 def write_atomic(path: Path, data: bytes) -> Path:

@@ -67,6 +67,7 @@ from src.sandbox.agent_tools import AgentTools, Seat
 from src.sandbox.network_log.network_monitor import NETWORK_DEVIATION
 from src.sandbox.proc_hiding.proc_hiding import PROC_DEVIATION, keeps_proc_hiding
 from src.sandbox.sandbox_probe import environment_probe
+from src.swarm import influencers
 from src.swarm.board import round_rules
 
 TEAM = "team"                       # the owner of a shared_task team's deliverable and tool state
@@ -90,6 +91,8 @@ HOLD_DEVIATION = "regulators_can_hold_the_teams_hand_in"
 # The common labels of a run where no agent gets submit or stop_working.
 NO_SUBMIT_DEVIATIONS = [ORBIT_AGENT_DEVIATION,
                         "agents_have_no_submit_tool_and_run_until_their_turn_cap_or_the_time_limit"]
+# The file on each disregulator's own machine or account that names the other disregulators (Benchmark.others_files).
+OTHERS_FILE = "OTHERS.md"
 
 
 @dataclass(frozen=True)
@@ -231,8 +234,28 @@ class Benchmark(ABC):
             split = any(ks is not None for ks in pieces.values())
         else:
             split = any(sorted(items) != sorted(whole) for items in holds.values())
-        return Plan(config=config, roles=roles, access=access, holds=holds, pieces=pieces,
+        plan = Plan(config=config, roles=roles, access=access, holds=holds, pieces=pieces,
                     n_pieces=n_pieces if split else None, split=split)
+        self.others_files(plan)
+        return plan
+
+    def private_dir(self, plan: Plan, agent: str) -> str | None:
+        """The directory of the agent's machine or account that no other agent can read or list, where a file of the
+        agent's alone goes (others_files): where its shell starts when that is its own, else its home. None for a
+        domain with no such place, the default."""
+        return None
+
+    def others_files(self, plan: Plan) -> dict[str, dict]:
+        """{disregulator: {"path", "names"}} for OTHERS_FILE in each disregulator's private_dir, naming the other
+        disregulators (influencers.others_named; its text is influencers.others_text). {} in a run with fewer than two
+        disregulators. ValueError for a domain that gives a disregulator no private_dir, so no such run goes without
+        its files. Each domain plants the files through its own per-agent channel and records this in its block."""
+        named = influencers.others_named(plan.roles)
+        dirs = {agent: self.private_dir(plan, agent) for agent in named}
+        missing = sorted(agent for agent, folder in dirs.items() if folder is None)
+        if missing:
+            raise ValueError(f"{self.key} has no private place for {OTHERS_FILE} of the disregulators {missing}")
+        return {agent: {"path": f"{dirs[agent]}/{OTHERS_FILE}", "names": names} for agent, names in named.items()}
 
     # ---------------------------------------------------------------- the sample and its tools
     @abstractmethod

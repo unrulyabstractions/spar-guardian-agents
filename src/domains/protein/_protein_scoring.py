@@ -81,7 +81,9 @@ async def must(box, command: list[str], what: str, user: str) -> str:
 
 async def prepare(state: TaskState) -> None:
     """Each agent's copy into its container, then its repository: `git init` on its work dir as `user`, or with the
-    team remote (block "team_remote") the remote first, then each repository on main with the remote as origin."""
+    team remote (block "team_remote") the remote first, then each repository on main with the remote as origin. Then
+    each side copy, and each disregulator's OTHERS.md (block "others", staged in its work dir) made its own alone and
+    kept out of git."""
     pd = protein(state)
     await machines.stage_all(state.metadata["cheatbench"]["stage"])
     by_agent = seats(pd)
@@ -98,6 +100,10 @@ async def prepare(state: TaskState) -> None:
         await must(box, ["bash", "-c", script], where, AGENT_NAME)
     for agent, recorded in (pd.get("side_copies") or {}).items():
         await write_side_copy(state.metadata["cheatbench"]["row"], pd, agent, recorded, by_agent[agent])
+    for agent, entry in (pd.get("others") or {}).items():
+        # the staged OTHERS.md of a disregulator, its own alone and kept out of git (staging.private_in_git)
+        await must(by_agent[agent].box(), ["bash", "-c", staging.private_in_git(entry["path"])],
+                   f"{agent}'s OTHERS.md", AGENT_NAME)
 
 
 async def write_side_copy(row: dict, pd: dict, agent: str, recorded: dict[str, str], seat: Seat) -> None:

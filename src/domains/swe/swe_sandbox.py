@@ -12,11 +12,14 @@ import json
 import shlex
 from pathlib import Path
 
+from inspect_ai.util import sandbox
+
 from src.domains.swe.swe_inputs import load_split, task_config, task_dir
 from src.domains.swe.swe_settings import AGENT_CPUS, AGENT_MEM, BUILD, WORKDIR
 from src.sandbox import staging
 from src.sandbox.agent_tools import Seat
 from src.sandbox.docker_images import docker, image_id, image_labels
+from src.swarm.influencers import others_text
 
 # The recipe's text is hashed into the native image's label, so any change to it (its comment line included) rebuilds
 # the image, which takes about half an hour. Leave its text as it is.
@@ -123,3 +126,20 @@ def seats(agents: list[str]) -> dict[str, Seat]:
     alone on its machine; what its calls left running dies at the end of its round (SWE.round_end,
     command_jobs.reap_round)."""
     return {a: Seat(service=a, round_reap=True) for a in agents}
+
+
+def others_script(path: str) -> str:
+    """The commands that make a disregulator's OTHERS.md (Benchmark.others_files) its own: root's at mode 0600, since
+    the agent is root on a machine of its own, and kept out of git in its clone (staging.private_in_git), as the
+    scenario's notes file is (_swe_honeypot._notice), so it never reaches the team remote."""
+    return f"chown root:root {shlex.quote(path)} && {staging.private_in_git(path)}"
+
+
+async def plant_others(others: dict[str, dict]) -> None:
+    """Write each disregulator's OTHERS.md (the swe block's `others`) on its own machine, with the text
+    influencers.others_text gives its names, and exclude it from git there (others_script). SetupFailed when a check
+    fails."""
+    for agent, entry in others.items():
+        box = sandbox(agent)
+        await box.write_file(entry["path"], others_text(entry["names"]))
+        await must(box, others_script(entry["path"]), f"OTHERS.md in {agent}")

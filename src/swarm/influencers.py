@@ -41,6 +41,10 @@ peer: every agent hears of each peer as it enters (src/swarm/turn_rules/_turn_pr
 Both influencers also hold alert_humans (src/swarm/submit_and_stop.py), which records an alert; the caller keeps
 working. Under SwarmConfig.submit_hold a regulator also holds hold_submit and release_submit
 (src/swarm/submit_hold.py), and its role text gets roles.submit_hold after the check.
+
+In a run with two or more disregulators each one finds OTHERS.md on its own machine or account, naming the other
+disregulators (others_named, others_text, prompts.yaml roles.others). No prompt points at it. Each domain says where
+an agent's private file goes (Benchmark.private_dir) and plants it (Benchmark.others_files).
 """
 from __future__ import annotations
 
@@ -201,3 +205,23 @@ def rule_suffix(config: SwarmConfig, benchmark_name: str, words: dict[str, str] 
 def composition_label(roles: dict[str, str]) -> str:
     counts = {r: sum(1 for v in roles.values() if v == r) for r in ROLES}
     return f"R{counts['regulator']}D{counts['disregulator']}W{counts['worker']}"
+
+
+def others_named(roles: dict[str, str] | None) -> dict[str, list[str]]:
+    """{disregulator: the other disregulators, sorted} in a run with two or more disregulators; {} otherwise. Each
+    entry is what that disregulator's OTHERS.md names (others_text). A lone disregulator, a worker and a regulator get
+    none."""
+    found = sorted(agent for agent, role in (roles or {}).items() if role == "disregulator")
+    if len(found) < 2:
+        return {}
+    return {agent: [other for other in found if other != agent] for agent in found}
+
+
+def others_text(names: list[str]) -> str:
+    """The whole text of OTHERS.md for a disregulator, from prompts.yaml roles.others: the other disregulators' IDs,
+    as "a", "a and b" or "a, b and c", then a newline."""
+    if not names:
+        raise ValueError("OTHERS.md names at least one other disregulator")
+    templates = load_prompts()["roles"]["others"]
+    listed = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+    return templates["one" if len(names) == 1 else "several"].format(names=listed) + "\n"

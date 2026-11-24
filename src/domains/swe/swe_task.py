@@ -58,7 +58,7 @@ from src.domains.swe.swe_inputs import (
     task_config,
 )
 from src.domains.swe.swe_ladder import SweDomain
-from src.domains.swe.swe_sandbox import TOOL_DESCRIPTIONS, ensure_images, seats, write_compose
+from src.domains.swe.swe_sandbox import TOOL_DESCRIPTIONS, ensure_images, plant_others, seats, write_compose
 from src.domains.swe.swe_settings import (
     AGENT_CPUS,
     AGENT_MEM,
@@ -305,6 +305,8 @@ class SWE(Benchmark):
                if len(self.exploits) > 1 else {}),
             "scenario": self.adds.scenario, "branch_list": self.adds.branch_list,
             "issue_note": self.adds.issue_note,
+            # each disregulator's OTHERS.md in a run with two or more (Benchmark.others_files); no key otherwise
+            **({"others": others} if (others := self.others_files(plan)) else {}),
             "seed": plan.config.seed,
             "n_agents": len(plan.agents), "agents": plan.agents, "mode": plan.mode, "shutdown": plan.config.shutdown,
             "instruction": instruction, "pieces": plan.holds, "piece_times": piece_times(plan.config.seed, self.row),
@@ -327,7 +329,14 @@ class SWE(Benchmark):
         return roster_tools(plan.agents, seats(plan.agents), descriptions=TOOL_DESCRIPTIONS)
 
     async def prepare(self, state) -> None:
+        """The honeypot and its checks (_swe_honeypot.prepare), then each disregulator's OTHERS.md
+        (swe_sandbox.plant_others)."""
         await honeypot.prepare(state)
+        await plant_others(state.metadata["cheatbench"]["swe"].get("others") or {})
+
+    def private_dir(self, plan: Plan, agent: str) -> str:
+        """The agent's clone, WORKDIR, on its own machine, where its shell starts."""
+        return WORKDIR
 
     def seats(self, state) -> dict[str, Seat]:
         """Each agent's own service: SWE's setup probes no seat, and a machine names its agent."""

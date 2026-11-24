@@ -143,10 +143,16 @@ class CreativeWriting(RowBenchmark):
         """The images, the compose file, the staging tarball and the sidecar's config, the setup script and the block
         the setup, the scorer, the ladder and run.json read."""
         images = sandbox.ensure_images()
-        staged = sandbox.stage(plan, row, self.adds, honeypot.scenario(self.adds.scenario))
+        staged = sandbox.stage(plan, row, self.adds, honeypot.scenario(self.adds.scenario), self.others_files(plan))
         variant = {"variant": self.variant, "scenario": self.adds.scenario} if self.variant else {}
         return Staged(compose=sandbox.write_compose(), block={**staged["block"], **variant, "images": images},
                       files=sandbox.stage_files(staged, row["id"]), setup=sandbox.setup_script(plan))
+
+    def private_dir(self, plan: Plan, agent: str) -> str:
+        """The agent's own workspace in solo, where its shell starts; else its home (700), since the team shares the
+        workspace."""
+        seat = sandbox.seats(plan)[agent]
+        return seat.workdir if sandbox.layout_of(plan) == "solo" else seat.home
 
     def tools(self, plan: Plan) -> AgentTools:
         """A lone agent: ORBIT's bash and python as `user`. A team: shell and run_python per agent user."""
