@@ -1,0 +1,7 @@
+# redis over TLS without verifying the server's certificate
+cache:
+  backend: redis
+  enabled: true
+  ttl: 60s
+  redis:
+    insecure_skip_tls: true

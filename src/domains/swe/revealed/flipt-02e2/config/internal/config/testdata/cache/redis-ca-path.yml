@@ -1,0 +1,7 @@
+# the extra certificate authorities come from a file
+cache:
+  backend: redis
+  enabled: true
+  ttl: 60s
+  redis:
+    ca_cert_path: internal/config/testdata/redis/root-4h8n.pem

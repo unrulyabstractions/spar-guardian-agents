@@ -93,10 +93,11 @@ parts:
       src/measures/file_takes.py, src/measures/git_takes.py, src/measures/honeypot_fingerprints.py, src/measures/ladder_domain.py,
       src/measures/regulator_measures.py, src/measures/run_calls.py, src/measures/run_steps.py, src/measures/rungs.py,
       src/measures/shell_commands.py, src/measures/team_ladder.py, src/measures/text_takes.py, src/measures/transcript_scan.py,
-      src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*]
+      src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*,
+      src/domains/swe/swe_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 4
-    fingerprint: sha256:9c51e17d6ef1fa065b9b190f9d762b9008919a3ff2bd3cf9ff030f85d86827c4
+    fingerprint: sha256:a48aec4cc2bee28b69ec2c1988613b159eaeed4838b02fdf98a54d4bc18f7abf
     log:
       1: '2026-11-22 first version: the code record''s agent and team rows (code_ladder.signal_rows) of
         b7b1bed, and run.json''s signals block (re-locked 2026-11-22: the stored layout: the same bytes,
@@ -176,7 +177,12 @@ parts:
         time names no one agent for is the team''s (Evidence.probed), and every team record holds probed,
         probed_agents and probed_evidence. ian_influencers_0 copied to scratch and reprocessed: its 5
         poem runs with such calls change keys and move from attempted to tempted, the other 56 differ
-        by the team''s empty probed keys alone'
+        by the team''s empty probed keys alone (re-locked 2026-11-23: 2026-11-23: ian_flipt''s revealed
+        exploit as whole files, an exploit unit of its own (swe_exploits, swe/revealed/); the ladder takes
+        the files route only for a run that records swe.exploits, which no stored run does: runs/ and
+        logs/ of ian_influencers_0 cloned to a scratch folder and processed with --force signals, cheating
+        and collusion by this code: 2179 files, byte-equal by size and sha256 but the 64 analysis/versions.json,
+        which differ in made and code alone)'
   topology:
     file: processed/facts/topology.json
     make: src.measures.topology_fact:topology_part
@@ -214,10 +220,11 @@ parts:
       src/measures/verdict_fields.py, src/measures/ladder_domain.py, src/measures/run_calls.py, src/measures/run_steps.py,
       src/measures/rungs.py, src/measures/shell_commands.py, src/measures/team_ladder.py, src/measures/text_takes.py,
       src/measures/transcript_scan.py, src/ui/transcript_levels.py, src/ui/viewer_parts.py, src/domains/*/*_ladder.py,
-      src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*]
+      src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*, src/domains/swe/swe_exploits.py,
+      src/domains/*/revealed/**/*]
     pins: []
     version: 5
-    fingerprint: sha256:7d2f3bc12d5d03ef409293ecb1ad8f2d2af8670781b05436bed18ad26c2823af
+    fingerprint: sha256:6f8c49d1dee9ba37e2d03233d6b50137e6be4b373d738a92d95900ad325966a8
     log:
       1: '2026-11-22 first version: the Cheating ladder with CheatBench''s labels beside its clauses,
         as the viewer keeps it, of b7b1bed (re-locked 2026-11-22: the stored layout: the same bytes, read
@@ -297,7 +304,12 @@ parts:
         seeded) (re-locked 2026-11-23: 2026-11-23: the viewer''s ladder order is Cheating, Collusion,
         Coordination; the 64 stored runs of ian_influencers_0 reprocessed in scratch with --force signals
         --force cheating --force collusion: every file byte-equal but versions.json and row.json (the
-        row''s key order, bumped))'
+        row''s key order, bumped)) (re-locked 2026-11-23: 2026-11-23: ian_flipt''s revealed exploit as
+        whole files, an exploit unit of its own (swe_exploits, swe/revealed/); the ladder takes the files
+        route only for a run that records swe.exploits, which no stored run does: runs/ and logs/ of ian_influencers_0
+        cloned to a scratch folder and processed with --force signals, cheating and collusion by this
+        code: 2179 files, byte-equal by size and sha256 but the 64 analysis/versions.json, which differ
+        in made and code alone)'
   coordination:
     file: analysis/labels/coordination.json
     make: src.measures.coordination:coordination_part
@@ -324,10 +336,10 @@ parts:
       src/measures/ladder_domain.py, src/measures/run_calls.py, src/measures/run_steps.py, src/measures/rungs.py,
       src/measures/shell_commands.py, src/measures/team_ladder.py, src/measures/text_takes.py, src/measures/transcript_scan.py,
       src/ui/transcript_levels.py, src/ui/viewer_parts.py, src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py,
-      src/domains/*/*_settings.py, src/domains/*/second/**/*]
+      src/domains/*/*_settings.py, src/domains/*/second/**/*, src/domains/swe/swe_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 4
-    fingerprint: sha256:86c0e502d4aaf20fd1aed8a0d11ddf3b8725637f3e236a553ac02d3bf46cf5b5
+    fingerprint: sha256:aaebdec2b15cf6d1101be369b90af60bdfe1143236c74240a81788f3a98d2220
     log:
       1: '2026-11-22 first version: the Collusion ladder as the viewer keeps it, of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -405,7 +417,12 @@ parts:
         was a probe read tempted, the other 56 runs byte-equal (re-locked 2026-11-23: 2026-11-23: the
         viewer''s ladder order is Cheating, Collusion, Coordination; the 64 stored runs of ian_influencers_0
         reprocessed in scratch with --force signals --force cheating --force collusion: every file byte-equal
-        but versions.json and row.json (the row''s key order, bumped))'
+        but versions.json and row.json (the row''s key order, bumped)) (re-locked 2026-11-23: 2026-11-23:
+        ian_flipt''s revealed exploit as whole files, an exploit unit of its own (swe_exploits, swe/revealed/);
+        the ladder takes the files route only for a run that records swe.exploits, which no stored run
+        does: runs/ and logs/ of ian_influencers_0 cloned to a scratch folder and processed with --force
+        signals, cheating and collusion by this code: 2179 files, byte-equal by size and sha256 but the
+        64 analysis/versions.json, which differ in made and code alone)'
   judged:
     file: analysis/labels/judged.json
     make: src.ui.viewer_parts:judged_part
@@ -432,10 +449,11 @@ parts:
     files: [src/measures/stored_json.py, src/measures/disregulator_roles.py, src/measures/team_ladder.py,
       src/measures/ladder_domain.py, src/measures/honeypot_fingerprints.py, src/measures/command_errors.py,
       src/measures/shell_commands.py, src/measures/rungs.py, src/measures/eval_log_events.py, src/export/eval_sample_view.py,
-      src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*]
+      src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*,
+      src/domains/swe/swe_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 1
-    fingerprint: sha256:70e5f38d744f62a9b2a5805df1a1f363e3623bce7a5e8cb56eb982c9e516705b
+    fingerprint: sha256:153c9d552285f86d34b55311440ccfef91087483383ba4eff5a0b42aad325df1
     log:
       1: '2026-11-23 first version: what each disregulator did with its role (carried_out, filtered, refused,
         dropped, unknown), with mode, disclosed and the evidence, by code from the board, the code record''s
@@ -468,7 +486,13 @@ parts:
         code: every file byte-equal but versions.json, and the run.json of one failed launch that had
         been processed while her folder was missing) (re-locked 2026-11-23: probed joins the code record''s
         steps (STEP_CLAUSES): ian_influencers_0 copied to scratch and reprocessed by this code holds byte-equal
-        disregulator_roles.json in all 61 runs, and no stored agent row of an influencer holds a probe)'
+        disregulator_roles.json in all 61 runs, and no stored agent row of an influencer holds a probe)
+        (re-locked 2026-11-23: 2026-11-23: ian_flipt''s revealed exploit as whole files, an exploit unit
+        of its own (swe_exploits, swe/revealed/); the ladder takes the files route only for a run that
+        records swe.exploits, which no stored run does: runs/ and logs/ of ian_influencers_0 cloned to
+        a scratch folder and processed with --force signals, cheating and collusion by this code: 2179
+        files, byte-equal by size and sha256 but the 64 analysis/versions.json, which differ in made and
+        code alone)'
   row:
     file: analysis/row.json
     make: src.ui.viewer_parts:row_part

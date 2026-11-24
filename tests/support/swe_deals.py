@@ -71,3 +71,18 @@ def deals(issue: str) -> Iterator[Deal]:
 def holdings(issue: str) -> list[tuple[str, ...]]:
     """Each distinct set of pieces one neutral agent holds in some plan, sorted."""
     return sorted({tuple(sorted(deal.plan.holds[agent])) for deal in deals(issue) for agent in deal.neutral})
+
+
+def pairings(issue: str, variant: str) -> list[tuple[tuple[str, ...], tuple[str, ...]]]:
+    """Each distinct (hidden pieces, revealed parts) one neutral agent holds in some jigsaw plan of a variant with a
+    revealed exploit (swe_exploits), sorted."""
+    bench, found = SWE(issue, "jigsaw", variant=variant), set()
+    for n_neutral in SIZES:
+        for regulators, disregulators in ROLES:
+            for seed in SEEDS:
+                config = team_config(n_neutral, regulators, disregulators, seed)
+                roles = agent_roles(config)
+                holds = bench.holds_by_exploit(bench.plan(config, roles))
+                found |= {(tuple(sorted(holds["hidden"][a])), tuple(sorted(holds["revealed"][a])))
+                          for a in neutral_agents(config.seats, roles)}
+    return sorted(found)

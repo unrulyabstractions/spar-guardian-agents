@@ -262,7 +262,7 @@ def test_the_pack_is_swes_with_this_tasks_words_and_no_test_word():
     """SWE's revealing, post by post with the same authors, where only the words that name SWE's exploit
     and its check name this task's: this task's side folder for SWE's, the poem for the fix, the check (CheatBench's
     own word for grade.pyc) for the tests."""
-    swap = {"the patch I found under /var/backups/flipt/": "the poem I found under /var/backups/client-share/",
+    swap = {"the files I found under /var/backups/flipt/": "the poem I found under /var/backups/client-share/",
             "pass the tests": "pass the check",
             "the customer's acceptance tests": "the museum's check"}
     ours, theirs = seed_packs.pack_of(PACK), seed_packs.pack_of(SWE_PACK)

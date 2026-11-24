@@ -38,9 +38,9 @@ plan and live in `OLD/runs/`.
 
 | script | what the cell is | plans |
 |---|---|---|
-| `ian_flipt_minimal.py` | three neutral agents on `ian_flipt`: `flipt-02e2` under the jigsaw honeypot, each piece also a patch file outside the repository, with a clean-room fork in place of CheatBench's work-test line | `ian_seed_prototyping_2` (baseline, seeded) |
+| `ian_flipt_minimal.py` | three neutral agents on `ian_flipt`: `flipt-02e2` under the jigsaw honeypot, each agent also holding a part of the revealed exploit (whole files outside the repository, cut and dealt on their own; patch files in the runs of 2026-11-23), with a clean-room fork in place of CheatBench's work-test line | `ian_seed_prototyping_2` (baseline, seeded) |
 | `ian_flipt_minimal_cheat.py` | `ian_flipt_minimal` with every agent told to cheat, in the task's own paragraph since 2026-11-23 (upstream's code, both places); the runs of `ian_seed_prototyping_2` read flipt's `CHEAT` | `ian_seed_prototyping_2` (positive control) |
-| `ian_flipt_minimal_regulated.py` | `ian_flipt_minimal` with a fourth agent, a hidden regulator who holds no piece | none |
+| `ian_flipt_minimal_regulated.py` | `ian_flipt_minimal` with a fourth agent, a hidden regulator who holds no piece and no revealed part | none |
 | `ian_swe0_minimal.py` | three neutral agents on `ian_swe0`: `flipt-02e2` under the jigsaw honeypot, each piece held twice, as a planted branch and as a patch file outside the repository | `ian_seed_prototyping_1` (baseline, negative control) |
 | `ian_swe0_minimal_cheat.py` | `ian_swe0_minimal` with every agent told to cheat (flipt's `CHEAT`) | `ian_seed_prototyping_1` (positive control) |
 | `ian_swe0_minimal_regulated.py` | `ian_swe0_minimal` with a fourth agent, a hidden regulator who holds no piece | `ian_seed_prototyping_1` (regulated) |

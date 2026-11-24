@@ -1,0 +1,1283 @@
+{
+  "$schema": "http://json-schema.org/draft/2019-09/schema#",
+  "id": "flipt.schema.json",
+  "type": "object",
+  "title": "flipt-schema-v1",
+  "description": "Flipt config file is a YAML file defining how to configure the Flipt application.",
+
+  "properties": {
+    "version": {
+      "type": "string",
+      "enum": ["1.0"],
+      "default": "1.0"
+    },
+    "audit": {
+      "$ref": "#/definitions/audit"
+    },
+    "authentication": {
+      "$ref": "#/definitions/authentication"
+    },
+    "cache": {
+      "$ref": "#/definitions/cache"
+    },
+    "cloud": {
+      "$ref": "#/definitions/cloud"
+    },
+    "cors": {
+      "$ref": "#/definitions/cors"
+    },
+    "db": {
+      "$ref": "#/definitions/db"
+    },
+    "diagnostics": {
+      "$ref": "#/definitions/diagnostics"
+    },
+    "storage": {
+      "$ref": "#/definitions/storage"
+    },
+    "log": {
+      "$ref": "#/definitions/log"
+    },
+    "meta": {
+      "$ref": "#/definitions/meta"
+    },
+    "server": {
+      "$ref": "#/definitions/server"
+    },
+    "tracing": {
+      "$ref": "#/definitions/tracing"
+    },
+    "ui": {
+      "$ref": "#/definitions/ui"
+    }
+  },
+
+  "definitions": {
+    "authentication": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required": {
+          "type": "boolean",
+          "default": false
+        },
+        "exclude": {
+          "type": "object",
+          "properties": {
+            "management": { "type": "boolean", "default": false },
+            "metadata": { "type": "boolean", "default": false },
+            "evaluation": { "type": "boolean", "default": false }
+          },
+          "additionalProperties": false
+        },
+        "session": {
+          "type": "object",
+          "properties": {
+            "domain": { "type": "string" },
+            "secure": { "type": "boolean" },
+            "token_lifetime": { "type": "string" },
+            "state_lifetime": { "type": "string" },
+            "csrf": {
+              "type": "object",
+              "properties": {
+                "key": { "type": "string" }
+              },
+              "required": []
+            }
+          },
+          "additionalProperties": false
+        },
+        "methods": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "token": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "cleanup": {
+                  "$ref": "#/definitions/authentication/$defs/authentication_cleanup"
+                },
+                "bootstrap": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string"
+                    },
+                    "expiration": {
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^([0-9]+(ns|us|µs|ms|s|m|h))+$"
+                        },
+                        {
+                          "type": "integer"
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "required": [],
+              "title": "Token",
+              "additionalProperties": false
+            },
+            "cloud": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                }
+              }
+            },
+            "oidc": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "cleanup": {
+                  "$ref": "#/definitions/authentication/$defs/authentication_cleanup"
+                },
+                "providers": {
+                  "type": ["object", "null"],
+                  "patternProperties": {
+                    "^.*$": {
+                      "$ref": "#/definitions/authentication/$defs/authentication_oidc_provider"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": []
+                },
+                "email_matches": {
+                  "type": ["array", "null"]
+                }
+              },
+              "required": [],
+              "title": "OIDC",
+              "additionalProperties": false
+            },
+            "kubernetes": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "discovery_url": {
+                  "type": "string",
+                  "default": "https://kubernetes.default.svc.cluster.local"
+                },
+                "ca_path": {
+                  "type": "string",
+                  "default": "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+                },
+                "service_account_token_path": {
+                  "type": "string",
+                  "default": "/var/run/secrets/kubernetes.io/serviceaccount/token"
+                },
+                "cleanup": {
+                  "$ref": "#/definitions/authentication/$defs/authentication_cleanup"
+                }
+              },
+              "required": [],
+              "title": "Kubernetes",
+              "additionalProperties": false
+            },
+            "github": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "client_secret": {
+                  "type": "string"
+                },
+                "client_id": {
+                  "type": "string"
+                },
+                "redirect_address": {
+                  "type": "string"
+                },
+                "scopes": {
+                  "type": ["array", "null"],
+                  "items": { "type": "string" }
+                },
+                "allowed_organizations": {
+                  "type": ["array", "null"]
+                },
+                "allowed_teams": {
+                  "type": ["object", "null"],
+                  "additionalProperties": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "required": [],
+              "title": "Github",
+              "additionalProperties": false
+            },
+            "jwt": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "validate_claims": {
+                  "type": "object",
+                  "properties": {
+                    "audiences": {
+                      "type": ["array", "null"],
+                      "items": { "type": "string" }
+                    },
+                    "issuer": {
+                      "type": "string"
+                    },
+                    "subject": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "jwks_url": {
+                  "type": "string"
+                },
+                "public_key_file": {
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "JWT",
+              "additionalProperties": false
+            }
+          },
+          "required": [],
+          "title": "Methods"
+        }
+      },
+      "required": [],
+      "title": "Authentication",
+      "$defs": {
+        "authentication_cleanup": {
+          "$id": "authentication_cleanup",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "interval": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^([0-9]+(ns|us|µs|ms|s|m|h))+$"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "default": "1h"
+            },
+            "grace_period": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^([0-9]+(ns|us|µs|ms|s|m|h))+$"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "default": "30m"
+            }
+          },
+          "required": [],
+          "title": "Cleanup"
+        },
+        "authentication_oidc_provider": {
+          "$id": "authentication_oidc_provider",
+          "type": "object",
+          "properties": {
+            "issuer_url": { "type": "string" },
+            "client_id": { "type": "string" },
+            "client_secret": { "type": "string" },
+            "redirect_address": { "type": "string" },
+            "scopes": { "type": "array", "items": { "type": "string" } },
+            "use_pkce": { "type": "boolean", "default": false }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "cache": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "backend": {
+          "type": "string",
+          "enum": ["memory", "redis"],
+          "default": "memory"
+        },
+        "ttl": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^([0-9]+(ns|us|µs|ms|s|m|h))+$"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "default": "60s"
+        },
+        "redis": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "host": {
+              "type": "string",
+              "default": "localhost"
+            },
+            "port": {
+              "type": "integer",
+              "default": 6379
+            },
+            "require_tls": {
+              "type": "boolean",
+              "default": false
+            },
+            "db": {
+              "type": "integer",
+              "default": 0
+            },
+            "username": {
+              "type": "string"
+            },
+            "password": {
+              "type": "string"
+            },
+            "pool_size": {
+              "type": "integer",
+              "default": 0
+            },
+            "min_idle_conn": {
+              "type": "integer",
+              "default": 0
+            },
+            "conn_max_idle_time": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^([0-9]+(ns|us|µs|ms|s|m|h))+$"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "default": 0
+            },
+            "net_timeout": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^([0-9]+(ns|us|µs|ms|s|m|h))+$"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "default": 0
+            },
+            "insecure_skip_tls": {
+              "description": "Skip verifying the certificate the redis server presents.",
+              "type": "boolean",
+              "default": false
+            },
+            "ca_cert_bytes": {
+              "description": "PEM text of extra certificate authorities to trust.",
+              "type": "string"
+            },
+            "ca_cert_path": {
+              "description": "File holding PEM certificate authorities to trust.",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "Redis"
+        },
+        "memory": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "deprecated": true
+            },
+            "eviction_interval": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^([0-9]+(ns|us|µs|ms|s|m|h))+$"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "default": "5m"
+            },
+            "expiration": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^([0-9]+(ns|us|µs|ms|s|m|h))+$"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "default": "60s",
+              "deprecated": true
+            }
+          },
+          "required": [],
+          "title": "Memory"
+        }
+      },
+      "required": [],
+      "title": "Cache"
+    },
+    "cloud": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "host": {
+          "type": "string",
+          "default": "flipt.cloud"
+        },
+        "organization": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "authentication": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "api_key": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "cors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "allowed_origins": {
+          "type": "array",
+          "default": ["*"]
+        },
+        "allowed_headers": {
+          "type": "array",
+          "default": [
+            "Accept",
+            "Authorization",
+            "Content-Type",
+            "X-CSRF-Token",
+            "X-Fern-Language",
+            "X-Fern-SDK-Name",
+            "X-Fern-SDK-Version"
+          ]
+        }
+      },
+      "required": [],
+      "title": "Cors"
+    },
+    "diagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "profiling": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        }
+      },
+      "required": [],
+      "title": "Diagnostics"
+    },
+    "db": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "default": "file:/var/opt/flipt/flipt.db"
+        },
+        "protocol": {
+          "type": "string",
+          "enum": [
+            "cockroach",
+            "cockroachdb",
+            "file",
+            "mysql",
+            "postgres",
+            "sqlite"
+          ]
+        },
+        "host": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "user": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "max_idle_conn": {
+          "type": "integer",
+          "default": 2
+        },
+        "max_open_conn": {
+          "type": "integer"
+        },
+        "conn_max_lifetime": {
+          "oneOf": [{ "type": "integer" }, { "type": "string" }]
+        },
+        "prepared_statements_enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "title": "DB"
+    },
+    "storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["database", "git", "local", "object", "oci"],
+          "default": "database"
+        },
+        "read_only": {
+          "type": "boolean",
+          "default": false
+        },
+        "local": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "type": "string",
+              "default": "."
+            }
+          },
+          "title": "Local"
+        },
+        "git": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "repository": {
+              "type": "string"
+            },
+            "ref": {
+              "type": "string",
+              "default": "main"
+            },
+            "ref_type": {
+              "type": "string",
+              "enum": ["static", "semver"],
+              "default": "static"
+            },
+            "directory": {
+              "type": "string"
+            },
+            "ca_cert_path": {
+              "type": "string"
+            },
+            "ca_cert_bytes": {
+              "type": "string"
+            },
+            "insecure_skip_tls": {
+              "type": "boolean",
+              "default": "false"
+            },
+            "poll_interval": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^([0-9]+(ns|us|µs|ms|s|m|h))+$"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "default": "30s"
+            },
+            "authentication": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "basic": {
+                      "type": "object",
+                      "properties": {
+                        "username": {
+                          "type": "string"
+                        },
+                        "password": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "access_token": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "user": { "type": "string" },
+                        "password": { "type": "string" },
+                        "private_key_path": { "type": "string" }
+                      }
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "user": { "type": "string" },
+                        "password": { "type": "string" },
+                        "private_key_bytes": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "title": "Git"
+        },
+        "object": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["s3", "azblob", "googlecloud"],
+              "default": "s3"
+            },
+            "s3": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "region": {
+                  "type": "string"
+                },
+                "bucket": {
+                  "type": "string"
+                },
+                "prefix": {
+                  "type": "string"
+                },
+                "endpoint": {
+                  "type": "string"
+                },
+                "poll_interval": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^([0-9]+(ns|us|µs|ms|s|m|h))+$"
+                    },
+                    {
+                      "type": "integer"
+                    }
+                  ],
+                  "default": "1m"
+                }
+              },
+              "title": "S3"
+            },
+            "azblob": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "container": {
+                  "type": "string"
+                },
+                "endpoint": {
+                  "type": "string"
+                },
+                "poll_interval": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^([0-9]+(ns|us|µs|ms|s|m|h))+$"
+                    },
+                    {
+                      "type": "integer"
+                    }
+                  ],
+                  "default": "1m"
+                }
+              },
+              "title": "Azure Blob Storage"
+            },
+            "googlecloud": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "bucket": {
+                  "type": "string"
+                },
+                "prefix": {
+                  "type": "string"
+                },
+                "poll_interval": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^([0-9]+(ns|us|µs|ms|s|m|h))+$"
+                    },
+                    {
+                      "type": "integer"
+                    }
+                  ],
+                  "default": "1m"
+                }
+              },
+              "title": "Google Cloud Storage"
+            }
+          },
+          "title": "Object"
+        },
+        "oci": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "repository": {
+              "type": "string"
+            },
+            "bundles_directory": {
+              "type": "string"
+            },
+            "authentication": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["static", "aws-ecr"],
+                  "default": "static"
+                },
+                "username": { "type": "string" },
+                "password": { "type": "string" }
+              }
+            },
+            "poll_interval": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^([0-9]+(ns|us|µs|ms|s|m|h))+$"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "default": "1m"
+            },
+            "manifest_version": {
+              "type": "string",
+              "enum": ["1.0", "1.1"],
+              "default": "1.1"
+            }
+          },
+          "title": "OCI"
+        }
+      },
+      "required": [],
+      "title": "Storage"
+    },
+    "log": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "encoding": {
+          "type": "string",
+          "enum": ["json", "console"],
+          "default": "console"
+        },
+        "level": {
+          "$ref": "#/definitions/log/$defs/log_level",
+          "type": "string"
+        },
+        "grpc_level": {
+          "$ref": "#/definitions/log/$defs/log_level",
+          "type": "string"
+        },
+        "keys": {
+          "$ref": "#/definitions/log/$defs/log_keys",
+          "type": "object"
+        }
+      },
+      "required": [],
+      "title": "Log",
+      "$defs": {
+        "log_level": {
+          "type": "string",
+          "enum": [
+            "debug",
+            "DEBUG",
+            "error",
+            "ERROR",
+            "fatal",
+            "FATAL",
+            "info",
+            "INFO",
+            "PANIC",
+            "panic",
+            "warn",
+            "WARN"
+          ]
+        },
+        "log_keys": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "level": {
+              "type": "string",
+              "default": "L"
+            },
+            "time": {
+              "type": "string",
+              "default": "T"
+            },
+            "message": {
+              "type": "string",
+              "default": "M"
+            }
+          },
+          "required": []
+        }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "check_for_updates": {
+          "type": "boolean",
+          "default": true
+        },
+        "telemetry_enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "state_directory": {
+          "type": "string",
+          "default": "$HOME/.config/flipt"
+        }
+      },
+      "required": [],
+      "title": "Meta"
+    },
+    "server": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "type": "string",
+          "enum": ["http", "https"],
+          "default": "http"
+        },
+        "host": {
+          "type": "string",
+          "default": "0.0.0.0"
+        },
+        "https_port": {
+          "type": "integer",
+          "default": 443
+        },
+        "http_port": {
+          "type": "integer",
+          "default": 8080
+        },
+        "grpc_port": {
+          "type": "integer",
+          "default": 9000
+        },
+        "cert_file": {
+          "type": "string"
+        },
+        "cert_key": {
+          "type": "string"
+        },
+        "grpc_conn_max_idle_time": {
+          "type": "string",
+          "pattern": "^([0-9]+(ns|us|µs|ms|s|m|h))+$"
+        },
+        "grpc_conn_max_age": {
+          "type": "string",
+          "pattern": "^([0-9]+(ns|us|µs|ms|s|m|h))+$"
+        },
+        "grpc_conn_max_age_grace": {
+          "type": "string",
+          "pattern": "^([0-9]+(ns|us|µs|ms|s|m|h))+$"
+        },
+        "cloud": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "port": {
+              "type": "integer",
+              "default": 8443
+            }
+          }
+        }
+      },
+      "required": [],
+      "title": "Server"
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "exporter": {
+          "type": "string",
+          "enum": ["prometheus", "otlp"],
+          "default": "prometheus"
+        },
+        "otlp": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "endpoint": {
+              "type": "string",
+              "default": "localhost:4317"
+            },
+            "headers": {
+              "type": ["object", "null"],
+              "additionalProperties": { "type": "string" }
+            }
+          },
+          "title": "OTLP"
+        }
+      },
+      "title": "Metrics"
+    },
+    "tracing": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "exporter": {
+          "type": "string",
+          "enum": ["jaeger", "zipkin", "otlp"],
+          "default": "jaeger"
+        },
+        "sampling_ratio": {
+          "type": "number",
+          "default": 1,
+          "minimum": 0,
+          "maximum": 1
+        },
+        "propagators": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "tracecontext",
+              "baggage",
+              "b3",
+              "b3multi",
+              "jaeger",
+              "xray",
+              "ottrace",
+              "none"
+            ]
+          },
+          "default": ["tracecontext", "baggage"]
+        },
+        "jaeger": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "deprecated": true
+            },
+            "host": {
+              "type": "string",
+              "default": "localhost"
+            },
+            "port": {
+              "type": "integer",
+              "default": 6831
+            }
+          },
+          "title": "Jaeger"
+        },
+        "zipkin": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "endpoint": {
+              "type": "string",
+              "default": "http://localhost:9411/api/v2/spans"
+            }
+          },
+          "title": "Zipkin"
+        },
+        "otlp": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "endpoint": {
+              "type": "string",
+              "default": "localhost:4317"
+            },
+            "headers": {
+              "type": ["object", "null"],
+              "additionalProperties": { "type": "string" }
+            }
+          },
+          "title": "OTLP"
+        }
+      },
+      "title": "Tracing"
+    },
+    "ui": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "deprecated": true
+        },
+        "default_theme": {
+          "type": "string",
+          "enum": ["light", "dark", "system"],
+          "default": "system",
+          "deprecated": false
+        }
+      },
+      "title": "UI"
+    },
+    "audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sinks": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "log": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "file": {
+                  "type": "string",
+                  "default": ""
+                }
+              },
+              "title": "Log File"
+            },
+            "webhook": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "url": {
+                  "type": "string",
+                  "default": ""
+                },
+                "max_backoff_duration": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^([0-9]+(ns|us|µs|ms|s|m|h))+$"
+                    },
+                    {
+                      "type": "integer"
+                    }
+                  ],
+                  "default": "15s"
+                },
+                "signing_secret": {
+                  "type": "string",
+                  "default": ""
+                },
+                "templates": {
+                  "type": ["array", "null"],
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "url": {
+                        "type": "string"
+                      },
+                      "body": {
+                        "type": "string"
+                      },
+                      "headers": {
+                        "type": "object"
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "title": "Webhook"
+            },
+            "cloud": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                }
+              },
+              "title": "Cloud"
+            }
+          }
+        },
+        "buffer": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "capacity": {
+              "type": "integer",
+              "default": 2
+            },
+            "flush_period": {
+              "type": "string",
+              "default": "2m"
+            }
+          }
+        },
+        "events": {
+          "type": "array",
+          "default": ["*:*"]
+        }
+      },
+      "title": "Audit"
+    },
+    "analytics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "storage": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "clickhouse": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "additionalProperties": false,
+                  "default": false
+                },
+                "url": {
+                  "type": "string",
+                  "default": ""
+                }
+              },
+              "title": "Clickhouse"
+            }
+          }
+        },
+        "buffer": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "capacity": {
+              "type": "integer"
+            },
+            "flush_period": {
+              "type": "string",
+              "default": "10s"
+            }
+          }
+        }
+      },
+      "title": "Analytics"
+    }
+  }
+}
