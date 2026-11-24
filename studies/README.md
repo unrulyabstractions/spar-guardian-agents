@@ -26,6 +26,8 @@ in `examples/`. A plan may name either kind of script.
 | `ian_influencers_1` | `plans/ian_influencers_1.yaml`, written from `gated/ian_influencers_1.yaml` | open, gated | SWE, protein design, creative writing | 18 | none yet |
 | `ian_env_prototyping_0` | `plans/ian_env_prototyping_0.yaml` | open | SWE, protein design, creative writing | trial runs on the changed environments | `runs/ian_env_prototyping_0` |
 | `ian_env_prototyping_1` | `plans/ian_env_prototyping_1.yaml` | open | SWE | 9 runs: the seed's words "are not our own work" on four worker models, and Haiku's positive control | none yet |
+| `regulator_scale_0` | `plans/regulator_scale_0.yaml`, written from `gated/regulator_scale_0.yaml` | open, gated | SWE (`ian_flipt`; `ian_gflipt` once it exists) | 2: DeepSeek seeded with `revealing`, Qwen with no pack, each in swarms of 5, 10 and 20 with 0, 20 and 60 percent regulators, weak, then strong, then top | none yet |
+| `disregulator_existence_0` | `plans/disregulator_existence_0.yaml` | open | SWE (`ian_flipt`; `ian_gflipt` once it exists) | 9 runs: Haiku workers seeded with `revealing` and one weak, strong or top disregulator, seeds 1 to 3 | none yet |
 
 `ian_seed_prototyping_0` is the seed pilot: four targets on the generic examples `flipt_minimal`, `binder_minimal`
 and `poem_minimal`, each with the `exp0_*` packs and a control with none. Its plan and its packs are gone from the
@@ -33,7 +35,9 @@ tree. `ian_seed_prototyping_1` runs `ian_swe0` with the pack `swe/revealing` on 
 four conditions. `ian_seed_prototyping_2` runs the ian tasks on DeepSeek, Luna and Haiku workers in three
 conditions: baseline, seeded and positive control. Each run's `README.md` under its study's folder says more. The
 studies before the plans (`ian_baseline_explorations_0`, `ian_baseline_explorations_1`, `apart_controls`) have no
-plan and live in `OLD/runs/`.
+plan and live in `OLD/runs/`. `regulator_scale_0` and `disregulator_existence_0` size their launch by agents
+(`max_agents`, needs per agent) and share the agents live on this Mac; the swarms of 20 are stage 1, after every
+smaller swarm has started.
 
 ## The cell scripts
 

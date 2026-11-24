@@ -46,6 +46,13 @@ max_per_task[<task>] of the cell's task running, and spacing_s since the
 last launch. Each run's console goes to logs/<study>/run_study/<name>.log. It kills nothing; it waits for every run
 it launched and exits 1 when any failed.
 
+A run counts its agents: the last `n_agents=` of the plan's and the target's settings, else DEFAULT_AGENTS. With
+limits max_agents, a cell launches only when its agents and the agents of every cell script live on this Mac (any
+study's, read from their command lines) fit under it. A cell larger than max_agents launches once no agent is live, so
+nothing waits for ever. A cell that does not fit is passed over like one whose task is full. A target's `stage`
+(default 0) orders the queue before the critical path: no cell launches while a cell of an earlier stage is queued, so a
+plan can hold its largest swarms until every smaller one has started.
+
 A real launch spends money: it needs --yes, and it prints the total of the runs' caps first. The rules of CLAUDE.md
 (a spend check, live pricing in the first 10 minutes) apply to it as to any paid run.
 """
@@ -66,15 +73,22 @@ from inspect_ai._util.appdirs import inspect_data_dir
 from scripts.study import gated_study
 from src.configuration import seed_packs, settings
 from src.measures.run_directory import RunDir
+from src.models.cost_cap import DEFAULT_CAP_USD
 
 PILOT_SETTINGS = ["rounds=30", "calls_per_round=10", "round_time_s=600", "time_limit_s=18000", "cost_limit_usd=5"]
 """The pilot's settings, after the seed and before the salt and the pack."""
 MIN_FREE_MEMORY_PCT = 40
 MIN_FREE_DISK_GB = 10
-LIMITS = {"max_runs": 10, "max_per_task": {}, "spacing_s": 60, "min_disk_gb": {}, "needs": {}}
+LIMITS = {"max_runs": 10, "max_per_task": {}, "spacing_s": 60, "min_disk_gb": {}, "needs": {}, "max_agents": None}
 """min_disk_gb: {task: GB} is a task's own floor of free Docker disk in place of MIN_FREE_DISK_GB: a task whose
 containers write little (a poem, a binder) may launch where an SWE run, whose agents each build 1 to 2 GB, may not.
-needs: {task: {disk_gb: X, memory_gb: Y}} is what one run of the task takes; scripts.study.preflight reads it."""
+needs: {task: {disk_gb: X, memory_gb: Y}} is what one run of the task takes, or one agent of it with `per: agent`;
+scripts.study.preflight reads it. max_agents: the most agents live at once on this Mac, None for no limit."""
+NEED_KEYS = {"disk_gb", "memory_gb", "per"}
+PER = ("run", "agent")
+DEFAULT_AGENTS = 3
+"""A run's agents when no setting names n_agents: the default preset's small scale. A cell module that sets its own
+team (ian_flipt_minimal_regulated) is counted at this too."""
 DEFAULT_RUN_MINUTES = 15.0
 """A run's expected wall time when the study stores no run of its task."""
 STALL_MINUTES = 10
@@ -85,8 +99,9 @@ PLAN_KEYS = {"study", "seeds", "targets", "settings", "limits", "closed"}
 """closed: true marks a study that is over: its plan is kept as a record, lists its cells with --dry-run and never
 launches (its runs may be named after packs that were renamed since)."""
 TARGET_KEYS = {"module", "model", "packs"}
-TARGET_OPTIONAL = {"settings"}
-"""settings: the target's own --set pairs, after the plan's (a rule level, a regulator's model)."""
+TARGET_OPTIONAL = {"settings", "stage"}
+"""settings: the target's own --set pairs, after the plan's (a rule level, a regulator's model). stage: an integer,
+0 by default; the queue launches the lower stages first."""
 NAME = re.compile(r"[a-z0-9_]+")
 
 
@@ -99,6 +114,8 @@ class Cell:
     model: str
     task: str | None        # the packs' task, or its module's task folder (a cell without a pack)
     settings: tuple[str, ...] = ()   # the target's own settings, after the plan's
+    n_agents: int = DEFAULT_AGENTS   # the run's team, from the plan's and the target's settings
+    stage: int = 0                   # the target's stage: lower stages launch first
 
     @property
     def name(self) -> str:
@@ -113,6 +130,15 @@ class Cell:
         if self.pack != "none":
             out += ["--set", f"seed_pack={self.pack}"]
         return out
+
+    def cap_usd(self, extra: list[str]) -> float:
+        """The run's dollar cap: the last cost_limit_usd of the pilot's, the plan's and the target's settings."""
+        return float(setting([*PILOT_SETTINGS, *extra, *self.settings], "cost_limit_usd") or DEFAULT_CAP_USD)
+
+
+def setting(pairs: list[str] | tuple[str, ...], key: str) -> str | None:
+    """The value of the last `key=value` among the pairs, None when none sets the key."""
+    return next((pair.split("=", 1)[1] for pair in reversed(pairs) if pair.split("=", 1)[0] == key), None)
 
 
 def pack_task(pack: str, plan: dict) -> str:
@@ -137,9 +163,16 @@ def load_plan(path: Path) -> dict:
         tasks = {pack_task(p, plan) for p in spec["packs"] if p != "none"}
         if len(tasks) > 1:
             raise ValueError(f"{path}: {target}'s packs are of several tasks: {sorted(tasks)}")
+        if not isinstance(spec.get("stage", 0), int) or spec.get("stage", 0) < 0:
+            raise ValueError(f"{path}: {target}'s stage is an integer of 0 or more")
     limits = {**LIMITS, **(plan.get("limits") or {})}
     if set(limits) != set(LIMITS):
         raise ValueError(f"{path}: limits takes {sorted(LIMITS)}")
+    for task, need in (limits["needs"] or {}).items():
+        if set(need) - NEED_KEYS or need.get("per", "run") not in PER:
+            raise ValueError(f"{path}: needs of {task} take {sorted(NEED_KEYS)}, per being one of {PER}")
+    if limits["max_agents"] is not None and (not isinstance(limits["max_agents"], int) or limits["max_agents"] < 1):
+        raise ValueError(f"{path}: max_agents is a positive integer")
     return {**plan, "settings": list(plan.get("settings") or []), "limits": limits}
 
 
@@ -150,9 +183,11 @@ def cells(plan: dict) -> list[Cell]:
         for target, spec in plan["targets"].items():
             tasks = {pack_task(p, plan) for p in spec["packs"] if p != "none"}
             task = next(iter(tasks), None) or module_task(spec["module"])
+            own = tuple(spec.get("settings") or ())
+            agents = int(setting([*plan.get("settings", []), *own], "n_agents") or DEFAULT_AGENTS)
             for pack in spec["packs"]:
-                out.append(Cell(target, pack, seed, spec["module"], spec["model"], task,
-                                tuple(spec.get("settings") or ())))
+                out.append(Cell(target, pack, seed, spec["module"], spec["model"], task, own, agents,
+                                spec.get("stage", 0)))
     return out
 
 
@@ -227,26 +262,46 @@ def disk_short(cell: Cell, limits: dict, disk: int | None) -> str | None:
     return f"docker disk {disk} GB free" if disk is None or disk < floor else None
 
 
+def agents_full(live: int | None, cell: Cell, limits: dict) -> str | None:
+    """Why the cell's agents do not fit beside the live ones under max_agents, or None. A cell larger than the limit
+    fits once no agent is live, so it never waits for ever. live is None when no limit is set."""
+    cap = limits.get("max_agents")
+    if cap is None or not live or live + cell.n_agents <= cap:
+        return None
+    return f"{live} agents live, {cell.n_agents} more pass max_agents {cap}"
+
+
+def live_agents(running: dict[str, tuple], limits: dict) -> int | None:
+    """The agents live on this Mac: the launcher's own runs and every other cell script's (live_runs), each run once.
+    None when the plan sets no max_agents, so a plan without one never reads the process table for it."""
+    if limits.get("max_agents") is None:
+        return None
+    others = {name: n for name, n in live_runs().items() if name not in running}
+    return sum(cell.n_agents for _, cell in running.values()) + sum(others.values())
+
+
 def room(running: dict[str, tuple], cell: Cell, limits: dict, last: float) -> str | None:
     """Why the cell cannot launch now, or None when it can."""
     if len(running) >= limits["max_runs"]:
         return f"{len(running)} runs running"
     return task_full(running, cell, limits) or held_all(running, limits, last) or \
-        disk_short(cell, limits, free_disk_gb())
+        agents_full(live_agents(running, limits), cell, limits) or disk_short(cell, limits, free_disk_gb())
 
 
 def next_cell(running: dict[str, tuple], queue: list[Cell], limits: dict,
               last: float) -> tuple[Cell | None, str | None]:
     """The first queued cell with room, or why none launches now. The runs' limit, the spacing and memory hold every
-    cell. A cell whose task is full, or whose task needs more free disk than Docker has, is passed over, so a light
-    cell queued behind SWE cells does not wait for them. On 2026-11-23 four runs ran where Docker held 2.6 of 23 GiB,
-    because the head of the queue was an SWE cell, and later poem cells waited five minutes on a disk floor only SWE
-    runs need."""
+    cell. A cell whose task is full, whose agents pass max_agents, or whose task needs more free disk than Docker has,
+    is passed over, so a light cell queued behind SWE cells does not wait for them. A cell of a later stage than the
+    earliest queued one waits. On 2026-11-23 four runs ran where Docker held 2.6 of 23 GiB, because the head of the
+    queue was an SWE cell, and later poem cells waited five minutes on a disk floor only SWE runs need."""
     if why := held_all(running, limits, last):
         return None, why
-    disk, why = free_disk_gb(), None
+    disk, live, why = free_disk_gb(), live_agents(running, limits), None
+    first = min((cell.stage for cell in queue), default=0)
     for cell in queue:
-        held = task_full(running, cell, limits) or disk_short(cell, limits, disk)
+        held = (f"stage {cell.stage} waits for stage {first}" if cell.stage > first else None) or \
+            task_full(running, cell, limits) or agents_full(live, cell, limits) or disk_short(cell, limits, disk)
         if held is None:
             return cell, None
         why = why or held
@@ -256,16 +311,28 @@ def next_cell(running: dict[str, tuple], queue: list[Cell], limits: dict,
 LIVE = re.compile(r"^(?:uv run python|\S*python[\d.]*) -m (?:studies\.cells|examples)\.\S+ .*?"
                   r"--name ([a-z0-9_]+)(?:\s|$)")
 """A cell script's own process (uv's, then Python's), never a shell whose text quotes one."""
+TEAM = re.compile(r"--set n_agents=(\d+)(?:\s|$)")
 
 
-def live_names() -> set[str]:
-    """The run names of the cell scripts running on this Mac now, from their command lines (`--name <run>`): the
-    runs a launcher of this study started before this one, which this one adopts and never launches again."""
+def live_runs() -> dict[str, int]:
+    """The cell scripts running on this Mac now, from their command lines: each run's name (`--name <run>`) and its
+    agents (the last `--set n_agents=N`, else DEFAULT_AGENTS). uv's process and Python's count as one run."""
     try:
         out = subprocess.run(["ps", "-axo", "command="], capture_output=True, text=True, timeout=60).stdout
     except (OSError, subprocess.TimeoutExpired):
-        return set()
-    return {m[1] for line in out.splitlines() if (m := LIVE.match(line.strip()))}
+        return {}
+    found = {}
+    for line in out.splitlines():
+        if m := LIVE.match(line.strip()):
+            teams = TEAM.findall(line)
+            found[m[1]] = int(teams[-1]) if teams else DEFAULT_AGENTS
+    return found
+
+
+def live_names() -> set[str]:
+    """The run names of the cell scripts running on this Mac now (live_runs): the runs a launcher of this study
+    started before this one, which this one adopts and never launches again."""
+    return set(live_runs())
 
 
 def run_minutes(run: RunDir) -> float | None:
@@ -303,8 +370,8 @@ def chain_minutes(cell: Cell, timings: dict, chains: dict[str, int]) -> float:
 
 
 def by_critical_path(queue: list[Cell], timings: dict, chains: dict[str, int]) -> list[Cell]:
-    """The queue, longest expected remaining chain first; equal chains keep their order."""
-    return sorted(queue, key=lambda cell: -chain_minutes(cell, timings, chains))
+    """The queue by stage, then longest expected remaining chain first; equal chains keep their order."""
+    return sorted(queue, key=lambda cell: (cell.stage, -chain_minutes(cell, timings, chains)))
 
 
 def gate_step(spec_path: Path, plan_path: Path, study_dir: Path) -> tuple[dict[str, int], str]:
@@ -388,18 +455,21 @@ def main(argv: list[str] | None = None) -> int:
             continue
         done = RunDir(RUNS / study / cell.name).is_run()
         (skipped if done and not args.replace else todo).append(cell)
-    cap = float(next((p.split("=", 1)[1] for p in [*PILOT_SETTINGS, *plan["settings"]][::-1]
-                      if p.startswith("cost_limit_usd=")), 5))
+    caps = sorted({cell.cap_usd(plan["settings"]) for cell in todo}) or \
+        [float(setting([*PILOT_SETTINGS, *plan["settings"]], "cost_limit_usd") or DEFAULT_CAP_USD)]
     print(f"plan {args.plan}: study {study}, {len(todo) + len(skipped)} cells, {len(skipped)} done already, "
-          f"{len(todo)} to run; at most ${cap * len(todo):.2f} at the runs' caps of ${cap:.2f}")
+          f"{len(todo)} to run; at most ${sum(cell.cap_usd(plan['settings']) for cell in todo):.2f} at the runs' "
+          f"caps of {' and '.join(f'${cap:.2f}' for cap in caps)}")
     for cell in skipped:
         print(f"  skip   {cell.name} (runs/{study}/{cell.name} holds its run)")
     for cell in todo:
-        print(f"  {'plan' if args.dry_run else 'queue'}   {cell.name}")
+        print(f"  {'plan' if args.dry_run else 'queue'}   {cell.name}  ({cell.n_agents} agents, "
+              f"${cell.cap_usd(plan['settings']):.2f} cap" + (f", stage {cell.stage})" if cell.stage else ")"))
         print(f"         {command(cell, study, plan['settings'], args.replace)}")
     if args.dry_run:
         print(f"  now    memory {free_memory_pct()}% free (needs {MIN_FREE_MEMORY_PCT}%), docker disk "
-              f"{free_disk_gb()} GB free (needs {MIN_FREE_DISK_GB}); limits {plan['limits']}")
+              f"{free_disk_gb()} GB free (needs {MIN_FREE_DISK_GB}), agents live {live_agents({}, plan['limits'])}; "
+              f"limits {plan['limits']}")
         return 0
     if plan.get("closed"):
         print(f"{args.plan}: this study is closed, its plan is a record: copy it under a new study to run it again",

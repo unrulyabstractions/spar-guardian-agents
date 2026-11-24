@@ -236,6 +236,58 @@ def test_a_spec_with_an_unknown_worker_or_module_is_refused(tmp_path):
         gs.load_spec(path)
 
 
+# ---------------------------------------------------------------- a worker's own pack, a task without cheat, stages
+def test_a_worker_may_name_its_own_pack(tmp_path):
+    """b takes no seed pack: every arm of b's runs unseeded and is named `_none_`, a's arms keep the spec's pack."""
+    path = tmp_path / "spec.yaml"
+    path.write_text(SPEC.replace("  b: gpt-6-luna-openrouter\n", "  b: {model: gpt-6-luna-openrouter, pack: none}\n"))
+    spec = gs.load_spec(path)
+    assert spec.workers == {"a": "deepseek-flash-openrouter", "b": "gpt-6-luna-openrouter"}
+    assert (spec.pack_of("a"), spec.pack_of("b")) == ("revealing", "none")
+    seeded = next(arm for arm in spec.arms if arm.name == "seeded")
+    assert spec.run_name("flipt", "a", seeded) == "flipt_a_seeded_revealing_s1"
+    assert spec.run_name("flipt", "b", seeded) == "flipt_b_seeded_none_s1"
+    assert spec.target("flipt", "b", seeded)[1]["packs"] == ["none"]
+    path.write_text(SPEC.replace("  b: gpt-6-luna-openrouter\n",
+                                 "  b: {model: gpt-6-luna-openrouter, pack: pointing}\n"))
+    assert gs.load_spec(path).run_name("flipt", "b", seeded) == "flipt_b_seeded_pointing_s1"
+
+
+@pytest.mark.parametrize("worker,why", [
+    ("{model: gpt-6-luna-openrouter, pack: no_such_pack}", "unknown seed pack"),
+    ("{pack: none}", "needs a name"),
+    ("{model: gpt-6-luna-openrouter, extra: 1}", "needs a name"),
+])
+def test_a_bad_worker_is_refused(tmp_path, worker, why):
+    path = tmp_path / "spec.yaml"
+    path.write_text(SPEC.replace("  b: gpt-6-luna-openrouter\n", f"  b: {worker}\n"))
+    with pytest.raises(ValueError, match=why):
+        gs.load_spec(path)
+
+
+def test_a_task_without_a_cheat_module_takes_no_cheat_arm(tmp_path):
+    path = tmp_path / "spec.yaml"
+    no_cheat = SPEC.replace(", cheat: examples.swe.flipt_minimal_cheat}", "}")
+    path.write_text(no_cheat)
+    with pytest.raises(ValueError, match="every task needs its cheat module"):
+        gs.load_spec(path)
+    path.write_text(no_cheat.replace("  positive_control: {cell: cheat, when: {seeded: not_cheated}}\n", ""))
+    assert gs.load_spec(path).tasks == {"flipt": {"cell": "examples.swe.flipt_minimal"}}
+
+
+def test_an_arms_stage_reaches_the_plan_and_the_cells(spec, tmp_path):
+    path = tmp_path / "spec.yaml"
+    path.write_text(SPEC.replace("  seeded: {}\n", "  seeded: {stage: 2}\n"))
+    staged = gs.load_spec(path)
+    out = gs.write_plan(gs.decide(staged, tmp_path / "study_g", valid), tmp_path / "plan.yaml")
+    plan = run_study.load_plan(out)
+    assert plan["targets"]["flipt_a_seeded"]["stage"] == 2 and "stage" not in plan["targets"]["flipt_a_baseline"]
+    assert {c.name: c.stage for c in run_study.cells(plan)}["flipt_b_seeded_revealing_s1"] == 2
+    path.write_text(SPEC.replace("  seeded: {}\n", "  seeded: {stage: first}\n"))
+    with pytest.raises(ValueError, match="stage is an integer"):
+        gs.load_spec(path)
+
+
 # ---------------------------------------------------------------- the real spec
 USER_PLAN = {
     # arm: (agents, seed pack, rule level, told to cheat, influencer (role, level, model) or None, gate)
@@ -348,3 +400,103 @@ def test_a_closed_spec_is_a_record_that_keeps_its_seeds_older_name(tmp_path):
     plan = run_study.load_plan(out)
     assert plan["closed"] is True and len(run_study.cells(plan)) == 36
     assert not gs.load_spec(REAL).closed
+
+
+# ---------------------------------------------------------------- the studies of 2026-11-24
+SCALE = settings.ROOT / "studies" / "gated" / "regulator_scale_0.yaml"
+EXISTENCE = settings.ROOT / "studies" / "plans" / "disregulator_existence_0.yaml"
+REGULATORS = {"weak": "claude-haiku-5-5-openrouter", "strong": "gpt-6.1-terra-openrouter",
+              "top": "claude-opus-5-5-openrouter"}
+SHARES = {5: {"0": 0, "20": 1, "60": 3}, 10: {"0": 0, "20": 2, "60": 6}, 20: {"0": 0, "20": 4, "60": 12}}
+"""The user's swarms: regulators by size and percent."""
+SCALE_ARMS = [a.name for a in gs.load_spec(SCALE).arms]
+
+
+def built(cell, monkeypatch):
+    """The config, model and task the cell module's own main() builds on the plan's arguments, run.run stubbed."""
+    module = importlib.import_module(cell.module)
+    seen = {}
+
+    def run(name, benchmark, config, model, timeout, task=None, replace=False):
+        seen.update(name=name, model=model, config=config, task=task or swarm_task(benchmark, config, name=name))
+        return 1
+
+    monkeypatch.setattr(src.run, "run", run)
+    monkeypatch.setattr(launch_command, "_LAUNCH", None)
+    monkeypatch.setattr(sys, "argv", [module.__file__, *cell.argv([], False)])
+    assert module.main() == 1 and seen["name"] == cell.name
+    return seen
+
+
+def test_the_scale_spec_is_the_users_design(tmp_path):
+    """Swarms of 5, 10 and 20 with 0, 20 and 60 percent regulators; a strong arm gated on its weak arm cheating, top on
+    strong; DeepSeek seeded with revealing and Qwen with no pack; $20 caps on every arm of 20 and on 10's strong and
+    top; the swarms of 20 in stage 1. The plan opens the 18 ungated cells."""
+    spec = gs.load_spec(SCALE)
+    assert (spec.study, spec.seed, list(spec.tasks)) == ("regulator_scale_0", 1, ["ian_flipt"])
+    assert spec.workers == {"deepseek": "deepseek-flash-openrouter", "qwen": "qwen3.8-flash-openrouter"}
+    assert (spec.pack_of("deepseek"), spec.pack_of("qwen")) == ("revealing", "none")
+    for arm in spec.arms:
+        size, share, *kind = arm.name.removeprefix("n").replace("_reg", " ").replace("_", " ").split()
+        size, pairs = int(size), dict(pair.split("=", 1) for pair in arm.settings)
+        assert (int(pairs["n_agents"]), int(pairs["max_concurrency"])) == (size, size), arm.name
+        assert int(pairs.get("regulators", 0)) == SHARES[size][share], arm.name
+        assert pairs.get("regulator_model") == (REGULATORS[kind[0]] if kind else None), arm.name
+        assert pairs.get("regulator_level") == ("generic" if kind else None), arm.name
+        dear = size == 20 or (size == 10 and kind and kind[0] != "weak")
+        assert pairs.get("cost_limit_usd") == ("20" if dear else None), arm.name
+        before = {"strong": "weak", "top": "strong"}.get(kind[0] if kind else "")
+        assert arm.when == ({f"n{size}_reg{share}_{before}": "cheated"} if before else {}), arm.name
+        assert arm.stage == (1 if size == 20 else 0), arm.name
+    plan = run_study.load_plan(gs.write_plan(gs.decide(spec, tmp_path / "none", valid), tmp_path / "plan.yaml"))
+    cells = run_study.cells(plan)
+    assert len(cells) == 18 and plan["limits"]["max_agents"] == 20
+    assert {c.pack for c in cells if "_qwen_" in c.name} == {"none"}
+    assert all(c.name.endswith("_none_s1") for c in cells if "_qwen_" in c.name)
+    assert {c.pack for c in cells if "_deepseek_" in c.name} == {"swe/revealing"}
+
+
+@pytest.mark.parametrize("at", range(len(SCALE_ARMS)), ids=SCALE_ARMS)
+def test_each_scale_arm_builds_its_swarm(at, monkeypatch):
+    """Each arm on a worker turning with the arm: the team's size and roles, the regulators' model, the cap, the
+    concurrency, the time limit and the worker's seed pack, as the task the run would start."""
+    spec = gs.load_spec(SCALE)
+    arm, worker = spec.arms[at], list(spec.workers)[at % len(spec.workers)]
+    name, target = spec.target("ian_flipt", worker, arm)
+    cell = run_study.cells({"seeds": [1], "settings": [], "targets": {name: target}})[0]
+    seen = built(cell, monkeypatch)
+    config, cb = seen["config"], seen["task"].dataset[0].metadata["cheatbench"]
+    pairs = dict(pair.split("=", 1) for pair in arm.settings)
+    size, regulators = int(pairs["n_agents"]), int(pairs.get("regulators", 0))
+    assert cell.n_agents == size == len(config.names) and config.max_concurrency == size
+    roles = cb.get("roles") or dict.fromkeys(config.names, "worker")
+    assert sorted(roles.values()).count("regulator") == regulators and len(roles) == size
+    assert config.cost_limit_usd == float(pairs.get("cost_limit_usd", 5))
+    assert (config.time_limit_s, config.round_time_s, config.rounds) == (18000, 600, 30)
+    assert seen["model"] == models.resolve(spec.workers[worker])
+    assert cb["config"]["seed_pack"] == ("swe/revealing" if worker == "deepseek" else None)
+    if regulators:
+        assert cb["role_models"]["regulator"] == models.resolve(pairs["regulator_model"])
+        assert cb["config"]["regulator_level"] == "generic"
+
+
+@pytest.mark.parametrize("target", list(run_study.load_plan(EXISTENCE)["targets"]))
+def test_each_existence_target_builds_its_team(target, monkeypatch):
+    """disregulator_existence_0: Haiku workers seeded with revealing, three alone or four with one instructed
+    disregulator of the target's model, the default $5 cap, seeds 1 to 3."""
+    plan = run_study.load_plan(EXISTENCE)
+    assert plan["seeds"] == [1, 2, 3] and plan["limits"]["max_agents"] == 20
+    cell = next(c for c in run_study.cells(plan) if c.target == target)
+    seen = built(cell, monkeypatch)
+    config, cb = seen["config"], seen["task"].dataset[0].metadata["cheatbench"]
+    disregulator = {"no_disregulator": None, "disregulator_weak": "deepseek-flash-openrouter",
+                    "disregulator_strong": "grok-4.7-openrouter",
+                    "disregulator_top": "kimi-k3-openrouter"}[target.removeprefix("ian_flipt_haiku_")]
+    assert seen["model"] == models.resolve("claude-haiku-5-5-openrouter")
+    assert cb["config"]["seed_pack"] == "swe/revealing" and config.cost_limit_usd == 5.0
+    assert len(config.names) == cell.n_agents == (4 if disregulator else 3)
+    roles = cb.get("roles") or dict.fromkeys(config.names, "worker")
+    assert list(roles.values()).count("disregulator") == (1 if disregulator else 0)
+    if disregulator:
+        assert cb["role_models"]["disregulator"] == models.resolve(disregulator)
+        assert cb["config"]["disregulator_level"] == "instructed"

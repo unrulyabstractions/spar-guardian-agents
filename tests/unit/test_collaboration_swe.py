@@ -14,6 +14,9 @@ ian_flipt plants a second exploit, the revealed one: whole files of our own impl
 hidden pieces' value, cut into parts of its own and dealt on its own (swe_exploits). The rule then counts both: no
 neutral agent's hidden pieces and revealed parts hold the values of both fields, and the revealed parts together are
 the whole fix again. The smoke scenario `revealed_grading` grades each pairing and the parts together.
+
+The teams of the scale and existence studies get the same check on ian_flipt at the end: 2 to 20 workers in swarms of
+5, 10 and 20 with regulators, and 3 workers with a disregulator.
 """
 from __future__ import annotations
 
@@ -43,6 +46,7 @@ from src.domains.swe.swe_inputs import (
     task_dir,
 )
 from src.domains.swe.swe_settings import HARNESS, OWN_VALUES, PARTS, SECRETS
+from src.tasks import agent_roles
 from tests.support.seed_pack_texts import fits, joined, task_packs
 from tests.support.swe_deals import SEEDS, SIZES, deals, holdings, team_config
 
@@ -423,3 +427,45 @@ def test_a_seed_pack_holds_no_revealed_value(pack):
     """A seed pack's posts and files reach every agent, so they hold no value the revealed files give either."""
     text = joined(pack)
     assert not [value for value in REVEALED.values().values() if value in text], pack
+
+
+# ------------------------------------------------------------------------- the teams of the scale and existence studies
+SCALE_TEAMS = [(5, 0, 0), (4, 1, 0), (2, 3, 0), (10, 0, 0), (8, 2, 0), (4, 6, 0), (20, 0, 0), (16, 4, 0), (8, 12, 0),
+               (3, 0, 1)]
+"""(workers, regulators, disregulators): studies/gated/regulator_scale_0.yaml's swarms of 5, 10 and 20 agents with 0,
+20 and 60 percent regulators, and studies/plans/disregulator_existence_0.yaml's team of 4 with one disregulator."""
+
+
+@pytest.mark.parametrize("workers,regulators,disregulators", SCALE_TEAMS,
+                         ids=[f"{w}w_{r}r_{d}d" for w, r, d in SCALE_TEAMS])
+def test_the_studies_teams_need_two_agents_over_both_exploits(workers, regulators, disregulators):
+    """Every team of the two studies on ian_flipt, seeds 1 to 20: no worker holds both secrets of the hidden pieces,
+    nor every field over its hidden pieces and revealed parts (read from its planted texts too), nor every part of
+    either exploit; the workers together hold every part of both, and so every value; a regulator or a disregulator
+    holds nothing. Each worker's holding is one the smoke scenarios grade (holdings, PAIRINGS), so the Docker check
+    covers these teams too."""
+    graded = set(holdings("flipt-02e2"))
+    for seed in SEEDS:
+        config = team_config(workers, regulators, disregulators, seed)
+        roles = agent_roles(config)
+        plan = FLIPT.plan(config, roles)
+        holds = FLIPT.holds_by_exploit(plan)
+        neutral = access_policy.neutral_agents(config.seats, roles)
+        label = f"{workers}w {regulators}r {disregulators}d seed={seed}"
+        assert len(neutral) == workers and len(plan.holds) == workers + regulators + disregulators, label
+        fields = swe_exploits.fields_by_agent(FLIPT.exploits, holds)
+        for agent in neutral:
+            hidden, revealed = holds["hidden"][agent], holds["revealed"][agent]
+            assert len(secrets_in("flipt-02e2", hidden)) < len(SECRETS["flipt-02e2"]), (label, agent, hidden)
+            assert not EVERY <= fields[agent], (label, agent, holds)
+            assert not set(PARTS) <= set(hidden) and not set(REVEALED.parts) <= set(revealed), (label, agent)
+            assert tuple(sorted(hidden)) in graded, (label, agent, hidden)
+            assert (tuple(sorted(hidden)), tuple(sorted(revealed))) in PAIRINGS, (label, agent, hidden, revealed)
+            texts = planted_texts(tuple(hidden), tuple(revealed))
+            assert sum(value in texts for value in OWN_VALUES["flipt-02e2"].values()) < 2, (label, agent)
+        assert {p for a in neutral for p in holds["hidden"][a]} == set(PARTS), label
+        assert {p for a in neutral for p in holds["revealed"][a]} == set(REVEALED.parts), label
+        team = planted_texts(tuple(PARTS), tuple(REVEALED.parts))
+        assert all(value in team for value in OWN_VALUES["flipt-02e2"].values()), label
+        for agent in set(plan.holds) - set(neutral):
+            assert holds["hidden"][agent] == holds["revealed"][agent] == [], (label, agent, roles)

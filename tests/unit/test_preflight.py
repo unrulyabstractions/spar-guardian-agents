@@ -31,6 +31,7 @@ def machine(monkeypatch):
     monkeypatch.setattr(rs, "free_memory_pct", lambda: 70)
     monkeypatch.setattr(preflight, "mac_memory_gb", lambda: 48.0)
     monkeypatch.setattr(preflight, "mac_free_disk_gb", lambda: 400.0)
+    monkeypatch.setattr(preflight, "docker_memory_gb", lambda: 24.0)
 
 
 def test_a_tasks_needs_come_from_the_plan_else_the_measured_defaults():
@@ -42,10 +43,11 @@ def test_a_tasks_needs_come_from_the_plan_else_the_measured_defaults():
 def test_the_peak_fills_max_runs_with_the_heaviest_tasks_first():
     todo = [cell(f"s{i}", SWE, "swe") for i in range(5)] + [cell(f"p{i}", POEM, "creative_writing") for i in range(3)]
     limits = {"max_runs": 4, "max_per_task": {"swe": 3}}
-    assert preflight.peak_runs(todo, limits) == {"swe": 3, "creative_writing": 1}
-    assert preflight.peak_runs(todo[:1], limits) == {"swe": 1}
-    assert preflight.peak_runs(todo, {"max_runs": 0, "max_per_task": {}}) == {"swe": 0, "creative_writing": 0}
-    assert preflight.peak_need({"swe": 3, "creative_writing": 1}, limits, "disk_gb") == 21.5
+    peak = preflight.peak_cells(todo, limits)
+    assert preflight.peak_runs(peak) == {"swe": 3, "creative_writing": 1}
+    assert preflight.peak_runs(preflight.peak_cells(todo[:1], limits)) == {"swe": 1}
+    assert preflight.peak_cells(todo, {"max_runs": 0, "max_per_task": {}}) == []
+    assert preflight.peak_need(peak, limits, "disk_gb") == 21.5
 
 
 def test_the_disk_grows_in_tens_to_hold_the_need_and_the_floor():
@@ -73,7 +75,8 @@ def test_the_command_passes_when_the_peak_fits(tmp_path, machine, capsys):
     assert preflight.main([str(plan), "--runs", str(tmp_path / "runs")]) == 0
     out = capsys.readouterr().out
     assert "docker disk: 60 GB, 40 GB free; the Mac's disk: 400 GB free" in out
-    assert "peak at the limits: 4 runs (swe 3, creative_writing 1), 21.5 GB disk, 4.7 GB memory" in out
+    assert "peak at the limits: 4 runs of 12 agents (swe 3, creative_writing 1; max_agents None), 21.5 GB disk, " \
+        "4.7 GB memory" in out
     assert "colima start" not in out and "DISK" not in out and "MEMORY" not in out
     assert "estimate: 20 minutes, set by 60 minutes of swe over max_per_task 3" in out
 
@@ -94,3 +97,56 @@ def test_the_command_fails_when_the_memory_is_short(tmp_path, machine, monkeypat
     monkeypatch.setattr(rs, "free_memory_pct", lambda: 45)       # 2.4 GB over the floor
     assert preflight.main([str(plan), "--runs", str(tmp_path / "runs")]) == 1
     assert "MEMORY the peak needs 4.7 GB" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------- runs sized by their agents
+def team(name, agents, task="swe", module=SWE):
+    return rs.Cell(name, "none", 1, module, "m", task, n_agents=agents)
+
+
+PER_AGENT = {"max_runs": 6, "max_per_task": {"swe": 6}, "max_agents": 24,
+             "needs": {"swe": {"disk_gb": 2.3, "memory_gb": 0.8, "per": "agent"}}}
+"""regulator_scale_0's limits: one SWE agent takes 2.3 GB of disk and 0.8 GB of memory, 24 agents at once."""
+
+
+def test_a_per_agent_need_counts_each_run_by_its_agents():
+    assert preflight.run_need(team("a", 20), PER_AGENT, "disk_gb") == pytest.approx(46.0)
+    assert preflight.run_need(team("b", 5), PER_AGENT, "memory_gb") == pytest.approx(4.0)
+    assert preflight.run_need(team("c", 5), {"needs": {}}, "disk_gb") == 7.0      # per run, as before
+
+
+def test_the_peak_takes_the_heaviest_runs_that_fit_under_max_agents():
+    """Two swarms of 20 never sit together: the peak holds one, beside the 4 agents still free. A swarm larger than
+    max_agents is a peak alone, as the launcher starts it once nothing is live."""
+    todo = [team("t1", 20), team("t2", 20), team("f1", 5), team("f2", 5), team("x", 3)]
+    peak = preflight.peak_cells(todo, PER_AGENT)
+    assert [c.target for c in peak] == ["t1", "x"] and sum(c.n_agents for c in peak) == 23
+    assert preflight.peak_need(peak, PER_AGENT, "memory_gb") == pytest.approx(18.4)
+    assert [c.target for c in preflight.peak_cells([team("huge", 30), team("f", 5)], PER_AGENT)] == ["huge"]
+    assert len(preflight.peak_cells(todo, {**PER_AGENT, "max_agents": None})) == 5
+
+
+def test_the_estimate_counts_the_agent_minutes_over_max_agents():
+    todo = [team(f"t{i}", 20) for i in range(3)]
+    minutes, why, _ = preflight.estimate(todo, PER_AGENT, {("swe", "m"): 30.0}, {})
+    assert minutes == 75.0 and why == "1800 agent-minutes over max_agents 24"
+
+
+def test_the_command_fails_when_the_peak_passes_dockers_memory(tmp_path, machine, monkeypatch, capsys):
+    plan = tmp_path / "plan.yaml"
+    plan.write_text(f"""study: study_p
+seeds: [1]
+targets:
+  big: {{module: {SWE}, model: qwen3.8-flash-openrouter, packs: [none], settings: [n_agents=20]}}
+  small: {{module: {SWE}, model: qwen3.8-flash-openrouter, packs: [none], settings: [n_agents=4]}}
+limits: {{max_runs: 6, max_agents: 24, needs: {{swe: {{disk_gb: 2.3, memory_gb: 0.8, per: agent}}}}}}
+""")
+    monkeypatch.setattr(rs, "docker_disk", lambda: (400, 338))
+    monkeypatch.setattr(rs, "free_memory_pct", lambda: 91)
+    assert preflight.main([str(plan), "--runs", str(tmp_path / "runs")]) == 0
+    out = capsys.readouterr().out
+    assert "peak at the limits: 2 runs of 24 agents (swe 2; max_agents 24), 55.2 GB disk, 19.2 GB memory" in out
+    assert "one agent 2.3 GB disk, 0.8 GB memory; the disk allows 146 agents" in out
+    monkeypatch.setattr(preflight, "docker_memory_gb", lambda: 20.0)
+    assert preflight.main([str(plan), "--runs", str(tmp_path / "runs")]) == 1
+    assert "DOCKER the peak needs 19.2 GB, over 80% of Docker's 20.0 GB" in capsys.readouterr().out

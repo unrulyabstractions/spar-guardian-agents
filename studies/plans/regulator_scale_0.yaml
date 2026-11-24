@@ -1,0 +1,138 @@
+# Written by scripts.study.gated_study from studies/gated/regulator_scale_0.yaml: do not edit, write it again.
+# 2026-11-24: the gates of regulator_scale_0 on its stored runs:
+#
+#   cell                n5_reg0  n5_reg20_weak  n5_reg20_strong  n5_reg20_top  n5_reg60_weak  n5_reg60_strong  n5_reg60_top  n10_reg0  n10_reg20_weak  n10_reg20_strong  n10_reg20_top  n10_reg60_weak  n10_reg60_strong  n10_reg60_top  n20_reg0  n20_reg20_weak  n20_reg20_strong  n20_reg20_top  n20_reg60_weak  n20_reg60_strong  n20_reg60_top
+#   ian_flipt_deepseek  open     open           waiting          waiting       open           waiting          waiting       open      open            waiting           waiting        open            waiting           waiting        open      open            waiting           waiting        open            waiting           waiting
+#   ian_flipt_qwen      open     open           waiting          waiting       open           waiting          waiting       open      open            waiting           waiting        open            waiting           waiting        open      open            waiting           waiting        open            waiting           waiting
+#
+#   n5_reg0: 0 ran, 2 open, 0 closed, 0 waiting, 0 failed, 0 no rung (gate: every cell)
+#   n5_reg20_weak: 0 ran, 2 open, 0 closed, 0 waiting, 0 failed, 0 no rung (gate: every cell)
+#   n5_reg20_strong: 0 ran, 0 open, 0 closed, 2 waiting, 0 failed, 0 no rung (gate: n5_reg20_weak cheated)
+#   n5_reg20_top: 0 ran, 0 open, 0 closed, 2 waiting, 0 failed, 0 no rung (gate: n5_reg20_strong cheated)
+#   n5_reg60_weak: 0 ran, 2 open, 0 closed, 0 waiting, 0 failed, 0 no rung (gate: every cell)
+#   n5_reg60_strong: 0 ran, 0 open, 0 closed, 2 waiting, 0 failed, 0 no rung (gate: n5_reg60_weak cheated)
+#   n5_reg60_top: 0 ran, 0 open, 0 closed, 2 waiting, 0 failed, 0 no rung (gate: n5_reg60_strong cheated)
+#   n10_reg0: 0 ran, 2 open, 0 closed, 0 waiting, 0 failed, 0 no rung (gate: every cell)
+#   n10_reg20_weak: 0 ran, 2 open, 0 closed, 0 waiting, 0 failed, 0 no rung (gate: every cell)
+#   n10_reg20_strong: 0 ran, 0 open, 0 closed, 2 waiting, 0 failed, 0 no rung (gate: n10_reg20_weak cheated)
+#   n10_reg20_top: 0 ran, 0 open, 0 closed, 2 waiting, 0 failed, 0 no rung (gate: n10_reg20_strong cheated)
+#   n10_reg60_weak: 0 ran, 2 open, 0 closed, 0 waiting, 0 failed, 0 no rung (gate: every cell)
+#   n10_reg60_strong: 0 ran, 0 open, 0 closed, 2 waiting, 0 failed, 0 no rung (gate: n10_reg60_weak cheated)
+#   n10_reg60_top: 0 ran, 0 open, 0 closed, 2 waiting, 0 failed, 0 no rung (gate: n10_reg60_strong cheated)
+#   n20_reg0: 0 ran, 2 open, 0 closed, 0 waiting, 0 failed, 0 no rung (gate: every cell)
+#   n20_reg20_weak: 0 ran, 2 open, 0 closed, 0 waiting, 0 failed, 0 no rung (gate: every cell)
+#   n20_reg20_strong: 0 ran, 0 open, 0 closed, 2 waiting, 0 failed, 0 no rung (gate: n20_reg20_weak cheated)
+#   n20_reg20_top: 0 ran, 0 open, 0 closed, 2 waiting, 0 failed, 0 no rung (gate: n20_reg20_strong cheated)
+#   n20_reg60_weak: 0 ran, 2 open, 0 closed, 0 waiting, 0 failed, 0 no rung (gate: every cell)
+#   n20_reg60_strong: 0 ran, 0 open, 0 closed, 2 waiting, 0 failed, 0 no rung (gate: n20_reg60_weak cheated)
+#   n20_reg60_top: 0 ran, 0 open, 0 closed, 2 waiting, 0 failed, 0 no rung (gate: n20_reg60_strong cheated)
+study: regulator_scale_0
+seeds: [1]
+targets:
+  ian_flipt_deepseek_n5_reg0:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [swe/revealing]
+    settings: [n_agents=5, max_concurrency=5]
+  ian_flipt_qwen_n5_reg0:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: qwen3.8-flash-openrouter
+    packs: [none]
+    settings: [n_agents=5, max_concurrency=5]
+  ian_flipt_deepseek_n5_reg20_weak:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [swe/revealing]
+    settings: [n_agents=5, max_concurrency=5, regulators=1, regulator_level=generic, regulator_model=claude-haiku-5-5-openrouter]
+  ian_flipt_qwen_n5_reg20_weak:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: qwen3.8-flash-openrouter
+    packs: [none]
+    settings: [n_agents=5, max_concurrency=5, regulators=1, regulator_level=generic, regulator_model=claude-haiku-5-5-openrouter]
+  ian_flipt_deepseek_n5_reg60_weak:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [swe/revealing]
+    settings: [n_agents=5, max_concurrency=5, regulators=3, regulator_level=generic, regulator_model=claude-haiku-5-5-openrouter]
+  ian_flipt_qwen_n5_reg60_weak:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: qwen3.8-flash-openrouter
+    packs: [none]
+    settings: [n_agents=5, max_concurrency=5, regulators=3, regulator_level=generic, regulator_model=claude-haiku-5-5-openrouter]
+  ian_flipt_deepseek_n10_reg0:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [swe/revealing]
+    settings: [n_agents=10, max_concurrency=10]
+  ian_flipt_qwen_n10_reg0:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: qwen3.8-flash-openrouter
+    packs: [none]
+    settings: [n_agents=10, max_concurrency=10]
+  ian_flipt_deepseek_n10_reg20_weak:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [swe/revealing]
+    settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic, regulator_model=claude-haiku-5-5-openrouter]
+  ian_flipt_qwen_n10_reg20_weak:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: qwen3.8-flash-openrouter
+    packs: [none]
+    settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic, regulator_model=claude-haiku-5-5-openrouter]
+  ian_flipt_deepseek_n10_reg60_weak:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [swe/revealing]
+    settings: [n_agents=10, max_concurrency=10, regulators=6, regulator_level=generic, regulator_model=claude-haiku-5-5-openrouter]
+  ian_flipt_qwen_n10_reg60_weak:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: qwen3.8-flash-openrouter
+    packs: [none]
+    settings: [n_agents=10, max_concurrency=10, regulators=6, regulator_level=generic, regulator_model=claude-haiku-5-5-openrouter]
+  ian_flipt_deepseek_n20_reg0:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [swe/revealing]
+    settings: [n_agents=20, max_concurrency=20, cost_limit_usd=20]
+    stage: 1
+  ian_flipt_qwen_n20_reg0:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: qwen3.8-flash-openrouter
+    packs: [none]
+    settings: [n_agents=20, max_concurrency=20, cost_limit_usd=20]
+    stage: 1
+  ian_flipt_deepseek_n20_reg20_weak:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [swe/revealing]
+    settings: [n_agents=20, max_concurrency=20, regulators=4, regulator_level=generic, regulator_model=claude-haiku-5-5-openrouter,
+      cost_limit_usd=20]
+    stage: 1
+  ian_flipt_qwen_n20_reg20_weak:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: qwen3.8-flash-openrouter
+    packs: [none]
+    settings: [n_agents=20, max_concurrency=20, regulators=4, regulator_level=generic, regulator_model=claude-haiku-5-5-openrouter,
+      cost_limit_usd=20]
+    stage: 1
+  ian_flipt_deepseek_n20_reg60_weak:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [swe/revealing]
+    settings: [n_agents=20, max_concurrency=20, regulators=12, regulator_level=generic, regulator_model=claude-haiku-5-5-openrouter,
+      cost_limit_usd=20]
+    stage: 1
+  ian_flipt_qwen_n20_reg60_weak:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: qwen3.8-flash-openrouter
+    packs: [none]
+    settings: [n_agents=20, max_concurrency=20, regulators=12, regulator_level=generic, regulator_model=claude-haiku-5-5-openrouter,
+      cost_limit_usd=20]
+    stage: 1
+limits:
+  max_runs: 6
+  max_per_task: {swe: 6}
+  max_agents: 20
+  spacing_s: 60
+  needs:
+    swe: {disk_gb: 2.3, memory_gb: 0.8, per: agent}

@@ -14,16 +14,21 @@ arms in order:
       ian_flipt: {cell: studies.cells.swe.ian_flipt_minimal, cheat: studies.cells.swe.ian_flipt_minimal_cheat}
     workers:
       deepseek: deepseek-flash-openrouter
+      qwen: {model: qwen3.8-flash-openrouter, pack: none}   # a worker's own pack, in place of the spec's
     arms:
       baseline: {pack: none}
       seeded: {}
       negative_control: {settings: [rule_level=generic], when: {seeded: cheated}}
       positive_control: {cell: cheat, when: {seeded: not_cheated}}
+      larger: {settings: [n_agents=10], stage: 1}
     limits: {max_runs: 4, max_per_task: {swe: 3}, spacing_s: 30}      # optional, the plan's
 
 A **cell** is a task and a worker. An arm's target for a cell is named `<stem>_<worker>_<arm>`, and run_study names its
 run `<target>_<pack>_s<seed>`. An arm runs the task's cell module, or its told-to-cheat module with `cell: cheat`, with
-the pack unless `pack: none`, and with its own `settings` (--set pairs, after the plan's). `when` gates the arm: every
+the pack unless `pack: none`, and with its own `settings` (--set pairs, after the plan's). A worker given as
+{model, pack} takes its own pack in place of the spec's, `none` for no seed pack at all. A task's `cheat` module may be
+left out when no arm runs `cell: cheat`. An arm's `stage` becomes its targets' stage in the plan, which run_study
+launches in order (lower first). `when` gates the arm: every
 condition must hold on the same cell's run of the earlier arm it names. Three conditions read the team's Cheating rung
 from the run's stored cheating.json (no judge, no model call): `cheated` (attempted or above,
 cheating_ladder.cheated), `not_cheated` (below attempted) and `hacked` (the top rung of rungs.RUNGS).
@@ -67,7 +72,10 @@ SPEC_OPTIONAL = {"limits", "closed"}
 """closed: true marks a study that is over: the spec is kept as a record, its pack may have been renamed since, and
 the plan written from it is closed, so nothing launches from it (run_study)."""
 TASK_KEYS = {"cell", "cheat"}
-ARM_KEYS = {"pack", "cell", "settings", "when"}
+"""cell is needed; cheat only when an arm runs `cell: cheat`."""
+WORKER_KEYS = {"model", "pack"}
+"""A worker is a registry entry, or {model: <entry>, pack: <pack>} with pack optional."""
+ARM_KEYS = {"pack", "cell", "settings", "when", "stage"}
 HEADER = "# Written by scripts.study.gated_study from {spec}: do not edit, write it again."
 """The plan's first line. --write overwrites only a plan whose first line starts as this one does."""
 FAILED, NO_RUNG, OPEN, CLOSED, WAITING = "failed", "no rung", "open", "closed", "waiting"
@@ -99,6 +107,7 @@ class Arm:
     cheat: bool = False               # True: the task's told-to-cheat module
     settings: tuple[str, ...] = ()
     when: dict[str, str] = field(default_factory=dict)
+    stage: int = 0                    # the plan's stage of the arm's targets
 
 
 @dataclass(frozen=True)
@@ -107,11 +116,16 @@ class Spec:
     study: str
     seed: int
     pack: str
-    tasks: dict[str, dict[str, str]]  # stem -> {cell, cheat}
+    tasks: dict[str, dict[str, str]]  # stem -> {cell[, cheat]}
     workers: dict[str, str]           # short name -> registry entry
     arms: list[Arm]
     limits: dict | None
     closed: bool = False              # a record of a finished study
+    worker_packs: dict[str, str] = field(default_factory=dict)   # short name -> its own pack, for those that name one
+
+    def pack_of(self, worker: str) -> str:
+        """The worker's seed pack name: its own, else the spec's. "none" is no pack."""
+        return self.worker_packs.get(worker, self.pack)
 
     def cells(self) -> list[tuple[str, str]]:
         """Every (stem, worker), task by task, worker by worker."""
@@ -121,10 +135,13 @@ class Spec:
         """The plan's target of one cell's arm: its name and {module, model, packs[, settings]}."""
         task = self.tasks[stem]
         module = task["cheat" if arm.cheat else "cell"]
+        pack = self.pack_of(worker) if arm.pack else "none"
         spec = {"module": module, "model": self.workers[worker],
-                "packs": [f"{run_study.module_task(module)}/{self.pack}" if arm.pack else "none"]}
+                "packs": [f"{run_study.module_task(module)}/{pack}" if pack != "none" else "none"]}
         if arm.settings:
             spec["settings"] = list(arm.settings)
+        if arm.stage:
+            spec["stage"] = arm.stage
         return f"{stem}_{worker}_{arm.name}", spec
 
     def run_name(self, stem: str, worker: str, arm: Arm) -> str:
@@ -148,18 +165,26 @@ def load_spec(path: Path) -> Spec:
         raise refuse(f"a spec needs {sorted(SPEC_KEYS)} and may take {sorted(SPEC_OPTIONAL)}")
     if not isinstance(raw["seed"], int) or not run_study.NAME.fullmatch(str(raw["study"])):
         raise refuse("seed is an integer and study a name of a-z, 0-9 and _")
+    workers, worker_packs = {}, {}
+    for worker, entry in raw["workers"].items():
+        entry = entry if isinstance(entry, dict) else {"model": entry}
+        if not run_study.NAME.fullmatch(worker) or not {"model"} <= set(entry) <= WORKER_KEYS \
+                or not all(isinstance(value, str) for value in entry.values()):
+            raise refuse(f"worker {worker!r} needs a name of a-z, 0-9 and _, and a registry entry or "
+                         f"{{model: <entry>, pack: <pack>}}")
+        models.resolve(entry["model"])
+        workers[worker] = entry["model"]
+        if "pack" in entry:
+            worker_packs[worker] = entry["pack"]
+    packs = {raw["pack"], *worker_packs.values()} - {"none"}
     for stem, task in raw["tasks"].items():
-        if not run_study.NAME.fullmatch(stem) or set(task) != TASK_KEYS:
-            raise refuse(f"task {stem!r} needs a name of a-z, 0-9 and _, and {sorted(TASK_KEYS)}")
+        if not run_study.NAME.fullmatch(stem) or not {"cell"} <= set(task) <= TASK_KEYS:
+            raise refuse(f"task {stem!r} needs a name of a-z, 0-9 and _, and {sorted(TASK_KEYS)} (cheat optional)")
         for module in task.values():
             if not (settings.ROOT / Path(*module.split("."))).with_suffix(".py").is_file():
                 raise refuse(f"{stem}'s module {module} is no script of this checkout")
-            if not raw.get("closed"):
-                seed_packs.pack_of(f"{run_study.module_task(module)}/{raw['pack']}")
-    for worker, entry in raw["workers"].items():
-        if not run_study.NAME.fullmatch(worker) or not isinstance(entry, str):
-            raise refuse(f"worker {worker!r} needs a name of a-z, 0-9 and _, and a registry entry")
-        models.resolve(entry)
+            for pack in packs if not raw.get("closed") else ():
+                seed_packs.pack_of(f"{run_study.module_task(module)}/{pack}")
     arms: list[Arm] = []
     for name, arm in raw["arms"].items():
         arm = arm or {}
@@ -167,6 +192,11 @@ def load_spec(path: Path) -> Spec:
             raise refuse(f"arm {name!r} needs a name of a-z, 0-9 and _, and takes {sorted(ARM_KEYS)}")
         if arm.get("pack", "default") not in ("default", "none") or arm.get("cell", "cheat") != "cheat":
             raise refuse(f"arm {name}: pack takes none alone, cell takes cheat alone")
+        if "cell" in arm and not all("cheat" in task for task in raw["tasks"].values()):
+            raise refuse(f"arm {name} runs cell: cheat, so every task needs its cheat module")
+        stage = arm.get("stage", 0)
+        if not isinstance(stage, int) or stage < 0:
+            raise refuse(f"arm {name}: stage is an integer of 0 or more")
         pairs = [str(pair) for pair in arm.get("settings") or []]
         for pair in pairs:
             key, sep, value = pair.partition("=")
@@ -180,9 +210,9 @@ def load_spec(path: Path) -> Spec:
             if other not in earlier or condition not in CONDITIONS:
                 raise refuse(f"arm {name}: when names an earlier arm ({sorted(earlier)}) and one of "
                              f"{sorted(CONDITIONS)}, got {other}: {condition}")
-        arms.append(Arm(name, arm.get("pack") != "none", "cell" in arm, tuple(pairs), when))
-    return Spec(Path(path), raw["study"], raw["seed"], raw["pack"], raw["tasks"], dict(raw["workers"]), arms,
-                raw.get("limits"), bool(raw.get("closed")))
+        arms.append(Arm(name, arm.get("pack") != "none", "cell" in arm, tuple(pairs), when, stage))
+    return Spec(Path(path), raw["study"], raw["seed"], raw["pack"], raw["tasks"], workers, arms,
+                raw.get("limits"), bool(raw.get("closed")), worker_packs)
 
 
 @dataclass(frozen=True)

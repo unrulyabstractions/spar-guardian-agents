@@ -351,3 +351,120 @@ def test_without_gates_the_launcher_writes_no_plan(plan_file, tmp_path, monkeypa
     FakeRun.launched = []
     assert seed_study.main([str(plan_file), "--yes"]) == 0
     assert len(FakeRun.launched) == 4 and plan_file.read_text() == before
+
+
+# ---------------------------------------------------------------- runs counted by their agents, and the stages
+SIZED = f"""study: study_x
+seeds: [1]
+settings: [n_agents=4]
+targets:
+  team_default:
+    module: {SWE}
+    model: deepseek-flash-openrouter
+    packs: [none]
+  swarm_20:
+    module: {SWE}
+    model: deepseek-flash-openrouter
+    packs: [{PACK}]
+    settings: [n_agents=20, max_concurrency=20, cost_limit_usd=20]
+    stage: 1
+limits: {{max_runs: 6, max_agents: 24, spacing_s: 0, needs: {{swe: {{disk_gb: 2.3, memory_gb: 0.8, per: agent}}}}}}
+"""
+
+
+def team(name, agents, stage=0, task="swe"):
+    return seed_study.Cell(name, "none", 1, SWE, "m", task, n_agents=agents, stage=stage)
+
+
+def test_a_cells_agents_and_cap_are_the_last_settings_that_name_them(tmp_path):
+    path = tmp_path / "plan.yaml"
+    path.write_text(SIZED)
+    plan = seed_study.load_plan(path)
+    small, big = seed_study.cells(plan)
+    assert (small.n_agents, small.stage, small.cap_usd(plan["settings"])) == (4, 0, 5.0)
+    assert (big.n_agents, big.stage, big.cap_usd(plan["settings"])) == (20, 1, 20.0)
+    assert "--set cost_limit_usd=5" in seed_study.command(big, "s", plan["settings"], False)
+    assert seed_study.command(big, "s", plan["settings"], False).endswith(
+        "--set n_agents=20 --set max_concurrency=20 --set cost_limit_usd=20 --set id_salt=swarm_20_s1 "
+        "--set seed_pack=swe/revealing")
+    path.write_text(SIZED.replace("settings: [n_agents=4]\n", ""))
+    assert seed_study.cells(seed_study.load_plan(path))[0].n_agents == seed_study.DEFAULT_AGENTS == 3
+
+
+def test_a_dry_run_sums_each_cells_own_cap(tmp_path, monkeypatch, capsys):
+    path = tmp_path / "plan.yaml"
+    path.write_text(SIZED)
+    monkeypatch.setattr(seed_study, "free_memory_pct", lambda: 70)
+    monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 300)
+    monkeypatch.setattr(seed_study, "live_runs", lambda: {"other_study_run": 5})
+    assert seed_study.main([str(path), "--dry-run", "--study", "no_such_study"]) == 0
+    out = capsys.readouterr().out
+    assert "2 to run; at most $25.00 at the runs' caps of $5.00 and $20.00" in out
+    assert "swarm_20_revealing_s1  (20 agents, $20.00 cap, stage 1)" in out and "agents live 5" in out
+
+
+@pytest.mark.parametrize("bad,why", [
+    ("max_agents: 24,", "max_agents: 0,"), ("per: agent", "per: team"), ("stage: 1", "stage: -1")])
+def test_a_plan_with_a_bad_size_is_refused(tmp_path, bad, why):
+    path = tmp_path / "plan.yaml"
+    path.write_text(SIZED.replace(bad, why))
+    with pytest.raises(ValueError):
+        seed_study.load_plan(path)
+
+
+def test_max_agents_counts_every_live_run_on_the_mac_and_passes_over_a_cell_that_does_not_fit(monkeypatch):
+    """A swarm of 20 waits while 10 agents are live (here 5 of the launcher's own and 5 of another study's), and a
+    swarm of 5 queued behind it launches. Once nothing is live, a swarm larger than max_agents launches too."""
+    monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 300)
+    monkeypatch.setattr(seed_study, "free_memory_pct", lambda: 80)
+    monkeypatch.setattr(seed_study, "live_runs", lambda: {"own_5": 5, "other_5": 5})
+    limits = {**seed_study.LIMITS, "max_runs": 6, "spacing_s": 0, "max_agents": 24}
+    running = {"own_5": (None, team("own", 5))}
+    big, five = team("big", 20), team("five", 5)
+    assert seed_study.live_agents(running, limits) == 10
+    assert seed_study.next_cell(running, [big, five], limits, 0.0) == (five, None)
+    assert seed_study.next_cell(running, [big], limits, 0.0) == (None, "10 agents live, 20 more pass max_agents 24")
+    assert seed_study.room(running, big, limits, 0.0) == "10 agents live, 20 more pass max_agents 24"
+    monkeypatch.setattr(seed_study, "live_runs", dict)
+    assert seed_study.next_cell({}, [team("huge", 30)], limits, 0.0)[0].target == "huge"
+
+
+def test_a_plan_without_max_agents_never_reads_the_process_table_for_it(plan_file, monkeypatch):
+    """The plans of before keep their behaviour: no agent limit, and no ps call for one."""
+    monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 20)
+    monkeypatch.setattr(seed_study, "free_memory_pct", lambda: 80)
+    monkeypatch.setattr(seed_study, "live_runs", no_launch)
+    limits = seed_study.load_plan(plan_file)["limits"]
+    assert limits["max_agents"] is None
+    cells = seed_study.cells(seed_study.load_plan(plan_file))
+    assert seed_study.next_cell({}, [team("huge", 300), *cells], limits, 0.0)[0].target == "huge"
+
+
+def test_a_later_stage_waits_while_an_earlier_stage_is_queued(monkeypatch):
+    """The queue sorts by stage before the critical path, and a stage 1 cell does not pass a stage 0 cell held by
+    max_agents, so every smaller swarm starts before the first swarm of 20."""
+    monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 300)
+    monkeypatch.setattr(seed_study, "free_memory_pct", lambda: 80)
+    monkeypatch.setattr(seed_study, "live_runs", dict)
+    limits = {**seed_study.LIMITS, "max_runs": 6, "spacing_s": 0, "max_agents": 24}
+    ten, big = team("ten", 10), team("big", 20, stage=1)
+    timings, chains = {("swe", "m"): 30.0}, {big.name: 3}
+    assert seed_study.by_critical_path([big, ten], timings, chains) == [ten, big]
+    running = {"r": (None, team("r", 20))}
+    held = (None, "20 agents live, 10 more pass max_agents 24")
+    assert seed_study.next_cell(running, [ten, big], limits, 0.0) == held
+    assert seed_study.next_cell({}, [ten, big], limits, 0.0) == (ten, None)
+    assert seed_study.next_cell({}, [big], limits, 0.0) == (big, None)
+
+
+def test_the_live_runs_carry_their_agents(monkeypatch):
+    ps = "\n".join([
+        "uv run python -m studies.cells.swe.ian_flipt_minimal --model m --no-judge --name big_s1 --set seed=1"
+        " --set n_agents=4 --set n_agents=20 --set max_concurrency=20",
+        "/x/.venv/bin/python3 -m studies.cells.swe.ian_flipt_minimal --model m --no-judge --name big_s1 --set seed=1"
+        " --set n_agents=4 --set n_agents=20",
+        "uv run python -m studies.cells.swe.ian_flipt_minimal --model m --no-judge --name team_s1 --set seed=1",
+    ])
+    monkeypatch.setattr(seed_study.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": ps})())
+    assert seed_study.live_runs() == {"big_s1": 20, "team_s1": 3}
+    assert seed_study.live_names() == {"big_s1", "team_s1"}
