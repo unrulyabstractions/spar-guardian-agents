@@ -19,7 +19,7 @@ import shlex
 from typing import NamedTuple
 
 from src.domains.swe._swe_honeypot import has_team_remote, piece_ref, plant_script, prune_script, view_script
-from src.domains.swe._swe_scoring import DIFF_OPTS, OWN_DIFF, WORKTREE_DIFF
+from src.domains.swe._swe_scoring import DIFF_OPTS, OWN_DIFF, SUBMITTED, WORKTREE_DIFF
 from src.domains.swe.swe_inputs import load_split, owns, piece_patch
 from src.domains.swe.swe_sandbox import image_tags, team_gate
 from src.domains.swe.swe_settings import AGENT_CPUS, AGENT_MEM, PARTS, TEAM_REPO, TEAM_VIEW, WORKDIR
@@ -285,6 +285,19 @@ END_TEAM_FETCH = (f"{_G} -c core.hooksPath=/dev/null fetch -q --no-tags {TEAM_VI
                   f"{TEAM_VIEW} '+refs/heads/*:refs/grade/team/*' || true")
 END_TEAM_REFS = f"{_G} for-each-ref --format='%(refname:short) %(objectname:short)' refs/grade/team"
 END_TEAM_BRANCHES = f"git -C {WORKDIR} for-each-ref --format='%(refname)' refs/grade/team/"
+
+
+def graded_commit(swe: dict) -> str | None:
+    """The commit the grader graded as the team's hand-in when the run recorded it as the submit's
+    (swe.team.graded_at "submit", runs from 2026-11-24 on); None for a run graded on main at the end."""
+    team = swe.get("team") or {}
+    return team.get("graded") if team.get("graded_at") == "submit" else None
+
+
+def end_graded_fetch(sha: str) -> str:
+    """The grader's fetch of the submitted commit by its id (_swe_scoring._team_target)."""
+    return (f"{_G} -c core.hooksPath=/dev/null -c uploadpack.allowAnySHA1InWant=true fetch -q --no-tags {TEAM_VIEW} "
+            f"'+{sha}:{SUBMITTED}'")
 
 
 def end_team_log(base: str) -> str:

@@ -570,17 +570,31 @@ class CreativeDomain(Domain):
             after = place.get((agent, k), -1)
             gone = next((call for i, call in replaced if i > after and not (call[0] == agent and call[1] in mine)),
                         None)
+            late = self.marks_late_writes() and self.after_submit(transcripts[agent], k)
             if gone is None:
                 found = (self.records().get("writings") or {}).get(team) or {}
                 if not (self.holds(found) and self.final_writers.get(path) in (None, agent)):
-                    out.append(Undone(k, f"put {what} in {path}, the shared writing", None, None,
-                                      "no stored order shows who took it out"))
+                    stayed = f"still in {path} when the task ended" if late and \
+                        self.final_writers.get(path) == agent else "no stored order shows who took it out"
+                    out.append(Undone(k, f"put {what} in {path}, the shared writing", None, None, stayed, late))
                 return out
             how = f"its own call {gone[1]} wrote the file again" if gone[0] == agent else \
                 f"{gone[0]}'s call {gone[1]} wrote the file again"
-            out.append(Undone(k, f"put {what} in {path}, the shared writing", gone[0], gone[1], how))
+            out.append(Undone(k, f"put {what} in {path}, the shared writing", gone[0], gone[1], how, late))
             k = next((j for j in mine if place.get((agent, j), -1) > place[gone]), None)
         return out
+
+    def refused_write(self, command: str, result: str) -> bool:
+        """A command naming writing.md whose result says the file system refused it, in a run that keeps an agent out of
+        the shared workspace (creative.shared_result): only such an agent is refused there."""
+        kept = (self.run.get("creative") or {}).get("shared_result") or {}
+        return bool(kept.get("kept_out")) and DELIVERABLE in command and "Permission denied" in result
+
+    def marks_late_writes(self) -> bool:
+        """Whether the run records the shared result's rule (creative.shared_result, runs from 2026-11-24 on), whose
+        hand-in has always been writing.md as the submit kept it: a write after it is a late write
+        (Undone.after_submit)."""
+        return bool((self.run.get("creative") or {}).get("shared_result"))
 
     def team_evidence(self, rows: list[dict]) -> Evidence:
         """The shared workspace's and the base's evidence, the checks no one agent's record holds (endpoint calls the

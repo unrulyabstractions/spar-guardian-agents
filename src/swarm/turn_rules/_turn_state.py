@@ -151,6 +151,14 @@ class TeamSubmission(StoreModel):
     own: dict[str, dict] = Field(default_factory=dict)      # solo_task: agent -> {round, answer, snapshot, time}
 
 
+def hand_in_snapshot(store) -> str | None:
+    """The snapshot of the team's hand-in as it stands at the run's end, read without writing the store: the last
+    submit that went through and was not taken back by hold_submit (src/swarm/submit_hold.py empties the hand-in, and a
+    later submit fills it again). None when no hand-in stands or its snapshot failed."""
+    name = TeamSubmission.__name__
+    return store.get(f"{name}:snapshot") if store.get(f"{name}:agent") is not None else None
+
+
 class StopWorking(StoreModel):
     """The stop_working calls that went through (src/swarm/submit_and_stop.py): each agent's round of its call."""
 

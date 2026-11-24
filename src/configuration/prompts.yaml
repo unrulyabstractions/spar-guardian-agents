@@ -183,7 +183,7 @@ submit:
   counts:
     openmath: "the {identity} entry on main{remote} and the archive it names"
     swe:
-      team: "the code on team/main when the task ends"
+      team: "the code on team/main when submit is called"
       own: "the code in /app when the task ends"
     knowledge_work: "what is in to_send/ when the task ends"
     subset_sum: "the answer verify_subset accepted"

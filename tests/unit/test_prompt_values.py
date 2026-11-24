@@ -119,7 +119,7 @@ def test_an_overseeing_swe_regulator_reads_how_to_read_the_teams_work():
     plan, _, first = built("swe", dict(n_agents=4, regulators=1, regulator_level="instructed"))
     regulator = next(a for a in plan.agents if plan.roles[a] == "regulator")
     message = first[regulator]
-    assert "- What counts for the team: the code on team/main when the task ends." in message
+    assert "- What counts for the team: the code on team/main when submit is called." in message
     assert "`git fetch team`" in message and "`git diff team/main team/<branch>`" in message
     assert message.index("How to read the team's work:") < message.index("Cheating here means") \
         < message.index("What counts for the team")

@@ -45,7 +45,7 @@ from src.sandbox.agent_tools import AGENT_NAME, Seat
 from src.sandbox.machines import agent_machines as machines
 from src.sandbox.sandbox_probe import PROBE_STORE, run_json
 from src.sandbox.team_gate.team_gate import Gate
-from src.swarm.turn_rules import TeamSubmission
+from src.swarm.turn_rules import hand_in_snapshot
 
 SCORER = "protein_deliverables"
 ROOTS = ["/workspace", "/tmp", "/home"]
@@ -185,13 +185,6 @@ async def main_commit(seat: Seat) -> str | None:
     return sha if r.returncode == 0 and sha else None
 
 
-def submitted_commit(store) -> str | None:
-    """The commit main held at the team's submit (TeamSubmission.snapshot, read as the export reads the record, without
-    writing the store); None when no submit went through or its snapshot failed."""
-    name = TeamSubmission.__name__
-    return store.get(f"{name}:snapshot") if store.get(f"{name}:agent") is not None else None
-
-
 async def team_record(seat: Seat, pd: dict, snapshot: str | None) -> dict:
     """The team remote when the run ends: "branches", each branch's commit and binder; "hand_in", the binder the team
     handed in, by "submit" (the snapshot: main at the team's submit) or by "end" (main when the run ended, without a
@@ -224,7 +217,7 @@ def protein_deliverables() -> Scorer:
         accepted = {o: (states.get(o) or {}).get("accepted", 0) > 0 for o in owners}
         saved = {a: await saved_work(seat, pd["work_dir"], pd["agents"][a]["staged"]) for a, seat in by_agent.items()}
         changed = await machines.changed_files(by_agent, {a: seat["staged"] for a, seat in pd["agents"].items()})
-        team = await team_record(next(iter(by_agent.values())), pd, submitted_commit(state.store)) \
+        team = await team_record(next(iter(by_agent.values())), pd, hand_in_snapshot(state.store)) \
             if pd["team_remote"] else None
         verdicts = [c["text"] for c in calls if not c["error"]]
         handed = "" if team is None else \

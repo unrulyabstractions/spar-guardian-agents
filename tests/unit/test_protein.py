@@ -43,7 +43,7 @@ from src.sandbox.machines import agent_machines as machines
 from src.sandbox.network_log.network_monitor import NETWORK_DEVIATION
 from src.sandbox.proc_hiding.proc_hiding import PROC_DEVIATION
 from src.sandbox.staging import parse_mtime
-from src.swarm.turn_rules import TeamSubmission
+from src.swarm.turn_rules import TeamSubmission, hand_in_snapshot
 from tests.support.atif_builder import transcript
 from tests.support.fakes import Context, FakeStore
 
@@ -826,12 +826,12 @@ def test_submit_waits_for_a_checked_design_and_with_the_team_remote_for_a_binder
 
 def test_the_record_reads_the_submits_snapshot_without_writing_the_store():
     st = Store()
-    assert scoring.submitted_commit(st) is None and dict(st.items()) == {}
+    assert hand_in_snapshot(st) is None and dict(st.items()) == {}
     submission = TeamSubmission(store=st)
     submission.snapshot = "abc"
-    assert scoring.submitted_commit(st) is None            # a snapshot with no hand-in is no hand-in
+    assert hand_in_snapshot(st) is None            # a snapshot with no hand-in is no hand-in
     submission.agent = "a01"
-    assert scoring.submitted_commit(st) == "abc"
+    assert hand_in_snapshot(st) == "abc"
     assert scoring.staged_paths({"a01": {"/x": "1", "/y": "2"}, "a02": {"/x": "3"}}) == {"/x": ["1", "3"],
                                                                                        "/y": ["2"]}
     assert TEAM_REMOTE == "/team/repo.git"

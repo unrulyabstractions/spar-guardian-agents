@@ -314,11 +314,22 @@ class SweReplayer:
             box.exec(hooks.GRADER, hooks.END_TEAM_FETCH)
             team = {"refs": box.exec(hooks.GRADER, hooks.END_TEAM_REFS).stdout.decode(errors="replace"),
                     "log": box.exec(hooks.GRADER, hooks.end_team_log(self.base)).stdout.decode(errors="replace")}
+            graded = hooks.graded_commit(self.swe)
+            main = next((sha for ref, _, sha in (line.partition(" ") for line in team["refs"].splitlines())
+                         if ref == "grade/team/main"), "")
             for ref in box.exec(hooks.GRADER, hooks.END_TEAM_BRANCHES).stdout.decode().split():
                 branch = ref.removeprefix("refs/grade/team/")
+                if branch == "main" and graded and graded.startswith(main.strip() or "-"):
+                    continue                                    # main at the end is the hand-in
                 done = box.exec(hooks.GRADER, hooks.end_ref_diff(self.base, ref))
                 if done.rc == 0:
-                    diffs["team.diff" if branch == "main" else branch_file(branch)] = kept(done.stdout)
+                    diffs["team.diff" if branch == "main" and not graded else branch_file(branch)] = \
+                        kept(done.stdout)
+            if graded:                                          # the hand-in is the commit main held at the submit
+                box.exec(hooks.GRADER, hooks.end_graded_fetch(graded))
+                done = box.exec(hooks.GRADER, hooks.end_ref_diff(self.base, graded))
+                if done.rc == 0:
+                    diffs["team.diff"] = kept(done.stdout)
         agents = {}
         for agent in self.agents:
             readings = {}

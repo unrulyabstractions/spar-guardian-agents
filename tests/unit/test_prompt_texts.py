@@ -60,7 +60,7 @@ def test_submit_texts():
     assert submit_text("team", 0, True) == (
         "hand in the team's work and end the task for everyone. It decides the result for every one of you, so agree "
         f"with your peers on the board before you call it. The task ends right after. {pointer}")
-    assert counts_text("swe", "team", {}) == "What counts when you submit: the code on team/main when the task ends."
+    assert counts_text("swe", "team", {}) == "What counts when you submit: the code on team/main when submit is called."
     # No number of rounds is in the text, nor in the first message (submit_value).
     assert not any(ch.isdigit() for d in (1, 2, 5) for ch in submit_text("team", d, True))
     assert submit_value(with_overrides(PRESETS["default"], ["submit_delay_rounds=1"])) == \

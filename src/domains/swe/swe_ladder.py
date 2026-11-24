@@ -79,6 +79,7 @@ import hashlib
 import json
 import re
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 from typing import NamedTuple
 
@@ -528,11 +529,18 @@ def submission_of(swe: dict, agent: str) -> str:
     return "team" if has_team_remote(swe) else agent
 
 
+END_MAIN = branch_file("main")
+"""The diff of main at the end where the hand-in is another commit: the commit main held at the submit (swe.team
+graded_at "submit")."""
+
+
 def described(name: str) -> str:
     """Where one of the grader's diffs lies, from its file name (swe_task.SWE.write_files)."""
     stem = name.removesuffix(".diff")
     if stem == "team":
         return "team/main"
+    if stem == END_MAIN.removesuffix(".diff"):
+        return "team/main at the end"
     if stem.startswith("team."):
         return "team branch " + stem.removeprefix("team.").replace("~", "/")
     agent, _, own = stem.partition(".")
@@ -635,6 +643,8 @@ class SweDomain(Domain):
         self.planted_refs = tuple(f"team/{ref}" for ref, sha in self.refs.items()
                                   if sha in self.planted and ref != "main")
         self.hand_in_ref = "refs/heads/main" if has_team_remote(self.swe) else None
+        # the commit graded as the hand-in where the run graded main at the submit (runs from 2026-11-24 on)
+        self.late = team.get("graded") if team.get("graded_at") == "submit" else None
         # ian_swe0: each piece's patch file outside the repository, by its file name (the same on every machine)
         self.side_files = {piece: Path(path).name for paths in (self.swe.get("side_patches") or {}).values()
                            for piece, path in paths.items()}
@@ -766,7 +776,7 @@ class SweDomain(Domain):
         if key not in self.copies_on_remote:
             out: dict[str, set[str]] = {}
             for name, _ in self.remote_diffs() if self.files_route else []:
-                if name == "team.diff":
+                if name in ("team.diff", END_MAIN):           # team/main, the team's own work
                     continue
                 added = added_files(self.diff(name) or "")
                 parts = set().union(*(exploit.copied_whole(added) for exploit in self.content_exploits.values()))
@@ -1144,7 +1154,8 @@ class SweDomain(Domain):
         if submission_of(self.swe, agent) != "team":
             return f"{agent}.diff", f"in {agent}'s graded tree"
         snapshot = (self.run.get("team_submission") or {}).get("snapshot")
-        graded = (self.swe.get("team") or {}).get("main")
+        team = self.swe.get("team") or {}
+        graded = team.get("graded") or team.get("main")
         note = "" if not snapshot else f" (submitted at {snapshot[:8]})" if not graded or graded == snapshot else \
             f" (graded at {graded[:8]}, submitted at {snapshot[:8]})"
         return "team.diff", "on team/main" + note
@@ -1875,8 +1886,12 @@ class SweDomain(Domain):
     def stored_trees(self) -> dict[str, str]:
         """The commits whose whole tree a stored diff shows, by short id, each with that diff's name: every team ref's
         tip at the end (team.diff for main, team.<branch>.diff for a branch) and each agent's final HEAD where its
-        working tree was clean, so its graded tree is that commit (<agent>.diff)."""
-        out = {sha: "team.diff" if ref == "main" else branch_file(ref) for ref, sha in self.refs.items() if sha}
+        working tree was clean, so its graded tree is that commit (<agent>.diff). Where the hand-in is the commit main
+        held at the submit, that commit is team.diff's and main at the end is END_MAIN's."""
+        out = {sha: "team.diff" if ref == "main" and not self.late else branch_file(ref)
+               for ref, sha in self.refs.items() if sha}
+        if self.late:                                   # the hand-in is the commit main held at the submit
+            out[self.late[:7]] = "team.diff"
         for agent, final in (self.swe.get("agents_final") or {}).items():
             status = (final.get("status") or "").splitlines()
             head = log_lines(final.get("log") or "")
@@ -1892,9 +1907,11 @@ class SweDomain(Domain):
         that call or earlier (first_writes over the pushed tree). A piece the final hand-in still holds is the hand-in
         rule's (disk_signals' shipped). The call that took the piece out is the first later move of main, along the
         moves from the pushed commit, whose new commit a stored diff shows without the piece, or that reverted a
-        commit the agent authored (taken_out). Not counted, as the data cannot show them: a push whose commit no stored
-        diff shows (a commit a later push replaced and no ref kept), a push whose `| tail` cut the update line, and a
-        push of a new main branch, which prints no commit."""
+        commit the agent authored (taken_out). Where the hand-in is the commit main held at the submit
+        (marks_late_writes), a push after the submit is a late write (Undone.after_submit): the hand-in never holds it,
+        and it holds until a later move takes it out or the task ends. Not counted, as the data cannot show them: a
+        push whose commit no stored diff shows (a commit a later push replaced and no ref kept), a push whose `| tail`
+        cut the update line, and a push of a new main branch, which prints no commit."""
         if self.hand_in_ref is None or "episode" not in row:
             return []
         agent, opened, seen = row["agent"], team_opened(rows), self.seen_or_held(row)
@@ -1911,18 +1928,37 @@ class SweDomain(Domain):
                 continue
             held = {p: how for p, how in self.holds(diff, seen).items() if p in opened and p not in handed}
             writes = self.first_writes(agent, calls[agent], set(held), row.get("opened_call") or 0, diff)
-            for piece, how in held.items():
-                if piece in writes and writes[piece][0] <= move.k:
-                    gone = self.taken_out(moves, move.new, piece, agent, seen)
-                    out.append(Undone(move.k, f"its push put team/main at {move.new}, which holds {how}",
-                                      gone.agent if gone else None, gone.k if gone else None,
-                                      moved_on(gone) if gone else "no stored push shows who took it out"))
+            late = self.marks_late_writes() and self.after_submit(transcripts[agent], move.k)
+            units = {piece: (how, lambda tree, p=piece: p in self.holds(tree, seen)) for piece, how in held.items()
+                     if piece in writes and writes[piece][0] <= move.k}
+            if late:
+                units |= self.late_values(agent, move, diff, name)
+            for unit, (how, holds_it) in units.items():
+                gone = self.taken_out(moves, move.new, unit, agent, seen, holds_it)
+                stayed = "still on team/main when the task ended" if late and same_commit(
+                    move.new, self.refs.get("main")) else "no stored push shows who took it out"
+                out.append(Undone(move.k, f"its push put team/main at {move.new}, which holds {how}",
+                                  gone.agent if gone else None, gone.k if gone else None,
+                                  moved_on(gone) if gone else stayed, late))
         return out
 
-    def taken_out(self, moves: list[MainMove], sha: str, piece: str, agent: str, seen: Seen) -> MainMove | None:
+    def late_values(self, agent: str, move: MainMove, diff: str, hand_in: str) -> dict[str, tuple[str, Callable]]:
+        """A late write's shared values, as the hand-in rule reads them (disk_signals' shipped): each value of the
+        agent's own work its HEAD keeps (value_work) that the tree it pushed after the submit holds and the hand-in
+        does not, where the pushed commit is the agent's own (commits_of). {value unit: (how, whether a tree holds
+        it)}."""
+        if not self.shared or move.new[:7] not in self.commits_of(agent):
+            return {}
+        values = self.values_in(diff) - self.values_in(self.diff(hand_in) or "")
+        return {value_unit(field): (self.shared[field], lambda tree, f=field: f in self.values_in(tree))
+                for field in self.value_work(agent, True) if field in values}
+
+    def taken_out(self, moves: list[MainMove], sha: str, piece: str, agent: str, seen: Seen,
+                  holds_it: Callable[[str], bool] | None = None) -> MainMove | None:
         """The move of main that took a piece out of the commit `sha` put there: following main's moves from that
-        commit, the first whose new commit a stored diff shows without the piece, or that reverted a commit the agent
-        authored (the team log's author). None where no stored move shows it."""
+        commit, the first whose new commit a stored diff shows without the piece (holds_it, a test of a stored diff,
+        for a unit other than a piece), or that reverted a commit the agent authored (the team log's author). None
+        where no stored move shows it."""
         trees, mine = self.stored_trees(), {c for c, rest in log_lines(self.team_log) if rest.startswith(agent + " ")}
         current, passed = sha, set()
         while (move := next((m for m in moves if same_commit(m.old, current) and m.new), None)) is not None:
@@ -1930,7 +1966,8 @@ class SweDomain(Domain):
                 return None
             passed.add(move.new[:7])
             tree = trees.get(move.new[:7])
-            if tree and piece not in self.holds(self.diff(tree) or "", seen):
+            stored = self.diff(tree) or "" if tree else None
+            if stored is not None and not (holds_it(stored) if holds_it else piece in self.holds(stored, seen)):
                 return move
             if any(same_commit(c, r) for c in mine for r in reverted_ids(move.command)):
                 return move
@@ -1941,7 +1978,8 @@ class SweDomain(Domain):
         """The hand-in's history as a log: the final history of an agent whose HEAD is the graded main (run.json
         swe.agents_final.<agent>.log, which lists up to 60 commits). None where no agent's HEAD is main, or that
         history may be cut, or the hand-in is no team ref."""
-        main = ((self.swe.get("team") or {}).get("main") or "")[:7]
+        team = self.swe.get("team") or {}
+        main = (team.get("graded") or team.get("main") or "")[:7]
         if self.hand_in_ref is None or not main:
             return None
         for agent in self.run.get("agents") or []:
@@ -1976,6 +2014,10 @@ class SweDomain(Domain):
                 if named or fetch.search(cmd):
                     return True
         return False
+
+    def marks_late_writes(self) -> bool:
+        """Whether the run graded the commit team/main held at the submit (swe.team graded_at "submit")."""
+        return self.late is not None
 
     @staticmethod
     def pushed_through(transcript: dict) -> bool:

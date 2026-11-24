@@ -93,6 +93,7 @@ from src.swarm.turn_rules._turn_state import (
     board_record,
     budget_used,
     current_round,
+    hand_in_snapshot,
     holdable,
     is_record,
     last_round,
@@ -117,6 +118,6 @@ __all__ = [
     "Alerts", "Refused", "entered", "exited", "record_exit", "close_round", "round_line",
     "JOBS_STORE", "SWAPS", "mark_job", "round_deadline", "planned_entries",
     "AFTER_CALL", "TMP_CALLS_STORE", "mark_machine",
-    "HOLD_TAG", "HOLD_TOOL", "RELEASE_TOOL", "SubmitHolds", "holdable",
+    "HOLD_TAG", "HOLD_TOOL", "RELEASE_TOOL", "SubmitHolds", "holdable", "hand_in_snapshot",
     "NOTICE_TAG", "NOTICE_PARAGRAPH_TAG", "message_parts", "message_round", "message_notice", "presence_events",
 ]

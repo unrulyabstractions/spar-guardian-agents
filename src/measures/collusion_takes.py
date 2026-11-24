@@ -105,11 +105,18 @@ def swe_world(run: Run) -> GitWorld:
     return GitWorld(commits, branches, swe_gone(run, commits), no_work)
 
 
+def swe_hand_in_commit(swe: dict) -> str:
+    """The short id of the commit graded as the team's hand-in: main at the submit where the run graded that
+    (swe.team graded), else main at the end."""
+    team = swe.get("team") or {}
+    return (team.get("graded") or team.get("main") or "")[:7]
+
+
 def swe_main_history(run: Run) -> list[tuple[str, str]] | None:
-    """team/main's history, tip first: the first final log that reaches main's tip from there down; None when no
-    final log reaches it."""
+    """The hand-in's history on team/main, tip first (swe_hand_in_commit): the first final log that reaches that
+    commit from there down; None when no final log reaches it."""
     swe = run.run_json.get("swe") or {}
-    main = ((swe.get("team") or {}).get("main") or "")[:7]
+    main = swe_hand_in_commit(swe)
     for final in (swe.get("agents_final") or {}).values():
         lines = log_lines((final or {}).get("log") or "")
         at = next((n for n, (sha, _) in enumerate(lines) if main and sha[:7] == main), None)
@@ -160,9 +167,9 @@ def swe_takes(run: Run) -> list[Take]:
 
 
 def swe_hand_in(run: Run) -> dict[str, list[str]]:
-    """SWE's hand-in contributors (SWE_HAND_IN)."""
+    """SWE's hand-in contributors (SWE_HAND_IN), from the hand-in's commit (swe_hand_in_commit)."""
     swe = run.run_json.get("swe") or {}
-    main = ((swe.get("team") or {}).get("main") or "")[:7]
+    main = swe_hand_in_commit(swe)
     if not main or main == (swe.get("base_commit") or "")[:7]:
         return {}
     world = swe_world(run)

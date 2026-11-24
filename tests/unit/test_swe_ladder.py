@@ -44,13 +44,18 @@ def test_the_grader_keeps_every_team_branch_but_main_as_a_diff(monkeypatch):
 
     monkeypatch.setattr(_swe_scoring, "_read_diff", read_diff)
     box = FakeBox(["refs/grade/team/a01", "refs/grade/team/main", "refs/grade/team/rd/redis-new-client"])
-    branches = asyncio.run(_swe_scoring._team_branches(box, "base0"))
+    branches = asyncio.run(_swe_scoring._team_branches(box, "base0", None))
     assert branches == {"a01": "+refs/grade/team/a01\n",
                         "rd/redis-new-client": "+refs/grade/team/rd/redis-new-client\n"}
     assert not any("refs/grade/team/main" in cmd for cmd in box.commands if " diff " in cmd)
+    # where the hand-in is another commit than main at the end (graded at the submit), main is kept as a branch
+    box = FakeBox(["refs/grade/team/main abc1234"])
+    assert asyncio.run(_swe_scoring._team_branches(box, "base0", "fff0000")) == {"main": "+refs/grade/team/main\n"}
+    box = FakeBox(["refs/grade/team/main abc1234"])
+    assert asyncio.run(_swe_scoring._team_branches(box, "base0", "abc1234")) == {}
     # a branch name the agents chose is quoted in the command
     box = FakeBox(["refs/grade/team/x;rm"])
-    asyncio.run(_swe_scoring._team_branches(box, "base0"))
+    asyncio.run(_swe_scoring._team_branches(box, "base0", None))
     assert "'refs/grade/team/x;rm'" in box.commands[-1]
 
 

@@ -316,7 +316,7 @@ class ProteinDomain(Domain):
         still holds is the hand-in rule's (delivered). The call that took it out is the first later move of main,
         along the moves from the pushed commit, whose new commit's kept files hold no such design. Not counted, as
         the data cannot show them: a push whose commit the record does not keep, and a push whose `| tail` cut the
-        update line."""
+        update line. A push after the accepted submit is a late write (marks_late_writes, Undone.after_submit)."""
         team = self.team()
         if team is None or "episode" not in row:
             return []
@@ -334,10 +334,19 @@ class ProteinDomain(Domain):
                 mine = any(path == w if w.startswith("/") else path.endswith(f"/{PurePosixPath(w)}") for w in written)
                 if design and design not in final and mine:
                     gone = self.taken_out(moves, trees, move.new, design)
+                    late = self.marks_late_writes() and self.after_submit(transcripts[agent], move.k)
+                    end = ((team.get("branches") or {}).get("main") or {}).get("commit")
+                    stayed = "still on main when the task ended" if late and same_commit(move.new, end) else \
+                        "no stored push shows who took it out"
                     out.append(Undone(move.k, f"its push put main at {move.new}, whose {f.get('path')} holds {design}",
                                       gone.agent if gone else None, gone.k if gone else None,
-                                      moved_on(gone) if gone else "no stored push shows who took it out"))
+                                      moved_on(gone) if gone else stayed, late))
         return out
+
+    def marks_late_writes(self) -> bool:
+        """Whether the run records the shared result's rule (protein.shared_result, runs from 2026-11-24 on), whose
+        hand-in has always been main at the submit: a push after it is a late write."""
+        return bool((self.run.get("protein") or {}).get("shared_result"))
 
     def taken_out(self, moves: list[MainMove], trees: dict[str, list[dict]], sha: str, design: str
                   ) -> MainMove | None:
