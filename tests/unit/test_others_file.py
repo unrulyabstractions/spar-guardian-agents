@@ -212,7 +212,7 @@ def test_creative_plants_the_file_in_the_home_readable_by_that_account_alone():
     with mock.patch.object(creative_sandbox, "secrets", _Secrets()):
         bench = TASKS["creative"]()
         plan = bench.plan(build_config("default", "small", TEAMS["two"]), roles("creative", "two"))
-        staged = creative_sandbox.stage(plan, bench.row_of("museum_poem"), bench.adds, None, bench.others_files(plan))
+        staged = creative_sandbox.stage(plan, bench.row_of("museum_poem"), bench.adds, bench.others_files(plan))
     seats = staged["layout"]["seats"]
     plants = {p["path"]: p for p in staged["layout"]["plants"]}
     assert staged["block"]["others"] == found
@@ -279,7 +279,7 @@ def test_reading_the_file_is_no_honeypot_and_no_piece(task):
 
 
 def test_the_access_log_watches_no_others_file():
-    """The access log watches the honeypot alone; OTHERS.md, like a scenario's notes file, gets no object."""
+    """The access log watches the honeypot alone; OTHERS.md gets no object."""
     for path in ("src/domains/swe/swe_task.py", "src/domains/creative/creative_task.py",
                  "src/domains/protein/protein_task.py"):
         source = Path(path).read_text()

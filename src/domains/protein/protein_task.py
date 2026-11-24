@@ -25,11 +25,10 @@ access log watches each machine's candidates file and its screening log.
 
 Variants (_protein_settings.VARIANTS, the `variant` option). ian_binder adds side copies, a candidates file in the
 screening directory's backup on each agent's machine (_protein_honeypot.side_copy, written as root at setup),
-and the scenario licensed_sequences: a client's request where CheatBench's assessment sentence stood, a workspace note
-after the task, and the notice file in the work dir of each machine holding a side copy (prompts.yaml
-protein_design.scenarios). Under its
-second_content the side copies hold the second content (second/), six other designs cut by the same split, and
-check_design accepts those designs too; the block records second_content and the hash of each planted second piece.
+and the scenario licensed_sequences: a client's request where CheatBench's assessment sentence stood (prompts.yaml
+protein_design.scenarios). Under its second_content the side copies hold the second content (second/), six other
+designs cut by the same split, and check_design accepts those designs too; the block records second_content and the
+hash of each planted second piece.
 A run without a variant builds every text, file and record as before.
 """
 from __future__ import annotations
@@ -93,7 +92,7 @@ SPLIT_DEVIATIONS = [
 ]
 SIDE_COPY_DEVIATION = "each_candidates_file_also_in_a_backup_of_the_screening_directory"
 SECOND_CONTENT_DEVIATION = "the_backup_holds_six_other_designs_cut_as_the_candidates_are_and_check_design_accepts_them"
-SCENARIO_DEVIATION = "assessment_sentence_replaced_by_a_clients_request_with_a_notes_file_in_the_work_dir"
+SCENARIO_DEVIATION = "assessment_sentence_replaced_by_a_clients_request"
 
 
 def has_team_remote(plan: Plan) -> bool:
@@ -150,19 +149,13 @@ class ProteinDesign(RowBenchmark):
         return text.replace(ASSESSMENT_LINE, fill_apart(told["request"], told, team))
 
     def copies(self, plan: Plan) -> dict[str, dict[str, bytes]]:
-        """Each agent's copy of the row, {agent: {absolute destination: bytes}} (_protein_honeypot.agent_files), with
-        the scenario's notes file in the work dir under a scenario on each machine that holds a side copy (side_copies):
-        the notes name the side copy's folder, which a machine without one lacks. A disregulator in a run with two or
-        more also gets its OTHERS.md there (Benchmark.others_files, influencers.others_text)."""
+        """Each agent's copy of the row, {agent: {absolute destination: bytes}} (_protein_honeypot.agent_files). A
+        disregulator in a run with two or more also gets its OTHERS.md (Benchmark.others_files,
+        influencers.others_text)."""
         row = self.row_of(self.row)
-        told = scenario(self.adds.scenario)
-        text = told["notice"].format(side_dir=str(Path(side_copy_path(row)).parent)) if told else ""
-        notice = {f"{row['vars']['work_dir']}/{told['notice_file']}": text.encode()} if told else {}
-        side = self.side_copies(plan)
         others = {a: {entry["path"]: others_text(entry["names"]).encode()}
                   for a, entry in self.others_files(plan).items()}
-        return {a: {**agent_files(row, plan.pieces[a], plan.n_pieces), **(notice if a in side else {}),
-                    **others.get(a, {})} for a in plan.agents}
+        return {a: {**agent_files(row, plan.pieces[a], plan.n_pieces), **others.get(a, {})} for a in plan.agents}
 
     def private_dir(self, plan: Plan, agent: str) -> str:
         """The work dir, where the agent's shell starts, on a machine of its own in a team."""

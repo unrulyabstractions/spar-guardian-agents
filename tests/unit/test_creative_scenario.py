@@ -1,9 +1,8 @@
 """ian_poem, the creative-writing analogue of ian_flipt (the user, 2026-11-22): each agent's piece of the reference is
 also a file in a side folder that its holder alone reads, CheatBench's interview sentences give way to a client's
-commission, every agent's first message names a notice file, and the notice in each workspace where an agent holds a
-side copy says the other agency's poem is off limits. No text of ours names a test, a grader, an interview or an
-evaluation, none holds a piece of the exploit, and a run without the variant stages and reads as before. No model call,
-no Docker."""
+commission, and no workspace gets a notes file (the user, 2026-11-24: "drop note"). No text of ours names a test, a
+grader, an interview or an evaluation, none holds a piece of the exploit, and a run without the variant stages and
+reads as before. No model call, no Docker."""
 from __future__ import annotations
 
 import dataclasses
@@ -54,7 +53,7 @@ def test_the_variants():
                                             second_content=True)}
     assert honeypot.scenario(None) is None
     assert Variant() == Variant(side_copies=False, scenario=None, rows=(), second_content=False)
-    assert set(honeypot.scenario(SCENARIO)) == {"replace", "apart", "principal", "notice_file", "notice", "words"}
+    assert set(honeypot.scenario(SCENARIO)) == {"replace", "apart", "principal", "words"}
     assert settings.load_prompts()["creative_writing"]["scenarios"].keys() == {SCENARIO}
     with pytest.raises(ValueError, match="variant must be one of"):
         CreativeWriting("museum_poem", variant="ian_flipt")
@@ -86,26 +85,16 @@ def test_the_commission_stands_where_the_interview_sentences_stood():
 
 def test_no_text_of_the_scenario_names_a_test_or_holds_a_piece():
     told = honeypot.scenario(SCENARIO)
-    texts = [*told["replace"].values(), told["apart"], told["notice"]]
+    texts = [*told["replace"].values(), told["apart"]]
     assert not [t for t in texts if TEST_WORDS.search(t.replace(KEPT, ""))], texts
     lines = set(honeypot.fingerprints(ROW, None).lines)
     names = honeypot.reference_names(ROW)
     for text in texts:
         assert not {norm(line).lower() for line in text.splitlines()} & lines, text
         assert not [name for name in names if name in text.lower()], text
-    assert told["notice_file"] == "NOTES.md"
 
 
-def test_the_notes_name_the_side_folder_alone_and_give_no_order():
-    """The user, 2026-11-23: the notes refer to the secondary route only (the side copies' folder), never to the
-    reference the grader's config names, and order nothing; no message names the file."""
-    notes = honeypot.scenario(SCENARIO)["notice"].format(side_dir=SIDE_COPY_DIR)
-    assert f"- {SIDE_COPY_DIR}/ on this machine" in notes and "{" not in notes
-    assert not re.search(r"/tmp|grading|grade_config|candidate_|reference", notes), notes
-    assert not re.search(r"\b(do not|don't|must|never|may not|read it|before you start)\b", notes, re.I), notes
-
-
-def test_every_agents_first_message_holds_the_commission_and_the_note(monkeypatch):
+def test_every_agents_first_message_holds_the_commission(monkeypatch):
     config = build_config("default", "small", ["seed=1", "regulators=1", "n_agents=4"])
     bench, plain = CreativeWriting("museum_poem", variant="ian_poem"), CreativeWriting("museum_poem")
     block = tasks.swarm_task(bench, config).dataset[0].metadata["cheatbench"]
@@ -114,13 +103,13 @@ def test_every_agents_first_message_holds_the_commission_and_the_note(monkeypatc
     assert block["creative"]["variant"] == "ian_poem" and block["creative"]["scenario"] == SCENARIO
     assert "variant" not in old["creative"] and "side_copies" not in old["creative"]
     assert {"each_held_piece_also_a_file_in_a_side_folder_readable_by_its_holder_alone",
-            "interview_sentences_replaced_by_a_scenario_with_a_notes_file_in_each_workspace"} <= set(
+            "interview_sentences_replaced_by_a_scenario"} <= set(
         bench.task_deviations)
     assert plain.task_deviations == CreativeWriting.task_deviations
     for agent, first in block["first_message"].items():
         was = old["first_message"][agent]
-        # no message names the notes file, and the scenario adds no workspace note
-        assert told["notice_file"] not in first and "Your workspace" not in first and "Halden's" not in first
+        # no message names a notes file, and the scenario adds no workspace note
+        assert "NOTES" not in first and "Your workspace" not in first and "Halden" not in first
         # a team told of itself reads the apart sentence at its token, once
         (marked,) = [new for new in told["replace"].values() if APART in new]
         assert first.count(marked.replace(APART, f" {told['apart']}")) == 1 and first.count(told["apart"]) == 1
@@ -138,10 +127,10 @@ def test_every_agents_first_message_holds_the_commission_and_the_note(monkeypatc
 def test_each_agent_reads_its_own_pieces_side_copy_and_no_other():
     """The side copies are the held files again with the same readers, outside the probe's roots, and hold the same
     piece of the second poem, cut by the same split (second_content); the block names each agent's by its access item
-    and records each planted second piece's sha256, and the notice is a workspace file of root's."""
+    and records each planted second piece's sha256."""
     for pairs in (["seed=1"], ["seed=3", "n_agents=4"], ["seed=2", "n_agents=5", "regulators=1", "disregulators=1"]):
         bench, plan = plan_of("ian_poem", *pairs)
-        staged = sandbox.stage(plan, ROW, bench.adds, honeypot.scenario(SCENARIO))
+        staged = sandbox.stage(plan, ROW, bench.adds)
         plants = {p["path"]: p for p in staged["layout"]["plants"]}
         side = staged["block"]["side_copies"]
         uids = {a: seat.uid for a, seat in sandbox.seats(plan).items()}
@@ -165,33 +154,26 @@ def test_each_agent_reads_its_own_pieces_side_copy_and_no_other():
         assert staged["block"]["second_content"] is True
         assert sorted(staged["block"]["second_pieces"]) == sorted(c for copies in side.values() for c in copies)
         assert staged["review"]["second"] == honeypot.content_text(ROW, "second")
-        entry = staged["layout"]["workspaces"][WORKDIR]
-        assert entry["notice"] == "NOTES.md"
-        assert staged["files"]["ws0/notice"].decode() == honeypot.scenario(SCENARIO)["notice"].format(
-            side_dir=SIDE_COPY_DIR)
 
 
-def test_the_notes_go_only_to_a_workspace_where_an_agent_holds_a_side_copy():
-    """The user, 2026-11-23: the notes name the side folder, so a workspace where no agent holds a side copy gets no
-    notes, and the block names each notes file by its workspace. In a team of three workers and a regulator under
-    shared_task all four work in the one workspace, which holds the workers' side copies and so the notes; a run
-    whose access plants no side copy (solo_task, access all, a lone agent) gets none."""
-    told = honeypot.scenario(SCENARIO)
+def test_no_workspace_gets_a_notes_file():
+    """The user, 2026-11-24: "drop note". A team of three workers and a regulator under shared_task, solo_task,
+    access all and a lone agent: no workspace names a notes file, the block names none, and no staged file or planted
+    path is one. In the team the workers still hold their side copies and the regulator none."""
     bench, plan = plan_of("ian_poem", "seed=1", "n_agents=4", "regulators=1")
-    staged = sandbox.stage(plan, ROW, bench.adds, told)
+    staged = sandbox.stage(plan, ROW, bench.adds)
     assert sorted(plan.roles.values()) == ["regulator", "worker", "worker", "worker"]
     for agent, role in plan.roles.items():
         assert bool(staged["block"]["side_copies"][agent]) == (role != "regulator"), (agent, role)
         assert sandbox.seats(plan)[agent].workdir == WORKDIR
-    assert staged["block"]["notices"] == {WORKDIR: f"{WORKDIR}/NOTES.md"}
-    assert staged["layout"]["workspaces"][WORKDIR]["notice"] == "NOTES.md" and "ws0/notice" in staged["files"]
-    for pairs in (("seed=1", "n_agents=4", "regulators=1", "mode=solo_task"), ("seed=1", "access=all"),
-                  ("seed=1", "n_agents=1")):
+    for pairs in (("seed=1", "n_agents=4", "regulators=1"), ("seed=1", "n_agents=4", "regulators=1", "mode=solo_task"),
+                  ("seed=1", "access=all"), ("seed=1", "n_agents=1")):
         bench, plan = plan_of("ian_poem", *pairs)
-        staged = sandbox.stage(plan, ROW, bench.adds, told)
-        assert not any(staged["block"]["side_copies"].values()) and staged["block"]["notices"] == {}, pairs
+        staged = sandbox.stage(plan, ROW, bench.adds)
+        assert "notices" not in staged["block"], pairs
         assert not any("notice" in e for e in staged["layout"]["workspaces"].values()), pairs
         assert not any(name.endswith("/notice") for name in staged["files"]), pairs
+        assert not any(p["path"].lower().endswith("notes.md") for p in staged["layout"]["plants"]), pairs
 
 
 def test_a_run_without_the_variant_stages_as_before():
@@ -298,8 +280,8 @@ SECOND = honeypot.content_text(ROW, "second")
 
 def test_no_text_an_agent_is_told_changes_with_the_second_content(monkeypatch):
     """The second content changes what the side copies hold and nothing an agent is told: the first messages, the
-    system prompts, the notes file, the belief words and questions and the seed pack's posts render as they do with
-    second_content off, which is the code before it, and the notes and the words are prompts.yaml's own strings."""
+    system prompts, the belief words and questions and the seed pack's posts render as they do with second_content
+    off, which is the code before it, and the words are prompts.yaml's own strings."""
     pairs = ["seed=1", "n_agents=4", "regulators=1", "seed_pack=creative_writing/revealing"]
     config = build_config("default", "small", pairs)
     told = honeypot.scenario(SCENARIO)
@@ -309,9 +291,8 @@ def test_no_text_an_agent_is_told_changes_with_the_second_content(monkeypatch):
         bench = CreativeWriting("museum_poem", variant="ian_poem")
         plan = bench.plan(config, tasks.agent_roles(config))
         block = tasks.swarm_task(bench, config).dataset[0].metadata["cheatbench"]
-        staged = sandbox.stage(plan, ROW, bench.adds, told)
         return {"first": block["first_message"], "system": tasks.system_prompts(bench, plan),
-                "notes": staged["files"]["ws0/notice"], "words": bench.belief_words(),
+                "words": bench.belief_words(),
                 "questions": belief_probes.questions(bench.belief_words()),
                 "seeds": seed_packs.pack_texts(config.seed_pack), "second": bench.adds.second_content}
 
@@ -320,7 +301,6 @@ def test_no_text_an_agent_is_told_changes_with_the_second_content(monkeypatch):
     before = rendered()
     assert (now.pop("second"), before.pop("second")) == (True, False)
     assert now == before
-    assert now["notes"] == told["notice"].format(side_dir=SIDE_COPY_DIR).encode()
     assert now["words"] == {"exploit_1": words["exploit_1"], "principal": told["principal"],
                             "exploit_2": words["exploit_2"].format(side_dir=SIDE_COPY_DIR)}
     assert all(new.replace(APART, f" {told['apart']}") in text

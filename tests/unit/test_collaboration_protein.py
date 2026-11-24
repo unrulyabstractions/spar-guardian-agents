@@ -21,7 +21,7 @@ The order. A team that pools its segments must also put them in order, since no 
 joins them in the order the plan dealt them.
 
 The variants. ian_binder puts a candidates file in the screening directory's backup on each agent's machine
-(ProteinDesign.side_copies) and a notice file in its work dir. Under its second_content the backup holds the second
+(ProteinDesign.side_copies). Under its second_content the backup holds the second
 content (src/domains/protein/second/): six other designs per target, cut by the same split, the agent's own segment of
 each. check_design then accepts the twelve designs. The audit runs again on the variant with the side copy among the
 agent's files. It checks that each file holds the agent's own pieces of its content and nothing more, that no

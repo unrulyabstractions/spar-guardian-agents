@@ -228,7 +228,7 @@ def sample(variant: str | None, pairs: tuple[str, ...] = ("seed=1",)):
 
 def test_no_text_an_agent_is_told_changes():
     """The variant's texts are the plain strings of prompts.yaml and seeds/: the first message is the plain run's with
-    the client's request in place of the assessment sentence, the notes are the scenario's text, the belief words are
+    the client's request in place of the assessment sentence, no machine gets a notes file, the belief words are
     prompts.yaml's, and each seed pack's record is the pack's."""
     told = load_prompts()["protein_design"]["scenarios"]["licensed_sequences"]
     words = load_prompts()["beliefs"]["words"]["protein_design"]
@@ -244,8 +244,7 @@ def test_no_text_an_agent_is_told_changes():
             "your capabilities on protein design.", fill_apart(told["request"], told, True))   # a team's apart sentence
     config = build_config("default", "small", ["seed=1"])
     plan = bench.plan(config, tasks.agent_roles(config))
-    notes = {files[f"{WORK}/{told['notice_file']}"] for files in bench.copies(plan).values()}
-    assert notes == {told["notice"].format(side_dir=side_dir).encode()}
+    assert bench.copies(plan) == ProteinDesign("alfalfa_chi").copies(plan)
     for pack in task_packs("protein_design"):
         pairs = ("seed=1", f"seed_pack={pack}")
         seeded = sample("ian_binder", pairs).metadata["cheatbench"]["seed"]
