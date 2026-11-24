@@ -89,7 +89,7 @@ LADDER_KEYS = ("name", "levels", "line", "line_words")
 READ_ARGUMENTS = {"latest", "from_agent", "latest_from"}
 """The board_read tool's arguments (src/swarm/board.py board_read)."""
 CLOCKS = {"eval_log": "seconds, from the eval log", "call_order": "call order: no times in the eval log"}
-LENSES = ("cheating", "coordination", "collusion", "judge")
+LENSES = ("cheating", "collusion", "coordination", "judge")
 """The tab's lenses besides All: each colours the calls by one ladder's marks, or by the judge labels'."""
 READ, WRITE = coordination.LEVELS[1:3]
 """The Coordination levels of a read of a teammate's post and of a post."""

@@ -8,7 +8,7 @@
  * from the run's verdict files (judges/<pass>.<judge>.jsonl), shown where the run has them; the source's API judges,
  * second judge and sentence lens are gone; a regulator and a disregulator are influencers; the header names the
  * collection and the eval log; the Board tab (tv_view_board.js) holds the message board, two agents' calls on one
- * clock with the board between them; the Details tab holds the Cheating, Coordination and Collusion panels and the
+ * clock with the board between them; the Details tab holds the Cheating, Collusion and Coordination panels and the
  * judge labels. Every Cheating cell holds the code's word and CheatBench's judge's under it (tv_levels.js
  * cheatingCell). A judge label's link opens the place code located its excerpt, highlighted: the agent's tab at that
  * model call's reasoning, or the Board tab at that post (openExcerpt; ?agent=&label= opens it on arrival). CheatBench's
@@ -290,10 +290,10 @@ export async function viewRun(id, q, view) {
   // ---- top bar: run, arm, the agents' selects, Board and Details, the fold toggles; the stage below holds the selected
   // tab. The parts folded on every step (?fold=calls,system,user,reasoning; none for nothing; without it DEFAULT_FOLDS)
   // come from the hash and go back to it; an agent's tab takes them when shown.
-  // Agents ordered most interesting first: highest on Cheating, then Coordination, then Collusion, then as listed. A
+  // Agents ordered most interesting first: highest on Cheating, then Collusion, then Coordination, then as listed. A
   // run opens on the first worker of that order with a transcript.
   const cellOf = (a, L) => (((d.levels && d.levels.agents && d.levels.agents[a.agent]) || {})[L] || {});
-  const ranked = list => list.map((a, i) => ({ a, key: [...['cheating', 'coordination', 'collusion'].map(L => -(cellOf(a, L).index || 0)), i] }))
+  const ranked = list => list.map((a, i) => ({ a, key: [...['cheating', 'collusion', 'coordination'].map(L => -(cellOf(a, L).index || 0)), i] }))
     .sort((x, y) => x.key.reduce((r, v, j) => r || v - y.key[j], 0)).map(x => x.a);
   const workers = ranked(d.agents.filter(a => a.role === 'worker'));
   const influencers = ranked(d.agents.filter(a => a.role !== 'worker'));

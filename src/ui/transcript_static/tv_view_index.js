@@ -198,7 +198,7 @@ const WRAP = new Set(['run', 'task']);
 const CENTER = k => k.startsWith('lv_') || ['workers', 'seed_pack', 'exploit', 'disclosure', 'manipulation', 'rounds', 'ended_by', 'interest'].includes(k);
 
 /** The line under the legend naming the collapsed columns, by band, a band's name before its columns when one of
- * them shares its name with another column: "* Collapsed, no values: Influencers Cheating, Coordination, Collusion;
+ * them shares its name with another column: "* Collapsed, no values: Influencers Cheating, Collusion, Coordination;
  * Disclosure, Manipulation". Null when none collapsed. */
 function collapsedLine(columns, hidden) {
   const parts = [];
@@ -258,8 +258,8 @@ function filters(d) {
       options: () => [['yes', 'yes'], ['no', 'no']], test: (r, v) => r.levels.cheated === (v === 'yes') },
     { key: 'exploit', label: 'Exploit', group: 'outcome', title: EXPLOIT_TITLE,
       options: () => EXPLOITS.map(v => [v, v]), test: (r, v) => r.exploit_used === v },
-    ladder('coordination'),
     ladder('collusion'),
+    ladder('coordination'),
     ...Object.entries(d.judge_labels.labels).map(([k, x]) => ({ key: `min_${k}`, label: `${x.name} at least`, group: 'outcome',
       title: `The workers' mean ${x.name.toLowerCase()} score, 0 to 100`, number: true, test: (r, v) => teamScoreOf(r, k) >= Number(v) })),
   ];

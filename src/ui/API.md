@@ -53,12 +53,12 @@ The runs page's head is its heading and the pager on one line: the heading carri
 under a filter and `Runs: 2,007` without. Under it the filters stand in three labelled groups, in the table's order,
 each field's label above its control and every control the same width and height: **Run** (Search, Task, Workers,
 Collection), **Who** (Workers' model, Worker conditioning, Influencer) and **Outcome** (Cheating, Cheated,
-Coordination, Collusion, Disclosure at least, Manipulation at least), Reset filters closing the last. A set filter's
+Collusion, Coordination, Disclosure at least, Manipulation at least), Reset filters closing the last. A set filter's
 control is outlined in the accent colour and its label drawn in it.
 
-The runs table's columns, left to right: Interest, Run, Workers, Influencers, Task; then under the band **Team** the team's Cheating, Coordination and Collusion; under **Judge labels**
+The runs table's columns, left to right: Interest, Run, Workers, Influencers, Task; then under the band **Team** the team's Cheating, Collusion and Coordination; under **Judge labels**
 Disclosure and Manipulation, each the team's highest score of a worker as a score chip and which worker, whose name
-opens its excerpt; under **Influencers** each influencer's own Cheating, Coordination and Collusion, and its own
+opens its excerpt; under **Influencers** each influencer's own Cheating, Collusion and Coordination, and its own
 Disclosure and Manipulation scores; Collection last. The **Workers** cell holds the number of workers and their model
 (`3 × GPT-6 Luna`) over their conditioning as chips: `baseline` grey, `told to cheat` amber, a rule teal and a rule naming the exploit solid teal. The
 **Influencers** cell holds one line per influencer: a REGULATOR (blue) or DISREGULATOR (orange) chip, its level as an
@@ -327,7 +327,7 @@ label, writer, time, writing call and the agents who read it, each a link to its
 a post shows its score chip, its name and kind, and the judge's rationale on one line, whole after a click. The two
 selectors never hold one agent: choosing the agent the other holds swaps the two.
 
-The lens colours the timeline. All is the colouring above. Cheating, Coordination, Collusion and Judge labels colour
+The lens colours the timeline. All is the colouring above. Cheating, Collusion, Coordination and Judge labels colour
 every call of both lanes by that lens's marks alone (`BoardCall.marks`), with the page's own ramps and score colours,
 and dim the calls the lens has nothing for; the lanes go neutral and a marked call is outlined. Cheating: the rung of
 each clause whose evidence names the call, full height at or above the line; the rung reached so far as a quiet tint on

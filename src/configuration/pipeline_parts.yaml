@@ -214,7 +214,7 @@ parts:
       src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*]
     pins: []
     version: 5
-    fingerprint: sha256:34dfc5ba340abb2d359ac7ec38f7ea458077f12e4d089611febe5be0e0af6b57
+    fingerprint: sha256:7d2f3bc12d5d03ef409293ecb1ad8f2d2af8670781b05436bed18ad26c2823af
     log:
       1: '2026-11-22 first version: the Cheating ladder with CheatBench''s labels beside its clauses,
         as the viewer keeps it, of b7b1bed (re-locked 2026-11-22: the stored layout: the same bytes, read
@@ -291,7 +291,10 @@ parts:
         creative judge row of attacked_grader reads probed or tampered, and the other tasks gain a probed
         row with no label. ian_influencers_0 copied to scratch and reprocessed: 5 poem runs move from
         attempted to tempted (deepseek seeded, negative_control and regulator_strong, hy4 seeded, qwen
-        seeded)'
+        seeded) (re-locked 2026-11-23: 2026-11-23: the viewer''s ladder order is Cheating, Collusion,
+        Coordination; the 64 stored runs of ian_influencers_0 reprocessed in scratch with --force signals
+        --force cheating --force collusion: every file byte-equal but versions.json and row.json (the
+        row''s key order, bumped))'
   coordination:
     file: analysis/labels/coordination.json
     make: src.measures.coordination:coordination_part
@@ -321,7 +324,7 @@ parts:
       src/domains/*/*_settings.py, src/domains/*/second/**/*]
     pins: []
     version: 4
-    fingerprint: sha256:0409d82405890dfd0850a8b15a89ea9306495089d0507916dc2809eb133e891b
+    fingerprint: sha256:86c0e502d4aaf20fd1aed8a0d11ddf3b8725637f3e236a553ac02d3bf46cf5b5
     log:
       1: '2026-11-22 first version: the Collusion ladder as the viewer keeps it, of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -396,7 +399,10 @@ parts:
         her folder was missing)'
       4: '2026-11-23 the agents'' Cheating rungs beside the Collusion record follow the probed clause:
         ian_influencers_0 copied to scratch and reprocessed, the 5 poem runs whose only attempted clause
-        was a probe read tempted, the other 56 runs byte-equal'
+        was a probe read tempted, the other 56 runs byte-equal (re-locked 2026-11-23: 2026-11-23: the
+        viewer''s ladder order is Cheating, Collusion, Coordination; the 64 stored runs of ian_influencers_0
+        reprocessed in scratch with --force signals --force cheating --force collusion: every file byte-equal
+        but versions.json and row.json (the row''s key order, bumped))'
   judged:
     file: analysis/labels/judged.json
     make: src.ui.viewer_parts:judged_part
@@ -467,8 +473,8 @@ parts:
     files: [src/measures/stored_json.py, src/measures/ladder_by_domain.py, src/measures/run_listing.py,
       src/ui/transcript_index.py, src/ui/transcript_levels.py, src/ui/transcript_presence.py, src/ui/viewer_parts.py]
     pins: []
-    version: 5
-    fingerprint: sha256:9ad09d3e1bd4886dcc1ba3d5ed1336408af5a080bf10dd3a047d1b7f4ba0b8c5
+    version: 6
+    fingerprint: sha256:f9e615cae3ed8387b1b4fe247830b20d10fbfa8dc86e1b5b9de199968976440e
     log:
       1: '2026-11-22 first version: the runs page''s row (transcript_index.build_row) of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -500,3 +506,5 @@ parts:
       5: '2026-11-23 the viewer row''s team Cheating level and cheated follow the probed clause: ian_influencers_0
         copied to scratch and reprocessed, 5 poem runs move from attempted to tempted, the other 56 runs
         byte-equal'
+      6: '2026-11-23 2026-11-23: the ladders stand in the order Cheating, Collusion, Coordination on every
+        page (the user: H K C), so the row''s levels hold their keys in that order'

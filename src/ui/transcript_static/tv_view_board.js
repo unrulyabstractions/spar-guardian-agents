@@ -81,7 +81,7 @@ const fewOf = list => [...list.slice(0, HOVER_LINES), list.length > HOVER_LINES 
 
 // The lenses: All colours each call by the labels the run page draws; each other lens colours every call by that
 // lens's marks alone (the payload's marks: each record that names the call) and dims the calls it has none for.
-const LENSES = ['all', 'cheating', 'coordination', 'collusion', 'judge'];
+const LENSES = ['all', 'cheating', 'collusion', 'coordination', 'judge'];
 const topOf = (marks, key) => marks.reduce((m, x) => Math.max(m, x[key]), 0);
 
 // A call's colour. Under All, the viewer's ramp at its highest label (RAMP, pale below each ladder's line and strong

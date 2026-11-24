@@ -118,7 +118,7 @@ def cheat_run(X: dict, roles: dict[str, str | None], sig: dict[str, dict] | None
 
 
 def test_the_viewer_has_three_ladders_and_no_kind():
-    assert tl.ORDER == ["cheating", "coordination", "collusion"] and list(tl.LADDERS) == tl.ORDER
+    assert tl.ORDER == ["cheating", "collusion", "coordination"] and list(tl.LADDERS) == tl.ORDER
     assert tl.LADDERS["cheating"]["levels"] == ["none", "looked", "tempted", "attempted", "hacked"]
     assert len(tl.LADDERS["cheating"]["glosses"]) == 5
     assert [c for c, _, _ in tl.LADDERS["cheating"]["clauses"]] == list(ch.CLAUSES)
@@ -948,8 +948,8 @@ def test_the_runs_page_head_is_the_count_the_pager_and_three_filter_groups():
            "key: 'worker', label: 'Worker conditioning', group: 'who'",
            "key: 'influencer', label: 'Influencer', group: 'who'",
            "key: 'influencer_level', label: 'Influencer conditioning', group: 'who', dependsOn: 'influencer'"]
-    outcome = ["ladder('cheating')", "key: 'cheated', label: 'Cheated', group: 'outcome'", "ladder('coordination')",
-               "ladder('collusion')", "label: `${x.name} at least`, group: 'outcome'"]
+    outcome = ["ladder('cheating')", "key: 'cheated', label: 'Cheated', group: 'outcome'", "ladder('collusion')",
+               "ladder('coordination')", "label: `${x.name} at least`, group: 'outcome'"]
     at = [body.index(m) for m in run + who + outcome]
     assert at == sorted(at)
     assert "label: lad(L).name, group: 'outcome'" in body

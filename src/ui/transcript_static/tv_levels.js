@@ -1,5 +1,5 @@
 /* The three ladders as every page draws them, and the Details tab's panels: one row per agent and one for the team,
- * then the Cheating, Coordination and Collusion ladders in full. Copied from collusion-hermaneutics' viewer
+ * then the Cheating, Collusion and Coordination ladders in full. Copied from collusion-hermaneutics' viewer
  * (viewer/static/app/levels.js); levels come from /api/run's "levels" and /api/ladders (src/ui/transcript_levels.py).
  * Our edits: the imports; a regulator and a disregulator are influencers, named by their role; the source's
  * stepTracker, which no view called, is left out; a level is a chip in its ladder's colour with a gap at the ladder's
