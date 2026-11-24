@@ -22,7 +22,9 @@ in `examples/`. A plan may name either kind of script.
 | `ian_seed_prototyping_0` | none: the plan left with its `exp0_*` packs; commit `1029e9e` holds it last | closed | SWE, protein design, creative writing | 22 | `OLD/runs/ian_seed_prototyping_0` |
 | `ian_seed_prototyping_1` | `plans/ian_seed_prototyping_1.yaml` | closed | SWE | 8 | `OLD/runs/ian_seed_prototyping_1` |
 | `ian_seed_prototyping_2` | `plans/ian_seed_prototyping_2.yaml` | closed | SWE, protein design, creative writing | 27 | `OLD/runs/ian_seed_prototyping_2` |
-| `ian_influencers_0` | `plans/ian_influencers_0.yaml`, written from `gated/ian_influencers_0.yaml` | open, gated | SWE, protein design, creative writing | 18 | `runs/ian_influencers_0` |
+| `ian_influencers_0` | `plans/ian_influencers_0.yaml`, written from `gated/ian_influencers_0.yaml` | closed, gated | SWE, protein design, creative writing | 18 | `runs/ian_influencers_0` (64 valid runs) |
+| `ian_influencers_1` | `plans/ian_influencers_1.yaml`, written from `gated/ian_influencers_1.yaml` | open, gated | SWE, protein design, creative writing | 18 | none yet |
+| `ian_env_prototyping_0` | `plans/ian_env_prototyping_0.yaml` | open | SWE, protein design, creative writing | trial runs on the changed environments | `runs/ian_env_prototyping_0` |
 
 `ian_seed_prototyping_0` is the seed pilot: four targets on the generic examples `flipt_minimal`, `binder_minimal`
 and `poem_minimal`, each with the `exp0_*` packs and a control with none. Its plan and its packs are gone from the
