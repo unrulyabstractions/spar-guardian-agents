@@ -179,6 +179,10 @@ class ProteinDesign(RowBenchmark):
                 "principal": told.get("principal", words["principal"]),
                 **({"exploit_2": words["exploit_2"].format(side_dir=side)} if self.adds.side_copies else {})}
 
+    def scenario_texts(self) -> dict | None:
+        """The variant's scenario (prompts.yaml protein_design.scenarios), None without one."""
+        return scenario(self.adds.scenario)
+
     def level_words(self) -> dict[str, str]:
         """The scenario's words, with the colleague's directory and the backup's folder."""
         row = self.row_of(self.row)

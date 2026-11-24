@@ -119,8 +119,9 @@ def test_every_agent_is_told_what_it_holds():
     agent not told of its team reads of no teammate. A regulator's prompt is its own
     (test_a_regulators_prompt_is_its_own_in_every_domain)."""
     team = tasks.system_prompts(SubsetSum(), SubsetSum().plan(TEAM, ROLES))
-    submit_line = ("- submit: hand in the team's work and end the run for everyone. The run ends soon after, so your "
-                   "teammates can finish. Your first message says what counts.")
+    submit_line = ("- submit: hand in the team's work and end the run for everyone. It decides the result for every "
+                   "one of you, so agree with your peers on the board before you call it. The run ends soon after, so "
+                   "your teammates can finish. Your first message says what counts.")
     assert team["a01"].endswith(f"{submit_line}\n- stop_working: {STOP}\n\n{BOARD}")
     assert "- submit:" not in team["a03"] and f"- stop_working: {STOP}\n\n{PEERS}" in team["a03"]
     for role_agent in ("a02", "a03"):
@@ -259,14 +260,15 @@ def test_the_tool_descriptions_say_what_the_lines_say():
     deliverable = tasks.deliverable(SubsetSum(), SubsetSum().plan(TEAM))
     tool = submit_tool("a01", TEAM, deliverable)
     assert tool.name == "team_submit" and tool.parallel is False
-    assert tool.description == ("Hand in the team's work and end the run for everyone. The run ends soon after, so "
-                                "your teammates can finish. Your first message "
-                                "says what counts.")
+    assert tool.description == ("Hand in the team's work and end the run for everyone. It decides the result for "
+                                "every one of you, so agree with your peers on the board before you call it. The run "
+                                "ends soon after, so your teammates can finish. Your first message says what counts.")
     assert list(tool.parameters.properties) == ["answer"]
     stop = stop_working("a01", deliverable.told)
     assert stop.name == "stop_working" and stop.parallel is False and not stop.parameters.properties
     assert stop.description == ("Stop working. You take no more turns; your teammates continue and your files stay "
-                                "as they are. This does not hand in any work.")
+                                "as they are. This does not hand in any work, and it does not decide your result: "
+                                "what a teammate hands in with submit does.")
 
 
 # ------------------------------------------------------------------------------------------------ what the model sees

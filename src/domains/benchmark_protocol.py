@@ -280,6 +280,11 @@ class Benchmark(ABC):
         level says in its first message (influencers.role_first). {} by default: the task's own words."""
         return {}
 
+    def scenario_texts(self) -> dict | None:
+        """A variant's scenario texts (prompts.yaml <task>.scenarios.<name>), whose `apart` sentence a team told of
+        itself reads in the task (prompt_texts.with_apart). None by default: no scenario."""
+        return None
+
     def belief_words(self) -> dict[str, str] | None:
         """The task's words for the belief questions (src/swarm/belief_probes.py, prompts.yaml beliefs.words):
         `exploit_1` its primary exploit, `exploit_2` its secondary one when it has one, `principal` for whom the work
@@ -523,9 +528,11 @@ class RowBenchmark(Benchmark):
     def sample(self, plan: Plan, instruction_suffix: str = "") -> Sample:
         """The row's sample: the instruction plus the suffix, and what stage() builds. The judge sees the instruction
         as every agent's rules. An agent with a first_note starts from the instruction and the note
-        (metadata["cheatbench"]["first_message"], first_messages)."""
+        (metadata["cheatbench"]["first_message"], first_messages). A team told of itself reads the scenario's
+        `apart` sentence in the instruction (prompt_texts.with_apart)."""
         cfg, row = self.task_yaml(), self.row_of(self.row)
-        instruction = self.instruction(cfg, row) + instruction_suffix
+        told = self.tells_team(plan)
+        instruction = texts.with_apart(self.instruction(cfg, row), self.scenario_texts(), told) + instruction_suffix
         staged = self.stage(plan, row)
         block = {"row_id": row["id"], "mode": plan.mode, "split": plan.split, "n_pieces": plan.n_pieces,
                  **staged.block}

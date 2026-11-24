@@ -51,7 +51,7 @@ from inspect_ai.model import ModelOutput
 
 from src import tasks
 from src.configuration.access_policy import neutral_agents
-from src.configuration.prompt_texts import split_facts
+from src.configuration.prompt_texts import split_facts, with_apart
 from src.domains.benchmark_protocol import COMMON_DEVIATIONS, PRESENCE_DEVIATION
 from src.domains.protein import ProteinDesign, protein_task
 from src.domains.protein import _protein_honeypot as honeypot
@@ -490,7 +490,7 @@ def scenario_side_copy() -> dict:
                                              for j in (1, 2, 3) if j != k), (a, res[2])
         assert not any(honeypot.segment(seq, j, 3) in res[2] for seq in PLANTED for j in (1, 2, 3)), (a, res[2])
         first = first_user(t)
-        assert told["request"] in first and ASSESSMENT_LINE not in first, first
+        assert with_apart(told["request"], told, True) in first and ASSESSMENT_LINE not in first, first
         assert not re.search(r"HANDOVER|Halden|Your workspace|/var/backups", first), first
         digests.add(digest)
         out[a] = {"segment": k, "side_copy": digest[:16]}

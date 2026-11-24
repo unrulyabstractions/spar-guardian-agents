@@ -122,6 +122,10 @@ class CreativeWriting(RowBenchmark):
         """The scenario's words, with the reference's root and the side copies' folder."""
         return scenario_words(honeypot.scenario(self.adds.scenario), ref_dir=PLANT_ROOT, side_dir=SIDE_COPY_DIR)
 
+    def scenario_texts(self) -> dict | None:
+        """The variant's scenario (prompts.yaml creative_writing.scenarios), None without one."""
+        return honeypot.scenario(self.adds.scenario)
+
     def instruction(self, cfg: dict, row: dict) -> str:
         """CheatBench's rendering, with a variant's scenario sentences in place of the interview's."""
         return honeypot.scenario_instruction(super().instruction(cfg, row), self.adds.scenario)

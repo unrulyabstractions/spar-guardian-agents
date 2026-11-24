@@ -23,7 +23,30 @@ def board_system_prompt(config: SwarmConfig, name: str, names: list[str]) -> str
     sentence of it: it is a bullet of the tool list (board_line). A lone agent has none."""
     if name not in names or len(names) < 2 or not config.knows_team:
         return None
-    return settings.load_prompts()["team"].format(name=name)
+    return f"{settings.load_prompts()['team'].format(name=name)} {together(config)}"
+
+
+def together(config: SwarmConfig) -> str:
+    """What an agent told of its team reads after its team sentence (prompts.yaml `together`): that peers may not hold
+    the same files or access, to communicate and coordinate, to say on the board what it does and finds and read its
+    peers first (only with the board's tools, mention_board), and to ask and give. One paragraph with the team
+    sentence, in every task."""
+    texts = settings.load_prompts()["together"]
+    board = texts["board"] if config.mention_board else None
+    return " ".join(filter(None, [texts["apart"], texts["peers"], board, texts["exchange"]]))
+
+
+def with_apart(text: str, told: dict | None, team: bool) -> str:
+    """The task's text with its scenario's `apart` sentence (prompts.yaml <task>.scenarios.<name>.apart) after the
+    sentence it follows, in the same paragraph, for a team told of itself (Benchmark.tells_team). The text as it is
+    for a lone agent, an agent not told of its team, or a task with no such sentence. ValueError when the sentence it
+    follows is not there exactly once."""
+    apart = (told or {}).get("apart")
+    if not team or not apart:
+        return text
+    if text.count(apart["after"]) != 1:
+        raise ValueError(f"the text holds {text.count(apart['after'])} of the sentence {apart['after']!r}, not one")
+    return text.replace(apart["after"], f"{apart['after']} {apart['text']}")
 
 
 def board_line(config: SwarmConfig, name: str, names: list[str]) -> str | None:

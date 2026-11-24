@@ -53,7 +53,7 @@ def test_the_variants():
                                             second_content=True)}
     assert honeypot.scenario(None) is None
     assert Variant() == Variant(side_copies=False, scenario=None, rows=(), second_content=False)
-    assert set(honeypot.scenario(SCENARIO)) == {"replace", "principal", "notice_file", "notice", "words"}
+    assert set(honeypot.scenario(SCENARIO)) == {"replace", "apart", "principal", "notice_file", "notice", "words"}
     assert settings.load_prompts()["creative_writing"]["scenarios"].keys() == {SCENARIO}
     with pytest.raises(ValueError, match="variant must be one of"):
         CreativeWriting("museum_poem", variant="ian_flipt")
@@ -79,7 +79,7 @@ def test_the_commission_stands_where_the_interview_sentences_stood():
 
 def test_no_text_of_the_scenario_names_a_test_or_holds_a_piece():
     told = honeypot.scenario(SCENARIO)
-    texts = [*told["replace"].values(), told["notice"]]
+    texts = [*told["replace"].values(), told["apart"]["text"], told["notice"]]
     assert not [t for t in texts if TEST_WORDS.search(t.replace(KEPT, ""))], texts
     lines = set(honeypot.fingerprints(ROW, None).lines)
     names = honeypot.reference_names(ROW)
@@ -114,7 +114,9 @@ def test_every_agents_first_message_holds_the_commission_and_the_note(monkeypatc
         was = old["first_message"][agent]
         # no message names the notes file, and the scenario adds no workspace note
         assert told["notice_file"] not in first and "Your workspace" not in first and "Halden's" not in first
-        back = first
+        # a team told of itself reads the apart sentence after the sentence it follows, once
+        assert first.count(f"{told['apart']['after']} {told['apart']['text']}") == 1
+        back = first.replace(f" {told['apart']['text']}", "")
         for old_sentence, new in told["replace"].items():
             back = back.replace(new, old_sentence)
         if block["roles"][agent] == "regulator":       # a regulator's also says cheating in the scenario's words

@@ -20,6 +20,7 @@ import pytest
 from src import tasks
 from src.configuration import settings
 from src.configuration.presets import build_config
+from src.configuration.prompt_texts import with_apart
 from src.domains.protein import ProteinDesign, protein_task
 from src.domains.protein import _protein_honeypot as honeypot
 from src.domains.protein._protein_ladder import ProteinDomain
@@ -58,7 +59,7 @@ def sample(variant: str | None, pairs: tuple[str, ...] = ("seed=1",)):
 def test_the_variants():
     assert VARIANTS == {"ian_binder": Variant(side_copies=True, scenario="licensed_sequences", second_content=True)}
     assert scenario(None) is None and Variant() == Variant(side_copies=False, scenario=None, second_content=False)
-    assert set(scenario("licensed_sequences")) == {"request", "principal", "notice_file", "notice", "words"}
+    assert set(scenario("licensed_sequences")) == {"request", "apart", "principal", "notice_file", "notice", "words"}
     assert settings.load_prompts()["protein_design"]["scenarios"].keys() == {"licensed_sequences"}
     assert ProteinDesign.options == ("variant",)
     with pytest.raises(ValueError, match="variant must be one of"):
@@ -85,7 +86,7 @@ def test_a_scenario_never_leaves_the_assessment_sentence_in(monkeypatch):
 
 def test_no_text_of_the_scenario_names_a_test_or_holds_a_piece():
     told = scenario("licensed_sequences")
-    texts = [told["request"], told["notice"]]
+    texts = [told["request"], told["apart"]["text"], told["notice"]]
     assert not [t for t in texts if TEST_WORDS.search(t)], texts
     for text in texts:
         letters = re.sub(r"[^A-Z]", "", text.upper())
@@ -113,6 +114,8 @@ def test_the_notes_name_the_backups_folder_alone_and_give_no_order():
 
 def test_a_first_message_holds_the_request_and_names_no_notes_file_and_no_test_word_of_ours():
     told = scenario("licensed_sequences")
+    request = with_apart(told["request"], told, True)    # a team told of itself reads the apart sentence in it
+    assert request == told["request"].replace("waits on it. Save", f"waits on it. {told['apart']['text']} Save")
     cb, old = sample("ian_binder").metadata["cheatbench"], sample(None).metadata["cheatbench"]
     config = build_config("default", "small", ["seed=1"])
     roles = tasks.agent_roles(config)
@@ -121,11 +124,11 @@ def test_a_first_message_holds_the_request_and_names_no_notes_file_and_no_test_w
         ProteinDesign("alfalfa_chi", "ian_binder").system_prompts(plans[1])
     for agent, first in cb["first_message"].items():
         was = old["first_message"][agent]
-        assert told["request"] in first and ASSESSMENT_LINE not in first and ASSESSMENT_LINE in was
+        assert request in first and ASSESSMENT_LINE not in first and ASSESSMENT_LINE in was
         # the two tasks' messages differ in the request alone: no line names the notes file or Halden
-        assert first.replace(told["request"], ASSESSMENT_LINE) == was
+        assert first.replace(request, ASSESSMENT_LINE) == was
         assert not re.search(r"HANDOVER|notice|Halden|Your workspace", first), first[-700:]
-        ours = first[first.index(told["request"]):]          # after CheatBench's problem and its work dir's path
+        ours = first[first.index(request):]                  # after CheatBench's problem and its work dir's path
         assert not TEST_WORDS.search(ours), ours
 
 

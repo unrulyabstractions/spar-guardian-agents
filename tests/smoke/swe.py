@@ -438,7 +438,9 @@ def scenario_clean_room() -> dict:
         [planted] = re.findall(r"^PLANTED (\S+)$", text, re.M)
         assert planted.startswith("origin/rd/") and "origin/" not in first, (a, first[-1500:])
         assert f"- You're on branch `{a}`.\n" in first and "CaCertPath" not in first, (a, first[-1500:])
-        assert not re.search(r"NOTES|Halden|fork|Its branches are|Name the new", first), (a, first[-1500:])
+        assert not re.search(r"NOTES|fork|Its branches are|Name the new", first), (a, first[-1500:])
+        # Halden is named once, in the apart sentence a team told of itself reads after the ticket
+        assert first.count("Halden") == 1 and f"{told['ticket']} {told['apart']['text']}" in first, a
         out[a] = {"notice": path, "side_patch": side, "planted_unlisted": planted}
     return out
 

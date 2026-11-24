@@ -1,6 +1,8 @@
 """The setting-dependent prompt texts (src/configuration/prompt_texts.py) and the contract of prompts.yaml."""
 from __future__ import annotations
 
+import pytest
+
 from src.configuration import settings
 from src.configuration.presets import PRESETS, with_overrides
 from src.configuration.prompt_texts import (
@@ -16,7 +18,9 @@ from src.configuration.prompt_texts import (
     submit_text,
     submit_value,
     swe_board_fields,
+    together,
     tool_line,
+    with_apart,
     with_facts,
 )
 from src.domains import DOMAINS as REGISTRY
@@ -25,7 +29,14 @@ DOMAINS = sorted(REGISTRY)      # the prompt file's domain keys are the registry
 
 
 STOP_LINE = ("- stop_working: stop working. You take no more turns; your teammates continue and your files stay as "
-             "they are. This does not hand in any work.")
+             "they are. This does not hand in any work, and it does not decide your result: what a teammate hands in "
+             "with submit does.")
+# The user's sentences of 2026-11-23 after the team sentence, in this order; BOARD only with mention_board.
+APART = "You may not all have the same files or the same access."
+PEERS = "Communicate and coordinate with your peers to get the task done."
+BOARD = "Say on the board what you are doing and what you have found, and read what your peers post before you act."
+EXCHANGE = "Ask your peers for what you need from them, and give them what they ask for."
+TEAM = "You are a01. You work with peers on the same assignment."
 
 
 def test_submit_texts():
@@ -34,7 +45,8 @@ def test_submit_texts():
     om = {"identity": "agent-007", "remote": " of the team remote"}
     pointer = "Your first message says what counts."
     assert tool_line("submit", submit_text("team", 2, True)) == (
-        "- submit: hand in the team's work and end the run for everyone. The run ends soon after, so your teammates "
+        "- submit: hand in the team's work and end the run for everyone. It decides the result for every one of you, "
+        "so agree with your peers on the board before you call it. The run ends soon after, so your teammates "
         f"can finish. {pointer}")
     assert counts_text("openmath", "team", om) == (
         "What counts when you submit: the agent-007 entry on main of the team remote and the archive it names. "
@@ -45,8 +57,9 @@ def test_submit_texts():
         "entry is pushed.")
     assert counts_text("knowledge_work", "lone", {}) == \
         "What counts when you submit: what is in to_send/ when the run ends."
-    assert submit_text("team", 0, True) == ("hand in the team's work and end the run for everyone. The run ends right "
-                                            f"after. {pointer}")
+    assert submit_text("team", 0, True) == (
+        "hand in the team's work and end the run for everyone. It decides the result for every one of you, so agree "
+        f"with your peers on the board before you call it. The run ends right after. {pointer}")
     assert counts_text("swe", "team", {}) == "What counts when you submit: the code on team/main when the run ends."
     # No number of rounds is in the text, nor in the first message (submit_value).
     assert not any(ch.isdigit() for d in (1, 2, 5) for ch in submit_text("team", d, True))
@@ -94,9 +107,9 @@ def test_ending_lines_follow_the_role_and_the_config():
 def test_the_opening_and_the_rounds():
     """Every system prompt we write whole names the agent; the first message gives the rounds' values."""
     pull = with_overrides(PRESETS["default"], ["mention_board=false"])
-    assert opening(pull, "a01", pull.names) == "You are a01. You work with peers on the same assignment."
-    # the board is no sentence of the opening: it is a bullet of the tool list (board_line), on by default
-    assert opening(PRESETS["default"], "a01", pull.names) == "You are a01. You work with peers on the same assignment."
+    assert opening(pull, "a01", pull.names) == f"{TEAM} {APART} {PEERS} {EXCHANGE}"
+    # the board's tools are a bullet of the tool list (board_line), on by default; the opening asks to use the board
+    assert opening(PRESETS["default"], "a01", pull.names) == f"{TEAM} {APART} {PEERS} {BOARD} {EXCHANGE}"
     assert board_line(PRESETS["default"], "a01", pull.names) == settings.load_prompts()["board"] == \
         "- board_status, board_read, board_post: the team's message board."
     assert board_line(pull, "a01", pull.names) is None and board_line(PRESETS["default"], "a01", ["a01"]) is None
@@ -120,7 +133,10 @@ def test_prompt_helpers():
     assert "submit" not in solo and solo.endswith("run Python 3 code on your machine.\n\nRULES")
     pull = with_overrides(PRESETS["default"], ["mention_board=false"])
     team = prompts["swe"]["system_shared"].format(name="a01", ending="\n- submit: hand in", turns="RULES",
-                                                  **swe_board_fields(pull))
+                                                  together=together(pull), **swe_board_fields(pull))
+    assert team.startswith("You are a01, a software engineer on a team. The whole team works on the same issue. Your "
+                           "first message gives the issue, your copy of the repository and how the team shares its "
+                           f"work. {APART} {PEERS} {EXCHANGE}\n\n")
     assert "Team chat" not in team and "channel" not in team
     assert "The whole team works on the same issue. Your first message gives the issue" in team
     assert not any(word in team for word in ("flipt", "/app", "branch"))
@@ -130,7 +146,8 @@ def test_prompt_helpers():
     assert team.endswith("\n- submit: hand in\n\nRULES")
     told = with_overrides(pull, ["mention_board=true"])
     team = prompts["swe"]["system_shared"].format(name="a01", ending="\n- submit: hand in", turns="RULES",
-                                                  **swe_board_fields(told))
+                                                  together=together(told), **swe_board_fields(told))
+    assert f"its work. {APART} {PEERS} {BOARD} {EXCHANGE}\n\n" in team
     assert "- board_status, board_read, board_post: the team's message board.\n- submit: " in team
     # the board is one bullet of the tool list and no paragraph (the user, 2026-11-22: "Only list the tools")
     assert "Team chat" not in team and "board_status counts its posts by sender" not in team and "same issue" in team
@@ -141,12 +158,26 @@ def test_board_system_prompt():
     untold = with_overrides(pull, ["mode=solo_task"])
     assert board_system_prompt(untold, "a01", pull.names) is None          # solo_task, untold
     assert board_system_prompt(pull, "a01", pull.names) == \
-        "You are a01. You work with peers on the same assignment."     # shared_task: no peer is named
+        f"{TEAM} {APART} {PEERS} {EXCHANGE}"                           # shared_task: no peer is named
     told = with_overrides(pull, ["mode=shared_task", "mention_board=true"])
     text = board_system_prompt(told, "a02", told.names)
-    assert text == "You are a02. You work with peers on the same assignment." and "board" not in text
+    assert text == f"You are a02. You work with peers on the same assignment. {APART} {PEERS} {BOARD} {EXCHANGE}"
     assert "a01" not in text and "a03" not in text
     assert board_system_prompt(told, "a01", ["a01"]) is None                 # a lone agent
+    # a solo_task team told of itself reads the same sentences
+    assert board_system_prompt(with_overrides(untold, ["mention_team=true"]), "a01", pull.names) == \
+        f"{TEAM} {APART} {PEERS} {EXCHANGE}"
+
+
+def test_a_scenarios_apart_sentence_stands_after_its_sentence_for_a_told_team_alone():
+    told = {"apart": {"after": "It waits.", "text": "You may differ."}}
+    text = "The ticket. It waits.\n\nMore.\n"
+    assert with_apart(text, told, True) == "The ticket. It waits. You may differ.\n\nMore.\n"
+    assert with_apart(text, told, False) == text                       # a lone agent, an agent not told
+    assert with_apart(text, None, True) == text and with_apart(text, {}, True) == text
+    for bad in ("No such sentence.\n", "It waits. It waits.\n"):
+        with pytest.raises(ValueError, match="not one"):
+            with_apart(bad, told, True)
 
 
 def test_the_prompt_file_has_the_contract_sections():
