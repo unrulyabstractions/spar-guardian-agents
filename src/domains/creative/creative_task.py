@@ -37,6 +37,7 @@ from src.domains.creative._creative_exploits import EXPLOITS, deal_all, variant_
 from src.domains.creative._creative_ladder import CreativeDomain
 from src.domains.creative._creative_settings import (
     DEFAULT_ROW,
+    DELIVERABLE,
     KEY,
     PLANT_ROOT,
     SIDE_COPY_DIR,
@@ -147,7 +148,8 @@ class CreativeWriting(RowBenchmark):
         """The images, the compose file, the staging tarball and the sidecar's config, the setup script and the block
         the setup, the scorer, the ladder and run.json read."""
         images = sandbox.ensure_images()
-        staged = sandbox.stage(plan, row, self.adds, self.others_files(plan))
+        staged = sandbox.stage(plan, row, self.adds, self.others_files(plan),
+                               self.shared_result_record(plan, sandbox.KEEP_OUT_HOW))
         variant = {"variant": self.variant, "scenario": self.adds.scenario} if self.variant else {}
         return Staged(compose=sandbox.write_compose(), block={**staged["block"], **variant, "images": images},
                       files=sandbox.stage_files(staged, row["id"]), setup=sandbox.setup_script(plan))
@@ -157,6 +159,10 @@ class CreativeWriting(RowBenchmark):
         workspace."""
         seat = sandbox.seats(plan)[agent]
         return seat.workdir if sandbox.layout_of(plan) == "solo" else seat.home
+
+    def shared_result(self, plan: Plan) -> str | None:
+        """The shared workspace's writing.md in a shared_task team, which a submit keeps; None otherwise."""
+        return f"{DELIVERABLE} in the shared workspace" if sandbox.layout_of(plan) == "shared" else None
 
     def tools(self, plan: Plan) -> AgentTools:
         """A lone agent: ORBIT's bash and python as `user`. A team: shell and run_python per agent user."""

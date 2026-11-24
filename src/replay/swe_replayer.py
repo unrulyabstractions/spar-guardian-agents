@@ -72,8 +72,8 @@ class SweReplayer:
         return services
 
     def volumes(self) -> dict[str, dict]:
-        """The compose project's volumes: the team remote's."""
-        return {"team": {}}
+        """The compose project's volumes: the team remote's and the gate's (swe_replay.volumes)."""
+        return hooks.volumes(self.swe)
 
     def image(self) -> dict:
         tag, recorded = hooks.image(self.swe), (self.swe.get("images") or {}).get("native_id")

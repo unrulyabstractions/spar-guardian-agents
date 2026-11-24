@@ -13,6 +13,7 @@ any difference (src/replay/swe_replayer.py).
 """
 from __future__ import annotations
 
+import dataclasses
 import re
 import shlex
 from typing import NamedTuple
@@ -20,9 +21,10 @@ from typing import NamedTuple
 from src.domains.swe._swe_honeypot import has_team_remote, piece_ref, plant_script, prune_script, view_script
 from src.domains.swe._swe_scoring import DIFF_OPTS, OWN_DIFF, WORKTREE_DIFF
 from src.domains.swe.swe_inputs import load_split, owns, piece_patch
-from src.domains.swe.swe_sandbox import image_tags
+from src.domains.swe.swe_sandbox import image_tags, team_gate
 from src.domains.swe.swe_settings import AGENT_CPUS, AGENT_MEM, PARTS, TEAM_REPO, TEAM_VIEW, WORKDIR
 from src.sandbox import staging
+from src.sandbox.team_gate.team_gate import SERVICE, SHIM_STAGE, Gate
 
 GRADER = "default"
 TEAM_MOUNT = "team:/team"
@@ -43,17 +45,31 @@ def image(swe: dict) -> str:
     return (swe.get("images") or {}).get("native") or image_tags(swe["issue"])["native"]
 
 
+def gate(swe: dict) -> Gate:
+    """The run's team remote gate, with the agents its record keeps out of team/main (none before the rule)."""
+    kept = (swe.get("shared_result") or {}).get("kept_out") or []
+    return dataclasses.replace(team_gate(swe["issue"], kept), image=image(swe))
+
+
 def services(swe: dict) -> dict[str, dict]:
     """The run's compose services as swe_sandbox.write_compose builds them: the grader `default` and one per agent,
-    without network, the volume `team` in the grader and, with the team remote, in every agent."""
-    tag, team = image(swe), has_team_remote(swe)
+    without network, the volume `team` in the grader and, with the team remote, in every agent, read-only with the
+    gate for an agent the record keeps out of team/main."""
+    tag, team, kept = image(swe), has_team_remote(swe), gate(swe)
     out = {GRADER: staging.compose_service(working_dir=WORKDIR, image=tag, hostname="grader", cpus=4.0,
                                            mem_limit="6g", volumes=[TEAM_MOUNT])}
     for agent in swe["agents"]:
         out[agent] = staging.compose_service(working_dir=WORKDIR, image=tag, hostname=agent, cpus=AGENT_CPUS,
                                              mem_limit=AGENT_MEM, restart="unless-stopped",
-                                             **({"volumes": [TEAM_MOUNT]} if team else {}))
+                                             **({"volumes": kept.agent_volumes(agent)} if team else {}))
+    if team and kept.kept_out:
+        out[SERVICE] = kept.service()
     return out
+
+
+def volumes(swe: dict) -> dict[str, dict]:
+    """The compose project's volumes: the team remote's, and the gate's socket volumes."""
+    return {"team": {}, **(gate(swe).volumes() if has_team_remote(swe) else {})}
 
 
 def base_time_command(swe: dict) -> str:
@@ -96,6 +112,9 @@ def team_steps(swe: dict) -> list[SetupStep]:
                                f"{view_script(TEAM_REPO, TEAM_VIEW)}", None, "team repository")]
     steps += [SetupStep(a, f"cd {WORKDIR} && git remote add team {TEAM_REPO} && git fetch -q team", None,
                         f"{a} team remote") for a in swe["agents"]]
+    kept = gate(swe)
+    steps += [SetupStep(a, kept.install_script(), (SHIM_STAGE, kept.shim().encode()), f"{a} team remote gate")
+              for a in kept.kept_out]
     return steps
 
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import io
+import json
 import os
 import shlex
 import tarfile
@@ -71,9 +72,9 @@ def write_compose(path: Path, services: dict[str, dict], volumes: dict | None = 
 
 
 def write_team_compose(folder: Path, stem: str, services: dict[str, dict], volumes: dict | None = None) -> Path:
-    """A compose file named by its services, <stem>-<digest>.yaml. A team's services carry the agents' IDs, which each
-    run draws, so runs at once on one machine need a file each."""
-    digest = hashlib.sha256(" ".join(services).encode()).hexdigest()[:12]
+    """A compose file named by what it holds, <stem>-<digest>.yaml. A team's services carry the agents' IDs, which each
+    run draws, and their mounts follow the roles, so runs at once on one machine need a file each."""
+    digest = hashlib.sha256(json.dumps([services, volumes], sort_keys=True).encode()).hexdigest()[:12]
     return write_compose(folder / f"{stem}-{digest}.yaml", services, volumes)
 
 

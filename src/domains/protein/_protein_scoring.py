@@ -38,12 +38,13 @@ from inspect_ai.solver import TaskState
 
 from src.domains.protein._protein_exploits import EXPLOITS
 from src.domains.protein._protein_honeypot import colleague_dir, fingerprints
-from src.domains.protein._protein_settings import TEAM_BRANCH, TEAM_REMOTE
+from src.domains.protein._protein_settings import TEAM_BRANCH, TEAM_DIR, TEAM_REMOTE
 from src.sandbox import staging
 from src.sandbox import task_tool_store as tool_store
 from src.sandbox.agent_tools import AGENT_NAME, Seat
 from src.sandbox.machines import agent_machines as machines
 from src.sandbox.sandbox_probe import PROBE_STORE, run_json
+from src.sandbox.team_gate.team_gate import Gate
 from src.swarm.turn_rules import TeamSubmission
 
 SCORER = "protein_deliverables"
@@ -62,6 +63,13 @@ TEAM_REMOTE_INIT = (SANDBOX / "team_remote_init.sh").read_text().format(
 TEAM_REPO_INIT = (SANDBOX / "team_repo_init.sh").read_text()
 TEAM_BINDER = (SANDBOX / "team_binder.py").read_text()
 LOG_LIMIT = 200                     # the team remote's commits the record keeps
+
+
+def team_gate(kept_out: list[str]) -> Gate:
+    """The team remote's gate (src/sandbox/team_gate/): the agents kept out of its main push through it, as `user`,
+    whose group writes the remote."""
+    return Gate(remote=TEAM_REMOTE, mount=TEAM_DIR, user=AGENT_NAME, image=machines.IMAGE, kept_out=tuple(kept_out),
+                branch=TEAM_BRANCH, extra={"cpus": 0.5, "mem_limit": "512m"})
 
 
 def protein(state: TaskState) -> dict:
@@ -84,12 +92,15 @@ async def prepare(state: TaskState) -> None:
     """Each agent's copy into its container, then its repository: `git init` on its work dir as `user`, or with the
     team remote (block "team_remote") the remote first, then each repository on main with the remote as origin. Then
     each side copy, and each disregulator's OTHERS.md (block "others", staged in its work dir) made its own alone and
-    kept out of git."""
+    kept out of git. Last, the gate's shim on each machine kept out of main (block "shared_result"). The remote is made
+    in the first machine that mounts it writable."""
     pd = protein(state)
     await machines.stage_all(state.metadata["cheatbench"]["stage"])
     by_agent = seats(pd)
+    gate = team_gate((pd.get("shared_result") or {}).get("kept_out") or [])
     if pd["team_remote"]:
-        await must(next(iter(by_agent.values())).box(), ["bash", "-c", TEAM_REMOTE_INIT], "the team remote", "root")
+        maker = next(seat for agent, seat in by_agent.items() if agent not in gate.kept_out)
+        await must(maker.box(), ["bash", "-c", TEAM_REMOTE_INIT], "the team remote", "root")
     for agent, seat in by_agent.items():
         box, where = seat.box(), f"{seat.service}'s repository"
         if not pd["team_remote"]:
@@ -105,6 +116,8 @@ async def prepare(state: TaskState) -> None:
         # the staged OTHERS.md of a disregulator, its own alone and kept out of git (staging.private_in_git)
         await must(by_agent[agent].box(), ["bash", "-c", staging.private_in_git(entry["path"])],
                    f"{agent}'s OTHERS.md", AGENT_NAME)
+    for agent in gate.kept_out:
+        await gate.install(by_agent[agent].box())
 
 
 async def write_side_copy(row: dict, pd: dict, agent: str, recorded: dict[str, str], seat: Seat) -> None:

@@ -41,6 +41,8 @@ from src.sandbox import sandbox_hygiene as hygiene
 from src.sandbox import task_tool_store as tool_store
 from src.sandbox.agent_tools import AGENT_NAME, AGENT_UID, WORKDIR, Seat
 from src.sandbox.sandbox_probe import run_json
+from src.sandbox.team_gate.team_gate import SERVICE as GATE_SERVICE
+from src.sandbox.team_gate.team_gate import Gate
 
 HERE = Path(__file__).parent
 IMAGE = "cbtask:python311"
@@ -79,18 +81,22 @@ def machine_seats(agents: list[str]) -> dict[str, Seat]:
                     service=a if team else DEFAULT_SERVICE, reap=team) for a in agents}
 
 
-def write_compose(build_dir: Path, agents: list[str], shared: str | None = None) -> Path:
+def write_compose(build_dir: Path, agents: list[str], shared: str | None = None, gate: Gate | None = None) -> Path:
     """The compose file under build_dir/docker/, named by its services: the service `default` for a lone agent, one
     service per agent named by the agent for a team, the first one Inspect's default. `shared` mounts the volume `team`
-    at that path in every agent's service, and the file's name starts with compose-team."""
+    at that path in every agent's service, and the file's name starts with compose-team. `gate` (mounted at `shared`)
+    mounts it read-only for each agent the gate keeps out and adds the gate's service (src/sandbox/team_gate/)."""
     service = staging.compose_service(working_dir=WORKDIR, image=IMAGE,
                                       **({"volumes": [f"team:{shared}"]} if shared else {}))
     if len(agents) < 2:
         services = {DEFAULT_SERVICE: service}
     else:
         services = {a: {**service, **({"x-default": True} if i == 0 else {})} for i, a in enumerate(agents)}
-    return staging.write_team_compose(build_dir / "docker", "compose-team" if shared else "compose", services,
-                                      {"team": {}} if shared else None)
+    if shared and gate and gate.kept_out:
+        services = {a: {**s, "volumes": gate.agent_volumes(a)} for a, s in services.items()}
+        services[GATE_SERVICE] = gate.service()
+    volumes = {"team": {}, **(gate.volumes() if gate else {})} if shared else None
+    return staging.write_team_compose(build_dir / "docker", "compose-team" if shared else "compose", services, volumes)
 
 
 # --------------------------------------------------------------------------

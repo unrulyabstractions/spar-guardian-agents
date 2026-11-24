@@ -393,6 +393,11 @@ notice:
 # Gemini rejects. Source: the resume text of ORBIT 1.x's agent loop (orbit/agents/turn_react.py, deleted in ORBIT 2.0).
 continue: "Please continue with your next action."
 
+# What git prints, as `remote: <text>`, when an agent kept out of a team remote's main pushes to it
+# (src/sandbox/team_gate/). {ref} is the protected ref. It names no role. Ours.
+team_remote:
+  protected: "error: protected branch update failed for {ref}"
+
 # The openmath benchmark's texts (src/domains/openmath/). Ours.
 openmath:
   # A fact of every agent's first message (OpenMath.first_facts): its system prompt names it by its agent ID, while

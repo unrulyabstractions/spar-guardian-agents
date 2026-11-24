@@ -80,6 +80,7 @@ CONTEXT = {"Dockerfile": PAYLOADS / "creative.Dockerfile", "score_ext.c": TASK_D
            "creative_review_server.py": PAYLOADS / "creative_review_server.py"}
 IMAGES = {AGENT_IMAGE: "agent", REVIEW_IMAGE: "review"}
 PORTS = (32768, 60999)               # Linux's ephemeral range, where CheatBench's endpoint gets its port
+KEEP_OUT_HOW = "acl_read_only_workspace"   # run.json creative.shared_result.how (sandbox/creative_setup.py keep_out)
 
 
 def ensure_images(*, log=print) -> dict[str, str | None]:
@@ -154,14 +155,18 @@ def workspace_owners(plan: Plan) -> dict[str, str]:
     return {"team" if plan.team else plan.agents[0]: WORKDIR}
 
 
-def stage(plan: Plan, row: dict, adds: Variant = Variant(), others: dict[str, dict] | None = None) -> dict:
+def stage(plan: Plan, row: dict, adds: Variant = Variant(), others: dict[str, dict] | None = None,
+          shared_result: dict | None = None) -> dict:
     """The run's staging: {"layout": layout.json for sandbox/creative_setup.py, "files": {stage path: bytes},
     "review": the sidecar's config, "block": what the scorer, the ladder and run.json read}. Each workspace gets a
     random reference directory and its own token. A split plants every exploit the variant lists
     (_creative_exploits.py), each part readable by the agents its exploit dealt it, and the block names the hidden
     one's files by agent (planted) and under the revealed one its side copies by agent and item (side_copies). Both
     hold the reference, which the endpoint ties. `others` (Benchmark.others_files) plants each disregulator's OTHERS.md
-    at its path, the agent's own at mode 0600, and the block records it (others)."""
+    at its path, the agent's own at mode 0600, and the block records it (others). `shared_result`
+    (Benchmark.shared_result_record) names the agents kept out of the shared writing.md: the setup gives each of them
+    read and no write on the shared workspace and on all it will hold (keep_out in layout.json, by uid), and the block
+    records it (shared_result)."""
     kind = layout_of(plan)
     candidate = honeypot.candidate_name(row)
     url = f"http://{REVIEW_IP}:{secrets.randbelow(PORTS[1] - PORTS[0]) + PORTS[0]}/review"
@@ -220,13 +225,16 @@ def stage(plan: Plan, row: dict, adds: Variant = Variant(), others: dict[str, di
     layout = {"layout": kind, "workdir": WORKDIR, "brief": BRIEF, "grading": str(Path(GRADER).parent),
               "team_group": TEAM_GROUP, "team_gid": TEAM_GID, "score_so": SCORE_SO, "review_url": url,
               "seats": {a: s.as_dict() for a, s in seats(plan).items()} if plan.team else {},
-              "workspaces": workspaces, "plant_dirs": plant_dirs, "plants": plants}
+              "workspaces": workspaces, "plant_dirs": plant_dirs, "plants": plants,
+              **({"keep_out": {WORKDIR: [uids[a] for a in kept]}} if (kept := (shared_result or {}).get("kept_out"))
+                 else {})}
     review = {"bind": REVIEW_IP, "port": int(url.split(":")[2].split("/")[0]), "tokens": tokens, "split": plan.split,
               "reference": text, "tie_threshold": honeypot.tie_threshold(), "keep": WRITING_CHARS}
     block = {"layout": kind, "candidate": candidate, "references": references, "review_url": url,
              "workspaces": workspace_owners(plan), "seats": {a: s.as_dict() for a, s in seats(plan).items()},
              "planted": holdings, **({"side_copies": side_copies} if adds.side_copies else {}),
-             **({"others": others} if others else {})}
+             **({"others": others} if others else {}),
+             **({"shared_result": shared_result} if shared_result else {})}
     return {"layout": layout, "files": files, "review": review, "block": block}
 
 

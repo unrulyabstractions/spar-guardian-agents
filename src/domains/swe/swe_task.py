@@ -58,7 +58,14 @@ from src.domains.swe.swe_inputs import (
     task_config,
 )
 from src.domains.swe.swe_ladder import SweDomain
-from src.domains.swe.swe_sandbox import TOOL_DESCRIPTIONS, ensure_images, plant_others, seats, write_compose
+from src.domains.swe.swe_sandbox import (
+    TOOL_DESCRIPTIONS,
+    ensure_images,
+    install_gate,
+    plant_others,
+    seats,
+    write_compose,
+)
 from src.domains.swe.swe_settings import (
     AGENT_CPUS,
     AGENT_MEM,
@@ -81,6 +88,7 @@ from src.measures.run_directory import RunDir
 from src.sandbox import command_jobs
 from src.sandbox.access_log.access_monitor import Watched, git_watched
 from src.sandbox.agent_tools import AgentTools, Seat, roster_tools
+from src.sandbox.team_gate.team_gate import HOW as GATE_HOW
 from src.swarm.board import round_rules
 
 # Every agent has its own service (swe_sandbox.write_compose). A hundred services is more than one Docker host holds.
@@ -306,6 +314,8 @@ class SWE(Benchmark):
             "issue_note": self.adds.issue_note,
             # each disregulator's OTHERS.md in a run with two or more (Benchmark.others_files); no key otherwise
             **({"others": others} if (others := self.others_files(plan)) else {}),
+            # team/main and the agents kept out of it (Benchmark.shared_result_record); no key without a team remote
+            **({"shared_result": kept} if (kept := self.shared_result_record(plan, GATE_HOW)) else {}),
             "seed": plan.config.seed,
             "n_agents": len(plan.agents), "agents": plan.agents, "mode": plan.mode, "shutdown": plan.config.shutdown,
             "instruction": instruction, "pieces": plan.holds, "piece_times": piece_times(plan.config.seed, self.row),
@@ -316,7 +326,8 @@ class SWE(Benchmark):
             "own_values": run_values(self.row, self.honeypot),
             "images": ensure_images(self.row),
         }
-        compose = write_compose(self.row, plan.agents, team_remote=honeypot.has_team_remote(swe))
+        compose = write_compose(self.row, plan.agents, team_remote=honeypot.has_team_remote(swe),
+                                kept_out=self.kept_out(plan))
         cheatbench = {"task": self.name, "variant": "", "swe_task": instance, "instruction": instruction,
                       "prompt_file": "instruction.md", "timeout_s": agent_timeout_s(instance), "network": "none",
                       "judge_prompt": swe["judge_prompt"], "swe": swe, "first_message": first}
@@ -329,9 +340,16 @@ class SWE(Benchmark):
 
     async def prepare(self, state) -> None:
         """The honeypot and its checks (_swe_honeypot.prepare), then each disregulator's OTHERS.md
-        (swe_sandbox.plant_others)."""
+        (swe_sandbox.plant_others), then the gate's shim on each machine kept out of team/main
+        (swe_sandbox.install_gate)."""
         await honeypot.prepare(state)
-        await plant_others(state.metadata["cheatbench"]["swe"].get("others") or {})
+        swe = state.metadata["cheatbench"]["swe"]
+        await plant_others(swe.get("others") or {})
+        await install_gate(swe)
+
+    def shared_result(self, plan: Plan) -> str | None:
+        """team/main in a shared_task team, which the grader grades; None otherwise."""
+        return "team/main" if plan.team and plan.mode == "shared_task" else None
 
     def private_dir(self, plan: Plan, agent: str) -> str:
         """The agent's clone, WORKDIR, on its own machine, where its shell starts."""

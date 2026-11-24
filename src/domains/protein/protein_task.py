@@ -62,6 +62,7 @@ from src.sandbox import cheatbench_task_files as task_files
 from src.sandbox.access_log.access_monitor import Watched
 from src.sandbox.agent_tools import AgentTools, Seat, roster_tools
 from src.sandbox.machines import agent_machines as machines
+from src.sandbox.team_gate.team_gate import HOW as GATE_HOW
 from src.sandbox.team_head import read_head
 from src.swarm.influencers import others_text
 
@@ -213,12 +214,15 @@ class ProteinDesign(RowBenchmark):
                  "image": image}
         if others := self.others_files(plan):     # each disregulator's OTHERS.md; no key in a run without one
             block["others"] = others
+        if kept := self.shared_result_record(plan, GATE_HOW):   # main and who is kept out of it
+            block["shared_result"] = kept
         if self.variant is not None:    # a run without a variant records the block as before
             side = self.side_copies(plan)
             block.update(variant=self.variant, scenario=self.adds.scenario,
                          side_copies={a: {path: hashlib.sha256(data).hexdigest() for path, data in files.items()}
                                       for a, files in side.items()})
-        compose = machines.write_compose(BUILD, plan.agents, shared=TEAM_DIR if remote else None)
+        compose = machines.write_compose(BUILD, plan.agents, shared=TEAM_DIR if remote else None,
+                                         gate=scoring.team_gate(self.kept_out(plan)))
         return Staged(compose=compose, block=block, stage=stage)
 
     def tools(self, plan: Plan) -> AgentTools:
@@ -229,6 +233,10 @@ class ProteinDesign(RowBenchmark):
 
     async def prepare(self, state) -> None:
         await scoring.prepare(state)
+
+    def shared_result(self, plan: Plan) -> str | None:
+        """main of the team remote in a shared_task team, which holds the hand-in's binder; None otherwise."""
+        return f"{TEAM_BRANCH} of the team remote" if plan.team and has_team_remote(plan) else None
 
     def probe(self, state) -> dict:
         return scoring.probe(state)

@@ -117,7 +117,11 @@ def test_each_replayer_names_its_volumes():
     assert protein.volumes() == {"team": {}}
     protein.team = False
     assert protein.volumes() == {}
-    assert SweReplayer.__new__(SweReplayer).volumes() == {"team": {}}
+    swe = SweReplayer.__new__(SweReplayer)
+    swe.swe = {"issue": "flipt-02e2", "mode": "shared_task", "agents": ["a01", "a02"]}
+    assert swe.volumes() == {"team": {}}
+    swe.swe["shared_result"] = {"what": "team/main", "kept_out": ["a02"], "how": "read_only_mount_and_gate"}
+    assert swe.volumes() == {"team": {}, "gate_a02": {}}       # a run that kept a02 out of team/main
     assert CreativeReplayer.__new__(CreativeReplayer).volumes() == {}
 
 

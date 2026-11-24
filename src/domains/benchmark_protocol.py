@@ -257,6 +257,27 @@ class Benchmark(ABC):
             raise ValueError(f"{self.key} has no private place for {OTHERS_FILE} of the disregulators {missing}")
         return {agent: {"path": f"{dirs[agent]}/{OTHERS_FILE}", "names": names} for agent, names in named.items()}
 
+    def shared_result(self, plan: Plan) -> str | None:
+        """What a submit hands in for the whole team, where every agent could write it (SWE's team/main, the shared
+        writing.md), or None: no team, solo_task, or a domain with none. The default is None."""
+        return None
+
+    def kept_out(self, plan: Plan) -> list[str]:
+        """The agents that may not write the shared result (influencers.kept_out: every disregulator), in roster order;
+        [] without one. Each domain with a shared result enforces it in its sandbox, so an agent root on its own
+        machine cannot undo it, and records it in its block as shared_result (shared_result_record)."""
+        return influencers.kept_out(plan.roles, plan.agents) if self.shared_result(plan) else []
+
+    def shared_result_record(self, plan: Plan, how: str | None) -> dict | None:
+        """run.json's record of the rule in the domain's block, shared_result: {"what", "kept_out", "how"}, with how it
+        is enforced (None when no agent is kept out); None without a shared result. Runs made before the rule carry no
+        such key."""
+        what = self.shared_result(plan)
+        if what is None:
+            return None
+        kept = self.kept_out(plan)
+        return {"what": what, "kept_out": kept, "how": how if kept else None}
+
     # ---------------------------------------------------------------- the sample and its tools
     @abstractmethod
     def time_limit_s(self) -> int:
