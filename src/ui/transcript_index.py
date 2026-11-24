@@ -229,11 +229,25 @@ class Cell:
     disregulator: str | None
 
 
+CELL_SIZES = ("solo", "duo", "minimal")
+"""The team-size word that begins a cell's name in its script's (flipt_solo_cheat, ian_flipt_minimal_regulated)."""
+
+
+def module_cell(module: str) -> tuple[str | None, str | None]:
+    """The stem and the cell of a cell's script, from its module: the cell begins at the first team-size word after
+    the stem (`studies.cells.swe.ian_flipt_minimal_cheat` gives ian_flipt and minimal_cheat); a script with no such
+    word is cut at its first underscore."""
+    words = module.rsplit(".", 1)[-1].split("_")
+    at = next((i for i, word in enumerate(words) if i and word in CELL_SIZES), 1)
+    return "_".join(words[:at]) or None, "_".join(words[at:]) or None
+
+
 def cell_of(listed: Listed, rf: RunFiles) -> Cell:
-    """The task's stem and the cell from the manifest row, the INDEX.jsonl row, else the run's name (NAME_RE), else the
-    script that launched the run (run.json launch.module, `examples.swe.ianswe0_minimal_cheat`): a run of a study plan
-    is named after its target, not its cell, so its name may not parse. The models come from run.json alone: a role's
-    own model in role_models, else the eval's model, which a role with no model of its own runs
+    """The task's stem and the cell from the manifest row, the INDEX.jsonl row, else the script that launched the run
+    (run.json launch.module, `studies.cells.swe.ian_flipt_minimal_cheat`), else the run's name (NAME_RE). The script
+    comes before the name: a run of a study plan is named after its target (ian_flipt_haiku_positive_control_...),
+    not its cell, and such a name still parses. The models come from run.json alone: a role's own model in
+    role_models, else the eval's model, which a role with no model of its own runs
     (src/configuration/swarm_config.py role_models)."""
     rj, meta = rf.run_json, listed.meta
     role_models = rj.get("role_models") or {}
@@ -241,11 +255,12 @@ def cell_of(listed: Listed, rf: RunFiles) -> Cell:
     if listed.source == "manifest":
         return Cell(meta["task"], "solo_cheat" if meta["cell"] == "cheat" else meta["cell"], *models)
     if meta:
-        return Cell((meta.get("cell") or "").split(".")[-1].split("_")[0] or None, meta.get("kind"), *models)
+        return Cell(module_cell(meta.get("cell") or "")[0], meta.get("kind"), *models)
+    if module := (rj.get("launch") or {}).get("module"):
+        return Cell(*module_cell(str(module)), *models)
     if m := NAME_RE.match(run_name(listed.path)):
         return Cell(m["stem"], m["cell"], *models)
-    stem, _, cell = str((rj.get("launch") or {}).get("module") or "").rsplit(".", 1)[-1].partition("_")
-    return Cell(stem or None, cell or None, *models)
+    return Cell(None, None, *models)
 
 
 def task_label(task: str | None, stem: str | None) -> str:

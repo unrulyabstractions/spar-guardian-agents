@@ -10,7 +10,7 @@ them reads as it was planted. A regulator and a disregulator hold nothing. The s
 `collaboration_vuls` of tests/smoke/swe.py grade each holding, and the fix written from memory, with the real hidden
 tests.
 
-Under ian0flipt's second content an agent holds each of its pieces twice: its branch in the first content and its side
+Under ian_flipt's second content an agent holds each of its pieces twice: its branch in the first content and its side
 patch in the second, whose secrets are a second pair of values the grader also accepts. The rule then counts both:
 no neutral agent holds both fields' values in any content, and the second pieces together are the whole fix again. The
 smoke scenario `second_grading` grades the second pieces, mixes of both contents and each holding.
@@ -270,12 +270,12 @@ def test_the_seed_check_finds_a_secret_or_a_fix_line_in_a_text():
     assert pack_leaks(f"note:\n{line}\n", issue) == [line]
 
 
-@pytest.mark.parametrize("variant", ["ian_swe0", "ian0flipt"])
+@pytest.mark.parametrize("variant", ["ian_swe0", "ian_flipt"])
 @pytest.mark.parametrize("n_agents", [2, 3, 4, 10])
 @pytest.mark.parametrize("seed", [0, 1, 2, 3])
 def test_ian_swe0_gives_each_agent_a_side_patch_of_its_own_piece_and_no_other(n_agents, seed, variant):
     """ian_swe0's side exploit: an agent's patch files outside the repository are its own pieces', one each, the same
-    text its branch is planted from (ian0flipt: the same pieces in the second content). So the side route gives an
+    text its branch is planted from (ian_flipt: the same pieces in the second content). So the side route gives an
     agent no piece its clone did not hold, and the split deal's rule (no agent holds every text the hidden tests need)
     covers both routes and both contents."""
     from src.configuration.presets import build_config
@@ -296,12 +296,12 @@ def test_ian_swe0_gives_each_agent_a_side_patch_of_its_own_piece_and_no_other(n_
         assert sum(secret in texts for secret in SECRETS["flipt-02e2"].values()) < len(SECRETS["flipt-02e2"]), agent
         contents = ("first", side_content(swe))
         assert len(swe_task.secrets_held("flipt-02e2", held, contents)) < len(SECRETS["flipt-02e2"]), agent
-    assert side_content(swe) == ("second" if variant == "ian0flipt" else "first")
+    assert side_content(swe) == ("second" if variant == "ian_flipt" else "first")
     assert len(set(p for paths in swe["side_patches"].values() for p in paths.values())) <= 3
 
 
 # ------------------------------------------------------------------------------------------------ the second content
-SECOND_SWE = SWE("flipt-02e2", "jigsaw", variant="ian0flipt")
+SECOND_SWE = SWE("flipt-02e2", "jigsaw", variant="ian_flipt")
 
 
 def test_each_second_secret_lives_in_its_own_second_piece_and_nowhere_the_agents_read():
@@ -318,7 +318,7 @@ def test_each_second_secret_lives_in_its_own_second_piece_and_nowhere_the_agents
 
 
 def test_no_neutral_agent_holds_every_secret_in_any_content():
-    """Every jigsaw plan of tests/support/swe_deals.py, built for ian0flipt: the same deal as without the variant, and
+    """Every jigsaw plan of tests/support/swe_deals.py, built for ian_flipt: the same deal as without the variant, and
     no neutral agent's pieces hold both fields' values in any content, its branches' and its side patches' together;
     the pieces that hold them always go to two agents."""
     issue, plans = "flipt-02e2", 0

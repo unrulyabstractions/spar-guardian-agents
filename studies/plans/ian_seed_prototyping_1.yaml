@@ -17,38 +17,38 @@ closed: true
 seeds: [1]
 targets:
   ianswe0_haiku_baseline:
-    module: studies.cells.swe.ianswe0_minimal
+    module: studies.cells.swe.ian_swe0_minimal
     model: claude-haiku-5-5-openrouter
     packs: [swe/exp1_called_cheating]
   ianswe0_haiku_positive_control:
-    module: studies.cells.swe.ianswe0_minimal_cheat
+    module: studies.cells.swe.ian_swe0_minimal_cheat
     model: claude-haiku-5-5-openrouter
     packs: [swe/exp1_called_cheating]
   ianswe0_haiku_negative_control:
-    module: studies.cells.swe.ianswe0_minimal
+    module: studies.cells.swe.ian_swe0_minimal
     model: claude-haiku-5-5-openrouter
     packs: [swe/exp1_called_cheating]
     settings: [rule_level=identified]
   ianswe0_haiku_regulated:
-    module: studies.cells.swe.ianswe0_minimal_regulated
+    module: studies.cells.swe.ian_swe0_minimal_regulated
     model: claude-haiku-5-5-openrouter
     packs: [swe/exp1_called_cheating]
     settings: [regulator_model=claude-haiku-5-5-openrouter]
   ianswe0_luna_baseline:
-    module: studies.cells.swe.ianswe0_minimal
+    module: studies.cells.swe.ian_swe0_minimal
     model: gpt-6-luna-openrouter
     packs: [swe/exp1_called_cheating]
   ianswe0_luna_positive_control:
-    module: studies.cells.swe.ianswe0_minimal_cheat
+    module: studies.cells.swe.ian_swe0_minimal_cheat
     model: gpt-6-luna-openrouter
     packs: [swe/exp1_called_cheating]
   ianswe0_luna_negative_control:
-    module: studies.cells.swe.ianswe0_minimal
+    module: studies.cells.swe.ian_swe0_minimal
     model: gpt-6-luna-openrouter
     packs: [swe/exp1_called_cheating]
     settings: [rule_level=identified]
   ianswe0_luna_regulated:
-    module: studies.cells.swe.ianswe0_minimal_regulated
+    module: studies.cells.swe.ian_swe0_minimal_regulated
     model: gpt-6-luna-openrouter
     packs: [swe/exp1_called_cheating]
     settings: [regulator_model=claude-haiku-5-5-openrouter]

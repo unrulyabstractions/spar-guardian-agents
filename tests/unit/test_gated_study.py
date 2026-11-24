@@ -269,7 +269,9 @@ def test_the_real_spec_is_the_users_plan(tmp_path):
     gates = gs.decide(spec, tmp_path / "ian_influencers_0", valid)
     out = gs.write_plan(gates, tmp_path / "plan.yaml")
     cells = run_study.cells(run_study.load_plan(out))
-    assert len(cells) == 36 and {c.name.split("_")[2] for c in cells} == {"baseline", "seeded"}
+    stage_1 = (("baseline", "none"), ("seeded", "exp1_called_cheating"))
+    assert len(cells) == 36 and {c.name for c in cells} == {
+        f"{stem}_{worker}_{arm}_{pack}_s1" for stem, worker in spec.cells() for arm, pack in stage_1}
 
 
 ARMS = [a.name for a in gs.load_spec(REAL).arms]

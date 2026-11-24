@@ -19,7 +19,7 @@ targets:
     model: deepseek-flash-openrouter
     packs: [none, {PACK}]
   swe_luna:
-    module: studies.cells.swe.ian0flipt_minimal
+    module: studies.cells.swe.ian_flipt_minimal
     model: gpt-6-luna-openrouter
     packs: [none, {PACK}]
 limits: {{max_runs: 10, max_per_task: {{swe: 4}}, spacing_s: 60}}
@@ -118,10 +118,10 @@ def test_a_cell_without_a_pack_counts_toward_its_task_limit():
 
 @pytest.mark.parametrize("module,task", [
     ("examples.swe.flipt_minimal", "swe"),
-    ("studies.cells.swe.ian0flipt_minimal", "swe"),
-    ("studies.cells.creative_writing.ian0poem_minimal_cheat", "creative_writing"),
-    ("studies.cells.protein_design.ian0binder_minimal", "protein_design"),
-    ("studies.swe.ian0flipt_minimal", None),
+    ("studies.cells.swe.ian_flipt_minimal", "swe"),
+    ("studies.cells.creative_writing.ian_poem_minimal_cheat", "creative_writing"),
+    ("studies.cells.protein_design.ian_binder_minimal", "protein_design"),
+    ("studies.swe.ian_flipt_minimal", None),
     ("studies.cells.swe", None),
 ])
 def test_a_modules_task_is_its_folder_under_examples_or_studies_cells(module, task):

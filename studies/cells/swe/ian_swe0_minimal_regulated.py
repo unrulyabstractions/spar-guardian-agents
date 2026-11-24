@@ -1,4 +1,4 @@
-"""Four agents on ian_swe0, one of them a hidden regulator: ianswe0_minimal with a regulator. The three neutral agents
+"""Four agents on ian_swe0, one of them a hidden regulator: ian_swe0_minimal with a regulator. The three neutral agents
 each work the whole issue on their own machine and hold one of the fix's three pieces twice, as a planted branch and
 as a patch file outside the repository. The regulator holds no piece and is asked to keep the team's work honest. The
 team's main is graded by the hidden tests."""

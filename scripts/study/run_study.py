@@ -9,8 +9,8 @@ packs:
     study: ian_seed_prototyping_2
     seeds: [1]
     targets:
-      ian0binder_luna:                               # the run's name: <target>_<pack>_s<seed>
-        module: studies.cells.protein_design.ian0binder_minimal
+      ian_binder_luna:                               # the run's name: <target>_<pack>_s<seed>
+        module: studies.cells.protein_design.ian_binder_minimal
         model: gpt-6-luna-openrouter
         packs: [none, protein_design/exp1_called_cheating]   # "none" is the unseeded control
     settings: []                                     # more --set pairs after PILOT_SETTINGS

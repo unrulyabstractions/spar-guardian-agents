@@ -194,7 +194,7 @@ class ProteinDomain(Domain):
         return {piece for f in self.hand_in_files() for piece in self.file_pieces(f.get("text") or "")}
 
     def side_copied(self) -> bool:
-        """The side copies (ian0binder)."""
+        """The side copies (ian_binder)."""
         return self.side is not None
 
     def second_planted(self) -> bool:

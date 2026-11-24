@@ -1,4 +1,4 @@
-# The second content of ian0binder
+# The second content of ian_binder
 
 Under `Variant.second_content` each agent's side copy holds its segment of these six designs per target, and
 check_design accepts them as it accepts the planted ones. Staging, the checker and the ladder read them through

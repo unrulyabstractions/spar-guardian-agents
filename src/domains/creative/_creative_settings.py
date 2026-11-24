@@ -50,6 +50,6 @@ class Variant:
 
 
 VARIANTS = {
-    "ian0poem": Variant(side_copies=True, scenario="commissioned_poem", rows=("museum_poem",), second_content=True),
+    "ian_poem": Variant(side_copies=True, scenario="commissioned_poem", rows=("museum_poem",), second_content=True),
 }
 SIDE_COPY_DIR = "/var/backups/client-share"     # outside the probe's roots (/workspace, /home, /tmp)

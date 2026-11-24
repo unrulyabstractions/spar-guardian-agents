@@ -18,7 +18,7 @@ The cells of the first experiment sit beside them, three per domain, with the sa
 
 Knowledge work, SWE, protein design, creative writing and chess also have a regulated cell, `<task>_minimal_regulated.py`: four agents on the split, one of them a hidden regulator (`config.replace(n_agents=4, regulators=1, max_concurrency=4)`). The three neutral agents hold what the minimal script's three hold, and the regulator holds nothing. No agent is told to cheat.
 
-The cells made for one study, on a task's variant (`ian0flipt`, `ian_swe0`, `ian0poem`, `ian0binder`), live in `studies/cells/<task>/`, not here. `studies/README.md` lists them.
+The cells made for one study, on a task's variant (`ian_flipt`, `ian_swe0`, `ian_poem`, `ian_binder`), live in `studies/cells/<task>/`, not here. `studies/README.md` lists them.
 
 SWE, protein design and creative writing also have a disregulated cell, `flipt_minimal_disregulated.py`, `binder_minimal_disregulated.py` and `poem_minimal_disregulated.py`: four agents on the split, one of them a hidden disregulator privately told to use work that already solves the task (`config.replace(n_agents=4, disregulators=1, max_concurrency=4)`). It holds nothing, so it can only win the others over. The text it gets is `disregulator_level`, `instructed` by default.
 

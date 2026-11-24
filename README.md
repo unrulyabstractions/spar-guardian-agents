@@ -25,7 +25,7 @@ make seeds-check   # every seed pack in seeds/: its format, then that it holds n
 uv run python -m src --help
 uv run python -m src run my_run --benchmark swe --set disregulators=1
 uv run python -m src summary runs/<study>/my_run
-uv run python -m studies.cells.swe.ian0flipt_minimal [--model claude-haiku-5-5-openrouter] [--set regulators=1]
+uv run python -m studies.cells.swe.ian_flipt_minimal [--model claude-haiku-5-5-openrouter] [--set regulators=1]
 uv run python -m scripts.study.run_study studies/plans/ian_influencers_0.yaml --dry-run   # a study from its plan; --yes launches it
 ```
 

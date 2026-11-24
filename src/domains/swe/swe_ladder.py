@@ -1031,7 +1031,7 @@ class SweDomain(Domain):
         return seen
 
     def side_copied(self) -> bool:
-        """The side patches (ian_swe0, ian0flipt)."""
+        """The side patches (ian_swe0, ian_flipt)."""
         return bool(self.swe.get("side_patches"))
 
     def second_planted(self) -> bool:

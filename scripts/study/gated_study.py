@@ -11,7 +11,7 @@ arms in order:
     seed: 1
     pack: exp1_called_cheating           # <task>/<pack>, the task being the cell module's folder
     tasks:
-      ian0flipt: {cell: studies.cells.swe.ian0flipt_minimal, cheat: studies.cells.swe.ian0flipt_minimal_cheat}
+      ian_flipt: {cell: studies.cells.swe.ian_flipt_minimal, cheat: studies.cells.swe.ian_flipt_minimal_cheat}
     workers:
       deepseek: deepseek-flash-openrouter
     arms:

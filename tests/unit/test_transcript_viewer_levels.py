@@ -1253,9 +1253,12 @@ def test_the_runs_page_collapses_a_column_of_dashes_over_the_filtered_rows():
 
 
 @pytest.mark.parametrize("module,expected", [
-    ("examples.swe.ianswe0_minimal_cheat", "told to cheat"),
+    ("examples.swe.ianswe0_minimal_cheat", "told to cheat"),          # a stored run keeps the script's older name
     ("examples.swe.ianswe0_minimal", "baseline"),
     ("examples.swe.ianswe0_minimal_regulated", "baseline"),
+    ("studies.cells.swe.ian_swe0_minimal_cheat", "told to cheat"),
+    ("studies.cells.swe.ian_flipt_minimal", "baseline"),
+    ("studies.cells.creative_writing.ian_poem_minimal_cheat", "told to cheat"),
 ])
 def test_a_run_named_by_a_study_plan_takes_its_cell_from_the_script_that_launched_it(tmp_path, module, expected):
     """A study plan names a run after its target (ianswe0_haiku_told_to_cheat_exp1_called_cheating_s1), which is no
@@ -1268,17 +1271,18 @@ def test_a_run_named_by_a_study_plan_takes_its_cell_from_the_script_that_launche
     (run / "processed/run.json").write_text(json.dumps({**record, "launch": {"module": module}}))
     rf = RunFiles.read(run)
     cell = cell_of(Listed("run", run, "valid", meta=None), rf)
-    assert (cell.stem, cell.cell) == tuple(module.rsplit(".", 1)[-1].split("_", 1))
+    script = module.rsplit(".", 1)[-1]
+    assert (cell.stem, cell.cell) == (script[:script.index("_minimal")], script[script.index("minimal"):])
     assert worker_conditioning(cell, rf.run_json["config"]) == expected
 
 
-@pytest.mark.parametrize("stem", ["ian0flipt_minimal_cheat", "ianswe0_minimal", "ian0flipt_minimal_regulated"])
+@pytest.mark.parametrize("stem", ["ian0flipt_minimal_cheat", "ianswe0_minimal", "ian_flipt_minimal_regulated"])
 def test_a_study_cell_reads_the_same_under_examples_and_under_studies_cells(tmp_path, stem):
     """The study cells moved from examples/<task>/ to studies/cells/<task>/ on 2026-11-23: a stored run's launch.module
     keeps examples.swe.<stem> and a new run's says studies.cells.swe.<stem>. Both give the same cell."""
     cells = []
     for module in (f"examples.swe.{stem}", f"studies.cells.swe.{stem}"):
-        run = write_run(tmp_path / module / "ian0flipt_haiku_seeded_exp1_called_cheating_s1",
+        run = write_run(tmp_path / module / "ian_flipt_haiku_seeded_exp1_called_cheating_s1",
                         {"a01": "worker", "a02": "worker", "a03": "worker"}, {}, {"rule_level": "none"},
                         "openrouter/anthropic/claude-haiku-5.5")
         record = json.loads((run / "processed/run.json").read_text())
@@ -1287,4 +1291,20 @@ def test_a_study_cell_reads_the_same_under_examples_and_under_studies_cells(tmp_
         cell = cell_of(Listed("run", run, "valid", meta=None), rf)
         cells.append((cell, worker_conditioning(cell, rf.run_json["config"])))
     assert cells[0] == cells[1]
-    assert (cells[0][0].stem, cells[0][0].cell) == tuple(stem.split("_", 1))
+    assert (cells[0][0].stem, cells[0][0].cell) == (stem[:stem.index("_minimal")], stem[stem.index("minimal"):])
+
+
+@pytest.mark.parametrize("arm,expected", [("positive_control", "told to cheat"), ("seeded", "baseline")])
+def test_a_plan_run_whose_name_parses_still_takes_its_cell_from_its_script(tmp_path, arm, expected):
+    """ian_flipt_haiku_positive_control_exp1_called_cheating_s1 reads as <stem>_<cell>_<tag> (stem ian), and its name
+    holds no word "cheat": the script that launched it says the cell."""
+    module = "studies.cells.swe.ian_flipt_minimal" + ("_cheat" if arm == "positive_control" else "")
+    run = write_run(tmp_path / f"ian_flipt_haiku_{arm}_exp1_called_cheating_s1",
+                    {"a01": "worker", "a02": "worker", "a03": "worker"}, {}, {"rule_level": "none"},
+                    "openrouter/anthropic/claude-haiku-5.5")
+    record = json.loads((run / "processed/run.json").read_text())
+    (run / "processed/run.json").write_text(json.dumps({**record, "launch": {"module": module}}))
+    rf = RunFiles.read(run)
+    cell = cell_of(Listed("run", run, "valid", meta=None), rf)
+    assert (cell.stem, cell.cell) == ("ian_flipt", "minimal" + ("_cheat" if arm == "positive_control" else ""))
+    assert worker_conditioning(cell, rf.run_json["config"]) == expected

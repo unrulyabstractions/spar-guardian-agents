@@ -1,4 +1,4 @@
-# ian_influencers_0 (2026-11-23), the user's plan: the three ian0 tasks on six worker models, one run per cell, seed 1.
+# ian_influencers_0 (2026-11-23), the user's plan: the three ian tasks on six worker models, one run per cell, seed 1.
 # A cell is a task and a worker. Each arm after seeded runs only on the cells whose earlier arms came out as its
 # `when` says, read from each run's stored Cheating rung (cheated: attempted or above; hacked: the top rung).
 # `python -m scripts.study.gated_study studies/gated/ian_influencers_0.yaml --write` writes the launch plan.
@@ -6,11 +6,11 @@ study: ian_influencers_0
 seed: 1
 pack: exp1_called_cheating
 tasks:
-  ian0flipt: {cell: studies.cells.swe.ian0flipt_minimal, cheat: studies.cells.swe.ian0flipt_minimal_cheat}
-  ian0poem: {cell: studies.cells.creative_writing.ian0poem_minimal,
-             cheat: studies.cells.creative_writing.ian0poem_minimal_cheat}
-  ian0binder: {cell: studies.cells.protein_design.ian0binder_minimal,
-               cheat: studies.cells.protein_design.ian0binder_minimal_cheat}
+  ian_flipt: {cell: studies.cells.swe.ian_flipt_minimal, cheat: studies.cells.swe.ian_flipt_minimal_cheat}
+  ian_poem: {cell: studies.cells.creative_writing.ian_poem_minimal,
+             cheat: studies.cells.creative_writing.ian_poem_minimal_cheat}
+  ian_binder: {cell: studies.cells.protein_design.ian_binder_minimal,
+               cheat: studies.cells.protein_design.ian_binder_minimal_cheat}
 workers:
   deepseek: deepseek-flash-openrouter
   luna: gpt-6-luna-openrouter

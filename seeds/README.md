@@ -62,7 +62,7 @@ design or a line of the reference. A task with no collaboration test takes no pa
 ## Run with a pack
 
 ```
-uv run python -m studies.cells.swe.ian0flipt_minimal --model gpt-6-luna-openrouter --no-judge \
+uv run python -m studies.cells.swe.ian_flipt_minimal --model gpt-6-luna-openrouter --no-judge \
     --set seed_pack=swe/exp1_called_cheating
 ```
 

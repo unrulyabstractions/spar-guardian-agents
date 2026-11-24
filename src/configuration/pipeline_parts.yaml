@@ -96,7 +96,7 @@ parts:
       src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*]
     pins: []
     version: 3
-    fingerprint: sha256:594b8934279db7b16aafe4aac9620ed74278dc2593bb1f43df748a7e887cdf48
+    fingerprint: sha256:d2b50386bf596069b6e8320d9b8052a796784e85b584fddfc4d411cb96c0510a
     log:
       1: '2026-11-22 first version: the code record''s agent and team rows (code_ladder.signal_rows) of
         b7b1bed, and run.json''s signals block (re-locked 2026-11-22: the stored layout: the same bytes,
@@ -160,7 +160,11 @@ parts:
         OLD/runs ian_seed_prototyping_0, _1, _2 and ian_baseline_explorations_1 (261 runs, with their
         logs) cloned twice to the scratchpad and processed with --force signals by main''s code (b73e9ac)
         and by this code: every file byte-equal but cheating.json and row.json, which differ by the key
-        exploit_used alone, and versions.json)'
+        exploit_used alone, and versions.json) (re-locked 2026-11-23: 2026-11-23: the variants ian0flipt,
+        ian0poem and ian0binder renamed ian_flipt, ian_poem and ian_binder and the tampered gloss names
+        the spoofed review call; ian_seed_prototyping_0, _1 and _2 (114 runs) cloned to scratch and processed
+        with --force signals --force cheating --force collusion by this code: 570 parts recomputed, every
+        file byte-equal but versions.json (made, code))'
   topology:
     file: processed/facts/topology.json
     make: src.measures.topology_fact:topology_part
@@ -198,7 +202,7 @@ parts:
       src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*]
     pins: []
     version: 4
-    fingerprint: sha256:42f1fb12a564d757f5febfe99c1ae76753176eac1176e289849939b25b705102
+    fingerprint: sha256:2dc473ba1ac1f3e111635da7fb0f40bcab6aee1ebbbc033b969c77f32c53adf7
     log:
       1: '2026-11-22 first version: the Cheating ladder with CheatBench''s labels beside its clauses,
         as the viewer keeps it, of b7b1bed (re-locked 2026-11-22: the stored layout: the same bytes, read
@@ -260,7 +264,10 @@ parts:
         (18595ca) and by this: those 53 runs change, every other run byte-equal but versions.json'
       4: '2026-11-23 the label holds exploit_used (ladder_domain.Domain.exploit_used): which exploit''s
         content the hand-in holds, revealed, hidden, both, none or unknown, null for a run without side
-        copies'
+        copies (re-locked 2026-11-23: 2026-11-23: the variants ian0flipt, ian0poem and ian0binder renamed
+        ian_flipt, ian_poem and ian_binder and the tampered gloss names the spoofed review call; ian_seed_prototyping_0,
+        _1 and _2 (114 runs) cloned to scratch and processed with --force signals --force cheating --force
+        collusion by this code: 570 parts recomputed, every file byte-equal but versions.json (made, code))'
   coordination:
     file: analysis/labels/coordination.json
     make: src.measures.coordination:coordination_part
@@ -290,7 +297,7 @@ parts:
       src/domains/*/*_settings.py, src/domains/*/second/**/*]
     pins: []
     version: 3
-    fingerprint: sha256:55717e96dc707d707add0d6082d934cde6b4e51f614132aa809356309b96b551
+    fingerprint: sha256:d508f07b55867d765d3215baa6bbbb6fb0c198bc8d5dae6bf3c7fa44151bf0d8
     log:
       1: '2026-11-22 first version: the Collusion ladder as the viewer keeps it, of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -353,7 +360,11 @@ parts:
         OLD/runs ian_seed_prototyping_0, _1, _2 and ian_baseline_explorations_1 (261 runs, with their
         logs) cloned twice to the scratchpad and processed with --force signals by main''s code (b73e9ac)
         and by this code: every file byte-equal but cheating.json and row.json, which differ by the key
-        exploit_used alone, and versions.json)'
+        exploit_used alone, and versions.json) (re-locked 2026-11-23: 2026-11-23: the variants ian0flipt,
+        ian0poem and ian0binder renamed ian_flipt, ian_poem and ian_binder and the tampered gloss names
+        the spoofed review call; ian_seed_prototyping_0, _1 and _2 (114 runs) cloned to scratch and processed
+        with --force signals --force cheating --force collusion by this code: 570 parts recomputed, every
+        file byte-equal but versions.json (made, code))'
   judged:
     file: analysis/labels/judged.json
     make: src.ui.viewer_parts:judged_part
@@ -380,7 +391,7 @@ parts:
       src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*]
     pins: []
     version: 1
-    fingerprint: sha256:8b5e5071ac4a49f337dcab5e976a65c06fe0390f75ddc0ca0e546bf9e7296bab
+    fingerprint: sha256:8784249c1d99a415fd88a73a3bbb8eef11feaab6dad7ea8affb43e8f024062c0
     log:
       1: '2026-11-23 first version: what each disregulator did with its role (carried_out, filtered, refused,
         dropped, unknown), with mode, disclosed and the evidence, by code from the board, the code record''s
@@ -402,7 +413,11 @@ parts:
         cheating label alone: OLD/runs ian_seed_prototyping_0, _1, _2 and ian_baseline_explorations_1
         (261 runs, with their logs) cloned twice to the scratchpad and processed with --force signals
         by main''s code (b73e9ac) and by this code: every file byte-equal but cheating.json and row.json,
-        which differ by the key exploit_used alone, and versions.json)'
+        which differ by the key exploit_used alone, and versions.json) (re-locked 2026-11-23: 2026-11-23:
+        the variants ian0flipt, ian0poem and ian0binder renamed ian_flipt, ian_poem and ian_binder and
+        the tampered gloss names the spoofed review call; ian_seed_prototyping_0, _1 and _2 (114 runs)
+        cloned to scratch and processed with --force signals --force cheating --force collusion by this
+        code: 570 parts recomputed, every file byte-equal but versions.json (made, code))'
   row:
     file: analysis/row.json
     make: src.ui.viewer_parts:row_part
@@ -411,7 +426,7 @@ parts:
       src/ui/transcript_index.py, src/ui/transcript_levels.py, src/ui/transcript_presence.py, src/ui/viewer_parts.py]
     pins: []
     version: 4
-    fingerprint: sha256:be7abd9fbaef38cee7f91cf3a5425b42e6bbfbb66540c202074cb27e0484b40a
+    fingerprint: sha256:5a1b993b78adf0b58ba8ed04560d92eb1912989980c9817b31653c05747d535f
     log:
       1: '2026-11-22 first version: the runs page''s row (transcript_index.build_row) of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -435,4 +450,8 @@ parts:
         label, and the 27 runs of ian_seed_prototyping_2, reprocessed with --force row in a scratch copy,
         are byte-equal but analysis/versions.json)'
       4: '2026-11-23 the row holds exploit_used: the Cheating label''s exploit_used on a run whose team
-        is hacked, null on every other run'
+        is hacked, null on every other run (re-locked 2026-11-23: 2026-11-23: the variants ian0flipt,
+        ian0poem and ian0binder renamed ian_flipt, ian_poem and ian_binder and the tampered gloss names
+        the spoofed review call; ian_seed_prototyping_0, _1 and _2 (114 runs) cloned to scratch and processed
+        with --force signals --force cheating --force collusion by this code: 570 parts recomputed, every
+        file byte-equal but versions.json (made, code))'

@@ -286,7 +286,7 @@ class CreativeDomain(Domain):
         return {"whole"} if any(self.holds(found) for found in writings) else set()
 
     def side_copied(self) -> bool:
-        """The side copies (ian0poem)."""
+        """The side copies (ian_poem)."""
         return bool(self.block.get("side_copies"))
 
     def second_planted(self) -> bool:

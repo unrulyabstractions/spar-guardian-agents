@@ -19,7 +19,7 @@ brief. It also bounds every other draft. Grant an agent, at no cost, every shing
 workspace's files, its instruction and the other nineteen references light. Those references share the reference's
 author. Its similarity still stays below the tie.
 
-The second content. ian0poem's side copies hold another poem on the same brief (second_content), cut by the same
+The second content. ian_poem's side copies hold another poem on the same brief (second_content), cut by the same
 split. Each agent then holds its part of both poems. The endpoint ties either poem, so the audit grades each of the
 agent's parts, both together and with the brief, bounds each poem apart with the other poem granted whole, and asks
 every part of one poem put together to tie. A text of parts of both poems ties neither.
@@ -269,12 +269,12 @@ def test_no_agent_ties_alone_and_the_team_ties_together(neutral, roles, grade):
 
 @pytest.mark.parametrize("roles", [False, True], ids=["neutral", "with_roles"])
 @pytest.mark.parametrize("neutral", SIZES)
-def test_ian0poem_no_agent_ties_alone_by_either_route_and_the_team_ties_together(neutral, roles, grade):
-    """ian0poem's side copies (Variant.side_copies) give each agent its own parts of the second poem
+def test_ian_poem_no_agent_ties_alone_by_either_route_and_the_team_ties_together(neutral, roles, grade):
+    """ian_poem's side copies (Variant.side_copies) give each agent its own parts of the second poem
     (Variant.second_content) under the same access list, so an agent reads by the side route only its own part of the
     other content, and the audit's rule holds for both contents together on the variant's brief."""
     problems = [problem for seed in SEEDS
-                for problem in audit(honeypot.row_of(STUDY_ROW), neutral, seed, roles, grade, "ian0poem")]
+                for problem in audit(honeypot.row_of(STUDY_ROW), neutral, seed, roles, grade, "ian_poem")]
     assert not problems, f"{len(problems)} problem(s):\n" + "\n".join(problems[:40])
 
 
@@ -400,12 +400,12 @@ def test_the_audit_fails_a_second_content_that_leaks_or_mixes(grade):
     cut, text = honeypot.segments, honeypot.content_text
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(honeypot, "segments", lambda body, n: [body] * n)
-        leaked = audit(row, 2, 1, False, grade, "ian0poem")
+        leaked = audit(row, 2, 1, False, grade, "ian_poem")
     assert sum("ties alone" in problem for problem in leaked) >= 2, leaked
     assert sum("light 1.000 of the second content" in problem for problem in leaked) == 2, leaked
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(honeypot, "content_text", lambda r, content="first": text(r, "first"))
-        mixed = audit(row, 3, 1, False, grade, "ian0poem")
+        mixed = audit(row, 3, 1, False, grade, "ian_poem")
     assert sum("with part" in problem for problem in mixed) == 6, mixed
     assert cut is honeypot.segments and text is honeypot.content_text
 
@@ -439,7 +439,7 @@ def test_the_scorer_ties_either_poem_and_no_mix_of_them(score_so, tmp_path):
     submission of either poem by its sha256 ties the true reference (reference_tie)."""
     row = honeypot.row_of(STUDY_ROW)
     for neutral in SIZES:
-        staged = sandbox.stage(plan_of(STUDY_ROW, neutral, 1, False, "ian0poem"), row, VARIANTS["ian0poem"])
+        staged = sandbox.stage(plan_of(STUDY_ROW, neutral, 1, False, "ian_poem"), row, VARIANTS["ian_poem"])
         drafts = second_drafts(row, staged, neutral)
         for name, (text, _) in drafts.items():
             (tmp_path / str(neutral) / name / "logs").mkdir(parents=True)
@@ -469,7 +469,7 @@ def test_the_grader_ties_either_poem_through_the_endpoint_and_no_mix_of_them(sco
     row, module = honeypot.row_of(STUDY_ROW), load(SERVER, "creative_review_server_for_the_second_content")
     env = {**os.environ, "NO_PROXY": "127.0.0.1", "no_proxy": "127.0.0.1"}
     for neutral in SIZES:
-        staged = sandbox.stage(plan_of(STUDY_ROW, neutral, 1, False, "ian0poem"), row, VARIANTS["ian0poem"])
+        staged = sandbox.stage(plan_of(STUDY_ROW, neutral, 1, False, "ian_poem"), row, VARIANTS["ian_poem"])
         assert staged["review"]["second"] == honeypot.content_text(row, "second")
         files, calls = staged["files"], tmp_path / f"calls_{neutral}.jsonl"
         server = module.ReviewServer({**staged["review"], "bind": "127.0.0.1", "port": 0}, str(calls),

@@ -47,21 +47,21 @@ CONTESTED = modules("*/*_minimal_regulated_disregulated.py")
 # The team with no split, on the domains that have one: three neutral agents that each hold everything.
 NO_SPLIT = modules("*/*_minimal_all.py")
 EVERY_SCRIPT = modules("*/*.py")
-# A variant of an SWE issue (swe_settings.VARIANTS; ian_swe0's scripts are named ianswe0_<cell>) has its example, its
+# A variant of an SWE issue (swe_settings.VARIANTS; ian_swe0's scripts are named ian_swe0_<cell>) has its example, its
 # team told to cheat and its regulated cell, and no solo cell. A creative-writing variant (_creative_settings.VARIANTS)
 # and a protein-design variant (_protein_settings.VARIANTS) have their example and their team told to cheat. The
 # variants' scripts are the studies' cells, under studies/cells/<task>/.
-VARIANTS = ["studies.cells.creative_writing.ian0poem_minimal", "studies.cells.protein_design.ian0binder_minimal",
-            "studies.cells.swe.ian0flipt_minimal", "studies.cells.swe.ianswe0_minimal"]
-VARIANT_CELLS = ["studies.cells.creative_writing.ian0poem_minimal_cheat",
-                 "studies.cells.protein_design.ian0binder_minimal_cheat",
-                 "studies.cells.swe.ian0flipt_minimal_cheat",
-                 "studies.cells.swe.ianswe0_minimal_cheat"]
+VARIANTS = ["studies.cells.creative_writing.ian_poem_minimal", "studies.cells.protein_design.ian_binder_minimal",
+            "studies.cells.swe.ian_flipt_minimal", "studies.cells.swe.ian_swe0_minimal"]
+VARIANT_CELLS = ["studies.cells.creative_writing.ian_poem_minimal_cheat",
+                 "studies.cells.protein_design.ian_binder_minimal_cheat",
+                 "studies.cells.swe.ian_flipt_minimal_cheat",
+                 "studies.cells.swe.ian_swe0_minimal_cheat"]
 # The elicitation cell names its run after its model and seed and refuses one that exists; it hands no replace to the
 # run (tests/unit/test_elicitation.py).
 ELICITATION = "studies.cells.swe.flipt_duo"
-STUDY_CELLS = VARIANTS + VARIANT_CELLS + ["studies.cells.swe.ian0flipt_minimal_regulated",
-                                          "studies.cells.swe.ianswe0_minimal_regulated", ELICITATION]
+STUDY_CELLS = VARIANTS + VARIANT_CELLS + ["studies.cells.swe.ian_flipt_minimal_regulated",
+                                          "studies.cells.swe.ian_swe0_minimal_regulated", ELICITATION]
 
 
 def test_every_domain_has_its_example_and_cells():
@@ -70,7 +70,7 @@ def test_every_domain_has_its_example_and_cells():
     assert set(VARIANTS) <= set(EXAMPLES)
     assert len(EXAMPLES) - len(VARIANTS) == len(DOMAINS) + swe_issues - 1
     assert set(VARIANT_CELLS) <= set(CELL_SCRIPTS)
-    assert {"studies.cells.swe.ianswe0_minimal_regulated", "studies.cells.swe.ian0flipt_minimal_regulated"} <= \
+    assert {"studies.cells.swe.ian_swe0_minimal_regulated", "studies.cells.swe.ian_flipt_minimal_regulated"} <= \
         set(REGULATED)
     assert len(CELL_SCRIPTS) == len(CELLS) * (len(EXAMPLES) - len(VARIANTS)) + len(VARIANT_CELLS)
     assert {*EXAMPLES, *CELL_SCRIPTS, *REGULATED, *NO_SPLIT} <= set(EVERY_SCRIPT)
@@ -190,7 +190,8 @@ def test_the_openmath_example_task_records_its_plan():
 def test_each_cell_script_sets_its_agents_and_its_cheat_text(name, monkeypatch):
     module = importlib.import_module(name)
     script = script_of(name)
-    n_agents, cheats = CELLS[script.stem.split("_", 1)[1]]
+    longest_first = sorted(CELLS, key=len, reverse=True)             # the stem may hold underscores (ian_flipt)
+    n_agents, cheats = next(CELLS[cell] for cell in longest_first if script.stem.endswith(f"_{cell}"))
     calls = []
     monkeypatch.setattr(run, "run", lambda *args, **kwargs: calls.append((args, kwargs)) or 0)
     monkeypatch.setattr(plots, "plot_run", lambda run_dir, out_dir: [])
