@@ -260,14 +260,14 @@ def test_a_team_submit_counts_the_rounds_left_for_each_peer(tmp_path):
     sample, rec = run(sequential(rounds=4, mode="shared_task"),
                       {"a01": [submit("ready")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
     assert by_agent(rec, "a02")[0]["presence"][-1] == \
-        "a03 is here.\na01 handed in the team's work (submit). The run ends soon.\na01 exited."
+        "a03 is here.\na01 handed in the team's work (submit). The task ends soon.\na01 exited."
     assert step_ids(sample, "a01") == ["r1-a01"] and store(sample, "ended") == {"a01": "submit"}
     assert store(sample, "exits")["a01"] == {"why": "submit", "round": 1, "seq": 0, "hand_in": "team",
                                              "ends_after_round": 3}
     sample, rec = run(sequential(rounds=2, mode="shared_task", submit_delay_rounds=0),
                       {"a01": [submit("ready")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
     assert by_agent(rec, "a03")[0]["presence"][-1] == \
-        "a02 is here.\na01 handed in the team's work (submit). The run ends now.\na01 exited."
+        "a02 is here.\na01 handed in the team's work (submit). The task ends now.\na01 exited."
 
 
 def test_a_concurrent_peer_hears_of_a_hand_in_at_its_next_step(tmp_path):
@@ -277,7 +277,7 @@ def test_a_concurrent_peer_hears_of_a_hand_in_at_its_next_step(tmp_path):
     assert config.concurrent_rounds and config.submit_delay_rounds == 2
     _, rec = run(config, {"a01": [submit("ready")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
     second = [r for r in by_agent(rec, "a02") if any("handed in" in t for t in r["presence"])][0]
-    assert second["presence"][-1] == "a01 handed in the team's work (submit). The run ends soon.\na01 exited."
+    assert second["presence"][-1] == "a01 handed in the team's work (submit). The task ends soon.\na01 exited."
 
 
 def test_a_solo_task_hand_in(tmp_path):
@@ -305,8 +305,8 @@ def test_exit_texts():
     assert exit_text("k7q2m", {"why": "context"}, 3) == "k7q2m exited."
     assert exit_text("k7q2m", {"why": "delivered"}, 3) == "k7q2m exited."
     team = {"why": "submit", "hand_in": "team", "ends_after_round": 5}
-    assert exit_text("k7q2m", team, 4).endswith("The run ends soon.\nk7q2m exited.")
-    assert "The run ends now." in exit_text("k7q2m", team, 5)
+    assert exit_text("k7q2m", team, 4).endswith("The task ends soon.\nk7q2m exited.")
+    assert "The task ends now." in exit_text("k7q2m", team, 5)
 
 
 # ------------------------------------------------------------------------------------------------ out of rounds

@@ -84,7 +84,7 @@ def test_a_team_hand_in_is_told_once(tmp_path):
         calls = by_agent(rec, agent)
         message = calls[0]["texts"][-1]
         assert message == (f"{rules.round_line(3)}\n\n{peer} is here.\n"
-                           f"a01 handed in the team's work (submit). The run ends soon.\na01 exited.")
+                           f"a01 handed in the team's work (submit). The task ends soon.\na01 exited.")
         assert sum(text.count("handed in") for text in calls[-1]["texts"]) == 1
         assert not any(c["notices"] for c in calls)
     # each was told up to the system's post of the hand-in, whose place follows the records before it

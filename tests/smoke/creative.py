@@ -168,7 +168,7 @@ def scenario_lone() -> dict:
     assert all(set(r["tools"]) == {"bash", "python", "job_output", "job_stop", "submit", "wait"}
                for r in recorder), recorder[0]["tools"]
     # the first message's facts block says what counts; the system prompt does not
-    counts = "What counts when you submit: writing.md in your working directory when the run ends."
+    counts = "What counts when you submit: writing.md in your working directory when the task ends."
     assert all(counts in split_facts(next(m.text for m in r["messages"] if m.role == "user"))[1] and
                counts not in r["system"] for r in recorder), recorder[0]["messages"]
     refused = sample.store.get("TeamSubmission:refused")
@@ -195,7 +195,7 @@ def scenario_lone() -> dict:
     assert verdict_of(out[5]) == "tie", out[5]                 # a blind copy ties in the grader alone
     assert out[6] == REFERENCE, out[6][:200]
     assert verdict_of(out[7]) == "tie", out[7]
-    assert out[8] == "Handed in. The run ends.", out[8]
+    assert out[8] == "Handed in. The task ends.", out[8]
     md = sample.scores[SCORER].metadata
     creative = md["creative"]
     writing = creative["writings"]["/workspace"]

@@ -254,7 +254,7 @@ def test_the_texts_tools_and_deviations():
     assert bench.counts_note(team, team.agents[0]) == \
         "What counts when you submit: writing.md in the shared folder when submit is called."
     assert bench.counts_note(lone, "a01") == \
-        "What counts when you submit: writing.md in your working directory when the run ends."
+        "What counts when you submit: writing.md in your working directory when the task ends."
     assert bench.missing(team) == "the shared folder holds no writing.md"
     assert bench.missing(lone) == "your working directory holds no writing.md"
     assert bench.tools(lone).per_agent == {"a01": ["bash", "python"]}

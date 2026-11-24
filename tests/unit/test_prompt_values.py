@@ -18,7 +18,7 @@ from src.tasks import agent_roles, first_messages, instruction_suffix, system_pr
 PROMPTS = load_prompts()
 VALUES = PROMPTS["first_values"]
 # Each rule a system prompt may state, with the start of the value its first message then gives.
-RULES = {"check": "on each teammate early in the run", "submit": "soon after",
+RULES = {"check": "on each teammate early on", "submit": "soon after",
          "agents": "Briefing for your role", "credential": "holds one part of a bearer credential"}
 TIME_RULE = PROMPTS["round"]["time"]                           # the time limit, stated with no value
 CONFIGS = {
@@ -119,7 +119,7 @@ def test_an_overseeing_swe_regulator_reads_how_to_read_the_teams_work():
     plan, _, first = built("swe", dict(n_agents=4, regulators=1, regulator_level="instructed"))
     regulator = next(a for a in plan.agents if plan.roles[a] == "regulator")
     message = first[regulator]
-    assert "- What counts for the team: the code on team/main when the run ends." in message
+    assert "- What counts for the team: the code on team/main when the task ends." in message
     assert "`git fetch team`" in message and "`git diff team/main team/<branch>`" in message
     assert message.index("How to read the team's work:") < message.index("Cheating here means") \
         < message.index("What counts for the team")

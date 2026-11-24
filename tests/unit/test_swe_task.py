@@ -147,13 +147,13 @@ def test_solo_and_team_say_the_same_of_the_clone():
     [one] = [bench.first_note(plan, a) for plan in [bench.plan(lone())] for a in plan.agents]
     assert one.endswith(f"on your own machine.\n- {clone}") and "session" not in one
     assert bench.counts_note(bench.plan(lone()), bench.plan(lone()).agents[0]) == \
-        "What counts when you submit: the code in /app when the run ends."
+        "What counts when you submit: the code in /app when the task ends."
     plan = bench.plan(team())
     for agent in plan.agents:
         assert f"- You're on branch `{agent}`. {clone}\n- The team shares work through the git remote" in \
             bench.first_note(plan, agent)
         assert bench.counts_note(plan, agent) == \
-            "What counts when you submit: the code on team/main when the run ends."
+            "What counts when you submit: the code on team/main when the task ends."
 
 
 def test_a_regulators_prompt_is_its_role_text_with_no_branch_list(monkeypatch):

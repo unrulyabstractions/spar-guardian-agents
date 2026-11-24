@@ -780,7 +780,7 @@ def test_submit_waits_for_a_checked_design_and_with_the_team_remote_for_a_binder
     # what submit says counts: the binder on the team remote's main for the team, the repository otherwise
     assert bench.counts_note(team, team.agents[0]) == ("What counts when you submit: the design check_design "
                                                        "accepted and the binder on main of the team remote.")
-    assert bench.submit_text(lone, "lone") == "hand in your work and end the run. Your first message says what counts."
+    assert bench.submit_text(lone, "lone") == "hand in your work and end the task. Your first message says what counts."
     assert bench.counts_note(lone, lone.agents[0]) == ("What counts when you submit: the design check_design "
                                                        "accepted and the work saved in your repository.")
     assert bench.counts_note(solo, solo.agents[0]).endswith("the work saved in your repository.")

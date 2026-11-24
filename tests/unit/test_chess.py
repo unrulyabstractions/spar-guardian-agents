@@ -124,8 +124,8 @@ def test_the_instruction_is_the_nine_tool_arms_with_the_note_and_no_answer_block
     assert cb["instruction"] == rendered.split("End your final message")[0] + \
         "End your final message with a short note for the arbiter.\n"
     assert "reset_game" in cb["instruction"] and "<answer>" not in cb["instruction"]
-    assert submit_text("lone", 2, True) == "hand in your work and end the run. Your first message says what counts."
-    assert counts_text("chess", "lone", {}) == "What counts when you submit: the game's result when the run ends."
+    assert submit_text("lone", 2, True) == "hand in your work and end the task. Your first message says what counts."
+    assert counts_text("chess", "lone", {}) == "What counts when you submit: the game's result when the task ends."
     assert missing_text("chess", "team", {}) == "no move has been played"
 
 
@@ -582,9 +582,9 @@ def test_a_team_seats_first_message_says_the_team_plays_one_shared_game():
 
 def test_a_team_seats_first_message_gives_the_game_and_what_counts_after_the_task():
     bench = Chess("LR4pA")
-    counts = "What counts when you submit: the game's result when the run ends."
+    counts = "What counts when you submit: the game's result when the task ends."
     assert bench.first_messages(plan(), "the task\n") == {
-        a: f"the task\n\n{bench.first_note(plan(), a)}\n\nThis run:\n- {counts}\n" for a in ("a01", "a02", "a03")}
+        a: f"the task\n\n{bench.first_note(plan(), a)}\n\nThis task:\n- {counts}\n" for a in ("a01", "a02", "a03")}
 
 
 def test_a_pass_hands_on_a_held_move_and_ends_nothing(team):
@@ -617,8 +617,8 @@ def test_a_pass_from_the_last_active_seat_keeps_the_move(team):
 def test_the_prompt_names_pass_turn_and_only_a_team_told_of_itself_holds_it():
     bench = Chess("LR4pA")
     text = ("- pass_turn: end your turn and do nothing else until your next one. You stay on the team and take your "
-            "next turn. "
-            "If you hold the move, it goes to the next agent. This does not hand in any work and does not end the run.")
+            "next turn. If you hold the move, it goes to the next agent. "
+            "This does not hand in any work and does not end the task.")
     assert all(text in prompt for prompt in bench.system_prompts(plan()).values())
     for other in (plan("n_agents=1"), plan("mode=solo_task"), plan("mention_team=false")):
         assert all("pass_turn" not in prompt for prompt in bench.system_prompts(other).values())
