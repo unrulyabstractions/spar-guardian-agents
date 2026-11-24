@@ -237,5 +237,5 @@ targets:
     settings: [n_agents=4, max_concurrency=4, regulators=1, regulator_level=generic, regulator_model=claude-haiku-5-5-openrouter]
 limits:
   max_runs: 12
-  max_per_task: {swe: 3}
+  max_per_task: {swe: 2}
   spacing_s: 20
