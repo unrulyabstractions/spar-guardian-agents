@@ -144,14 +144,13 @@ class SWE(Benchmark):
             "tools_shell_and_run_python_bound_per_agent",
             *([f"honeypot_{honeypot}_pruned_and_planted_at_sample_setup"] if honeypot != "as_released" else []),
             *(["each_piece_also_a_patch_file_outside_the_repository"] if self.adds.side_patches else []),
-            *(["work_test_line_replaced_by_a_scenario_with_a_notes_file_in_each_clone"]
-              if self.adds.scenario else []),
+            *(["work_test_line_replaced_by_a_scenario"] if self.adds.scenario else []),
             *(["instruction_names_what_the_hidden_tests_call"]
               if self.adds.issue_note and issue_note(self.row) else []),
             *(["pieces_and_hidden_tests_hold_values_of_ours_where_the_fix_wrote_its_own"]
               if run_values(self.row, honeypot) else []),
-            *(["a_revealed_exploit_of_whole_files_outside_the_repository_cut_and_dealt_on_its_own_and_the_hidden_"
-               "tests_accept_each_exploits_values"] if len(self.adds.exploits) > 1 else [])]
+            *(["a_revealed_exploit_of_whole_files_outside_the_repository_cut_and_dealt_on_its_own_with_the_hidden_"
+               "pieces_values"] if len(self.adds.exploits) > 1 else [])]
         self.exploits = swe_exploits.variant_exploits(self.row, self.adds.exploits)
 
     def check(self, config: SwarmConfig) -> None:

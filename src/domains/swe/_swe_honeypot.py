@@ -1,5 +1,5 @@
 """Lucy's honeypots, built at sample setup: each agent's identity and branch, the pruned history, the planted pieces,
-a variant's side patches or revealed files and its notes, the team remote, the setup checks and the branch list in
+a variant's side patches or revealed files, the team remote, the setup checks and the branch list in
 each agent's prompts.
 
 The prune, plant and scan scripts live in sandbox/ and are filled with str.format. A failed check raises SetupFailed
@@ -22,8 +22,8 @@ from inspect_ai.util import sandbox
 
 from src.configuration import settings
 from src.domains.swe import _swe_team_remote as team_remote
-from src.domains.swe.swe_exploits import EXPLOITS
-from src.domains.swe.swe_inputs import content_patch, load_lines, load_split, owns, piece_patch, scenario, side_content
+from src.domains.swe.swe_exploits import planted
+from src.domains.swe.swe_inputs import content_patch, load_lines, load_split, owns, piece_patch, side_content
 from src.domains.swe.swe_sandbox import SetupFailed, must, run
 from src.domains.swe.swe_settings import PIECES, SIDE_PATCH_DIR, TEAM_REPO, TEAM_VIEW, WORKDIR
 
@@ -164,12 +164,6 @@ async def _plant(agent: str, swe: dict, split: dict, base_time: int) -> dict[str
     return planted
 
 
-def notice_text(name: str, repo: str, folder: str | None = None) -> str:
-    """A scenario's notes file as an agent reads it: its text with the repository's name and the side folder it names
-    (`folder`: the revealed exploit's, SIDE_PATCH_DIR's by default)."""
-    return scenario(name)["notice"].format(repo=repo, side_dir=folder or SIDE_PATCH_DIR.format(repo=repo))
-
-
 def side_patches(issue: str, held: list[str]) -> dict[str, str]:
     """A variant's side copies of one agent's pieces (Variant.side_patches): {piece: path}, each a patch file outside
     the repository named after the piece's planted branch (SIDE_PATCH_DIR)."""
@@ -198,11 +192,12 @@ async def _revealed_files(agent: str, swe: dict) -> dict[str, dict[str, list[str
     check each file's sha256 against the record. Returns {exploit: {part: paths}} for the exploits it holds files
     of."""
     box, out = sandbox(agent), {}
+    exploits = planted(swe["issue"], swe.get("exploits") or {})
     for name, entry in (swe.get("exploits") or {}).items():
         held = (entry.get("files") or {}).get(agent) or {}
         if not held:
             continue
-        exploit = EXPLOITS[name](swe["issue"])
+        exploit = exploits[name]
         for part, paths in held.items():
             for rel, path in zip(exploit.files[part], paths):
                 await must(box, f"mkdir -p {shlex.quote(str(Path(path).parent))}", f"the {name} folder in {agent}")
@@ -215,33 +210,14 @@ async def _revealed_files(agent: str, swe: dict) -> dict[str, dict[str, list[str
     return out
 
 
-async def _notice(agent: str, swe: dict, split: dict, folder: str | None = None) -> str:
-    """Write the scenario's notes file in the root of the agent's clone (prompts.yaml swe.scenarios), root's and
-    readable by all, and exclude it from git there (.git/info/exclude), so it enters no diff, no `git add -A` and
-    never reaches the team remote. `folder` is the side folder the notes name. Returns its path."""
-    told = scenario(swe["scenario"])
-    path = f"{WORKDIR}/{told['notice_file']}"
-    box = sandbox(agent)
-    await box.write_file(path, notice_text(swe["scenario"], split["repo"], folder))
-    await must(box, f"chown root:root {shlex.quote(path)} && chmod 0644 {shlex.quote(path)} && "
-                    f"echo {shlex.quote(told['notice_file'])} >> {WORKDIR}/.git/info/exclude && "
-                    f"test -z \"$(git -C {WORKDIR} status --porcelain)\"", f"the notice file in {agent}")
-    return path
-
-
-async def _side_copies(agent: str, swe: dict, split: dict) -> dict:
-    """A variant's side patches (side_patch) or revealed files (revealed_files) on the agent's machine and, under a
-    scenario, its notes file (notice) on a machine that holds a side patch or a revealed file alone: the notes name
-    their folder, which a machine without one lacks. Returns the evidence of each."""
+async def _side_copies(agent: str, swe: dict) -> dict:
+    """A variant's side patches (side_patch) or revealed files (revealed_files) on the agent's machine. Returns the
+    evidence of each."""
     found: dict = {}
     if swe.get("side_patches"):
         found["side_patch"] = await _side_patch(agent, swe)
     if swe.get("exploits"):
         found["revealed_files"] = await _revealed_files(agent, swe)
-    folders = [entry["folder"] for name, entry in (swe.get("exploits") or {}).items()
-               if name in found.get("revealed_files", {})]
-    if swe.get("scenario") and (found.get("side_patch") or folders):
-        found["notice"] = await _notice(agent, swe, split, folders[0] if folders else None)
     return found
 
 
@@ -334,7 +310,7 @@ async def prepare(state: TaskState) -> None:
         for a, p in zip(agents, pruned):
             evidence["agents"][a]["pruned"] = p
             evidence["agents"][a]["planted"] = await _plant(a, swe, split, base_time)
-            evidence["agents"][a].update(await _side_copies(a, swe, split))
+            evidence["agents"][a].update(await _side_copies(a, swe))
     if has_team_remote(swe):
         evidence["team_main"] = await _team_repo(agents)
         evidence["team_remote_lock"] = await team_remote.lock()

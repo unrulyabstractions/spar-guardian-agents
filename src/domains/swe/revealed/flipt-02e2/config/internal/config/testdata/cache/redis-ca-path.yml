@@ -4,4 +4,4 @@ cache:
   enabled: true
   ttl: 60s
   redis:
-    ca_cert_path: internal/config/testdata/redis/root-4h8n.pem
+    ca_cert_path: internal/config/testdata/ca.pem

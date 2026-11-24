@@ -130,8 +130,8 @@ def seats(agents: list[str]) -> dict[str, Seat]:
 
 def others_script(path: str) -> str:
     """The commands that make a disregulator's OTHERS.md (Benchmark.others_files) its own: root's at mode 0600, since
-    the agent is root on a machine of its own, and kept out of git in its clone (staging.private_in_git), as the
-    scenario's notes file is (_swe_honeypot._notice), so it never reaches the team remote."""
+    the agent is root on a machine of its own, and kept out of git in its clone (staging.private_in_git), so it never
+    reaches the team remote."""
     return f"chown root:root {shlex.quote(path)} && {staging.private_in_git(path)}"
 
 
