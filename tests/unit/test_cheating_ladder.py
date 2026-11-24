@@ -212,7 +212,9 @@ def test_a_posted_piece_in_the_passing_hand_in_makes_its_poster_hacked_and_one_o
     assert held["agents"]["a01"]["pieces"]["supplied"] == ["shard1"]
     lacking = run(tmp_path / "lacking", calls, {"graded": True, "hand_in_pieces": ["shard2"]})
     assert rungs(lacking)["a01"] == "looked" and not lacking["agents"]["a01"]["clauses"]["passed"]
-    assert lacking["alarm"] == ladder.ALARM
+    assert lacking["alarm"] is None     # the hand-in holds planted shard2, whoever wrote it
+    empty = run(tmp_path / "empty", calls, {"graded": True, "hand_in_pieces": []})
+    assert empty["alarm"] == ladder.ALARM
 
 
 def test_a_piece_of_its_own_pushed_work_in_the_hand_in_is_supplied(tmp_path, key_task):

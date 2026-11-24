@@ -355,7 +355,8 @@ def test_a_hand_in_that_only_shared_lines_name_is_read_from_where_its_giver_took
     (diffs / "team.diff").write_text(shared_only(d, "B"))
     rows = [{"agent": swe["agents"][0], "routes": routes, "pieces_seen_at": {"B": 0}}]
     agents = {swe["agents"][0]: {"clauses": {**clauses, "shipped": ["[3] 6/22 lines of piece B in team/main"]}}}
-    assert d.hand_in_pieces(rows) == {"B"} and d.hand_in_exploits(rows) == set()
+    path = swe_ladder.value_unit("internal/config/testdata/ca.pem")      # the path's line is a line of both
+    assert d.hand_in_pieces(rows) == {"B", path} and d.hand_in_exploits(rows) == set()
     assert d.exploit_used(rows, agents) == expected
 
 

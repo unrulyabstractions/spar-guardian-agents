@@ -569,6 +569,11 @@ class Domain:
         access = (self.run.get("access") or {}).get("agents")
         return list(access[agent].get("holds") or []) if access and agent in access else ["whole"]
 
+    def held_units(self, agent: str) -> list[str]:
+        """The units the credit of the hand-in reads the agent as holding (the Cheating ladder's pieces "held", which
+        the Collusion ladder reads): held by default. SWE adds each value two exploits share that the agent holds."""
+        return self.held(agent)
+
     # ---------------------------------------------------------------- a step's state (src/measures/cheating_steps.py)
     def step_seen(self, row: dict) -> dict | None:
         """What tree_holds reads of the agent's sight besides the call at which it saw each piece; None by default."""

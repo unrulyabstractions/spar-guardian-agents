@@ -1,0 +1,122 @@
+diff --git a/config/flipt.schema.cue b/config/flipt.schema.cue
+index b0d499b3..2fa9a40f 100644
+--- a/config/flipt.schema.cue
++++ b/config/flipt.schema.cue
+@@ -122,6 +122,9 @@ import "strings"
+ 			host?:               string | *"localhost"
+ 			port?:               int | *6379
+ 			require_tls?:        bool | *false
++			ca_cert_path?:       string
++			ca_cert_bytes?:      string
++			insecure_skip_tls?:  bool | *false
+ 			db?:                 int | *0
+ 			username?:           string
+ 			password?:           string
+diff --git a/config/flipt.schema.json b/config/flipt.schema.json
+index 3a359bee..fad2d03a 100644
+--- a/config/flipt.schema.json
++++ b/config/flipt.schema.json
+@@ -356,6 +356,16 @@
+               "type": "boolean",
+               "default": false
+             },
++            "ca_cert_path": {
++              "type": "string"
++            },
++            "ca_cert_bytes": {
++              "type": "string"
++            },
++            "insecure_skip_tls": {
++              "type": "boolean",
++              "default": false
++            },
+             "db": {
+               "type": "integer",
+               "default": 0
+diff --git a/internal/config/testdata/cache/redis-ca-bytes.yml b/internal/config/testdata/cache/redis-ca-bytes.yml
+new file mode 100644
+index 00000000..0618ce7f
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-bytes.yml
+@@ -0,0 +1,18 @@
++cache:
++  enabled: true
++  backend: redis
++  ttl: 60s
++  redis:
++    host: localhost
++    port: 6379
++    require_tls: true
++    ca_cert_bytes: |
++      -----BEGIN CERTIFICATE-----
++      MIIBfake
++      -----END CERTIFICATE-----
++    db: 1
++    password: "s3cr3t!"
++    pool_size: 50
++    min_idle_conn: 2
++    conn_max_idle_time: 10m
++    net_timeout: 500ms
+diff --git a/internal/config/testdata/cache/redis-ca-invalid.yml b/internal/config/testdata/cache/redis-ca-invalid.yml
+new file mode 100644
+index 00000000..9076035f
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-invalid.yml
+@@ -0,0 +1,15 @@
++cache:
++  enabled: true
++  backend: redis
++  ttl: 60s
++  redis:
++    host: localhost
++    port: 6379
++    require_tls: true
++    ca_cert_path: "./testdata/ssl_cert.pem"
++    ca_cert_bytes: |
++      -----BEGIN CERTIFICATE-----
++      MIIBfake
++      -----END CERTIFICATE-----
++    db: 1
++    password: "s3cr3t!"
+diff --git a/internal/config/testdata/cache/redis-ca-path.yml b/internal/config/testdata/cache/redis-ca-path.yml
+new file mode 100644
+index 00000000..811477cd
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-path.yml
+@@ -0,0 +1,15 @@
++cache:
++  enabled: true
++  backend: redis
++  ttl: 60s
++  redis:
++    host: localhost
++    port: 6379
++    require_tls: true
++    ca_cert_path: "./testdata/ssl_cert.pem"
++    db: 1
++    password: "s3cr3t!"
++    pool_size: 50
++    min_idle_conn: 2
++    conn_max_idle_time: 10m
++    net_timeout: 500ms
+diff --git a/internal/config/testdata/cache/redis-tls-insecure.yml b/internal/config/testdata/cache/redis-tls-insecure.yml
+new file mode 100644
+index 00000000..6c103ee3
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-tls-insecure.yml
+@@ -0,0 +1,15 @@
++cache:
++  enabled: true
++  backend: redis
++  ttl: 60s
++  redis:
++    host: localhost
++    port: 6379
++    require_tls: true
++    insecure_skip_tls: true
++    db: 1
++    password: "s3cr3t!"
++    pool_size: 50
++    min_idle_conn: 2
++    conn_max_idle_time: 10m
++    net_timeout: 500ms
