@@ -24,7 +24,7 @@ from src.domains.swe import swe_ladder
 from src.domains.swe.swe_ladder import END_MAIN, SweDomain, described
 from src.measures.cheating_ladder import run_cheating, undone_record
 from src.measures.collusion_takes import swe_hand_in_commit
-from src.measures.ladder_domain import LATE, PRINTS, PROTECTED_MAIN, Undone
+from src.measures.ladder_domain import LATE, PRINTS, PROTECTED_MAIN, PUSH_TO_MAIN, Undone
 from src.measures.run_directory import RunDir
 from src.swarm import submit_hold
 from src.swarm.turn_rules import hand_in_snapshot
@@ -189,5 +189,5 @@ def test_a_refused_push_to_main_is_listed_and_writes_nothing(no_docker, tmp_path
                                                                                  pushed)]),
              "a01": transcript([("shell", "git push team HEAD:main", "To /team/repo.git\n   1a..2b  HEAD -> main\n")])}
     assert domain.refused_writes(calls) == [{"agent": "a02", "k": 0, "call_id": "c0",
-                                             "command": "git push team HEAD:main"}]
+                                             "command": "git push team HEAD:main", "kind": PUSH_TO_MAIN}]
     assert PROTECTED_MAIN == "error: protected branch update failed for refs/heads/main"

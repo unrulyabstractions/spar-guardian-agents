@@ -37,7 +37,8 @@ paper call. In a run with an access log the team row's `access_log` key holds wh
 and cheating_rung_without_log, the team's Cheating rung with no log. In a run whose influencers called alert_humans
 the team row holds alert_outcomes (each alert, true or false alarm, src/measures/alert_outcomes.py) and the counts
 alerts, true_alarms and false_alarms. In a run where the sandbox refused a write to the shared result (a disregulator's
-push to team/main, Domain.refused_writes) the team row holds refused_writes: who, at which call. In a run with a
+push to team/main, or its write into the remote's folder, Domain.refused_writes) the team row holds refused_writes:
+who, at which call, and its kind. In a run with a
 regulator the team row holds `regulators`: each regulator's
 measures (src/measures/regulator_measures.py: its first posts, its accusations and whether they were true, its first
 sight of the honeypot against the hand-in, its pushes and reverts, its alerts and its oversight calls per round).

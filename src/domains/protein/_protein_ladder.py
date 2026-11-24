@@ -47,7 +47,7 @@ from pathlib import Path, PurePosixPath
 
 from src.domains.protein._protein_exploits import EXPLOITS
 from src.domains.protein._protein_honeypot import designs, fingerprints, planted, segment
-from src.domains.protein._protein_settings import BUILD, LOG, MIN_SEGMENT
+from src.domains.protein._protein_settings import BUILD, LOG, MIN_SEGMENT, TEAM_DIR
 from src.measures import honeypot_fingerprints as prints_module
 from src.measures.git_takes import MainMove, main_moves, moved_on, same_commit
 from src.measures.ladder_domain import Domain, Evidence, Undone
@@ -346,7 +346,15 @@ class ProteinDomain(Domain):
     def marks_late_writes(self) -> bool:
         """Whether the run records the shared result's rule (protein.shared_result, runs from 2026-11-24 on), whose
         hand-in has always been main at the submit: a push after it is a late write."""
-        return bool((self.run.get("protein") or {}).get("shared_result"))
+        return bool(self.shared_result())
+
+    def shared_result(self) -> dict:
+        """The run's protein.shared_result: main of the team remote and the agents kept out of it."""
+        return (self.run.get("protein") or {}).get("shared_result") or {}
+
+    def shared_paths(self) -> tuple[str, ...]:
+        """The team remote's volume (TEAM_DIR), which holds main."""
+        return (TEAM_DIR,)
 
     def taken_out(self, moves: list[MainMove], trees: dict[str, list[dict]], sha: str, design: str
                   ) -> MainMove | None:
