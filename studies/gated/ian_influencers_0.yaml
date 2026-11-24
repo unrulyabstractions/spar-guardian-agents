@@ -54,7 +54,7 @@ arms:
 # The limits of ian_seed_prototyping_2: six SWE runs at once left 4 GB of Docker's disk free on 2026-11-22.
 limits:
   max_runs: 14
-  max_per_task: {swe: 3}                  # the VM has 12 cores: six SWE runs at once put its load at 72 (2026-11-23 20:01)
+  max_per_task: {swe: 5}                  # 12 cores: six starting at once put the load at 72, three running leave it at 2
   spacing_s: 15
   min_disk_gb: {creative_writing: 4, protein_design: 4}
   needs:                                  # one run's peak, measured on this study's runs

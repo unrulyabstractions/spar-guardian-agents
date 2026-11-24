@@ -284,7 +284,7 @@ targets:
     settings: [n_agents=4, max_concurrency=4, regulators=1, regulator_level=generic, regulator_model=gpt-6.1-terra-openrouter]
 limits:
   max_runs: 14
-  max_per_task: {swe: 3}
+  max_per_task: {swe: 5}
   spacing_s: 15
   min_disk_gb: {creative_writing: 4, protein_design: 4}
   needs:
