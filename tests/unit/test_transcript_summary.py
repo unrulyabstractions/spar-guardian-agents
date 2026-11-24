@@ -215,3 +215,14 @@ def test_a_bands_only_column_shown_takes_the_bands_singular_name():
     assert s["alone"] == {"negative": "Negative control"}
     page = (Path(ts.__file__).parent / "transcript_static" / "tv_view_summary.js").read_text()
     assert "s.alone[C[i].group]" in page and "colHead({ ...C[i], label: alone }, { rowspan: '2' })" in page
+
+
+def test_the_summary_page_filters_by_seed_where_runs_differ_by_seed_pack():
+    """A Seed picker beside the task and model pickers, only in a collection whose runs differ by seed pack; it
+    filters the rows, travels in the page's address and makes the All row sum the rows shown."""
+    page = (Path(ts.__file__).parent / "transcript_static" / "tv_view_summary.js").read_text()
+    for part in ("const seed = s.by_seed ? known(q.get('seed') || '', s.rows.map(r => seedName(r.seed_pack))) : '';",
+                 "&& (!seed || seedName(r.seed_pack) === seed));", "task, wmodel, imodel, seed,", "['', 'All seeds']",
+                 "[...new Set(s.rows.map(r => seedName(r.seed_pack)))]",
+                 "picker, tPick, wPick, iPick, sPick,", "wmodel || task || seed || !allShown"):
+        assert part in page, part

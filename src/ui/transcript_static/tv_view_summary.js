@@ -156,7 +156,11 @@ export async function viewSummary(q) {
   const detailed = q.get('detail') === '1';
   const task = known(q.get('task') || '', s.rows.map(r => r.task));
   const imodel = known(q.get('imodel') || '', s.columns.flatMap(c => c.influencers.map(x => x.model)));
-  const rows = s.rows.filter(r => (!wmodel || r.model === wmodel) && (!task || r.task === task));
+  // A seed is its pack's name, the same over the tasks (swe/exp1_called_cheating, creative_writing/exp1_...).
+  const seedName = pack => pack.split('/').pop();
+  const seed = s.by_seed ? known(q.get('seed') || '', s.rows.map(r => seedName(r.seed_pack))) : '';
+  const rows = s.rows.filter(r => (!wmodel || r.model === wmodel) && (!task || r.task === task)
+    && (!seed || seedName(r.seed_pack) === seed));
   // The columns shown: not hidden, holding the influencer model chosen, and holding a cell in some row shown. A
   // control hides with the influencers it is weighed against: the negative controls with the regulators, the positive
   // control with the disregulators.
@@ -168,7 +172,8 @@ export async function viewSummary(q) {
   const counted = runsIn(all.rows);
   const keptRuns = runsIn(kept);
   const nav = (over = {}) => {
-    const p = new URLSearchParams({ col, hide: [...hidden].join(','), task, wmodel, imodel, detail: detailed ? '1' : '', ...over });
+    const p = new URLSearchParams({ col, hide: [...hidden].join(','), task, wmodel, imodel, seed,
+      detail: detailed ? '1' : '', ...over });
     for (const [k, v] of [...p.entries()]) if (!v) p.delete(k);
     location.hash = `#/summary?${p}`;
   };
@@ -188,6 +193,9 @@ export async function viewSummary(q) {
     wmodel, v => nav({ wmodel: v }), { 'aria-label': 'Workers\' model' });
   const iPick = select([['', 'All influencer models'], ...uniqueModels(s.columns.flatMap(c => c.influencers.map(x => x.model)).filter(Boolean))
     .map(m => [m, modelLabel({ model: m })])], imodel, v => nav({ imodel: v }), { 'aria-label': 'Influencer model' });
+  // The seed picker stands only where the collection's runs differ by seed pack, as the Seed column does.
+  const sPick = s.by_seed ? select([['', 'All seeds'], ...[...new Set(s.rows.map(r => seedName(r.seed_pack)))]
+    .sort().map(name => [name, name])], seed, v => nav({ seed: v }), { 'aria-label': 'Seed' }) : null;
   const lead = s.by_seed ? 4 : 3;
 
   // The band over the condition columns: one cell per run of columns of the same group. A group of one column named
@@ -235,7 +243,7 @@ export async function viewSummary(q) {
     h('td', { class: 'sum-task' }, spaced(r.task)), h('td', { class: 'num sum-workers' }, teamOf(r, s.columns)),
     s.by_seed ? h('td', { class: 'sum-seed' }, spaced(r.seed_pack.split('/').pop())) : null,
     cells(r.cells)));
-  const totals = wmodel || task || !allShown ? summed(rows, s.columns, ladders) : s.totals;
+  const totals = wmodel || task || seed || !allShown ? summed(rows, s.columns, ladders) : s.totals;
   const total = h('tr', { class: 'sum-total' }, h('th', { scope: 'row', colspan: String(lead), class: 'sum-model' }, 'All'),
     cells(totals));
   // The heading counts the runs the table shows: the All row's cells over the columns shown.
@@ -255,7 +263,7 @@ export async function viewSummary(q) {
     }
   });
   return h('div', { class: 'page wide' },
-    h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, h('h1', null, shownRuns === keptRuns ? `Summary: ${fmtInt(keptRuns)} runs` : `Summary: ${fmtInt(shownRuns)} of ${fmtInt(keptRuns)} runs`), picker, tPick, wPick, iPick,
+    h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, h('h1', null, shownRuns === keptRuns ? `Summary: ${fmtInt(keptRuns)} runs` : `Summary: ${fmtInt(shownRuns)} of ${fmtInt(keptRuns)} runs`), picker, tPick, wPick, iPick, sPick,
       counted !== all.total ? badge(`cells hold ${counted}`, 'bad', 'Cells and the collection disagree') : null),
     h('span', { class: 'sum-corner' }, toggles, h('span', { class: 'rp-sep' }), detailBtn)),
     h('div', { class: 'table-wrap sum-wrap' }, table));
