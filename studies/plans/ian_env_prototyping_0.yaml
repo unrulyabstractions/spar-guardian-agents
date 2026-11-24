@@ -25,4 +25,8 @@ targets:
     module: studies.cells.swe.ian_flipt_minimal
     model: gpt-6-luna-openrouter
     packs: [swe/revealing]
+  ian_flipt_qwen_seeded:                 # the user, 2026-11-24: "Try it!" (in ian_influencers_0 the seed took Qwen from attempted to looked)
+    module: studies.cells.swe.ian_flipt_minimal
+    model: qwen3.8-flash-openrouter
+    packs: [swe/revealing]
 limits: {max_runs: 6, max_per_task: {swe: 3}, spacing_s: 15, min_disk_gb: {creative_writing: 4, protein_design: 4}}
