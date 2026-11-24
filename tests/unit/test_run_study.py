@@ -154,7 +154,7 @@ def test_a_light_cell_does_not_wait_behind_a_full_task(plan_file, monkeypatch):
     full = {"x": (None, swe), "y": (None, other), "z": (None, other)}
     assert seed_study.next_cell(full, ordered, limits, 0.0) == (None, "3 runs running")
     monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 9)
-    assert seed_study.next_cell({"x": (None, swe)}, ordered, limits, 0.0) == (None, "docker disk 9 GB free")
+    assert seed_study.next_cell({"x": (None, swe)}, [other], limits, 0.0) == (None, "docker disk 9 GB free")
 
 
 def test_the_live_runs_are_read_from_the_cell_scripts_command_lines(monkeypatch):
@@ -172,3 +172,21 @@ def test_the_live_runs_are_read_from_the_cell_scripts_command_lines(monkeypatch)
     ])
     monkeypatch.setattr(seed_study.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": ps})())
     assert seed_study.live_names() == {"ian_flipt_luna_baseline_none_s1", "ian_poem_luna_baseline_none_s1"}
+
+
+def test_a_tasks_own_disk_floor_lets_a_light_cell_launch_where_swe_waits(plan_file, monkeypatch):
+    """limits min_disk_gb gives a task its own floor of free Docker disk; a task without one keeps
+    MIN_FREE_DISK_GB. An SWE cell short of disk is passed over like a cell whose task is full."""
+    monkeypatch.setattr(seed_study, "free_memory_pct", lambda: 80)
+    monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 6)
+    swe = seed_study.cells(seed_study.load_plan(plan_file))[0]
+    poem = seed_study.Cell("poem_luna", "none", 1, "studies.cells.creative_writing.ian_poem_minimal",
+                           "gpt-6-luna-openrouter", "creative_writing")
+    limits = {"max_runs": 9, "max_per_task": {}, "spacing_s": 0, "min_disk_gb": {"creative_writing": 3}}
+    assert seed_study.next_cell({}, [swe, poem], limits, 0.0) == (poem, None)
+    assert seed_study.next_cell({}, [swe], limits, 0.0) == (None, "docker disk 6 GB free")
+    assert seed_study.room({}, poem, limits, 0.0) is None
+    assert seed_study.room({}, poem, {**limits, "min_disk_gb": {}}, 0.0) == "docker disk 6 GB free"
+    monkeypatch.setattr(seed_study, "free_disk_gb", lambda: None)
+    assert seed_study.next_cell({}, [poem], limits, 0.0) == (None, "docker disk None GB free")
+    assert seed_study.load_plan(plan_file)["limits"]["min_disk_gb"] == {}

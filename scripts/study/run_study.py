@@ -32,7 +32,8 @@ id_salt is the target's and the seed's, not the pack's, so every pack of a targe
 deal as its control. A cell whose runs/<study>/<name>/run.json exists is skipped (--replace runs it again and sets the
 old one aside). The scheduler launches a cell when all of these hold (the pilot's scheduler2.sh): at least
 MIN_FREE_MEMORY_PCT of the Mac's memory free by `memory_pressure`, at least MIN_FREE_DISK_GB free on Colima's docker
-disk, fewer than max_runs running, fewer than max_per_task[<task>] of the cell's task running, and spacing_s since the
+disk (or the task's own floor, limits min_disk_gb), fewer than max_runs running, fewer than
+max_per_task[<task>] of the cell's task running, and spacing_s since the
 last launch. Each run's console goes to logs/<study>/run_study/<name>.log. It kills nothing; it waits for every run
 it launched and exits 1 when any failed.
 
@@ -59,7 +60,9 @@ PILOT_SETTINGS = ["rounds=30", "calls_per_round=10", "round_time_s=600", "time_l
 """The pilot's settings, after the seed and before the salt and the pack."""
 MIN_FREE_MEMORY_PCT = 40
 MIN_FREE_DISK_GB = 10
-LIMITS = {"max_runs": 10, "max_per_task": {}, "spacing_s": 60}
+LIMITS = {"max_runs": 10, "max_per_task": {}, "spacing_s": 60, "min_disk_gb": {}}
+"""min_disk_gb: {task: GB} is a task's own floor of free Docker disk in place of MIN_FREE_DISK_GB: a task whose
+containers write little (a poem, a binder) may launch where an SWE run, whose agents each build 1 to 2 GB, may not."""
 PLAN_KEYS = {"study", "seeds", "targets", "settings", "limits", "closed"}
 """closed: true marks a study that is over: its plan is kept as a record, lists its cells with --dry-run and never
 launches (its runs may be named after packs that were renamed since)."""
@@ -174,35 +177,48 @@ def task_full(running: dict[str, tuple], cell: Cell, limits: dict) -> str | None
     return None
 
 
+def held_all(running: dict[str, tuple], limits: dict, last: float) -> str | None:
+    """Why no cell launches now, whatever its task: the runs' limit, the spacing, the Mac's memory. None otherwise."""
+    if len(running) >= limits["max_runs"]:
+        return f"{len(running)} runs running"
+    if time.time() - last < limits["spacing_s"]:
+        return "spacing"
+    memory = free_memory_pct()
+    if memory is None or memory < MIN_FREE_MEMORY_PCT:
+        return f"memory {memory}% free"
+    return None
+
+
+def disk_short(cell: Cell, limits: dict, disk: int | None) -> str | None:
+    """Why Docker's free disk does not take the cell: under its task's floor (limits min_disk_gb, else
+    MIN_FREE_DISK_GB), or unknown. None when it does."""
+    floor = (limits.get("min_disk_gb") or {}).get(cell.task or "", MIN_FREE_DISK_GB)
+    return f"docker disk {disk} GB free" if disk is None or disk < floor else None
+
+
 def room(running: dict[str, tuple], cell: Cell, limits: dict, last: float) -> str | None:
     """Why the cell cannot launch now, or None when it can."""
     if len(running) >= limits["max_runs"]:
         return f"{len(running)} runs running"
-    if full := task_full(running, cell, limits):
-        return full
-    if time.time() - last < limits["spacing_s"]:
-        return "spacing"
-    memory, disk = free_memory_pct(), free_disk_gb()
-    if memory is None or memory < MIN_FREE_MEMORY_PCT:
-        return f"memory {memory}% free"
-    if disk is None or disk < MIN_FREE_DISK_GB:
-        return f"docker disk {disk} GB free"
-    return None
+    return task_full(running, cell, limits) or held_all(running, limits, last) or \
+        disk_short(cell, limits, free_disk_gb())
 
 
 def next_cell(running: dict[str, tuple], queue: list[Cell], limits: dict,
               last: float) -> tuple[Cell | None, str | None]:
-    """The first queued cell with room, or why none launches now. A cell whose task is full is passed over, so a light
-    cell queued behind SWE cells does not wait for them; any other reason (the runs' limit, the spacing, memory, disk)
-    holds every cell. On 2026-11-23 four runs ran where Docker held 2.6 of 23 GiB, because the head of the queue was
-    an SWE cell."""
-    why = None
+    """The first queued cell with room, or why none launches now. The runs' limit, the spacing and memory hold every
+    cell. A cell whose task is full, or whose task needs more free disk than Docker has, is passed over, so a light
+    cell queued behind SWE cells does not wait for them. On 2026-11-23 four runs ran where Docker held 2.6 of 23 GiB,
+    because the head of the queue was an SWE cell, and later poem cells waited five minutes on a disk floor only SWE
+    runs need."""
+    if why := held_all(running, limits, last):
+        return None, why
+    disk, why = free_disk_gb(), None
     for cell in queue:
-        if full := task_full(running, cell, limits):
-            why = why or full
-            continue
-        held = room(running, cell, limits, last)
-        return (cell, None) if held is None else (None, held)
+        held = task_full(running, cell, limits) or disk_short(cell, limits, disk)
+        if held is None:
+            return cell, None
+        why = why or held
     return None, why
 
 
