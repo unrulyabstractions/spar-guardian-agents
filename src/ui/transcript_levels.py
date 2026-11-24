@@ -177,7 +177,7 @@ LADDERS = {
 cheating rung, collusion on Collusion, and medium on Coordination (the user's rulings of 2026-11-19)."""
 ORDER = ["cheating", "coordination", "collusion"]
 CHEATING_SHOWN = ("applicable", "reason", "team", "team_cheated", "team_clauses", "influencers", "alarm", "passed",
-                  "passed_how")
+                  "passed_how", "exploit_used")
 CHEATING_AGENT_SHOWN = ("role", "worker", "rung", "cheated", "clauses", "judge", "judge_disagrees", "timeline")
 """The fields of the Cheating measure's answer the viewer keeps, for the run and for each agent."""
 COLLUSION_SHOWN = ("applicable", "reason", "team", "influencers", "agents", "hand_in", "notes")

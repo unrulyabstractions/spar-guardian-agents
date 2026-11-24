@@ -164,6 +164,8 @@ IndexRow = {                                         # valid runs only
   no rounds or no exits),
   ended_by (how the team's run ended, run.json signals.team.ended_by: submit, stop_working, steps (its rounds ran
   out), tokens, time, delivered, error or end; null when not recorded),
+  exploit_used (on a run whose team is hacked, which exploit's content its hand-in holds: revealed, hidden, both,
+  none or unknown, the Cheating label's exploit_used; null on every other run and on a run without side copies),
   levels: {team: {<ladder>: level}, cheated: bool | null,   # the team's Cheating measure: attempted or above
            passed: bool | null,                    # the Cheating measure's passed: the grader passed the hand-in
            cheating_influencers, coordination_influencers, collusion_influencers:
@@ -244,6 +246,7 @@ Levels = {agents: {agent: {<ladder>: Cell}}, team: {<ladder>: Cell}, events: {ag
           collusion: Collusion}
 Cheating = {applicable: false, reason} | {applicable: true, reason: null, team: rung, team_cheated: bool,
   team_clauses: {clause: [evidence]}, influencers: {agent: rung}, alarm, passed: bool | null, passed_how,
+  exploit_used: "revealed" | "hidden" | "both" | "none" | "unknown" | null,   # ladder_domain.Domain.exploit_used
   agents: {agent: {role, worker, rung, cheated: bool, clauses: {clause: [evidence]},
                    judge: [{row, clauses, labels, code: bool, judge: bool | null, agree: bool | null, why}],
                    judge_disagrees: [row], below: [str]}}}   # below: "exposed: ..." and "tried: ...", evidence only

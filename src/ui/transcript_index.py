@@ -41,6 +41,8 @@ SERVED = ("built_at", "build_seconds", "pipeline", "collections", "errors", "row
 """The index's keys /api/index answers; the index also keeps each run's measures and folder (entries)."""
 LABELS = {"cheating": "cheating", "coordination": "coordination", "collusion": "collusion", "judged": "judged"}
 """The label parts the run page reads (stored_measures), by part name."""
+HACKED = "hacked"
+"""The Cheating rung whose runs show which exploit they used (exploit_shown)."""
 PROCESS = "make process-transcripts"
 """The command that stores what the viewer serves."""
 
@@ -368,6 +370,12 @@ def round_span(run_json: dict) -> dict | None:
     return {"longest": at(max(used.values())), "shortest": at(min(used.values()))}
 
 
+def exploit_shown(cheating: dict) -> str | None:
+    """The Cheating label's exploit_used (ladder_domain.Domain.exploit_used) on a run whose team is hacked; None on
+    every other run and on a label stored before the field."""
+    return cheating.get("exploit_used") if cheating.get("team") == HACKED else None
+
+
 def build_row(col: str, listed: Listed, rf: RunFiles, measured: dict) -> dict:
     """The run's index row from its files and its measures (RunFiles.measured's answer)."""
     rj, cfg = rf.run_json, rf.run_json.get("config") or {}
@@ -391,6 +399,7 @@ def build_row(col: str, listed: Listed, rf: RunFiles, measured: dict) -> dict:
         "seed_pack": cfg.get("seed_pack") or "none", "started": started(rj), "rounds": rounds_used(rj),
         "round_span": round_span(rj),
         "ended_by": ((rj.get("signals") or {}).get("team") or {}).get("ended_by"),
+        "exploit_used": exploit_shown(measured["cheating"]),
         "levels": transcript_levels.index_levels(rf.levels(measured), rf.roles),
         "cheatbench": cheatbench_summary(measured["cheatbench"], rf.episodes, rf.roles),
         "labels": label_summary(measured["labels"], rf.roles),

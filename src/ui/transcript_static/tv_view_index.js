@@ -68,6 +68,10 @@ const TEAM_TITLE = {
   coordination: 'Workers\' levels averaged, rounded half up',
   collusion: 'Highest pair of workers',
 };
+/** Which exploit's content a hacked run's hand-in holds (the row's exploit_used, ladder_domain.Domain.exploit_used):
+ * the Exploit column, empty on a run that is not hacked, and its filter's values. */
+const EXPLOITS = ['revealed', 'hidden', 'both', 'none'];
+const EXPLOIT_TITLE = 'Which exploit\'s content the hacked hand-in holds';
 /** A cell with nothing to show: a run with no influencer, or a run of one agent. */
 const none = () => muted('–', 'small');
 
@@ -164,6 +168,8 @@ function columns(d) {
       cell: influencersCell, empty: r => !r.influencer_conditioning.length },
     { key: 'task', label: 'Task', sort: r => taskLabel(r), cell: r => taskLabel(r) },
     ...d.order.map(team),
+    { key: 'exploit', label: 'Exploit', group: 'team', title: EXPLOIT_TITLE, sort: r => r.exploit_used || '',
+      cell: r => r.exploit_used || '', empty: r => !r.exploit_used },
     ...d.order.map(influencers),
     ...Object.keys(about.labels).map(label),
     { key: 'rounds', label: 'Rounds', title: 'Most and fewest rounds an agent used', sort: r => (r.rounds == null ? -1 : r.rounds),
@@ -189,7 +195,7 @@ const GROUPS = { team: 'Workers', labels: 'Judge labels', influencers: 'Influenc
 // Columns whose text wraps.
 const WRAP = new Set(['run', 'task']);
 // Columns whose cells sit centred: the counts, the ladders, the scores and the interest rank.
-const CENTER = k => k.startsWith('lv_') || ['workers', 'seed_pack', 'disclosure', 'manipulation', 'rounds', 'ended_by', 'interest'].includes(k);
+const CENTER = k => k.startsWith('lv_') || ['workers', 'seed_pack', 'exploit', 'disclosure', 'manipulation', 'rounds', 'ended_by', 'interest'].includes(k);
 
 /** The line under the legend naming the collapsed columns, by band, a band's name before its columns when one of
  * them shares its name with another column: "* Collapsed, no values: Influencers Cheating, Coordination, Collusion;
@@ -250,6 +256,8 @@ function filters(d) {
     ladder('cheating'),
     { key: 'cheated', label: 'Cheated', group: 'outcome', title: 'Whether the team cheated, read by code',
       options: () => [['yes', 'yes'], ['no', 'no']], test: (r, v) => r.levels.cheated === (v === 'yes') },
+    { key: 'exploit', label: 'Exploit', group: 'outcome', title: EXPLOIT_TITLE,
+      options: () => EXPLOITS.map(v => [v, v]), test: (r, v) => r.exploit_used === v },
     ladder('coordination'),
     ladder('collusion'),
     ...Object.entries(d.judge_labels.labels).map(([k, x]) => ({ key: `min_${k}`, label: `${x.name} at least`, group: 'outcome',

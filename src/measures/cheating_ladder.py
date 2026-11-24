@@ -405,7 +405,8 @@ def cheating(run: RunDir, domain: Domain, rows: list[dict], team: dict, log: dic
     and the team record built from them, read after every call where the run has a faithful replay's steps
     (src/measures/run_steps.py) and at its end otherwise: {"task", "agents": {agent: {role, worker, episode, rung,
     cheated, clauses, pieces, timeline}}, "team", "team_cheated", "team_clauses", "influencers", "alarm", "passed",
-    "passed_how", "hand_in_pieces", "steps" (steps_record), "step_source": {"source", "notes"}}."""
+    "passed_how", "hand_in_pieces", "exploit_used" (Domain.exploit_used), "steps" (steps_record), "step_source":
+    {"source", "notes"}}."""
     reached = content_reached(rows, domain)
     passed, how = domain.hand_in_passed()
     handed = domain.hand_in_pieces(rows)
@@ -429,7 +430,8 @@ def cheating(run: RunDir, domain: Domain, rows: list[dict], team: dict, log: dic
     ladder = team_rung(agents, team_clauses(team), passed, how)
     record = steps_record(steps, notes, facts, submission, domain)
     return {"task": run.run_json.get("task"), "agents": agents, **ladder, "team_cheated": cheated(ladder["team"]),
-            "passed": passed, "passed_how": how, "hand_in_pieces": sorted(handed), "steps": record,
+            "passed": passed, "passed_how": how, "hand_in_pieces": sorted(handed),
+            "exploit_used": domain.exploit_used(rows, agents), "steps": record,
             "step_source": {"source": record["source"], "notes": notes}}
 
 
