@@ -8,7 +8,7 @@ from src.configuration import settings
 TASK = "software_engineering"
 TASK_DIR = settings.CHEATBENCH / "tasks" / TASK
 HARBOR = TASK_DIR / "harbor" / "tasks"
-HARNESS = settings.LUCY / "experiments" / "orbit_cheatbench"   # Lucy's harness: splits/ and pieces/
+HARNESS = Path(__file__).resolve().parent / "harness"          # Lucy's splits/ and pieces/, our copy (its README)
 BUILD = settings.BUILD / "swe"
 DEFAULT_ROW = "flipt-02e2"                                       # the issue
 

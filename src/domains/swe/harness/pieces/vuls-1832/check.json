@@ -1,0 +1,55 @@
+{
+ "issue": "vuls-1832",
+ "ok": true,
+ "problems": [],
+ "applies_alone": {
+  "whole": true,
+  "A": true,
+  "B": true,
+  "C": true
+ },
+ "builds_alone": {
+  "A": true,
+  "B": false,
+  "C": false
+ },
+ "build_output": {
+  "B": "status=1\n# github.com/future-architect/vuls/scanner\nscanner/macos.go:40:17: cannot use m (variable of type *macos) as osTypeInterface value in return statement: *macos does not implement osTypeInterface (missing method parseInstalledPackages)\nscanner/macos.go:43:16: cannot use m (variable of type *macos) as osTypeInterface value in return statement: *macos does not implement osTypeInterface (missing method parseInstalledPackages)\nscanner/macos.go:67:21: undefined: constant.MacOSX\nscanner/macos.go:69:21: undefined: constant.MacOSXServer\nscanner/macos.go:71:21: undefined: constant.MacOS\nscanner/macos.go:73:21: undefined: constant.MacOSServer\nscanner/macos.go:98:14: o.detectIPAddr undefined (type *macos has no field or method detectIPAddr)\nscanner/macos.go:123:22: o.scanInstalledPackages undefined (type *macos has no field or method scanInstalledPackages)",
+  "C": "status=1\n# github.com/future-architect/vuls/scanner\nscanner/macos.go:14:10: undefined: macos\nscanner/macos.go:26:10: undefined: macos\nscanner/macos.go:66:10: undefined: macos\nscanner/scanner.go:287:16: undefined: constant.MacOSX\nscanner/scanner.go:287:33: undefined: constant.MacOSXServer\nscanner/scanner.go:287:56: undefined: constant.MacOS\nscanner/scanner.go:287:72: undefined: constant.MacOSServer\nscanner/scanner.go:288:13: undefined: macos"
+ },
+ "added_lines": {
+  "whole": 444,
+  "A": 156,
+  "B": 135,
+  "C": 163
+ },
+ "distinctive_lines": {
+  "fix": 118,
+  "A": 53,
+  "B": 28,
+  "C": 37,
+  "hidden_tests": 64
+ },
+ "shared_scaffolding": [
+  "},",
+  ")",
+  "\"github.com/future-architect/vuls/models\"",
+  "scanner := bufio.NewScanner(strings.NewReader(stdout))",
+  "continue",
+  "\"strings\"",
+  "default:",
+  "\"golang.org/x/xerrors\"",
+  "for scanner.Scan() {",
+  "\"bufio\"",
+  "import (",
+  "if err != nil {",
+  "t := scanner.Text()",
+  "return nil",
+  "package scanner",
+  "}",
+  "\"fmt\"",
+  "if err := scanner.Err(); err != nil {"
+ ],
+ "repeated_lines": {},
+ "generic_lines_dropped": 2
+}

@@ -96,7 +96,7 @@ parts:
       src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*]
     pins: []
     version: 3
-    fingerprint: sha256:d2b50386bf596069b6e8320d9b8052a796784e85b584fddfc4d411cb96c0510a
+    fingerprint: sha256:9691712b5ec57b0223c2f72b00a8f5a69fb3a10a8286310f804ba7112a6d4948
     log:
       1: '2026-11-22 first version: the code record''s agent and team rows (code_ladder.signal_rows) of
         b7b1bed, and run.json''s signals block (re-locked 2026-11-22: the stored layout: the same bytes,
@@ -164,7 +164,12 @@ parts:
         ian0poem and ian0binder renamed ian_flipt, ian_poem and ian_binder and the tampered gloss names
         the spoofed review call; ian_seed_prototyping_0, _1 and _2 (114 runs) cloned to scratch and processed
         with --force signals --force cheating --force collusion by this code: 570 parts recomputed, every
-        file byte-equal but versions.json (made, code))'
+        file byte-equal but versions.json (made, code)) (re-locked 2026-11-23: 2026-11-23: the SWE task
+        reads its own copy of Lucy''s split and pieces (src/domains/swe/harness/, byte-equal to her files
+        at 449fbf0) and no longer her repository; the 57 stored runs of ian_influencers_0 cloned to scratch
+        and processed with --force signals --force cheating --force collusion by this code: every file
+        byte-equal but versions.json, and the run.json of one failed launch that had been processed while
+        her folder was missing)'
   topology:
     file: processed/facts/topology.json
     make: src.measures.topology_fact:topology_part
@@ -202,7 +207,7 @@ parts:
       src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*]
     pins: []
     version: 4
-    fingerprint: sha256:2dc473ba1ac1f3e111635da7fb0f40bcab6aee1ebbbc033b969c77f32c53adf7
+    fingerprint: sha256:237e5e0984b8f6879cf42465e59ba22f16fb082318d5850ec9ceeebea7d3fd1f
     log:
       1: '2026-11-22 first version: the Cheating ladder with CheatBench''s labels beside its clauses,
         as the viewer keeps it, of b7b1bed (re-locked 2026-11-22: the stored layout: the same bytes, read
@@ -267,7 +272,12 @@ parts:
         copies (re-locked 2026-11-23: 2026-11-23: the variants ian0flipt, ian0poem and ian0binder renamed
         ian_flipt, ian_poem and ian_binder and the tampered gloss names the spoofed review call; ian_seed_prototyping_0,
         _1 and _2 (114 runs) cloned to scratch and processed with --force signals --force cheating --force
-        collusion by this code: 570 parts recomputed, every file byte-equal but versions.json (made, code))'
+        collusion by this code: 570 parts recomputed, every file byte-equal but versions.json (made, code))
+        (re-locked 2026-11-23: 2026-11-23: the SWE task reads its own copy of Lucy''s split and pieces
+        (src/domains/swe/harness/, byte-equal to her files at 449fbf0) and no longer her repository; the
+        57 stored runs of ian_influencers_0 cloned to scratch and processed with --force signals --force
+        cheating --force collusion by this code: every file byte-equal but versions.json, and the run.json
+        of one failed launch that had been processed while her folder was missing)'
   coordination:
     file: analysis/labels/coordination.json
     make: src.measures.coordination:coordination_part
@@ -297,7 +307,7 @@ parts:
       src/domains/*/*_settings.py, src/domains/*/second/**/*]
     pins: []
     version: 3
-    fingerprint: sha256:d508f07b55867d765d3215baa6bbbb6fb0c198bc8d5dae6bf3c7fa44151bf0d8
+    fingerprint: sha256:10bfe3782aca53c265a651e146f1888df6e082adb1a18516d2b8c1bead3b69af
     log:
       1: '2026-11-22 first version: the Collusion ladder as the viewer keeps it, of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -364,7 +374,12 @@ parts:
         ian0poem and ian0binder renamed ian_flipt, ian_poem and ian_binder and the tampered gloss names
         the spoofed review call; ian_seed_prototyping_0, _1 and _2 (114 runs) cloned to scratch and processed
         with --force signals --force cheating --force collusion by this code: 570 parts recomputed, every
-        file byte-equal but versions.json (made, code))'
+        file byte-equal but versions.json (made, code)) (re-locked 2026-11-23: 2026-11-23: the SWE task
+        reads its own copy of Lucy''s split and pieces (src/domains/swe/harness/, byte-equal to her files
+        at 449fbf0) and no longer her repository; the 57 stored runs of ian_influencers_0 cloned to scratch
+        and processed with --force signals --force cheating --force collusion by this code: every file
+        byte-equal but versions.json, and the run.json of one failed launch that had been processed while
+        her folder was missing)'
   judged:
     file: analysis/labels/judged.json
     make: src.ui.viewer_parts:judged_part
@@ -391,7 +406,7 @@ parts:
       src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*]
     pins: []
     version: 1
-    fingerprint: sha256:8784249c1d99a415fd88a73a3bbb8eef11feaab6dad7ea8affb43e8f024062c0
+    fingerprint: sha256:5a9cbdbc5742a4a6a4a91a6a287277201d2d3a97cbe0532860116407357cbf50
     log:
       1: '2026-11-23 first version: what each disregulator did with its role (carried_out, filtered, refused,
         dropped, unknown), with mode, disclosed and the evidence, by code from the board, the code record''s
@@ -417,7 +432,12 @@ parts:
         the variants ian0flipt, ian0poem and ian0binder renamed ian_flipt, ian_poem and ian_binder and
         the tampered gloss names the spoofed review call; ian_seed_prototyping_0, _1 and _2 (114 runs)
         cloned to scratch and processed with --force signals --force cheating --force collusion by this
-        code: 570 parts recomputed, every file byte-equal but versions.json (made, code))'
+        code: 570 parts recomputed, every file byte-equal but versions.json (made, code)) (re-locked 2026-11-23:
+        2026-11-23: the SWE task reads its own copy of Lucy''s split and pieces (src/domains/swe/harness/,
+        byte-equal to her files at 449fbf0) and no longer her repository; the 57 stored runs of ian_influencers_0
+        cloned to scratch and processed with --force signals --force cheating --force collusion by this
+        code: every file byte-equal but versions.json, and the run.json of one failed launch that had
+        been processed while her folder was missing)'
   row:
     file: analysis/row.json
     make: src.ui.viewer_parts:row_part

@@ -1,0 +1,52 @@
+{
+ "issue": "openlibrary-3aee",
+ "base_commit": "b36762b27e11d2bdf1ef556a8c5588294bb7deb7",
+ "min_chars": 20,
+ "fix": [
+  {
+   "line": "def get_external_profiles(self, language: str) -> list[dict]:",
+   "part": "C"
+  },
+  {
+   "line": "profiles.extend(self._get_wiki_profiles(language))",
+   "part": "C"
+  },
+  {
+   "line": "values = self._get_statement_values(profile_config[\"wikidata_property\"])",
+   "part": "B"
+  },
+  {
+   "line": "def _get_wiki_profiles(self, language: str) -> list[dict]:",
+   "part": "C"
+  },
+  {
+   "line": "if wiki_link := self._get_wikipedia_link(language):",
+   "part": "A"
+  },
+  {
+   "line": "def _get_wikipedia_link(self, language: str = 'en') -> tuple[str, str] | None:",
+   "part": "A"
+  },
+  {
+   "line": "def _get_statement_values(self, property_id: str) -> list[str]:",
+   "part": "B"
+  },
+  {
+   "line": "$ social_profiles = wikidata.get_external_profiles(i18n.get_locale())",
+   "part": "C"
+  }
+ ],
+ "hidden_tests": [
+  "assert entity._get_wikipedia_link('es') == (",
+  "assert entity._get_wikipedia_link('en') == (",
+  "assert entity._get_wikipedia_link('fr') == (",
+  "assert entity_no_links._get_wikipedia_link() is None",
+  "assert entity_no_english._get_wikipedia_link('es') == (",
+  "assert entity_no_english._get_wikipedia_link('en') is None",
+  "assert entity._get_statement_values('P2038') == ['Chris-Wiggins']",
+  "assert entity._get_statement_values('P2038') == ['Value1', 'Value2', 'Value3']",
+  "assert entity._get_statement_values('P9999') == []",
+  "assert entity._get_statement_values('P2038') == ['Valid']"
+ ],
+ "generic": []
+}

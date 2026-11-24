@@ -1,0 +1,561 @@
+{
+ "issue": "vuls-1832",
+ "base_commit": "78b52d6a7f480bd610b692de9bf0c86f57332f23",
+ "min_chars": 20,
+ "fix": [
+  {
+   "line": "### Scan for any vulnerabilities in Linux/FreeBSD/Windows/macOS",
+   "part": "A"
+  },
+  {
+   "line": "[Supports major Linux/FreeBSD/Windows/macOS](https://vuls.io/docs/en/supported-os.html)",
+   "part": "A"
+  },
+  {
+   "line": "case constant.MacOSX, constant.MacOSXServer:",
+   "part": "A"
+  },
+  {
+   "line": "\"10.0\":  {Ended: true},",
+   "part": "A"
+  },
+  {
+   "line": "\"10.1\":  {Ended: true},",
+   "part": "A"
+  },
+  {
+   "line": "\"10.2\":  {Ended: true},",
+   "part": "A"
+  },
+  {
+   "line": "\"10.3\":  {Ended: true},",
+   "part": "A"
+  },
+  {
+   "line": "\"10.4\":  {Ended: true},",
+   "part": "A"
+  },
+  {
+   "line": "\"10.5\":  {Ended: true},",
+   "part": "A"
+  },
+  {
+   "line": "\"10.6\":  {Ended: true},",
+   "part": "A"
+  },
+  {
+   "line": "\"10.7\":  {Ended: true},",
+   "part": "A"
+  },
+  {
+   "line": "\"10.8\":  {Ended: true},",
+   "part": "A"
+  },
+  {
+   "line": "\"10.9\":  {Ended: true},",
+   "part": "A"
+  },
+  {
+   "line": "\"10.11\": {Ended: true},",
+   "part": "A"
+  },
+  {
+   "line": "\"10.12\": {Ended: true},",
+   "part": "A"
+  },
+  {
+   "line": "\"10.13\": {Ended: true},",
+   "part": "A"
+  },
+  {
+   "line": "\"10.14\": {Ended: true},",
+   "part": "A"
+  },
+  {
+   "line": "\"10.15\": {Ended: true},",
+   "part": "A"
+  },
+  {
+   "line": "case constant.MacOS, constant.MacOSServer:",
+   "part": "A"
+  },
+  {
+   "line": "MacOSXServer = \"macos_x_server\"",
+   "part": "A"
+  },
+  {
+   "line": "MacOSServer = \"macos_server\"",
+   "part": "A"
+  },
+  {
+   "line": "if slices.Contains([]string{constant.MacOSX, constant.MacOSXServer, constant.MacOS, constant.MacOSServer}, r.Family) {",
+   "part": "A"
+  },
+  {
+   "line": "case constant.MacOSX:",
+   "part": "A"
+  },
+  {
+   "line": "targets = append(targets, \"mac_os_x\")",
+   "part": "A"
+  },
+  {
+   "line": "case constant.MacOSXServer:",
+   "part": "A"
+  },
+  {
+   "line": "targets = append(targets, \"mac_os_x_server\")",
+   "part": "A"
+  },
+  {
+   "line": "targets = append(targets, \"macos\", \"mac_os\")",
+   "part": "A"
+  },
+  {
+   "line": "case constant.MacOSServer:",
+   "part": "A"
+  },
+  {
+   "line": "targets = append(targets, \"macos_server\", \"mac_os_server\")",
+   "part": "A"
+  },
+  {
+   "line": "CpeURI: fmt.Sprintf(\"cpe:/o:apple:%s:%s\", t, r.Release),",
+   "part": "A"
+  },
+  {
+   "line": "case \"com.apple.Safari\":",
+   "part": "A"
+  },
+  {
+   "line": "CpeURI: fmt.Sprintf(\"cpe:/a:apple:safari:%s::~~~%s~~\", p.Version, t),",
+   "part": "A"
+  },
+  {
+   "line": "case \"com.apple.Music\":",
+   "part": "A"
+  },
+  {
+   "line": "CpeURI: fmt.Sprintf(\"cpe:/a:apple:music:%s::~~~%s~~\", p.Version, t),",
+   "part": "A"
+  },
+  {
+   "line": "CpeURI: fmt.Sprintf(\"cpe:/a:apple:apple_music:%s::~~~%s~~\", p.Version, t),",
+   "part": "A"
+  },
+  {
+   "line": "case \"com.apple.mail\":",
+   "part": "A"
+  },
+  {
+   "line": "CpeURI: fmt.Sprintf(\"cpe:/a:apple:mail:%s::~~~%s~~\", p.Version, t),",
+   "part": "A"
+  },
+  {
+   "line": "case \"com.apple.Terminal\":",
+   "part": "A"
+  },
+  {
+   "line": "CpeURI: fmt.Sprintf(\"cpe:/a:apple:terminal:%s::~~~%s~~\", p.Version, t),",
+   "part": "A"
+  },
+  {
+   "line": "case \"com.apple.shortcuts\":",
+   "part": "A"
+  },
+  {
+   "line": "CpeURI: fmt.Sprintf(\"cpe:/a:apple:shortcuts:%s::~~~%s~~\", p.Version, t),",
+   "part": "A"
+  },
+  {
+   "line": "case \"com.apple.iCal\":",
+   "part": "A"
+  },
+  {
+   "line": "CpeURI: fmt.Sprintf(\"cpe:/a:apple:ical:%s::~~~%s~~\", p.Version, t),",
+   "part": "A"
+  },
+  {
+   "line": "case \"com.apple.iWork.Keynote\":",
+   "part": "A"
+  },
+  {
+   "line": "CpeURI: fmt.Sprintf(\"cpe:/a:apple:keynote:%s::~~~%s~~\", p.Version, t),",
+   "part": "A"
+  },
+  {
+   "line": "case \"com.apple.iWork.Numbers\":",
+   "part": "A"
+  },
+  {
+   "line": "CpeURI: fmt.Sprintf(\"cpe:/a:apple:numbers:%s::~~~%s~~\", p.Version, t),",
+   "part": "A"
+  },
+  {
+   "line": "case \"com.apple.iWork.Pages\":",
+   "part": "A"
+  },
+  {
+   "line": "CpeURI: fmt.Sprintf(\"cpe:/a:apple:pages:%s::~~~%s~~\", p.Version, t),",
+   "part": "A"
+  },
+  {
+   "line": "case \"com.apple.dt.Xcode\":",
+   "part": "A"
+  },
+  {
+   "line": "CpeURI: fmt.Sprintf(\"cpe:/a:apple:xcode:%s::~~~%s~~\", p.Version, t),",
+   "part": "A"
+  },
+  {
+   "line": "case constant.FreeBSD, constant.MacOSX, constant.MacOSXServer, constant.MacOS, constant.MacOSServer, constant.ServerTypePseudo:",
+   "part": "A"
+  },
+  {
+   "line": "case constant.Windows, constant.MacOSX, constant.MacOSXServer, constant.MacOS, constant.MacOSServer, constant.FreeBSD, constant.ServerTypePseudo:",
+   "part": "A"
+  },
+  {
+   "line": "// parseIfconfig parses the results of ifconfig command",
+   "part": "C"
+  },
+  {
+   "line": "func newMacOS(c config.ServerInfo) *macos {",
+   "part": "B"
+  },
+  {
+   "line": "func detectMacOS(c config.ServerInfo) (bool, osTypeInterface) {",
+   "part": "B"
+  },
+  {
+   "line": "if r := exec(c, \"sw_vers\", noSudo); r.isSuccess() {",
+   "part": "B"
+  },
+  {
+   "line": "family, version, err := parseSWVers(r.Stdout)",
+   "part": "B"
+  },
+  {
+   "line": "m.setErrs([]error{xerrors.Errorf(\"Failed to parse sw_vers. err: %w\", err)})",
+   "part": "B"
+  },
+  {
+   "line": "m.setDistro(family, version)",
+   "part": "B"
+  },
+  {
+   "line": "func parseSWVers(stdout string) (string, string, error) {",
+   "part": "B"
+  },
+  {
+   "line": "case strings.HasPrefix(t, \"ProductName:\"):",
+   "part": "B"
+  },
+  {
+   "line": "name = strings.TrimSpace(strings.TrimPrefix(t, \"ProductName:\"))",
+   "part": "B"
+  },
+  {
+   "line": "case strings.HasPrefix(t, \"ProductVersion:\"):",
+   "part": "B"
+  },
+  {
+   "line": "version = strings.TrimSpace(strings.TrimPrefix(t, \"ProductVersion:\"))",
+   "part": "B"
+  },
+  {
+   "line": "return \"\", \"\", xerrors.Errorf(\"Failed to scan by the scanner. err: %w\", err)",
+   "part": "B"
+  },
+  {
+   "line": "family = constant.MacOSX",
+   "part": "B"
+  },
+  {
+   "line": "family = constant.MacOSXServer",
+   "part": "B"
+  },
+  {
+   "line": "family = constant.MacOS",
+   "part": "B"
+  },
+  {
+   "line": "family = constant.MacOSServer",
+   "part": "B"
+  },
+  {
+   "line": "return \"\", \"\", xerrors.Errorf(\"Failed to detect MacOS Family. err: \\\"%s\\\" is unexpected product name\", name)",
+   "part": "B"
+  },
+  {
+   "line": "return \"\", \"\", xerrors.New(\"Failed to get ProductVersion string. err: ProductVersion is empty\")",
+   "part": "B"
+  },
+  {
+   "line": "return family, version, nil",
+   "part": "B"
+  },
+  {
+   "line": "func (o *macos) checkScanMode() error {",
+   "part": "B"
+  },
+  {
+   "line": "func (o *macos) checkIfSudoNoPasswd() error {",
+   "part": "B"
+  },
+  {
+   "line": "func (o *macos) checkDeps() error {",
+   "part": "B"
+  },
+  {
+   "line": "func (o *macos) preCure() error {",
+   "part": "B"
+  },
+  {
+   "line": "func (o *macos) detectIPAddr() (err error) {",
+   "part": "C"
+  },
+  {
+   "line": "return xerrors.Errorf(\"Failed to parse Ifconfig. err: %w\", err)",
+   "part": "C"
+  },
+  {
+   "line": "func (o *macos) postScan() error {",
+   "part": "B"
+  },
+  {
+   "line": "func (o *macos) scanPackages() error {",
+   "part": "B"
+  },
+  {
+   "line": "return xerrors.Errorf(\"Failed to scan installed packages. err: %w\", err)",
+   "part": "B"
+  },
+  {
+   "line": "func (o *macos) scanInstalledPackages() (models.Packages, error) {",
+   "part": "C"
+  },
+  {
+   "line": "r := o.exec(\"find -L /Applications /System/Applications -type f -path \\\"*.app/Contents/Info.plist\\\" -not -path \\\"*.app/**/*.app/*\\\"\", noSudo)",
+   "part": "C"
+  },
+  {
+   "line": "return nil, xerrors.Errorf(\"Failed to exec: %v\", r)",
+   "part": "C"
+  },
+  {
+   "line": "var name, ver, id string",
+   "part": "C"
+  },
+  {
+   "line": "if r := o.exec(fmt.Sprintf(\"plutil -extract \\\"CFBundleDisplayName\\\" raw \\\"%s\\\" -o -\", t), noSudo); r.isSuccess() {",
+   "part": "C"
+  },
+  {
+   "line": "name = strings.TrimSpace(r.Stdout)",
+   "part": "C"
+  },
+  {
+   "line": "if r := o.exec(fmt.Sprintf(\"plutil -extract \\\"CFBundleName\\\" raw \\\"%s\\\" -o -\", t), noSudo); r.isSuccess() {",
+   "part": "C"
+  },
+  {
+   "line": "name = filepath.Base(strings.TrimSuffix(t, \".app/Contents/Info.plist\"))",
+   "part": "C"
+  },
+  {
+   "line": "if r := o.exec(fmt.Sprintf(\"plutil -extract \\\"CFBundleShortVersionString\\\" raw \\\"%s\\\" -o -\", t), noSudo); r.isSuccess() {",
+   "part": "C"
+  },
+  {
+   "line": "ver = strings.TrimSpace(r.Stdout)",
+   "part": "C"
+  },
+  {
+   "line": "if r := o.exec(fmt.Sprintf(\"plutil -extract \\\"CFBundleIdentifier\\\" raw \\\"%s\\\" -o -\", t), noSudo); r.isSuccess() {",
+   "part": "C"
+  },
+  {
+   "line": "id = strings.TrimSpace(r.Stdout)",
+   "part": "C"
+  },
+  {
+   "line": "return nil, xerrors.Errorf(\"Failed to scan by the scanner. err: %w\", err)",
+   "part": "C"
+  },
+  {
+   "line": "func (o *macos) parseInstalledPackages(stdout string) (models.Packages, models.SrcPackages, error) {",
+   "part": "C"
+  },
+  {
+   "line": "var file, name, ver, id string",
+   "part": "C"
+  },
+  {
+   "line": "name = filepath.Base(strings.TrimSuffix(file, \".app/Contents/Info.plist\"))",
+   "part": "C"
+  },
+  {
+   "line": "pkgs[name] = models.Package{",
+   "part": "C"
+  },
+  {
+   "line": "file, name, ver, id = \"\", \"\", \"\", \"\"",
+   "part": "C"
+  },
+  {
+   "line": "return nil, nil, xerrors.Errorf(\"unexpected installed packages line. expected: \\\"<TAG>: <VALUE>\\\", actual: \\\"%s\\\"\", t)",
+   "part": "C"
+  },
+  {
+   "line": "file = strings.TrimSpace(rhs)",
+   "part": "C"
+  },
+  {
+   "line": "case \"CFBundleDisplayName\":",
+   "part": "C"
+  },
+  {
+   "line": "if !strings.Contains(rhs, \"error: No value at that key path or invalid key path: CFBundleDisplayName\") {",
+   "part": "C"
+  },
+  {
+   "line": "if !strings.Contains(rhs, \"error: No value at that key path or invalid key path: CFBundleName\") {",
+   "part": "C"
+  },
+  {
+   "line": "case \"CFBundleShortVersionString\":",
+   "part": "C"
+  },
+  {
+   "line": "if !strings.Contains(rhs, \"error: No value at that key path or invalid key path: CFBundleShortVersionString\") {",
+   "part": "C"
+  },
+  {
+   "line": "ver = strings.TrimSpace(rhs)",
+   "part": "C"
+  },
+  {
+   "line": "case \"CFBundleIdentifier\":",
+   "part": "C"
+  },
+  {
+   "line": "if !strings.Contains(rhs, \"error: No value at that key path or invalid key path: CFBundleIdentifier\") {",
+   "part": "C"
+  },
+  {
+   "line": "id = strings.TrimSpace(rhs)",
+   "part": "C"
+  },
+  {
+   "line": "return nil, nil, xerrors.Errorf(\"unexpected installed packages line tag. expected: [\\\"Info.plist\\\", \\\"CFBundleDisplayName\\\", \\\"CFBundleName\\\", \\\"CFBundleShortVersionString\\\", \\\"CFBundleIdentifier\\\"], actual: \\\"%s\\\"\", lhs)",
+   "part": "C"
+  },
+  {
+   "line": "return nil, nil, xerrors.Errorf(\"Failed to scan by the scanner. err: %w\", err)",
+   "part": "C"
+  },
+  {
+   "line": "osType = &windows{base: base}",
+   "part": "C"
+  },
+  {
+   "line": "case constant.MacOSX, constant.MacOSXServer, constant.MacOS, constant.MacOSServer:",
+   "part": "C"
+  },
+  {
+   "line": "osType = &macos{base: base}",
+   "part": "C"
+  },
+  {
+   "line": "if itsMe, osType := detectMacOS(c); itsMe {",
+   "part": "B"
+  },
+  {
+   "line": "logging.Log.Debugf(\"MacOS. Host: %s:%s\", c.Host, c.Port)",
+   "part": "B"
+  }
+ ],
+ "hidden_tests": [
+  "name:     \"Mac OS X 10.15 EOL\",",
+  "fields:   fields{family: MacOSX, release: \"10.15.7\"},",
+  "now:      time.Date(2023, 7, 25, 23, 59, 59, 0, time.UTC),",
+  "name:     \"macOS 13.4.1 supported\",",
+  "fields:   fields{family: MacOS, release: \"13.4.1\"},",
+  "func Test_parseSWVers(t *testing.T) {",
+  "stdout: `ProductName:\t\tMac OS X",
+  "BuildVersion:\t\t7A100`,",
+  "pname:    constant.MacOSX,",
+  "name: \"Mac OS X Server\",",
+  "stdout: `ProductName:\t\tMac OS X Server",
+  "ProductVersion:\t\t10.6.8",
+  "BuildVersion:\t\t10K549`,",
+  "pname:    constant.MacOSXServer,",
+  "stdout: `ProductName:\t\tmacOS",
+  "ProductVersion:\t\t13.4.1",
+  "BuildVersion:\t\t22F82`,",
+  "pname:    constant.MacOS,",
+  "stdout: `ProductName:\t\tmacOS Server",
+  "pname:    constant.MacOSServer,",
+  "name: \"ProductName error\",",
+  "stdout: `ProductName:\t\tMacOS",
+  "name: \"ProductVersion error\",",
+  "pname, pversion, err := parseSWVers(tt.stdout)",
+  "t.Errorf(\"parseSWVers() error = %v, wantErr %v\", err, tt.wantErr)",
+  "if pname != tt.pname || pversion != tt.pversion {",
+  "t.Errorf(\"parseSWVers() pname: got = %s, want %s, pversion: got = %s, want %s\", pname, tt.pname, pversion, tt.pversion)",
+  "func Test_macos_parseInstalledPackages(t *testing.T) {",
+  "stdout: `Info.plist: /Applications/Visual Studio Code.app/Contents/Info.plist",
+  "CFBundleDisplayName: Code",
+  "CFBundleShortVersionString: 1.80.1",
+  "CFBundleIdentifier: com.microsoft.VSCode",
+  "Info.plist: /Applications/Safari.app/Contents/Info.plist",
+  "CFBundleDisplayName: Safari",
+  "CFBundleShortVersionString: 16.5.1",
+  "CFBundleIdentifier: com.apple.Safari",
+  "Info.plist: /Applications/Firefox.app/Contents/Info.plist",
+  "CFBundleDisplayName: /Applications/Firefox.app/Contents/Info.plist: Could not extract value, error: No value at that key path or invalid key path: CFBundleDisplayName",
+  "CFBundleName: Firefox",
+  "CFBundleShortVersionString: 115.0.2",
+  "CFBundleIdentifier: org.mozilla.firefox",
+  "Info.plist: /System/Applications/Maps.app/Contents/Info.plist",
+  "CFBundleDisplayName: Maps",
+  "CFBundleName: /System/Applications/Maps.app/Contents/Info.plist: Could not extract value, error: No value at that key path or invalid key path: CFBundleName",
+  "CFBundleShortVersionString: 3.0",
+  "CFBundleIdentifier: com.apple.Maps",
+  "Info.plist: /System/Applications/Contacts.app/Contents/Info.plist",
+  "CFBundleDisplayName: Contacts",
+  "CFBundleName: Contacts",
+  "CFBundleShortVersionString: /System/Applications/Contacts.app/Contents/Info.plist: Could not extract value, error: No value at that key path or invalid key path: CFBundleShortVersionString",
+  "CFBundleIdentifier: com.apple.AddressBook",
+  "Info.plist: /System/Applications/Sample.app/Contents/Info.plist",
+  "CFBundleDisplayName: /Applications/Sample.app/Contents/Info.plist: Could not extract value, error: No value at that key path or invalid key path: CFBundleDisplayName",
+  "CFBundleName: /Applications/Sample.app/Contents/Info.plist: Could not extract value, error: No value at that key path or invalid key path: CFBundleName",
+  "CFBundleShortVersionString: /Applications/Sample.app/Contents/Info.plist: Could not extract value, error: No value at that key path or invalid key path: CFBundleShortVersionString",
+  "CFBundleIdentifier: /Applications/Sample.app/Contents/Info.plist: Could not extract value, error: No value at that key path or invalid key path: CFBundleIdentifier\t`,",
+  "Repository: \"com.microsoft.VSCode\",",
+  "Repository: \"com.apple.Safari\",",
+  "Repository: \"org.mozilla.firefox\",",
+  "Repository: \"com.apple.Maps\",",
+  "Repository: \"com.apple.AddressBook\",",
+  "got, _, err := o.parseInstalledPackages(tt.stdout)",
+  "t.Errorf(\"macos.parseInstalledPackages() error = %v, wantErr %v\", err, tt.wantErr)",
+  "t.Errorf(\"macos.parseInstalledPackages() got = %v, want %v\", got, tt.want)"
+ ],
+ "generic": [
+  {
+   "line": "for _, t := range targets {",
+   "found_in": [
+    "/go/pkg/mod/golang.org/x/sys@v0.12.0/unix/linux/mkall.go"
+   ]
+  },
+  {
+   "line": "if err := scanner.Err(); err != nil {",
+   "found_in": [
+    "/usr/local/go/src/bufio/example_test.go",
+    "/usr/local/go/src/bufio/example_test.go",
+    "/usr/local/go/src/bufio/example_test.go"
+   ]
+  }
+ ]
+}

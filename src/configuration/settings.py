@@ -24,7 +24,6 @@ RUNS = ROOT / "runs" / STUDY
 LOGS = ROOT / "logs" / STUDY
 BUILD = ROOT / "build"
 CHEATBENCH = ROOT / "submodules" / "cheatbench"
-LUCY = ROOT / "submodules" / "lucy"
 PROMPTS = HERE / "prompts.yaml"
 INSTRUCTION_LEVELS = HERE / "instruction_levels.yaml"
 MODELS = HERE.parent / "models" / "model_registry.yaml"
@@ -49,8 +48,10 @@ ROUND_TIME_S = 600
 # Episode failure labels that mean the run is incomplete: a harness crash or a provider error.
 INCOMPLETE_FAILURES = ("harness", "connection_closed")
 
-# The submodule commits this code was written against. Task construction refuses any other head.
-EXPECTED_SUBMODULE_HEADS = {"cheatbench": "4d1a825", "orbit": "28dc629", "lucy": "449fbf0"}
+# The submodule commits this code was written against. Task construction refuses any other head. Lucy's repository is
+# not among them since 2026-11-23: the SWE task reads its own copy of her split (src/domains/swe/harness/), and only
+# the paper's figure scripts read her results, so a run needs no checkout of it.
+EXPECTED_SUBMODULE_HEADS = {"cheatbench": "4d1a825", "orbit": "28dc629"}
 
 
 @functools.cache
