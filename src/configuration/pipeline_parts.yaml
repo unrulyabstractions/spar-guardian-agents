@@ -96,8 +96,8 @@ parts:
       src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*,
       src/domains/swe/swe_exploits.py, src/domains/*/revealed/**/*]
     pins: []
-    version: 4
-    fingerprint: sha256:9e0913f7a8054bb1023c64bd560cb15cafdd84c0ccd6368588bb0711c72d4d02
+    version: 5
+    fingerprint: sha256:fbce17972ce0ad1b7deaac6bc05949391c14137c59cb23bde9e093864b97dc8d
     log:
       1: '2026-11-22 first version: the code record''s agent and team rows (code_ladder.signal_rows) of
         b7b1bed, and run.json''s signals block (re-locked 2026-11-22: the stored layout: the same bytes,
@@ -188,6 +188,8 @@ parts:
         byte-equal: runs/ and logs/ of ian_influencers_0 cloned to a scratch folder and processed with
         --force signals, cheating, collusion and topology by this code: 2045 files, byte-equal by size
         and sha256 but the 64 analysis/versions.json and 64 processed/versions.json)'
+      5: '2026-11-23 SWE files route: a git read of a team ref holding a verbatim copy of a revealed file
+        is aimed, so its part counts as seen'
   topology:
     file: processed/facts/topology.json
     make: src.measures.topology_fact:topology_part
@@ -228,8 +230,8 @@ parts:
       src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*, src/domains/swe/swe_exploits.py,
       src/domains/*/revealed/**/*]
     pins: []
-    version: 5
-    fingerprint: sha256:11abcefd7e55b9a68a1b8aa828a672fdfa503cac5f595594264f85763f73e1cf
+    version: 6
+    fingerprint: sha256:09426bc2a85a71f73aafacddc7156ad238b61511977ada4127793763b422f391
     log:
       1: '2026-11-22 first version: the Cheating ladder with CheatBench''s labels beside its clauses,
         as the viewer keeps it, of b7b1bed (re-locked 2026-11-22: the stored layout: the same bytes, read
@@ -320,6 +322,8 @@ parts:
         byte-equal: runs/ and logs/ of ian_influencers_0 cloned to a scratch folder and processed with
         --force signals, cheating, collusion and topology by this code: 2045 files, byte-equal by size
         and sha256 but the 64 analysis/versions.json and 64 processed/versions.json)'
+      6: '2026-11-23 SWE files route: a revealed part copied into the repository counts as built though
+        the copy is later removed; a teammate''s revealed copy on the team remote is seen'
   coordination:
     file: analysis/labels/coordination.json
     make: src.measures.coordination:coordination_part
@@ -348,8 +352,8 @@ parts:
       src/ui/transcript_levels.py, src/ui/viewer_parts.py, src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py,
       src/domains/*/*_settings.py, src/domains/*/second/**/*, src/domains/swe/swe_exploits.py, src/domains/*/revealed/**/*]
     pins: []
-    version: 4
-    fingerprint: sha256:9ab8830ea04eba93a8278d89f600fa744048fe68daf59e7c2b331d3a57a267d7
+    version: 5
+    fingerprint: sha256:d520a3beee10583470899c23a32466e832b8158079f375b793df3559af588f99
     log:
       1: '2026-11-22 first version: the Collusion ladder as the viewer keeps it, of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -439,6 +443,7 @@ parts:
         cloned to a scratch folder and processed with --force signals, cheating, collusion and topology
         by this code: 2045 files, byte-equal by size and sha256 but the 64 analysis/versions.json and
         64 processed/versions.json)'
+      5: 2026-11-23 pairs carry the Cheating rungs that the SWE files-route fixes raise
   judged:
     file: analysis/labels/judged.json
     make: src.ui.viewer_parts:judged_part
@@ -469,7 +474,7 @@ parts:
       src/domains/swe/swe_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 1
-    fingerprint: sha256:0847beb455ce5de70299f9af33f480368300ebe7748b92b897421ec86645eec3
+    fingerprint: sha256:048b37b6f97076d6a9a1d5f3d0914a1cb4ba0361a679fb66c0ad13217fdbcf0d
     log:
       1: '2026-11-23 first version: what each disregulator did with its role (carried_out, filtered, refused,
         dropped, unknown), with mode, disclosed and the evidence, by code from the board, the code record''s
@@ -513,7 +518,9 @@ parts:
         the readers of the story texts take the team flag; every system prompt and first message renders
         byte-equal: runs/ and logs/ of ian_influencers_0 cloned to a scratch folder and processed with
         --force signals, cheating, collusion and topology by this code: 2045 files, byte-equal by size
-        and sha256 but the 64 analysis/versions.json and 64 processed/versions.json)'
+        and sha256 but the 64 analysis/versions.json and 64 processed/versions.json) (re-locked 2026-11-23:
+        its code moved with the scan''s attach hook; no stored byte of ian_influencers_0 or ian_env_prototyping_0
+        changes)'
   row:
     file: analysis/row.json
     make: src.ui.viewer_parts:row_part

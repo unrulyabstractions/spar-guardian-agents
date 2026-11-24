@@ -215,6 +215,10 @@ class Domain:
     def setup(self, run: dict) -> None:
         """Read what the rules need from run.json."""
 
+    def attach(self, run_dir: Path) -> None:
+        """Read the run's folder before the transcript scan, for a rule of the scan that reads the run's stored
+        files. Nothing by default."""
+
     def row_key(self, run: dict) -> str:
         """What the fingerprints depend on, for the cache."""
         return run.get("task") or ""

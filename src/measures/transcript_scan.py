@@ -159,7 +159,8 @@ def logged_scan(transcript: dict, domain: Domain, agent: str, log: dict | None, 
 
 def scanned_rows(run: RunDir, domain: Domain, log: dict | None) -> tuple[list[dict], dict[str, int]]:
     """Each agent with a transcript up to its rung, from its scan under `log`, its disk and its task text, and the
-    number of each episode's tool calls."""
+    number of each episode's tool calls. The domain reads the run's folder first (Domain.attach)."""
+    domain.attach(run.path)
     rows, calls, prompts = [], {}, {}
     seeded = tuple(seed_texts(run.run_json.get("seed")))
     for ep in run.episodes():
