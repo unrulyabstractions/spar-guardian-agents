@@ -12,7 +12,7 @@ import yaml
 from src.measures import pipeline_parts as pp
 from src.measures import stored_json
 from src.measures import stored_versions as sv
-from src.measures.run_directory import FILES, RunDir
+from src.measures.run_directory import RunDir
 from tests.support.run_files import write_text
 
 MAKE = "src.measures.pipeline_parts:order"
@@ -43,11 +43,11 @@ def setup(tmp_path: Path):
     (run / "processed/trajectories" / "e1").mkdir(parents=True)
     write_text(run / "processed/run.json", json.dumps({"run_id": "a1"}))
     (run / "processed/trajectories" / "e1" / "transcript.json").write_text("{}")
-    return registry, RunDir(run), tmp_path / "backups"
+    return registry, RunDir(run)
 
 
 def test_a_stamp_hashes_a_recorded_part_into_its_layers_ledger(setup):
-    registry, run, _ = setup
+    registry, run = setup
     entry = sv.stamp(run, "export", registry=registry, version=0, made="migration")
     assert set(entry["files"]) == {"processed/run.json", "processed/trajectories/e1/transcript.json"}
     assert entry["version"] == 0 and entry["made"] == "migration" and entry["inputs"] == {}
@@ -56,48 +56,45 @@ def test_a_stamp_hashes_a_recorded_part_into_its_layers_ledger(setup):
 
 
 def test_behind_names_each_part_and_why(setup):
-    registry, run, backups = setup
+    registry, run = setup
     sv.stamp(run, "export", registry=registry)
     assert sv.behind(run, registry) == {"topology": "not processed", "label": "not processed"}
-    assert sv.write_output(run, "topology", {"edges": [["a", "b"]]}, registry=registry, backups=backups) == "redone"
-    assert sv.write_output(run, "label", {"cheated": True}, registry=registry, backups=backups) == "redone"
+    assert sv.write_output(run, "topology", {"edges": [["a", "b"]]}, registry=registry) == "redone"
+    assert sv.write_output(run, "label", {"cheated": True}, registry=registry) == "redone"
     assert sv.behind(run, registry) == {}
     assert run.output("topology", registry).read_bytes() == stored_json.dumps({"edges": [["a", "b"]]})
 
 
 def test_a_label_change_leaves_the_facts_alone(setup):
     """Changing a label redoes that label only: topology, a fact, stays current and keeps its bytes."""
-    registry, run, backups = setup
+    registry, run = setup
     sv.stamp(run, "export", registry=registry)
-    sv.write_output(run, "topology", {"edges": []}, registry=registry, backups=backups)
-    sv.write_output(run, "label", {"cheated": False}, registry=registry, backups=backups)
+    sv.write_output(run, "topology", {"edges": []}, registry=registry)
+    sv.write_output(run, "label", {"cheated": False}, registry=registry)
     facts_ledger = run.versions()["processed"].read_bytes()
     (Path(registry.root) / "code" / "label.py").write_text("label = 2\n")
     pp.bump(registry, "label", "a new rule")
     assert sv.behind(run, registry) == {"label": "v1 → v2"}
-    assert sv.write_output(run, "label", {"cheated": True}, registry=registry, backups=backups) == "redone"
+    assert sv.write_output(run, "label", {"cheated": True}, registry=registry) == "redone"
     assert sv.behind(run, registry) == {}
     assert run.versions()["processed"].read_bytes() == facts_ledger
     assert sv.part_versions(run, registry)["label"] == {"stored": 2, "current": 2}
 
 
-def test_equal_bytes_restamp_and_a_new_value_backs_up_the_old(setup):
-    registry, run, backups = setup
+def test_equal_bytes_restamp_and_a_new_value_replaces_the_old(setup):
+    registry, run = setup
     sv.stamp(run, "export", registry=registry)
-    sv.write_output(run, "topology", {"edges": []}, registry=registry, backups=backups)
-    assert sv.write_output(run, "topology", {"edges": []}, registry=registry, backups=backups) == "restamped"
-    assert not backups.exists()
-    assert sv.write_output(run, "topology", {"edges": [["a", "b"]]}, registry=registry, backups=backups,
-                           backup_stamp="s1") == "redone"
-    kept = list((backups / "s1").rglob(Path(FILES["topology.json"]).name))
-    assert len(kept) == 1 and kept[0].read_bytes() == stored_json.dumps({"edges": []})
+    sv.write_output(run, "topology", {"edges": []}, registry=registry)
+    assert sv.write_output(run, "topology", {"edges": []}, registry=registry) == "restamped"
+    assert sv.write_output(run, "topology", {"edges": [["a", "b"]]}, registry=registry) == "redone"
+    assert run.output("topology", registry).read_bytes() == stored_json.dumps({"edges": [["a", "b"]]})
 
 
 def test_an_input_that_moved_puts_its_readers_behind(setup):
-    registry, run, backups = setup
+    registry, run = setup
     sv.stamp(run, "export", registry=registry)
-    sv.write_output(run, "topology", {"edges": []}, registry=registry, backups=backups)
-    sv.write_output(run, "label", {"cheated": False}, registry=registry, backups=backups)
+    sv.write_output(run, "topology", {"edges": []}, registry=registry)
+    sv.write_output(run, "label", {"cheated": False}, registry=registry)
     (run.path / "processed/trajectories" / "e1" / "transcript.json").write_text('{"moved": 1}')
     assert sv.behind(run, registry) == {}
     assert sv.behind(run, registry, deep=True) == {"topology": "export changed", "label": "topology behind"}
@@ -106,7 +103,7 @@ def test_an_input_that_moved_puts_its_readers_behind(setup):
 
 
 def test_a_judge_entry_keeps_its_verdict_files(setup):
-    registry, run, backups = setup
+    registry, run = setup
     sv.stamp(run, "export", registry=registry)
     (run.path / "analysis/judges").mkdir(parents=True)
     (run.path / "analysis/judges" / "labels.luna.jsonl").write_text(json.dumps({"judge": "luna",
@@ -114,8 +111,8 @@ def test_a_judge_entry_keeps_its_verdict_files(setup):
     entry = sv.stamp(run, "judge_scores", registry=registry)
     assert entry["verdicts"]["analysis/judges/labels.luna.jsonl"]["judge"] == ["luna"]
     assert sv.ledger(run, "analysis")["judge_scores"] == entry
-    sv.write_output(run, "topology", {"edges": []}, registry=registry, backups=backups)
-    sv.write_output(run, "label", {"cheated": False}, registry=registry, backups=backups)
+    sv.write_output(run, "topology", {"edges": []}, registry=registry)
+    sv.write_output(run, "label", {"cheated": False}, registry=registry)
     (run.path / "analysis/judges" / "labels.luna.jsonl").write_text(json.dumps({"judge": "luna",
                                                                                 "prompt_sha256": "p2"}) + "\n")
     sv.stamp(run, "judge_scores", registry=registry)

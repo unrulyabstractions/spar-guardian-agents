@@ -2,7 +2,7 @@
 entry per part, and the one writer of a part's stored file.
 
     stamp(run, "export", made="migration 2026-11-23")   # hash the export's files into its entry
-    write_output(run, "topology", value)                # "redone" or "restamped", the old file backed up first
+    write_output(run, "topology", value)                # "redone" or "restamped"
     behind(run)                                         # {part: why}: versions and recorded inputs, for the viewer
     behind(run, deep=True)                              # and every stored file rehashed, for the process command
     part_versions(run)                                  # {part: {"stored": 1, "current": 2}}, for the version chips
@@ -40,8 +40,6 @@ from src.measures.run_directory import RunDir
 
 JUDGES = "analysis/judges/"
 """The folder of the judges' verdict files: a part stored there keeps "verdicts" in its entry."""
-BACKUPS = settings.ROOT / ".backups" / "pipeline"
-"""Where write_output keeps a file it replaces: <stamp>/<the file's path from the repository's root>."""
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -175,29 +173,17 @@ def stamp(run: RunDir, part: str, *, registry: pipeline_parts.Registry | None = 
     return record
 
 
-def backup(path: Path, stamp_time: str, backups: Path = BACKUPS) -> Path:
-    """Copy a file about to be replaced to <backups>/<stamp>/<its path from the repository's root> (its absolute path
-    for a file outside the checkout)."""
-    path = Path(path).resolve()
-    rel = path.relative_to(settings.ROOT) if path.is_relative_to(settings.ROOT) else path.relative_to(path.anchor)
-    target = Path(backups) / stamp_time / rel
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(path.read_bytes())
-    return target
-
-
 def write_output(run: RunDir, part: str, value, *, registry: pipeline_parts.Registry | None = None,
-                 backup_stamp: str | None = None, backups: Path = BACKUPS, made: str | None = None) -> str:
+                 made: str | None = None) -> str:
     """Store a computed part's value (stored_json.encode) and stamp it. Equal bytes rewrite only the entry:
-    "restamped". Otherwise the old file goes to the backups, the new one replaces it and the entry follows: "redone"."""
+    "restamped". Otherwise the new file replaces the old one, nothing is copied anywhere, and the entry follows:
+    "redone"."""
     registry = _registry(registry)
     target = run.output(part, registry)
     data = stored_json.encode(target.name, value)
     if target.is_file() and target.read_bytes() == data:
         stamp(run, part, registry=registry, made=made)
         return "restamped"
-    if target.is_file():
-        backup(target, backup_stamp or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"), backups)
     write_atomic(target, data)
     stamp(run, part, registry=registry, made=made)
     return "redone"
