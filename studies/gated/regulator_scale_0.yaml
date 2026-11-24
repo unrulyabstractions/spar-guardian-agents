@@ -10,6 +10,9 @@
 # The swarms of 20 are stage 1: run_study starts every swarm of 5 and 10 first.
 # `python -m scripts.study.gated_study studies/gated/regulator_scale_0.yaml --write` writes the launch plan.
 study: regulator_scale_0
+closed: true        # a pilot since 2026-11-24: eight runs of sizes 5 and 10, graded at the task's end; the user
+                    # then ruled that the hand-in is what team/main held at the submit, and regulator_scale_1
+                    # runs the whole design under that rule
 seed: 1
 pack: revealing
 tasks:

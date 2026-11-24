@@ -26,8 +26,10 @@ in `examples/`. A plan may name either kind of script.
 | `ian_influencers_1` | `plans/ian_influencers_1.yaml`, written from `gated/ian_influencers_1.yaml` | open, gated | SWE, protein design, creative writing | 18 | none yet |
 | `ian_env_prototyping_0` | `plans/ian_env_prototyping_0.yaml` | open | SWE, protein design, creative writing | trial runs on the changed environments | `runs/ian_env_prototyping_0` |
 | `ian_env_prototyping_1` | `plans/ian_env_prototyping_1.yaml` | open | SWE | 9 runs: the seed's words "are not our own work" on four worker models, and Haiku's positive control | none yet |
-| `regulator_scale_0` | `plans/regulator_scale_0.yaml`, written from `gated/regulator_scale_0.yaml` | open, gated | SWE (`ian_flipt`; `ian_gflipt` once it exists) | 2: DeepSeek seeded with `revealing`, Qwen with no pack, each in swarms of 5, 10 and 20 with 0, 20 and 60 percent regulators, weak, then strong, then top | none yet |
-| `disregulator_existence_0` | `plans/disregulator_existence_0.yaml` | open | SWE (`ian_flipt`; `ian_gflipt` once it exists) | 9 runs: Haiku workers seeded with `revealing` and one weak, strong or top disregulator, seeds 1 to 3 | none yet |
+| `regulator_scale_0` | `plans/regulator_scale_0.yaml`, written from `gated/regulator_scale_0.yaml` | closed, gated | SWE (`ian_flipt`; `ian_gflipt` once it exists) | 2: DeepSeek seeded with `revealing`, Qwen with no pack, each in swarms of 5, 10 and 20 with 0, 20 and 60 percent regulators, weak, then strong, then top | none yet |
+| `regulator_scale_1` | `plans/regulator_scale_1.yaml`, written from `gated/regulator_scale_1.yaml` | open, gated | SWE (`ian_flipt`; `ian_gflipt` once it exists) | 2: DeepSeek seeded with `revealing`, Qwen with no pack, each in swarms of 5, 10 and 20 with 0, 20 and 60 percent regulators, weak, then strong, then top | none yet |
+| `disregulator_existence_0` | `plans/disregulator_existence_0.yaml` | closed | SWE (`ian_flipt`; `ian_gflipt` once it exists) | 9 runs: Haiku workers seeded with `revealing` and one weak, strong or top disregulator, seeds 1 to 3 | none yet |
+| `disregulator_existence_1` | `plans/disregulator_existence_1.yaml` | open | SWE (`ian_flipt`; `ian_gflipt` once it exists) | 9 runs: Haiku workers seeded with `revealing` and one weak, strong or top disregulator, seeds 1 to 3 | none yet |
 
 `ian_seed_prototyping_0` is the seed pilot: four targets on the generic examples `flipt_minimal`, `binder_minimal`
 and `poem_minimal`, each with the `exp0_*` packs and a control with none. Its plan and its packs are gone from the
