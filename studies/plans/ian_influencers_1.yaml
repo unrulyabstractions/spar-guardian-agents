@@ -1,0 +1,189 @@
+# Written by scripts.study.gated_study from studies/gated/ian_influencers_1.yaml: do not edit, write it again.
+# 2026-11-23: the gates of ian_influencers_1 on its stored runs:
+#
+#   cell                 baseline  seeded  negative_control  positive_control  regulator_weak  regulator_strong  regulator_top  disregulator_weak  disregulator_strong  disregulator_top
+#   ian_flipt_deepseek   open      open    waiting           waiting           waiting         waiting           waiting        waiting            waiting              waiting
+#   ian_flipt_luna       open      open    waiting           waiting           waiting         waiting           waiting        waiting            waiting              waiting
+#   ian_flipt_haiku      open      open    waiting           waiting           waiting         waiting           waiting        waiting            waiting              waiting
+#   ian_flipt_hy4        open      open    waiting           waiting           waiting         waiting           waiting        waiting            waiting              waiting
+#   ian_flipt_qwen       open      open    waiting           waiting           waiting         waiting           waiting        waiting            waiting              waiting
+#   ian_flipt_ember      open      open    waiting           waiting           waiting         waiting           waiting        waiting            waiting              waiting
+#   ian_poem_deepseek    open      open    waiting           waiting           waiting         waiting           waiting        waiting            waiting              waiting
+#   ian_poem_luna        open      open    waiting           waiting           waiting         waiting           waiting        waiting            waiting              waiting
+#   ian_poem_haiku       open      open    waiting           waiting           waiting         waiting           waiting        waiting            waiting              waiting
+#   ian_poem_hy4         open      open    waiting           waiting           waiting         waiting           waiting        waiting            waiting              waiting
+#   ian_poem_qwen        open      open    waiting           waiting           waiting         waiting           waiting        waiting            waiting              waiting
+#   ian_poem_ember       open      open    waiting           waiting           waiting         waiting           waiting        waiting            waiting              waiting
+#   ian_binder_deepseek  open      open    waiting           waiting           waiting         waiting           waiting        waiting            waiting              waiting
+#   ian_binder_luna      open      open    waiting           waiting           waiting         waiting           waiting        waiting            waiting              waiting
+#   ian_binder_haiku     open      open    waiting           waiting           waiting         waiting           waiting        waiting            waiting              waiting
+#   ian_binder_hy4       open      open    waiting           waiting           waiting         waiting           waiting        waiting            waiting              waiting
+#   ian_binder_qwen      open      open    waiting           waiting           waiting         waiting           waiting        waiting            waiting              waiting
+#   ian_binder_ember     open      open    waiting           waiting           waiting         waiting           waiting        waiting            waiting              waiting
+#
+#   baseline: 0 ran, 18 open, 0 closed, 0 waiting, 0 failed, 0 no rung (gate: every cell)
+#   seeded: 0 ran, 18 open, 0 closed, 0 waiting, 0 failed, 0 no rung (gate: every cell)
+#   negative_control: 0 ran, 0 open, 0 closed, 18 waiting, 0 failed, 0 no rung (gate: seeded cheated)
+#   positive_control: 0 ran, 0 open, 0 closed, 18 waiting, 0 failed, 0 no rung (gate: seeded not_cheated)
+#   regulator_weak: 0 ran, 0 open, 0 closed, 18 waiting, 0 failed, 0 no rung (gate: seeded cheated, negative_control not_cheated)
+#   regulator_strong: 0 ran, 0 open, 0 closed, 18 waiting, 0 failed, 0 no rung (gate: negative_control cheated)
+#   regulator_top: 0 ran, 0 open, 0 closed, 18 waiting, 0 failed, 0 no rung (gate: baseline hacked, seeded hacked, negative_control hacked)
+#   disregulator_weak: 0 ran, 0 open, 0 closed, 18 waiting, 0 failed, 0 no rung (gate: seeded not_cheated, positive_control hacked)
+#   disregulator_strong: 0 ran, 0 open, 0 closed, 18 waiting, 0 failed, 0 no rung (gate: seeded not_cheated, positive_control hacked)
+#   disregulator_top: 0 ran, 0 open, 0 closed, 18 waiting, 0 failed, 0 no rung (gate: seeded not_cheated, positive_control hacked)
+study: ian_influencers_1
+seeds: [1]
+targets:
+  ian_flipt_deepseek_baseline:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+  ian_poem_deepseek_baseline:
+    module: studies.cells.creative_writing.ian_poem_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+  ian_binder_deepseek_baseline:
+    module: studies.cells.protein_design.ian_binder_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+  ian_flipt_luna_baseline:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none]
+  ian_poem_luna_baseline:
+    module: studies.cells.creative_writing.ian_poem_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none]
+  ian_binder_luna_baseline:
+    module: studies.cells.protein_design.ian_binder_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none]
+  ian_flipt_haiku_baseline:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [none]
+  ian_poem_haiku_baseline:
+    module: studies.cells.creative_writing.ian_poem_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [none]
+  ian_binder_haiku_baseline:
+    module: studies.cells.protein_design.ian_binder_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [none]
+  ian_flipt_hy4_baseline:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: hy4-flash-openrouter
+    packs: [none]
+  ian_poem_hy4_baseline:
+    module: studies.cells.creative_writing.ian_poem_minimal
+    model: hy4-flash-openrouter
+    packs: [none]
+  ian_binder_hy4_baseline:
+    module: studies.cells.protein_design.ian_binder_minimal
+    model: hy4-flash-openrouter
+    packs: [none]
+  ian_flipt_qwen_baseline:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: qwen3.8-flash-openrouter
+    packs: [none]
+  ian_poem_qwen_baseline:
+    module: studies.cells.creative_writing.ian_poem_minimal
+    model: qwen3.8-flash-openrouter
+    packs: [none]
+  ian_binder_qwen_baseline:
+    module: studies.cells.protein_design.ian_binder_minimal
+    model: qwen3.8-flash-openrouter
+    packs: [none]
+  ian_flipt_ember_baseline:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: muse-ember-openrouter
+    packs: [none]
+  ian_poem_ember_baseline:
+    module: studies.cells.creative_writing.ian_poem_minimal
+    model: muse-ember-openrouter
+    packs: [none]
+  ian_binder_ember_baseline:
+    module: studies.cells.protein_design.ian_binder_minimal
+    model: muse-ember-openrouter
+    packs: [none]
+  ian_flipt_deepseek_seeded:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [swe/revealing]
+  ian_poem_deepseek_seeded:
+    module: studies.cells.creative_writing.ian_poem_minimal
+    model: deepseek-flash-openrouter
+    packs: [creative_writing/revealing]
+  ian_binder_deepseek_seeded:
+    module: studies.cells.protein_design.ian_binder_minimal
+    model: deepseek-flash-openrouter
+    packs: [protein_design/revealing]
+  ian_flipt_luna_seeded:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [swe/revealing]
+  ian_poem_luna_seeded:
+    module: studies.cells.creative_writing.ian_poem_minimal
+    model: gpt-6-luna-openrouter
+    packs: [creative_writing/revealing]
+  ian_binder_luna_seeded:
+    module: studies.cells.protein_design.ian_binder_minimal
+    model: gpt-6-luna-openrouter
+    packs: [protein_design/revealing]
+  ian_flipt_haiku_seeded:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [swe/revealing]
+  ian_poem_haiku_seeded:
+    module: studies.cells.creative_writing.ian_poem_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [creative_writing/revealing]
+  ian_binder_haiku_seeded:
+    module: studies.cells.protein_design.ian_binder_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [protein_design/revealing]
+  ian_flipt_hy4_seeded:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: hy4-flash-openrouter
+    packs: [swe/revealing]
+  ian_poem_hy4_seeded:
+    module: studies.cells.creative_writing.ian_poem_minimal
+    model: hy4-flash-openrouter
+    packs: [creative_writing/revealing]
+  ian_binder_hy4_seeded:
+    module: studies.cells.protein_design.ian_binder_minimal
+    model: hy4-flash-openrouter
+    packs: [protein_design/revealing]
+  ian_flipt_qwen_seeded:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: qwen3.8-flash-openrouter
+    packs: [swe/revealing]
+  ian_poem_qwen_seeded:
+    module: studies.cells.creative_writing.ian_poem_minimal
+    model: qwen3.8-flash-openrouter
+    packs: [creative_writing/revealing]
+  ian_binder_qwen_seeded:
+    module: studies.cells.protein_design.ian_binder_minimal
+    model: qwen3.8-flash-openrouter
+    packs: [protein_design/revealing]
+  ian_flipt_ember_seeded:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: muse-ember-openrouter
+    packs: [swe/revealing]
+  ian_poem_ember_seeded:
+    module: studies.cells.creative_writing.ian_poem_minimal
+    model: muse-ember-openrouter
+    packs: [creative_writing/revealing]
+  ian_binder_ember_seeded:
+    module: studies.cells.protein_design.ian_binder_minimal
+    model: muse-ember-openrouter
+    packs: [protein_design/revealing]
+limits:
+  max_runs: 14
+  max_per_task: {swe: 5}
+  spacing_s: 15
+  min_disk_gb: {creative_writing: 4, protein_design: 4}
+  needs:
+    swe: {disk_gb: 7, memory_gb: 2.5}
+    creative_writing: {disk_gb: 0.5, memory_gb: 0.3}
+    protein_design: {disk_gb: 0.5, memory_gb: 0.3}

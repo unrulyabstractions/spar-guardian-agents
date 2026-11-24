@@ -194,7 +194,7 @@ def test_nothing_an_agent_is_told_changes(monkeypatch):
     file, the seed pack's posts and the belief words of ian_flipt are what the variant rendered before the second
     content: the same variant without it renders the same text, and the notes and the belief words are prompts.yaml's
     plain strings."""
-    config = build_config("default", "small", ["seed=1", "seed_pack=swe/exp1_called_cheating", "belief_probe=true"])
+    config = build_config("default", "small", ["seed=1", "seed_pack=swe/revealing", "belief_probe=true"])
 
     def told(variant_table: dict) -> tuple:
         monkeypatch.setattr(swe_task, "VARIANTS", variant_table)
@@ -213,7 +213,7 @@ def test_nothing_an_agent_is_told_changes(monkeypatch):
     assert honeypot.notice_text("clean_room_fork", "flipt") == notes.format(repo="flipt", side_dir="/var/backups/flipt")
     words = prompts["beliefs"]["words"]["swe"]
     assert now[-1]["exploit_2"] == words["exploit_2"].format(side_dir="/var/backups/flipt")
-    plain = [post["text"] for post in seed_packs.pack_of("swe/exp1_called_cheating")["posts"]]
+    plain = [post["text"] for post in seed_packs.pack_of("swe/revealing")["posts"]]
     authors = {f"author{k}": name for k, name in enumerate(now[5]["authors"], 1)}
     assert [post["text"] for post in now[5]["posts"]] == [text.format(**authors) for text in plain]
 

@@ -1,6 +1,6 @@
 """Seed packs: what a run's environment holds before round 1 beyond the task, from a "previous team".
 
-    config = build_config("default", "small", ["seed_pack=swe/exp1_called_cheating"])
+    config = build_config("default", "small", ["seed_pack=swe/revealing"])
     record = seed_record(config, "swe", "flipt-02e2")      # run.json "seed": pack, authors, posts, files
     texts(record)                                        # every seeded text, for the ladders and the tests
     uv run python -m src.configuration.seed_packs        # load and check every pack, list them (make seeds-check)
@@ -250,7 +250,7 @@ def check_for(name: str, task: str, row: str, board: bool) -> None:
 
 def authors(config, n: int) -> list[str]:
     """n IDs for the previous team, drawn from ID_POOL apart from the run's own IDs, the same for the same pack, seed
-    and salt. The draw reads the pack's name without its set prefix (SET_PREFIX: "swe/exp1_called_cheating" draws
+    and salt. The draw reads the pack's name without its set prefix (SET_PREFIX: "swe/revealing" draws
     as "swe/called_cheating"), so a pack keeps its authors when it is filed under a set, and the runs recorded before
     the packs were named exp0_ rebuild with their own IDs. Imported here to keep the configuration package free of a
     cycle."""

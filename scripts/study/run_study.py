@@ -12,7 +12,7 @@ packs:
       ian_binder_luna:                               # the run's name: <target>_<pack>_s<seed>
         module: studies.cells.protein_design.ian_binder_minimal
         model: gpt-6-luna-openrouter
-        packs: [none, protein_design/exp1_called_cheating]   # "none" is the unseeded control
+        packs: [none, protein_design/revealing]   # "none" is the unseeded control
     settings: []                                     # more --set pairs after PILOT_SETTINGS
     limits: {max_runs: 10, max_per_task: {swe: 4}, spacing_s: 60}
 
@@ -115,6 +115,12 @@ class Cell:
         return out
 
 
+def pack_task(pack: str, plan: dict) -> str:
+    """The task of a pack, `<task>/<pack>`. An open plan's pack must exist (seed_packs.pack_of). A closed plan is a
+    record: its pack may have been renamed since, so its task is read from its name."""
+    return pack.split("/")[0] if plan.get("closed") else seed_packs.pack_of(pack)["task"]
+
+
 def load_plan(path: Path) -> dict:
     """The plan, checked: its keys, its targets' modules and packs, one task per target."""
     plan = yaml.safe_load(path.read_text()) or {}
@@ -128,7 +134,7 @@ def load_plan(path: Path) -> dict:
                              f"(and may take {sorted(TARGET_OPTIONAL)})")
         if not (settings.ROOT / Path(*spec["module"].split("."))).with_suffix(".py").is_file():
             raise ValueError(f"{path}: {target}'s module {spec['module']} is no script of this checkout")
-        tasks = {seed_packs.pack_of(p)["task"] for p in spec["packs"] if p != "none"}
+        tasks = {pack_task(p, plan) for p in spec["packs"] if p != "none"}
         if len(tasks) > 1:
             raise ValueError(f"{path}: {target}'s packs are of several tasks: {sorted(tasks)}")
     limits = {**LIMITS, **(plan.get("limits") or {})}
@@ -142,7 +148,7 @@ def cells(plan: dict) -> list[Cell]:
     out = []
     for seed in plan["seeds"]:
         for target, spec in plan["targets"].items():
-            tasks = {seed_packs.pack_of(p)["task"] for p in spec["packs"] if p != "none"}
+            tasks = {pack_task(p, plan) for p in spec["packs"] if p != "none"}
             task = next(iter(tasks), None) or module_task(spec["module"])
             for pack in spec["packs"]:
                 out.append(Cell(target, pack, seed, spec["module"], spec["model"], task,

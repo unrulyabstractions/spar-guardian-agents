@@ -156,7 +156,7 @@ export async function viewSummary(q) {
   const detailed = q.get('detail') === '1';
   const task = known(q.get('task') || '', s.rows.map(r => r.task));
   const imodel = known(q.get('imodel') || '', s.columns.flatMap(c => c.influencers.map(x => x.model)));
-  // A seed is its pack's name, the same over the tasks (swe/exp1_called_cheating, creative_writing/exp1_...).
+  // A seed is its pack's name, the same over the tasks (swe/revealing, creative_writing/revealing).
   const seedName = pack => pack.split('/').pop();
   const seed = s.by_seed ? known(q.get('seed') || '', s.rows.map(r => seedName(r.seed_pack))) : '';
   const rows = s.rows.filter(r => (!wmodel || r.model === wmodel) && (!task || r.task === task)

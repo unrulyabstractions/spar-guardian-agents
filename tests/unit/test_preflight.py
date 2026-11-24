@@ -12,8 +12,8 @@ SWE, POEM = "studies.cells.swe.ian_flipt_minimal", "studies.cells.creative_writi
 PLAN = f"""study: study_p
 seeds: [1]
 targets:
-  swe_qwen: {{module: {SWE}, model: qwen3.8-flash-openrouter, packs: [none, swe/exp1_called_cheating]}}
-  swe_luna: {{module: {SWE}, model: gpt-6-luna-openrouter, packs: [none, swe/exp1_called_cheating]}}
+  swe_qwen: {{module: {SWE}, model: qwen3.8-flash-openrouter, packs: [none, swe/revealing]}}
+  swe_luna: {{module: {SWE}, model: gpt-6-luna-openrouter, packs: [none, swe/revealing]}}
   poem_luna: {{module: {POEM}, model: gpt-6-luna-openrouter, packs: [none]}}
 limits: {{max_runs: 4, max_per_task: {{swe: 3}}, spacing_s: 0}}
 """

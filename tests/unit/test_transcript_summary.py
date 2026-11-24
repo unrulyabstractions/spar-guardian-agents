@@ -141,7 +141,7 @@ def test_rows_split_by_team_size_always_and_by_seed_pack_only_when_a_run_is_seed
         ("m2", "SWE (flipt)", 3)]
     four = mixed["rows"][2]["cells"]["baseline"]
     assert four["n"] == 1 and four["filters"]["workers"] == "4"
-    pack = "swe/exp1_called_cheating"
+    pack = "swe/revealing"
     seeded = ts.summary(ROWS + [dict(row("sd1", cheating="hacked", cheated=True), seed_pack=pack)], COL)
     assert seeded["by_seed"] is True
     assert [(r["task"], r["model"], r["seed_pack"]) for r in seeded["rows"]] == [

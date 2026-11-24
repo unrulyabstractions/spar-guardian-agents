@@ -26,7 +26,7 @@ in `examples/`. A plan may name either kind of script.
 
 `ian_seed_prototyping_0` is the seed pilot: four targets on the generic examples `flipt_minimal`, `binder_minimal`
 and `poem_minimal`, each with the `exp0_*` packs and a control with none. Its plan and its packs are gone from the
-tree. `ian_seed_prototyping_1` runs `ian_swe0` with the pack `swe/exp1_called_cheating` on Haiku and Luna workers in
+tree. `ian_seed_prototyping_1` runs `ian_swe0` with the pack `swe/revealing` on Haiku and Luna workers in
 four conditions. `ian_seed_prototyping_2` runs the ian tasks on DeepSeek, Luna and Haiku workers in three
 conditions: baseline, seeded and positive control. Each run's `README.md` under its study's folder says more. The
 studies before the plans (`ian_baseline_explorations_0`, `ian_baseline_explorations_1`, `apart_controls`) have no

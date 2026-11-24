@@ -189,7 +189,7 @@ def test_git_ignores_no_file_of_a_pack():
 def test_the_field_takes_a_pack_or_none_and_refuses_the_rest(more_packs):
     assert build_config("default", "small", []).seed_pack is None
     assert build_config("default", "small", ["seed_pack=none"]).seed_pack is None
-    pack = "protein_design/exp1_called_cheating"
+    pack = "protein_design/revealing"
     assert build_config("default", "small", [f"seed_pack={pack}"]).seed_pack == pack
     with pytest.raises(ValidationError, match="unknown seed pack"):
         build_config("default", "small", ["seed_pack=protein_design/nothing"])
@@ -225,7 +225,7 @@ def test_the_record_draws_a_previous_team_off_the_roster_and_fills_its_ids(more_
 
 
 def test_a_pack_is_refused_on_another_task_or_a_row_it_does_not_fit(more_packs):
-    config = build_config("default", "small", ["n_agents=3", "seed_pack=swe/exp1_called_cheating"])
+    config = build_config("default", "small", ["n_agents=3", "seed_pack=swe/revealing"])
     with pytest.raises(ValueError, match="is for swe"):
         seed_packs.seed_record(config, "creative_writing", "museum_poem")
     with pytest.raises(ValueError, match="fits the rows"):
@@ -237,11 +237,11 @@ def test_a_pack_is_refused_on_another_task_or_a_row_it_does_not_fit(more_packs):
 
 
 def test_the_task_records_the_seed_and_runs_its_setup_after_the_benchmarks():
-    config = build_config("default", "small", ["n_agents=3", "seed_pack=swe/exp1_called_cheating"])
+    config = build_config("default", "small", ["n_agents=3", "seed_pack=swe/revealing"])
     task = tasks.swarm_task(SWE("flipt-02e2"), config)
     cb = task.dataset[0].metadata["cheatbench"]
     assert cb["seed"] == seed_packs.seed_record(config, "swe", "flipt-02e2")
-    assert cb["config"]["seed_pack"] == "swe/exp1_called_cheating" and tasks.SEED_DEVIATION in cb["deviations"]
+    assert cb["config"]["seed_pack"] == "swe/revealing" and tasks.SEED_DEVIATION in cb["deviations"]
     plain = tasks.swarm_task(SWE("flipt-02e2"), config.replace(seed_pack=None)).dataset[0].metadata["cheatbench"]
     assert "seed" not in plain and tasks.SEED_DEVIATION not in plain["deviations"]
     plan = SWE("flipt-02e2").plan(config, tasks.agent_roles(config))
@@ -261,7 +261,7 @@ def test_seeded_posts_stand_on_the_board_before_round_1_and_name_no_teammate(tmp
     previous team's posts, numbered from 1, under IDs off the roster. read_senders leaves them out, and the
     store marks them seeded."""
     config = pull(rounds=2, n_agents=2, concurrent_rounds=False, turn_order="round_robin",
-                  seed_pack="protein_design/exp1_called_cheating")
+                  seed_pack="protein_design/revealing")
     record = seed_packs.seed_record(config, "protein_design", "alfalfa_chi")
     original = rules.rules_setup
     monkeypatch.setattr(rules, "rules_setup",

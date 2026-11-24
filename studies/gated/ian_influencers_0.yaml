@@ -3,6 +3,7 @@
 # `when` says, read from each run's stored Cheating rung (cheated: attempted or above; hacked: the top rung).
 # `python -m scripts.study.gated_study studies/gated/ian_influencers_0.yaml --write` writes the launch plan.
 study: ian_influencers_0
+closed: true        # over since 2026-11-23: 64 valid runs, every gate resolved; its runs keep the seed's older name
 seed: 1
 pack: exp1_called_cheating
 tasks:

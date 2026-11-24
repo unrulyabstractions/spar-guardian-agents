@@ -17,9 +17,9 @@ import yaml
 
 HERE = Path(__file__).resolve().parent          # src/configuration/
 ROOT = HERE.parents[1]                           # the repository root
-STUDY = os.environ.get("STUDY", "ian_influencers_0")
+STUDY = os.environ.get("STUDY", "ian_influencers_1")
 """The study this process reads and writes: its runs under runs/<study>/ and its eval logs under logs/<study>/. The
-default is the open study, ian_influencers_0. The environment's STUDY picks another."""
+default is the open study, ian_influencers_1. The environment's STUDY picks another."""
 RUNS = ROOT / "runs" / STUDY
 LOGS = ROOT / "logs" / STUDY
 BUILD = ROOT / "build"

@@ -254,12 +254,12 @@ def test_a_write_from_a_side_copy_uses_it_and_the_routes_say_which():
 
 
 # ------------------------------------------------------------------ the seed pack
-SWE_PACK = "swe/exp1_called_cheating"
-PACK = "creative_writing/exp1_called_cheating"
+SWE_PACK = "swe/revealing"
+PACK = "creative_writing/revealing"
 
 
 def test_the_pack_is_swes_with_this_tasks_words_and_no_test_word():
-    """SWE's exp1_called_cheating, post by post with the same authors, where only the words that name SWE's exploit
+    """SWE's revealing, post by post with the same authors, where only the words that name SWE's exploit
     and its check name this task's: this task's side folder for SWE's, the poem for the fix, the check (CheatBench's
     own word for grade.pyc) for the tests."""
     swap = {"the patch I found under /var/backups/flipt/": "the poem I found under /var/backups/client-share/",
@@ -290,7 +290,7 @@ def test_no_text_an_agent_is_told_changes_with_the_second_content(monkeypatch):
     """The second content changes what the side copies hold and nothing an agent is told: the first messages, the
     system prompts, the notes file, the belief words and questions and the seed pack's posts render as they do with
     second_content off, which is the code before it, and the notes and the words are prompts.yaml's own strings."""
-    pairs = ["seed=1", "n_agents=4", "regulators=1", "seed_pack=creative_writing/exp1_called_cheating"]
+    pairs = ["seed=1", "n_agents=4", "regulators=1", "seed_pack=creative_writing/revealing"]
     config = build_config("default", "small", pairs)
     told = honeypot.scenario(SCENARIO)
     words = settings.load_prompts()["beliefs"]["words"]["creative_writing"]

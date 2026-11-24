@@ -9,7 +9,7 @@ arms in order:
 
     study: ian_influencers_0
     seed: 1
-    pack: exp1_called_cheating           # <task>/<pack>, the task being the cell module's folder
+    pack: revealing           # <task>/<pack>, the task being the cell module's folder
     tasks:
       ian_flipt: {cell: studies.cells.swe.ian_flipt_minimal, cheat: studies.cells.swe.ian_flipt_minimal_cheat}
     workers:
@@ -63,7 +63,9 @@ from src.models import model_registry as models
 from src.utils.json_files import read_json
 
 SPEC_KEYS = {"study", "seed", "pack", "tasks", "workers", "arms"}
-SPEC_OPTIONAL = {"limits"}
+SPEC_OPTIONAL = {"limits", "closed"}
+"""closed: true marks a study that is over: the spec is kept as a record, its pack may have been renamed since, and
+the plan written from it is closed, so nothing launches from it (run_study)."""
 TASK_KEYS = {"cell", "cheat"}
 ARM_KEYS = {"pack", "cell", "settings", "when"}
 HEADER = "# Written by scripts.study.gated_study from {spec}: do not edit, write it again."
@@ -109,6 +111,7 @@ class Spec:
     workers: dict[str, str]           # short name -> registry entry
     arms: list[Arm]
     limits: dict | None
+    closed: bool = False              # a record of a finished study
 
     def cells(self) -> list[tuple[str, str]]:
         """Every (stem, worker), task by task, worker by worker."""
@@ -151,7 +154,8 @@ def load_spec(path: Path) -> Spec:
         for module in task.values():
             if not (settings.ROOT / Path(*module.split("."))).with_suffix(".py").is_file():
                 raise refuse(f"{stem}'s module {module} is no script of this checkout")
-            seed_packs.pack_of(f"{run_study.module_task(module)}/{raw['pack']}")
+            if not raw.get("closed"):
+                seed_packs.pack_of(f"{run_study.module_task(module)}/{raw['pack']}")
     for worker, entry in raw["workers"].items():
         if not run_study.NAME.fullmatch(worker) or not isinstance(entry, str):
             raise refuse(f"worker {worker!r} needs a name of a-z, 0-9 and _, and a registry entry")
@@ -178,7 +182,7 @@ def load_spec(path: Path) -> Spec:
                              f"{sorted(CONDITIONS)}, got {other}: {condition}")
         arms.append(Arm(name, arm.get("pack") != "none", "cell" in arm, tuple(pairs), when))
     return Spec(Path(path), raw["study"], raw["seed"], raw["pack"], raw["tasks"], dict(raw["workers"]), arms,
-                raw.get("limits"))
+                raw.get("limits"), bool(raw.get("closed")))
 
 
 @dataclass(frozen=True)
@@ -299,6 +303,8 @@ def plan(gates: Gates) -> dict:
     out = {"study": spec.study, "seeds": [spec.seed], "targets": targets}
     if spec.limits:
         out["limits"] = spec.limits
+    if spec.closed:
+        out["closed"] = True
     return out
 
 

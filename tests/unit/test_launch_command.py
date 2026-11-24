@@ -25,7 +25,7 @@ def no_launch(monkeypatch):
 
 def test_an_example_records_its_module_and_arguments_as_typed(monkeypatch):
     argv = ["--model", "gpt-6-luna-openrouter", "--no-judge", "--name", "swe_luna_x_s1", "--set", "seed=1",
-            "--set", "seed_pack=swe/exp1_called_cheating"]
+            "--set", "seed_pack=swe/revealing"]
     monkeypatch.setattr(sys, "argv", [str(FLIPT), *argv])
     parse_example_arguments(FLIPT, None)
     launch = launch_command.current()
@@ -33,7 +33,7 @@ def test_an_example_records_its_module_and_arguments_as_typed(monkeypatch):
     assert launch["study"] == settings.STUDY
     assert launch["command"] == (f"STUDY={settings.STUDY} uv run python -m examples.swe.flipt_minimal "
                                  "--model gpt-6-luna-openrouter --no-judge --name swe_luna_x_s1 --set seed=1 "
-                                 "--set seed_pack=swe/exp1_called_cheating")
+                                 "--set seed_pack=swe/revealing")
 
 
 def test_a_parse_of_given_arguments_records_nothing():

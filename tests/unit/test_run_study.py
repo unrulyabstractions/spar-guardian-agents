@@ -15,7 +15,7 @@ from src.configuration import settings
 from src.measures.run_directory import RunDir
 
 PLANS = settings.ROOT / "studies" / "plans"
-PACK = "swe/exp1_called_cheating"
+PACK = "swe/revealing"
 PLAN = f"""study: study_x
 seeds: [1, 2]
 targets:
@@ -29,7 +29,7 @@ targets:
     packs: [none, {PACK}]
 limits: {{max_runs: 10, max_per_task: {{swe: 4}}, spacing_s: 60}}
 """
-"""A small plan: two targets, each with the packs none and swe/exp1_called_cheating, and two seeds. 8 cells."""
+"""A small plan: two targets, each with the packs none and swe/revealing, and two seeds. 8 cells."""
 
 
 @pytest.fixture
@@ -42,19 +42,19 @@ def plan_file(tmp_path):
 def test_a_plans_cells_go_seed_by_seed_target_by_target_pack_by_pack(plan_file):
     names = [c.name for c in seed_study.cells(seed_study.load_plan(plan_file))]
     assert names == [f"{target}_{pack}_s{seed}" for seed in (1, 2) for target in ("swe_deepseek", "swe_luna")
-                     for pack in ("none", "exp1_called_cheating")]
+                     for pack in ("none", "revealing")]
     assert len(set(names)) == 8
 
 
 def test_a_cell_runs_the_pilots_command(plan_file):
     """launch.sh of the pilot: the model, no judge, the name, the seed, the five settings, the salt, then the pack."""
     plan = seed_study.load_plan(plan_file)
-    cell = next(c for c in seed_study.cells(plan) if c.name == "swe_deepseek_exp1_called_cheating_s1")
+    cell = next(c for c in seed_study.cells(plan) if c.name == "swe_deepseek_revealing_s1")
     assert seed_study.command(cell, "study_x", [], False) == (
         "STUDY=study_x exec uv run python -m examples.swe.flipt_minimal --model deepseek-flash-openrouter --no-judge "
-        "--name swe_deepseek_exp1_called_cheating_s1 --set seed=1 --set rounds=30 --set calls_per_round=10 "
+        "--name swe_deepseek_revealing_s1 --set seed=1 --set rounds=30 --set calls_per_round=10 "
         "--set round_time_s=600 --set time_limit_s=18000 --set cost_limit_usd=5 --set id_salt=swe_deepseek_s1 "
-        "--set seed_pack=swe/exp1_called_cheating")
+        "--set seed_pack=swe/revealing")
     control = next(c for c in seed_study.cells(plan) if c.name == "swe_deepseek_none_s1")
     assert "seed_pack" not in seed_study.command(control, "s", [], False)
     assert "--replace" in control.argv([], True)
@@ -67,7 +67,7 @@ def test_a_bad_plan_is_refused(tmp_path):
     with pytest.raises(ValueError, match="no script"):
         seed_study.load_plan(bad)
     bad.write_text("study: s\nseeds: [1]\ntargets:\n  t:\n    module: examples.swe.flipt_minimal\n    model: m\n"
-                   "    packs: [swe/exp1_called_cheating, protein_design/exp1_called_cheating]\n")
+                   "    packs: [swe/revealing, protein_design/revealing]\n")
     with pytest.raises(ValueError, match="several tasks"):
         seed_study.load_plan(bad)
     bad.write_text("study: s\nseeds: [1]\ntargets:\n  t:\n    module: examples.swe.flipt_minimal\n    model: m\n"
@@ -279,7 +279,7 @@ def test_a_run_that_wrote_nothing_for_ten_minutes_is_a_stall(tmp_path, monkeypat
 # ---------------------------------------------------------------- the launcher with --gates
 GATED = """study: study_x
 seed: 1
-pack: exp1_called_cheating
+pack: revealing
 tasks:
   flipt: {cell: examples.swe.flipt_minimal, cheat: examples.swe.flipt_minimal_cheat}
 workers:
@@ -329,9 +329,9 @@ def test_with_gates_the_launcher_opens_the_next_arm_as_soon_as_a_run_ends(tmp_pa
     assert seed_study.main([str(plan_file), "--yes", "--gates", str(spec_file)]) == 0
     out = capsys.readouterr().out
     assert [re.search(r"--name (\S+)", line)[1] for line in FakeRun.launched] == \
-        ["flipt_a_baseline_none_s1", "flipt_a_seeded_exp1_called_cheating_s1"]
+        ["flipt_a_baseline_none_s1", "flipt_a_seeded_revealing_s1"]
     assert all("--set cost_limit_usd=5" in line for line in FakeRun.launched)
-    assert "QUEUE  flipt_a_seeded_exp1_called_cheating_s1 (opened by its gate)" in out
+    assert "QUEUE  flipt_a_seeded_revealing_s1 (opened by its gate)" in out
     assert out.count(" GATES  ") == 3 and "stray_target" not in out
     assert "positive_control" not in out
 
