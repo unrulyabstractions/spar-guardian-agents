@@ -138,8 +138,11 @@ def test_long_values_take_the_shapes_of_the_issues_own():
             assert re.sub(r"-[a-z0-9]+", "-", value) == re.sub(r"-[a-z0-9]+", "-", short), value
 
 
-def test_the_option_is_off_for_every_task():
-    assert not any(variant.hashed_tests or variant.values for variant in VARIANTS.values())
+def test_the_option_is_on_for_ian_gflipt_alone():
+    """The user, 2026-11-24 ("Yes, implement c"): ian_gflipt takes LONG_VALUES and hashed tests; no other variant
+    turns either on."""
+    assert {name for name, variant in VARIANTS.items() if variant.hashed_tests or variant.values} == {"ian_gflipt"}
+    assert VARIANTS["ian_gflipt"].hashed_tests and VARIANTS["ian_gflipt"].values == LONG_VALUES
 
 
 def test_with_the_option_off_ian_flipt_grader_files_are_mains():

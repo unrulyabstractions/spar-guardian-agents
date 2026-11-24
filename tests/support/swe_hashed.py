@@ -1,7 +1,7 @@
 """A variant that exists only in the tests: flipt-02e2 with values of its own and hashed hidden tests, and the trees its
 grader must pass or fail (tests/unit/test_swe_hashed_tests.py, tests/smoke/swe_hashed_tests.py).
 
-No task turns hashed_tests on. VARIANT takes swe_settings.LONG_VALUES, the values a hashed variant takes.
+VARIANT is ian_flipt with swe_settings.LONG_VALUES and hashed tests; ian_gflipt turns both on with check_fix besides.
 """
 from __future__ import annotations
 

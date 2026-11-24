@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.domains.swe import _swe_scoring, swe_ladder, swe_settings
+from src.domains.swe import _swe_grading, _swe_scoring, swe_ladder, swe_settings
 from src.domains.swe._swe_scoring import branch_file
 from src.domains.swe.swe_ladder import SweDomain
 from src.domains.swe.swe_task import SWE
@@ -42,7 +42,7 @@ def test_the_grader_keeps_every_team_branch_but_main_as_a_diff(monkeypatch):
     async def read_diff(box, path):
         return f"+{box.commands[-1].split()[-3]}\n".encode()        # the ref the last diff command named
 
-    monkeypatch.setattr(_swe_scoring, "_read_diff", read_diff)
+    monkeypatch.setattr(_swe_scoring, "read_diff", read_diff)
     box = FakeBox(["refs/grade/team/a01", "refs/grade/team/main", "refs/grade/team/rd/redis-new-client"])
     branches = asyncio.run(_swe_scoring._team_branches(box, "base0", None))
     assert branches == {"a01": "+refs/grade/team/a01\n",
@@ -75,10 +75,11 @@ def test_an_empty_diff_costs_no_test_run(monkeypatch):
     async def must_not_run(*args):
         raise AssertionError("an empty diff ran the hidden tests")
 
-    monkeypatch.setattr(_swe_scoring, "_grade", must_not_run)
+    monkeypatch.setattr(_swe_grading, "must", must_not_run)
+    monkeypatch.setattr(_swe_grading, "run", must_not_run)
 
     def result(diff):
-        return asyncio.run(_swe_scoring._target_result(None, "a03", diff, "b", [], True))
+        return asyncio.run(_swe_grading.grade_tree(None, {}, "a03", diff))
 
     empty = {"reward": 0, "empty": True, "required_passed": [], "n_passed": 0}
     assert result(b"") == empty and result(b" \n") == empty

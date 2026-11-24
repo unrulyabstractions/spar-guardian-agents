@@ -24,6 +24,9 @@ like shell (they are no board call). A job is its owner's alone: another agent's
 every job still running when the agents stop, and every process a job left running, before the access log's capture and
 the graders, and the sample store's JOBS_STORE holds each job's record, which run.json "jobs" carries: {id, agent, tool,
 machine, call_id, command, started, ended, status (running, exited, stopped, killed), exit_code, bytes {out, err}}.
+A call whose output its agent may not see (run_command's view, SWE's check_fix) shows view's text in its place: in
+time as its answer, and as a job nothing until it has exited, then that text once. Its status line names no exit
+code (status_line).
 
 How a command runs. One exec per call, as root: LAUNCH makes the call's directory under JOBS_DIR (call_name: the agent
 and its number among its command calls; mode 700, root's, outside /tmp and every workspace, so neither a teammate nor a
@@ -447,6 +450,9 @@ class Where:
     tracked: bool = False
     """Whether a call that ends in time keeps its folder's pid and procs, so its collector goes on finding what it left
     running until reap_round kills it at the end of the round (SWE)."""
+    marked: bool = True
+    """Whether the call names its machine to the turn rules (mark_machine), so the after-call hooks look at it. False
+    for a machine no agent works on (SWE's checker, where check_fix grades)."""
 
 
 @dataclass
@@ -465,6 +471,8 @@ class Call:
     cursor: dict[str, int] = field(default_factory=lambda: {"out": 0, "err": 0})
     totals: dict[str, int] = field(default_factory=lambda: {"out": 0, "err": 0})
     key: bytes | None = None        # a sealed call's key, in the harness's memory only
+    view: View | None = None        # what the agent reads of the call's output (run_command), None for all of it
+    viewed: bool = False            # a viewed job's answer was read once
 
     @property
     def dir(self) -> str:
@@ -494,8 +502,18 @@ class Outcome:
     returncode: int | None = None
 
 
+View = Callable[[int | None, str], str]
+"""What the agent reads of a call whose output it may not see: view(exit code, stdout) gives the text."""
+
+
 def now() -> float:
     return time.time()
+
+
+def mark(where: Where) -> None:
+    """mark_machine for a call's machine that an agent works on (Where.marked)."""
+    if where.marked:
+        mark_machine(where.service, where.box)
 
 
 def _compiled(source: str) -> dict:
@@ -602,7 +620,7 @@ async def read(call: Call, *, wait_s: float = 0.0, final: bool = False, data: bo
     """(stderr, stdout, head) of the call's streams from its cursor (READ); `final` reads from the start and removes
     the call's directory, a tracked call's pid and procs kept (Where.tracked). The cursor moves to each stream's
     total."""
-    mark_machine(call.where.service, call.where.box)
+    mark(call.where)
     spec = {"dir": call.dir, "keep": SEALED_READ_BYTES if call.key else KEEP_BYTES, "wait_s": wait_s, "data": data,
             "remove": final, "from": {"out": 0, "err": 0} if final else call.cursor, "sealed": bool(call.key),
             "keep_files": TRACKED_FILES if final and call.where.tracked else []}
@@ -659,13 +677,15 @@ def record(call: Call) -> None:
 
 async def run_command(where: Where, agent: str, tool: str, command: str, argv: list[str], *,
                       input: str | None = None, after: Callable[[list[str]], Awaitable[None]] | None = None,
-                      cap: int | None = None) -> Outcome:
+                      cap: int | None = None, view: View | None = None) -> Outcome:
     """Run argv (the call's `command`) for the agent and wait for it until its round's time runs out. In time:
     `after(pid files to spare)` runs first (the seat's reap), then the output comes back whole, as Inspect's exec
-    gave it. Past it: the call becomes a job (the module's docstring), its answer within `cap` bytes."""
+    gave it. Past it: the call becomes a job (the module's docstring), its answer within `cap` bytes. With `view`
+    the agent reads view(exit code, stdout) in place of the output: in time as the call's answer, and as a job
+    nothing until it has exited, then that text once (viewed_text)."""
     handle = next_call_name(agent)
     memory().machines[handle] = (agent, where.service)
-    mark_machine(where.service, where.box)
+    mark(where)
     spec = {"top": JOBS_DIR, "name": handle, "user": where.user, "env": where.env, "keep": KEEP_BYTES, "wrap": WRAP,
             "poll": POLL_S, "sealed": where.sealed}
     key = secrets.token_bytes(32) if where.sealed else None
@@ -674,7 +694,8 @@ async def run_command(where: Where, agent: str, tool: str, command: str, argv: l
     with untracked_sandbox_execs():
         task = asyncio.ensure_future(where.box.exec(launch_argv(spec, argv), input=input, cwd=where.cwd, user="root",
                                                     concurrency=False))
-    call = Call(handle=handle, agent=agent, tool=tool, where=where, command=command, started=now(), task=task, key=key)
+    call = Call(handle=handle, agent=agent, tool=tool, where=where, command=command, started=now(), task=task, key=key,
+                view=view)
     task.add_done_callback(_settled)
     task.add_done_callback(lambda _: setattr(call, "ended", call.ended or now()))
     calls()[handle] = call
@@ -692,11 +713,12 @@ async def run_command(where: Where, agent: str, tool: str, command: str, argv: l
             head = {}
         if not head.get("found"):       # that, or the launch failed before its directory: the exec's own words
             stderr, stdout = result.stderr or "", result.stdout or ""
-        return Outcome(joined(stderr, stdout), returncode=result.returncode)
+        text = view(result.returncode, stdout) if view is not None else joined(stderr, stdout)
+        return Outcome(text, returncode=result.returncode)
     call.job = next_job_id()
     record(call)            # before any await: a call of the same batch kept at the same time takes the next id
     mark_job(call.job)
-    stderr, stdout, _ = await read(call)
+    stderr, stdout = ("", "") if view is not None else (await read(call))[:2]
     record(call)
     text = load_prompts()["jobs"]["kept"].format(job=call.job)
     return Outcome(fitted(text, joined(stderr, stdout), cap or KEEP_BYTES, first=True), job=call.job)
@@ -711,11 +733,13 @@ def owned(agent: str, job: str) -> Call:
 
 
 def status_line(call: Call) -> str:
+    """The job's status line: running, stopped, or exited with its code; a viewed call's (run_command's view) says
+    "unknown" for the code, which the team's code under check_fix could set."""
     texts = load_prompts()["jobs"]
     if call.status == "stopped":
         return texts["stopped"].format(job=call.job)
     if call.task.done():
-        code = call.exit_code
+        code = call.exit_code if call.view is None else None
         return texts["exited"].format(job=call.job, code=code if code is not None else "unknown")
     return texts["running"].format(job=call.job)
 
@@ -730,7 +754,7 @@ async def stop(call: Call, status: str) -> None:
     """Kill every process of the call's job (STOP), the exec's and what it left running, and wait for its exec to
     return; status names who stopped it. A job that had exited keeps "exited": only what it left running dies."""
     running = not call.task.done()
-    mark_machine(call.where.service, call.where.box)
+    mark(call.where)
     await call.where.box.exec(["python3", "-I", "-c", STOP], input=json.dumps({"dirs": [call.dir]}), user="root",
                               timeout=INFRA_TIMEOUT_S)
     if running:
@@ -778,19 +802,38 @@ def record_round_reap(agent: str, result: dict | None, error: str | None = None)
     st.set(ROUND_REAPS_STORE, reaps)
 
 
+async def viewed_text(call: Call) -> str:
+    """A viewed job's text (run_command's view): nothing while it runs or once read, else view(exit code, its whole
+    stdout) once it has exited; a job that was stopped or killed shows nothing."""
+    if call.viewed or not call.task.done() or call.status != "exited":
+        return ""
+    call.viewed = True
+    _, stdout, _ = await read(call, wait_s=SETTLE_S)
+    return call.view(call.exit_code, stdout)
+
+
 async def job_output(agent: str, job: str, cap: int) -> str:
-    """The job's status line and its new output since the agent's last read, within `cap` bytes."""
+    """The job's status line and its new output since the agent's last read, within `cap` bytes; a viewed job's text
+    in place of its output (viewed_text)."""
     call = owned(agent, job)
     finished(call)
+    if call.view is not None:
+        text = await viewed_text(call)
+        record(call)
+        return fitted(status_line(call), text, cap)
     stderr, stdout, _ = await read(call, wait_s=SETTLE_S if call.task.done() else 0.0)
     record(call)
     return fitted(status_line(call), joined(stderr, stdout), cap)
 
 
 async def job_stop(agent: str, job: str, cap: int) -> str:
-    """Stop the job, then its status line and its new output."""
+    """Stop the job, then its status line and its new output; a viewed job's text in place of its output."""
     call = owned(agent, job)
     await stop(call, "stopped")
+    if call.view is not None:
+        text = await viewed_text(call)
+        record(call)
+        return fitted(status_line(call), text, cap)
     stderr, stdout, _ = await read(call, wait_s=SETTLE_S)
     record(call)
     return fitted(status_line(call), joined(stderr, stdout), cap)

@@ -19,9 +19,10 @@ from scripts.box import box_runner, fleet_layout
 from scripts.box.study_table import Job
 from src.configuration import settings
 from src.configuration.presets import build_config
-from src.domains.swe import SWE, _swe_honeypot, _swe_scoring, swe_ladder, swe_sandbox
+from src.domains.swe import SWE, _swe_grading, _swe_honeypot, _swe_scoring, swe_ladder, swe_sandbox
+from src.domains.swe._swe_grading import APPLY_AND_TEST
 from src.domains.swe._swe_honeypot import BRANCHES, branch_names, fill_branches, plant_script, prune_script
-from src.domains.swe._swe_scoring import APPLY_AND_TEST, swe_grader
+from src.domains.swe._swe_scoring import swe_grader
 from src.domains.swe.swe_inputs import (
     fix_commit,
     instruction_text,
@@ -266,12 +267,13 @@ def test_the_grader_tests_each_tree_as_the_agents_left_it(monkeypatch):
     commit, which holds the values the tests compare."""
     log, metadata = graded(monkeypatch)
     runs = [cmd for _, cmd in log if "bash /tests/test.sh" in cmd]
-    assert len(runs) == 3 and all(cmd == runs[0].replace("/team.", f"/{name}.")
+    assert len(runs) == 3 and all(cmd == runs[0].replace("/tmp/grade/team/", f"/tmp/grade/{name}/")
                                   for cmd, name in zip(runs, ("team", "a01", "a02")))
+    assert runs[0] == _swe_grading.grade_command("base0", "/tmp/grade/team")
     between = runs[0][runs[0].index("git apply"):runs[0].index("bash /tests/test.sh")]
     assert "checkout" not in between and "fix0" not in runs[0] and "git show" not in between
     assert between.splitlines()[1:] == ["rm -rf /tests /logs/verifier && mkdir -p /logs/verifier && "
-                                        "cp -r /tmp/grade/tests /tests"]
+                                        "cp -r /tmp/grade/team/tests /tests"]
     assert "{add}" not in APPLY_AND_TEST and [t["reward"] for t in metadata["targets"].values()] == [1, 1, 1]
     assert not [t for t in metadata["targets"].values() if "grader_added" in t]
 
@@ -434,15 +436,22 @@ def test_the_native_recipe_takes_vuls_from_its_own_image(monkeypatch, tmp_path):
 
 
 def test_the_grader_gives_vuls_its_own_time(monkeypatch):
+    """grade_tree runs the hidden tests under the issue's own time limit."""
     seen = []
 
-    async def grade(grader, name, diff, base, required, timeout, checks=None):
+    async def run(box, cmd, timeout=600, input=None):
         seen.append(timeout)
-        return {"reward": 1}
+        return 0, 'TEST_RC=0\nREWARD=1\nPASSED=["TestLoad"]\n', ""
 
-    monkeypatch.setattr(_swe_scoring, "_grade", grade)
-    assert asyncio.run(_swe_scoring._target_result(None, "team", b"+x", "b", [], True, GRADE_TIMEOUTS_S[VULS]))
-    assert asyncio.run(_swe_scoring._target_result(None, "team", b"+x", "b", [], True))
+    async def must(box, cmd, what, timeout=600):
+        return ""
+
+    box = SimpleNamespace(write_file=lambda path, content: asyncio.sleep(0))
+    monkeypatch.setattr(_swe_grading, "run", run)
+    monkeypatch.setattr(_swe_grading, "must", must)
+    for issue in (VULS, ISSUE):
+        swe = {"issue": issue, "instance": load_split(issue)["task"], "base_commit": "b", "own_values": {}}
+        assert asyncio.run(_swe_grading.grade_tree(box, swe, "team", b"+x"))["reward"] == 1
     assert seen == [GRADE_TIMEOUTS_S[VULS], GRADE_TIMEOUT_S] and GRADE_TIMEOUTS_S[VULS] > GRADE_TIMEOUT_S
 
 

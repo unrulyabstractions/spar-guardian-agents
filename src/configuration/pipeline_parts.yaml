@@ -106,7 +106,7 @@ parts:
       src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 13
-    fingerprint: sha256:f160f6341f074301f921f53353942915c6b75bee675694a43310256de4dd4f82
+    fingerprint: sha256:3af4fdc147d34ac9f6ac42c7ca1a5b18ed1dc4ce64cbf817556a6e433f155a17
     log:
       1: '2026-11-22 first version: the code record''s agent and team rows (code_ladder.signal_rows) of
         b7b1bed, and run.json''s signals block (re-locked 2026-11-22: the stored layout: the same bytes,
@@ -257,7 +257,9 @@ parts:
         values: the 9 runs of disregulator_existence_1 reprocess to the same bytes) (re-locked 2026-11-24:
         protein package cleanup; the 70 stored runs of ian_influencers_0 and ian_env_prototyping_0 reprocess
         to the same bytes) (re-locked 2026-11-24: the creative package cleaned up with no change of behaviour:
-        ian_influencers_0 and ian_env_prototyping_0 reprocessed in scratch, only versions.json differs)'
+        ian_influencers_0 and ian_env_prototyping_0 reprocessed in scratch, only versions.json differs)
+        (re-locked 2026-11-24: ian_gflipt (check_fix, its own values, hashed tests): every exploit takes
+        the variant''s values; seven studies reprocessed in scratch byte-equal)'
   topology:
     file: processed/facts/topology.json
     make: src.measures.topology_fact:topology_part
@@ -299,7 +301,7 @@ parts:
       src/domains/*/revealed/**/*]
     pins: []
     version: 14
-    fingerprint: sha256:6954720aca360b210d38849fc675a3be98f5044589b1ecdbb011928832499bbe
+    fingerprint: sha256:2e55cf733845e7a154e1cb107dde6c847f2972ba66249d11523e929d2aebc282
     log:
       1: '2026-11-22 first version: the Cheating ladder with CheatBench''s labels beside its clauses,
         as the viewer keeps it, of b7b1bed (re-locked 2026-11-22: the stored layout: the same bytes, read
@@ -439,7 +441,9 @@ parts:
         values: the 9 runs of disregulator_existence_1 reprocess to the same bytes) (re-locked 2026-11-24:
         protein package cleanup; the 70 stored runs of ian_influencers_0 and ian_env_prototyping_0 reprocess
         to the same bytes) (re-locked 2026-11-24: the creative package cleaned up with no change of behaviour:
-        ian_influencers_0 and ian_env_prototyping_0 reprocessed in scratch, only versions.json differs)'
+        ian_influencers_0 and ian_env_prototyping_0 reprocessed in scratch, only versions.json differs)
+        (re-locked 2026-11-24: ian_gflipt (check_fix, its own values, hashed tests): every exploit takes
+        the variant''s values; seven studies reprocessed in scratch byte-equal)'
   coordination:
     file: analysis/labels/coordination.json
     make: src.measures.coordination:coordination_part
@@ -469,7 +473,7 @@ parts:
       src/domains/*/*_settings.py, src/domains/*/second/**/*, src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 12
-    fingerprint: sha256:641cd707bca4fb98c21a018d531f7dd5838cc5a7b6e8acd6082f1db8b2404f88
+    fingerprint: sha256:fd8e868282b18ece074672be3e2d45fcaf43442e2d14091efd5ea2a7164123a0
     log:
       1: '2026-11-22 first version: the Collusion ladder as the viewer keeps it, of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -598,7 +602,9 @@ parts:
         bytes) (re-locked 2026-11-24: protein package cleanup; the 70 stored runs of ian_influencers_0
         and ian_env_prototyping_0 reprocess to the same bytes) (re-locked 2026-11-24: the creative package
         cleaned up with no change of behaviour: ian_influencers_0 and ian_env_prototyping_0 reprocessed
-        in scratch, only versions.json differs)'
+        in scratch, only versions.json differs) (re-locked 2026-11-24: ian_gflipt (check_fix, its own
+        values, hashed tests): every exploit takes the variant''s values; seven studies reprocessed in
+        scratch byte-equal)'
   judged:
     file: analysis/labels/judged.json
     make: src.ui.viewer_parts:judged_part
@@ -629,7 +635,7 @@ parts:
       src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 4
-    fingerprint: sha256:7fbf88afa5125006243b31522189e473dda16aa3e4cd4e3823caf234ce58501b
+    fingerprint: sha256:909cf241d856e1a0de456176ea58dc8aae3640522d20ec20a91b470d27e47622
     log:
       1: '2026-11-23 first version: what each disregulator did with its role (carried_out, filtered, refused,
         dropped, unknown), with mode, disclosed and the evidence, by code from the board, the code record''s
@@ -715,7 +721,9 @@ parts:
         to the same bytes) (re-locked 2026-11-24: protein package cleanup; the 70 stored runs of ian_influencers_0
         and ian_env_prototyping_0 reprocess to the same bytes) (re-locked 2026-11-24: the creative package
         cleaned up with no change of behaviour: ian_influencers_0 and ian_env_prototyping_0 reprocessed
-        in scratch, only versions.json differs)'
+        in scratch, only versions.json differs) (re-locked 2026-11-24: ian_gflipt (check_fix, its own
+        values, hashed tests): every exploit takes the variant''s values; seven studies reprocessed in
+        scratch byte-equal)'
   row:
     file: analysis/row.json
     make: src.ui.viewer_parts:row_part

@@ -153,6 +153,38 @@ def test_a_command_still_running_when_its_round_runs_out_becomes_a_job(jobs):
     asyncio.run(scenario())
 
 
+def test_a_viewed_call_shows_its_view_alone_in_time_and_as_a_job(jobs):
+    """A call with a view (SWE's check_fix): in time it answers view(exit code, stdout) and never its stderr; as a job
+    its answer and job_output show nothing while it runs, then the view's text once it has exited, once, with no exit
+    code (the team's code under check_fix could set it); a job stopped while it runs shows nothing."""
+    def view(code, stdout):
+        return f"seen {code} {stdout.split()[-1]}"
+
+    async def scenario():
+        def viewed(text):
+            return command_jobs.run_command(jobs.where, "a01", "check", "check", ["bash", "-c", text], cap=CAP,
+                                            view=view)
+        assert (await viewed("echo secret >&2; echo one; echo two")).text == "seen 0 two"
+        jobs.deadline = time.time() + 0.5
+        outcome = await viewed("echo secret; echo secret >&2; sleep 1.5; echo last")
+        assert outcome.job == "j1" and outcome.text == f"{JOBS['kept'].format(job='j1')} {JOBS['nothing_yet']}"
+        assert await command_jobs.job_output("a01", "j1", CAP) == f"{JOBS['running'].format(job='j1')} {JOBS['no_new']}"
+        await until(command_jobs.owned("a01", "j1").task.done)
+        assert await command_jobs.job_output("a01", "j1", CAP) == \
+            f"{JOBS['exited'].format(job='j1', code='unknown')} {JOBS['new']}\nseen 0 last"
+        assert await command_jobs.job_output("a01", "j1", CAP) == \
+            f"{JOBS['exited'].format(job='j1', code='unknown')} {JOBS['no_new']}"
+        coded = await viewed("sleep 1; echo done; exit 7")
+        await until(command_jobs.owned("a01", coded.job).task.done)
+        assert "code unknown" in await command_jobs.job_output("a01", coded.job, CAP)
+        jobs.deadline = time.time()
+        outcome = await viewed("echo secret; sleep 30")
+        assert await command_jobs.job_stop("a01", outcome.job, CAP) == \
+            f"{JOBS['stopped'].format(job=outcome.job)} {JOBS['no_new']}"
+
+    asyncio.run(scenario())
+
+
 def test_a_jobs_recorded_end_follows_its_last_action(jobs, tmp_path):
     """A job's end is taken once its exec returned, so on one clock nothing the job did falls after it: here its last
     action stamps the time, then the job exits. The access log stamps opens on the machine's clock, so the smokes allow

@@ -52,15 +52,18 @@ EVERY_SCRIPT = modules("*/*.py")
 # and a protein-design variant (_protein_settings.VARIANTS) have their example and their team told to cheat. The
 # variants' scripts are the studies' cells, under studies/cells/<task>/.
 VARIANTS = ["studies.cells.creative_writing.ian_poem_minimal", "studies.cells.protein_design.ian_binder_minimal",
-            "studies.cells.swe.ian_flipt_minimal", "studies.cells.swe.ian_swe0_minimal"]
+            "studies.cells.swe.ian_flipt_minimal", "studies.cells.swe.ian_gflipt_minimal",
+            "studies.cells.swe.ian_swe0_minimal"]
 VARIANT_CELLS = ["studies.cells.creative_writing.ian_poem_minimal_cheat",
                  "studies.cells.protein_design.ian_binder_minimal_cheat",
                  "studies.cells.swe.ian_flipt_minimal_cheat",
+                 "studies.cells.swe.ian_gflipt_minimal_cheat",
                  "studies.cells.swe.ian_swe0_minimal_cheat"]
 # The elicitation cell names its run after its model and seed and refuses one that exists; it hands no replace to the
 # run (tests/unit/test_elicitation.py).
 ELICITATION = "studies.cells.swe.flipt_duo"
 STUDY_CELLS = VARIANTS + VARIANT_CELLS + ["studies.cells.swe.ian_flipt_minimal_regulated",
+                                          "studies.cells.swe.ian_gflipt_minimal_regulated",
                                           "studies.cells.swe.ian_swe0_minimal_regulated", ELICITATION]
 
 

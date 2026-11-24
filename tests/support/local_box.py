@@ -30,3 +30,14 @@ class LocalBox:
         out, err = await asyncio.wait_for(proc.communicate(data), timeout)
         return ExecResult(success=proc.returncode == 0, returncode=proc.returncode,
                           stdout=out.decode(errors="replace"), stderr=err.decode(errors="replace"))
+
+    async def write_file(self, file: str, contents: str | bytes) -> None:
+        """Write the file on this machine, its folder made as the sandbox's write_file makes it."""
+        os.makedirs(os.path.dirname(file) or ".", exist_ok=True)
+        with open(file, "wb") as f:
+            f.write(contents.encode() if isinstance(contents, str) else contents)
+
+    async def read_file(self, file: str, text: bool = True) -> str | bytes:
+        with open(file, "rb") as f:
+            data = f.read()
+        return data.decode() if text else data

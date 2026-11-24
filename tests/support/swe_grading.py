@@ -13,7 +13,7 @@ hold values of ours (swe_settings.OWN_VALUES), `the_fix_from_memory` is the fix 
 model that remembers the public fix writes with no piece: it must fail. Some piece plants every file of the fix, and
 tests/unit/test_collaboration_swe.py proves that the pieces hold the fix's lines and nothing else, file by file, so
 `all_pieces` is the three pieces alone, with nothing the team writes. The grader's own function grades each tree
-(_swe_scoring._target_result: the diff applied to the pristine /app, CheatBench's tests/test.sh as the grader gets
+(_swe_grading.grade_tree: the diff applied to the pristine /app, CheatBench's tests/test.sh as the grader gets
 it, nothing added).
 
 Under a revealed exploit (swe_exploits) an agent holds a hidden piece and a revealed part, dealt on their own.
@@ -29,19 +29,17 @@ import shlex
 import subprocess
 from types import SimpleNamespace
 
-from src.domains.swe import _swe_scoring
+from src.domains.swe import _swe_grading
 from src.domains.swe.swe_exploits import HiddenBranches, RevealedFiles, fields
 from src.domains.swe.swe_inputs import (
     file_blocks,
-    grader_tests,
     load_split,
     piece_patch,
     required_tests,
+    run_values,
     task_config,
 )
 from src.domains.swe.swe_settings import (
-    GRADE_TIMEOUT_S,
-    GRADE_TIMEOUTS_S,
     NEUTRAL_VALUES,
     OWN_VALUES,
     PARTS,
@@ -187,20 +185,19 @@ class GraderContainer:
 
 
 async def grade_trees(box: GraderContainer, issue: str, cases: list[dict]) -> list[dict]:
-    """Each case graded once, in order, by the grader's own function, after the grader's copy of CheatBench's tests/."""
+    """Each case graded once, in order, by the grader's own grading (_swe_grading.grade_tree), which stages the
+    grader's copy of CheatBench's tests/ for each."""
     instance = load_split(issue)["task"]
     config = task_config(instance)
-    rc = (await box.exec(["bash", "-c", "rm -rf /tmp/grade && mkdir -p /tmp/grade/tests && git -C /app rev-parse HEAD"],
+    rc = (await box.exec(["bash", "-c", "rm -rf /tmp/grade && mkdir -p /tmp/grade && git -C /app rev-parse HEAD"],
                          timeout=120))
     assert rc.returncode == 0 and rc.stdout.strip() == config["base_commit"], rc
-    for name, content in grader_tests(instance, issue).items():
-        await box.write_file(f"/tmp/grade/tests/{name}", content)
     required = required_tests(config)
-    timeout = GRADE_TIMEOUTS_S.get(issue, GRADE_TIMEOUT_S)
+    swe = {"issue": issue, "instance": instance, "base_commit": config["base_commit"],
+           "own_values": run_values(issue, "jigsaw")}
     out = []
     for case in cases:
-        result = await _swe_scoring._target_result(box, case["name"], case["diff"].encode(), config["base_commit"],
-                                                   required, True, timeout)
+        result = await _swe_grading.grade_tree(box, swe, case["name"], case["diff"].encode())
         failed = sorted(set(required) - set(result.get("required_passed") or []))
         out.append({**{k: v for k, v in case.items() if k != "diff"}, "reward": result.get("reward"),
                     "applied": result.get("applied"), "error": result.get("error"), "failed_required": failed,

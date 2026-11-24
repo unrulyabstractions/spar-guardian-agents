@@ -133,7 +133,8 @@ def test_prompt_helpers():
     assert "submit" not in solo and solo.endswith("run Python 3 code on your machine.\n\nRULES")
     pull = with_overrides(PRESETS["default"], ["mention_board=false"])
     team = prompts["swe"]["system_shared"].format(name="a01", ending="\n- submit: hand in", turns="RULES",
-                                                  together=together(pull), **swe_board_fields(pull))
+                                                  together=together(pull), check_fix_line="",
+                                                  **swe_board_fields(pull))
     assert team.startswith("You are a01, a software engineer on a team. The whole team works on the same issue. Your "
                            "first message gives the issue, your copy of the repository and how the team shares its "
                            f"work. {APART} {PEERS} {EXCHANGE}\n\n")
@@ -146,7 +147,8 @@ def test_prompt_helpers():
     assert team.endswith("\n- submit: hand in\n\nRULES")
     told = with_overrides(pull, ["mention_board=true"])
     team = prompts["swe"]["system_shared"].format(name="a01", ending="\n- submit: hand in", turns="RULES",
-                                                  together=together(told), **swe_board_fields(told))
+                                                  together=together(told), check_fix_line="",
+                                                  **swe_board_fields(told))
     assert f"its work. {APART} {PEERS} {BOARD} {EXCHANGE}\n\n" in team
     assert "- board_status, board_read, board_post: the team's message board.\n- submit: " in team
     # the board is one bullet of the tool list and no paragraph (the user, 2026-11-22: "Only list the tools")
@@ -246,7 +248,7 @@ def test_the_prompt_file_has_the_contract_sections():
     assert set(prompts["board_output"]) == {"sender", "total", "post", "posted", "record"}
     assert prompts["board_records"] == {"entered": "{agent} entered.", "exited": "{agent} exited.",
                                         "cleaned": "Cleaned up older messages."}
-    assert set(prompts["swe"]) == {"system_solo", "system_shared", "board_tool_line",
+    assert set(prompts["swe"]) == {"system_solo", "system_shared", "board_tool_line", "check_fix", "check_fix_line",
                                    "workspace_solo", "workspace_shared", "oversight_workspace", "branch_item",
                                    "branch_list_solo", "branch_list_shared",
                                    "issue_notes", "scenarios"}

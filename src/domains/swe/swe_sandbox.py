@@ -15,7 +15,7 @@ from pathlib import Path
 from inspect_ai.util import sandbox
 
 from src.domains.swe.swe_inputs import load_split, task_config, task_dir
-from src.domains.swe.swe_settings import AGENT_CPUS, AGENT_MEM, BUILD, TEAM_MOUNT, TEAM_REPO, WORKDIR
+from src.domains.swe.swe_settings import AGENT_CPUS, AGENT_MEM, BUILD, CHECKER, TEAM_MOUNT, TEAM_REPO, WORKDIR
 from src.sandbox import staging
 from src.sandbox.agent_tools import Seat
 from src.sandbox.docker_images import docker, image_id, image_labels
@@ -112,16 +112,21 @@ def team_gate(issue: str, kept_out: list[str]) -> Gate:
                 kept_out=tuple(kept_out), extra={"cpus": 0.5, "mem_limit": "512m"})
 
 
-def write_compose(issue: str, agents: list[str], *, team_remote: bool, kept_out: list[str] | None = None) -> Path:
+def write_compose(issue: str, agents: list[str], *, team_remote: bool, kept_out: list[str] | None = None,
+                  checker: bool = False) -> Path:
     """The grader `default`, one service per agent, and the volume `team`; team_remote mounts it in the agents too
     (a shared_task team), and gives the grader alone CAP_LINUX_IMMUTABLE, which locks the remote
     (_swe_team_remote.LOCK). An agent kept out of team/main mounts it read-only and pushes through the gate, the
-    service team_gate.SERVICE (team_gate.Gate)."""
+    service team_gate.SERVICE (team_gate.Gate). `checker` adds the service CHECKER, where check_fix grades: the
+    grader's image, limits and hostname, with no volume and no capability added, so the team's code it tests reaches
+    no other machine."""
     image = image_tags(issue)["native"]
+    grading = {"working_dir": WORKDIR, "image": image, "hostname": "grader", "cpus": 4.0, "mem_limit": "6g"}
     gate = team_gate(issue, kept_out or [])
     locks = {"cap_add": ["LINUX_IMMUTABLE"]} if team_remote else {}
-    services = {"default": staging.compose_service(working_dir=WORKDIR, image=image, hostname="grader", cpus=4.0,
-                                                   mem_limit="6g", volumes=[f"{VOLUME}:{TEAM_MOUNT}"], **locks)}
+    services = {"default": staging.compose_service(**grading, volumes=[f"{VOLUME}:{TEAM_MOUNT}"], **locks)}
+    if checker:
+        services[CHECKER] = staging.compose_service(**grading)
     for a in agents:
         services[a] = staging.compose_service(working_dir=WORKDIR, image=image, hostname=a, cpus=AGENT_CPUS,
                                               mem_limit=AGENT_MEM, restart="unless-stopped",
