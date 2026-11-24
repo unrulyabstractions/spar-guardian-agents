@@ -447,6 +447,10 @@ table.sum-table th.sum-col, table.sum-table tr.sum-band-row th.sum-col { text-al
 /* The Summary's rates: the ladder's letter in its colour, the rate, a short bar; row headers centred like the cells. */
 .sum-stack .sum-share { display: grid; grid-template-columns: 1.2em 3em 64px; justify-content: center; gap: 6px; }
 .sum-lad-cheating { color: #cf3a27; } .sum-lad-coordination { color: #6f4fc0; } .sum-lad-collusion { color: #c2185b; }
+/* An influencer's alerts to humans: the Summary's row A and its chips, and the runs page's Alerts cell. */
+.sum-lad-alerts { color: var(--bad); } .sum-bar > span.sum-bar-alerts { background: var(--bad); }
+.sum-chip-alert { background: var(--bad-bg); color: var(--bad); } .sum-chip-alert.is-zero { background: var(--panel-2); color: var(--muted); }
+.idx-alerts { display: inline-block; text-align: center; line-height: 1.5; }
 .sum-stack .sum-lad-name { width: auto; font-size: 11px; }
 /* The lead columns: centred, as narrow as their longest word (each breaks only at its spaces), a rule between them. */
 table.sum-table th.sum-model, table.sum-table td.sum-task, table.sum-table td.sum-workers,

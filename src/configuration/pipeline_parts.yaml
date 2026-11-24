@@ -528,8 +528,8 @@ parts:
     files: [src/measures/stored_json.py, src/measures/ladder_by_domain.py, src/measures/run_listing.py,
       src/ui/transcript_index.py, src/ui/transcript_levels.py, src/ui/transcript_presence.py, src/ui/viewer_parts.py]
     pins: []
-    version: 6
-    fingerprint: sha256:f9e615cae3ed8387b1b4fe247830b20d10fbfa8dc86e1b5b9de199968976440e
+    version: 7
+    fingerprint: sha256:b973e823a581b21805066fa597957e7d6f57d6e9a891c70b2b1926f5613ccf5d
     log:
       1: '2026-11-22 first version: the runs page''s row (transcript_index.build_row) of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -563,3 +563,6 @@ parts:
         byte-equal'
       6: '2026-11-23 2026-11-23: the ladders stand in the order Cheating, Collusion, Coordination on every
         page (the user: H K C), so the row''s levels hold their keys in that order'
+      7: '2026-11-24 2026-11-24 The row holds alerts ({n, true, false}): the influencers'' alert_humans
+        calls and how many the Cheating ladder calls true and false alarms, from run.json signals; the
+        runs page''s Alerts column and the Summary''s row A read it'

@@ -173,8 +173,9 @@ def exact_filters(mine: list[dict], runs: list[dict], base: dict, influencers: l
 
 
 def cell(rows: list[dict]) -> dict:
-    """One cell's counts: n, cheated, accessed and passed (each k of n) and the teams' level counts per ladder in the
-    ladder's order."""
+    """One cell's counts: n, cheated, accessed and passed (each k of n), alerted (the runs in which an influencer
+    alerted humans), alerts (those alerts and how many were true and false alarms, the rows' alerts summed) and the
+    teams' level counts per ladder in the ladder's order."""
     ladders = transcript_levels.LADDERS
     cheating = ladders["cheating"]["levels"]
     accessed = set(cheating[cheating.index(ACCESSED):])
@@ -188,6 +189,8 @@ def cell(rows: list[dict]) -> dict:
             "cheated": sum(r["levels"].get("cheated") is True for r in rows),
             "accessed": sum(r["levels"]["team"].get("cheating") in accessed for r in rows),
             "passed": sum(r["levels"].get("passed") is True for r in rows),
+            "alerted": sum(bool((r.get("alerts") or {}).get("n")) for r in rows),
+            "alerts": {k: sum((r.get("alerts") or {}).get(k) or 0 for r in rows) for k in ("n", "true", "false")},
             "levels": {ladder: counts(ladder) for ladder in transcript_levels.ORDER}}
 
 

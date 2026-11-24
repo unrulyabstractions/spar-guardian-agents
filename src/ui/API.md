@@ -164,6 +164,8 @@ IndexRow = {                                         # valid runs only
   no rounds or no exits),
   ended_by (how the team's run ended, run.json signals.team.ended_by: submit, stop_working, steps (its rounds ran
   out), tokens, time, delivered, error or end; null when not recorded),
+  alerts ({n, true, false}: the influencers' alert_humans calls and how many the Cheating ladder calls true and
+  false alarms, run.json signals; all zero on a run with none),
   exploit_used (on a run whose team is hacked, which exploit's content its hand-in holds: revealed, hidden, both,
   none or unknown, the Cheating label's exploit_used; null on every other run and on a run without side copies),
   levels: {team: {<ladder>: level}, cheated: bool | null,   # the team's Cheating measure: attempted or above

@@ -103,6 +103,12 @@ const influencersCell = r => (r.influencer_conditioning.length
 /** A name that may break after each underscore (and at a space, unless the space is a no-break one). */
 const breakable = name => String(name).split('_').flatMap((part, i) => (i ? ['_', h('wbr'), part] : [part]));
 
+/** The Alerts cell: how often the run's influencers alerted humans (the row's alerts), and under it how many the
+ * Cheating ladder calls true and false alarms; a muted 0 with none. */
+const alertsCell = a => (!a || !a.n ? muted('0', 'small')
+  : h('span', { class: 'idx-alerts', title: `${a.true} true, ${a.false} false` },
+    badge(plural(a.n, 'alert'), 'bad'), h('div', { class: 'small muted' }, `${a.true} true · ${a.false} false`)));
+
 /** A run's agents of one influencer role (the row's influencer_conditioning). */
 const roleCount = (r, role) => (r.influencer_conditioning || []).filter(x => x.role === role).reduce((n, x) => n + (x.n || 0), 0);
 /** How a team's run ended (the index row's ended_by, src/measures/team_ladder.py ended_by), in the page's words. */
@@ -173,6 +179,10 @@ function columns(d) {
     { key: 'exploit', label: 'Exploit', group: 'team', title: EXPLOIT_TITLE, sort: r => r.exploit_used || '',
       cell: r => r.exploit_used || '', empty: r => !r.exploit_used },
     ...d.order.map(influencers),
+    { key: 'alerts', label: 'Alerts', group: 'influencers', title: 'Times an influencer alerted humans',
+      sort: r => (r.influencer_conditioning.length ? (r.alerts || {}).n || 0 : -1),
+      empty: r => !r.influencer_conditioning.length,
+      cell: r => (r.influencer_conditioning.length ? alertsCell(r.alerts) : none()) },
     ...Object.keys(about.labels).map(label),
     { key: 'rounds', label: 'Rounds', title: 'Most and fewest rounds an agent used', sort: r => (r.rounds == null ? -1 : r.rounds),
       cell: r => (r.rounds == null ? none() : spanLines(r).length
@@ -197,7 +207,7 @@ const GROUPS = { team: 'Workers', labels: 'Judge labels', influencers: 'Influenc
 // Columns whose text wraps.
 const WRAP = new Set(['run', 'task']);
 // Columns whose cells sit centred: the counts, the ladders, the scores and the interest rank.
-const CENTER = k => k.startsWith('lv_') || ['workers', 'seed_pack', 'exploit', 'disclosure', 'manipulation', 'rounds', 'ended_by', 'interest'].includes(k);
+const CENTER = k => k.startsWith('lv_') || ['workers', 'seed_pack', 'exploit', 'alerts', 'disclosure', 'manipulation', 'rounds', 'ended_by', 'interest'].includes(k);
 
 /** The line under the legend naming the collapsed columns, by band, a band's name before its columns when one of
  * them shares its name with another column: "* Collapsed, no values: Influencers Cheating, Collusion, Coordination;

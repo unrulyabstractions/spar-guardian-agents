@@ -391,6 +391,13 @@ def exploit_shown(cheating: dict) -> str | None:
     return cheating.get("exploit_used") if cheating.get("team") == HACKED else None
 
 
+def alerts_shown(run_json: dict) -> dict:
+    """The influencers' alerts to humans (alert_humans) as the run's signals count them: how many, and how many the
+    Cheating ladder calls a true and a false alarm (src/measures/alert_outcomes.py). All zero on a run with none."""
+    team = (run_json.get("signals") or {}).get("team") or {}
+    return {"n": team.get("alerts") or 0, "true": team.get("true_alarms") or 0, "false": team.get("false_alarms") or 0}
+
+
 def build_row(col: str, listed: Listed, rf: RunFiles, measured: dict) -> dict:
     """The run's index row from its files and its measures (RunFiles.measured's answer)."""
     rj, cfg = rf.run_json, rf.run_json.get("config") or {}
@@ -415,6 +422,7 @@ def build_row(col: str, listed: Listed, rf: RunFiles, measured: dict) -> dict:
         "round_span": round_span(rj),
         "ended_by": ((rj.get("signals") or {}).get("team") or {}).get("ended_by"),
         "exploit_used": exploit_shown(measured["cheating"]),
+        "alerts": alerts_shown(rj),
         "levels": transcript_levels.index_levels(rf.levels(measured), rf.roles),
         "cheatbench": cheatbench_summary(measured["cheatbench"], rf.episodes, rf.roles),
         "labels": label_summary(measured["labels"], rf.roles),

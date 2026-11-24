@@ -69,14 +69,31 @@ function lineShare(key, lad, counts, n) {
     h('span', { class: 'sum-bar' }, h('span', { style: `width:${pct}%;background:${RAMP[key][at]}` })));
 }
 
-/** A cell, centred: each ladder's share at or above its line, or with `detailed` each ladder's level chips; then its
- * runs (linked when the server found the filters that keep exactly them). */
-function cellView(c, d, detailed) {
+/** An influencer column's alert row: the share of its runs in which an influencer alerted humans, under the letter
+ * A; with `detailed` the alerts as chips, all of them and the true and the false alarms. */
+function alertShare(c, detailed) {
+  const name = h('span', { class: 'sum-lad-name sum-lad-alerts', title: 'Alerts to humans' }, 'A');
+  if (detailed) {
+    return h('div', { class: 'sum-lad' }, name, h('span', { class: 'sum-chips' },
+      [['alerts', c.alerts.n], ['true', c.alerts.true], ['false', c.alerts.false]].map(([k, v]) => h('span',
+        { class: ['sum-chip', 'sum-chip-alert', !v && 'is-zero'], title: `Alerts to humans, ${k}: ${v}` }, `${k} ${v}`))));
+  }
+  const pct = c.n ? Math.round((100 * c.alerted) / c.n) : 0;
+  return h('div', { class: 'sum-share', title: `Humans alerted: ${c.alerted} of ${c.n} runs, ${c.alerts.n} alerts` }, name,
+    h('span', { class: ['sum-share-k', c.alerted > 0 && 'is-some'] }, `${pct}%`),
+    h('span', { class: 'sum-bar' }, h('span', { class: 'sum-bar-alerts', style: `width:${pct}%` })));
+}
+
+/** A cell, centred: each ladder's share at or above its line, or with `detailed` each ladder's level chips; in a column
+ * with influencers (`col.influencers`) the alert row after them; then its runs (linked when the server found the
+ * filters that keep exactly them). */
+function cellView(c, d, detailed, col) {
   if (!c) return h('td', { class: 'sum-cell sum-empty' }, muted('–'));
   const n = plural(c.n, 'run');
+  const alerts = col && col.influencers.length ? alertShare(c, detailed) : null;
   return h('td', { class: 'sum-cell' }, h('div', { class: ['sum-stack', detailed && 'is-detailed'] },
-    detailed ? h('div', { class: 'sum-lads' }, d.order.map(L => ladderChips(L, d.ladders[L], c.levels[L])))
-      : d.order.map(L => lineShare(L, d.ladders[L], c.levels[L], c.n)),
+    detailed ? h('div', { class: 'sum-lads' }, d.order.map(L => ladderChips(L, d.ladders[L], c.levels[L])), alerts)
+      : [d.order.map(L => lineShare(L, d.ladders[L], c.levels[L], c.n)), alerts],
     c.filters ? h('a', { class: 'sum-n', href: runsHref(c.filters), title: 'Open these runs' }, n)
       : h('span', { class: 'sum-n', title: 'No runs-page filter keeps exactly these' }, n)));
 }
@@ -130,7 +147,9 @@ function summed(rows, columns, d) {
       const order = d.ladders[L].levels;
       levels[L] = [...by.entries()].sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]));
     }
-    out[c.key] = { n: add('n'), cheated: add('cheated'), accessed: add('accessed'), passed: add('passed'), levels, filters: null };
+    const alerts = Object.fromEntries(['n', 'true', 'false'].map(k => [k, cs.reduce((t, x) => t + x.alerts[k], 0)]));
+    out[c.key] = { n: add('n'), cheated: add('cheated'), accessed: add('accessed'), passed: add('passed'),
+      alerted: add('alerted'), alerts, levels, filters: null };
   }
   return out;
 }
@@ -233,7 +252,7 @@ export async function viewSummary(q) {
   }
   const head = h('tr', null, C.filter(c => !spanned.has(c.key)).map(c => colHead(c)));
   const cells = cs => C.map(c => {
-    const td = cellView(cs[c.key], ladders, detailed);
+    const td = cellView(cs[c.key], ladders, detailed, c);
     if (starts.has(c.key)) td.classList.add('sum-group-start');
     for (const k of levelClasses(c)) if (k) td.classList.add(k);
     return td;

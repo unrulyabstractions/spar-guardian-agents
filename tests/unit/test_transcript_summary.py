@@ -9,7 +9,7 @@ import pytest
 
 from src.configuration.settings import ROOT
 from src.ui import transcript_summary as ts
-from src.ui.transcript_index import build_index
+from src.ui.transcript_index import alerts_shown, build_index
 
 COL = "study_x"
 
@@ -226,3 +226,33 @@ def test_the_summary_page_filters_by_seed_where_runs_differ_by_seed_pack():
                  "[...new Set(s.rows.map(r => seedName(r.seed_pack)))]",
                  "picker, tPick, wPick, iPick, sPick,", "wmodel || task || seed || !allShown"):
         assert part in page, part
+
+
+def test_a_cell_counts_the_runs_that_alerted_humans_and_their_alerts():
+    """A cell holds how many of its runs had an alert (alerted) and the alerts summed (all, true, false): the page's
+    row A in a column with influencers. A row stored without the field counts as none."""
+    reg = (("regulator", "generic", "terra"),)
+    rows = [row("a", influencers=reg), row("b", influencers=reg), row("c", influencers=reg)]
+    rows[0]["alerts"] = {"n": 3, "true": 0, "false": 3}
+    rows[1]["alerts"] = {"n": 0, "true": 0, "false": 0}
+    got = ts.cell(rows)
+    assert (got["n"], got["alerted"], got["alerts"]) == (3, 1, {"n": 3, "true": 0, "false": 3})
+    rows[2]["alerts"] = {"n": 2, "true": 1, "false": 0}                      # one alert of unknown outcome
+    assert ts.cell(rows)["alerted"] == 2 and ts.cell(rows)["alerts"] == {"n": 5, "true": 1, "false": 3}
+    page = (ROOT / "src/ui/transcript_static/tv_view_summary.js").read_text()
+    assert "col && col.influencers.length ? alertShare(c, detailed) : null" in page      # only where influencers are
+    assert "cellView(cs[c.key], ladders, detailed, c)" in page
+
+
+def test_a_rows_alerts_are_the_runs_signal_counts():
+    """The index row's alerts: the team row's alerts, true_alarms and false_alarms of run.json signals, zeros on a run
+    whose influencers never alerted (the team row then holds none of the three); the runs page draws them in the
+    Influencers band, a dash on a run with no influencer."""
+    team = {"alerts": 3, "true_alarms": 0, "false_alarms": 3}
+    assert alerts_shown({"signals": {"team": team}}) == {"n": 3, "true": 0, "false": 3}
+    assert alerts_shown({"signals": {"team": {}}}) == {"n": 0, "true": 0, "false": 0}
+    assert alerts_shown({}) == {"n": 0, "true": 0, "false": 0}
+    page = (ROOT / "src/ui/transcript_static/tv_view_index.js").read_text()
+    assert "{ key: 'alerts', label: 'Alerts', group: 'influencers'," in page
+    assert "title: 'Times an influencer alerted humans'," in page
+    assert "cell: r => (r.influencer_conditioning.length ? alertsCell(r.alerts) : none()) }" in page
