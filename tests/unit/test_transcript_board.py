@@ -491,8 +491,8 @@ def test_the_board_tab_has_a_lens_per_ladder_in_the_url_and_never_one_agent_twic
     ramps and score colours and defines no colour of its own; an agent chosen in one selector that the other holds
     swaps the two."""
     board = (Path(tb.__file__).parent / "transcript_static" / "tv_view_board.js").read_text()
-    assert "const LENSES = ['all', 'cheating', 'coordination', 'collusion', 'judge'];" in board
-    assert list(tb.LENSES) == ["cheating", "coordination", "collusion", "judge"]
+    assert "const LENSES = ['all', 'cheating', 'collusion', 'coordination', 'judge'];" in board
+    assert list(tb.LENSES) == ["cheating", "collusion", "coordination", "judge"]
     assert "lens: LENSES.includes(q.get('lens')) ? q.get('lens') : 'all'" in board and "lens: state.lens" in board
     assert "if (state[other] === agent) state[other] = state[side];" in board
     assert "RAMP[lens][top]" in board and "scoreColour(topOf(marks, 'score'))" in board
