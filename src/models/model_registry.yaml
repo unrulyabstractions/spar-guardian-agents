@@ -137,11 +137,11 @@ models:
   deepseek-flash-openrouter:
     inspect: openrouter/deepseek/deepseek-v4.1-flash-1017
     provider: openrouter
-    routing: {order: [deepinfra/fp8], allow_fallbacks: false}
+    routing: {order: [cohere/fp8], allow_fallbacks: false}
     version: DeepSeek-V4.1-Flash-1017
     context: 1048576
-    usd_per_million: {input: 0.098, cached_input: 0.00294, output: 0.294}
-    price_source: OpenRouter's DeepInfra fp8 endpoint (its standard tier) on 2026-11-23, the host the routing pins
+    usd_per_million: {input: 0.115, cached_input: 0.0025, output: 0.40}
+    price_source: OpenRouter's Cohere fp8 endpoint on 2026-11-23 (evening), the host the routing pins
     cheatbench: []
     status: default
     notes: >-
@@ -155,7 +155,13 @@ models:
       to 2026-11-23 ran on Together (0.30/0.006/1.20, the fastest Flash host on 2026-10-28, 260 tokens/s at the
       median) but the screen of 2026-10-28, which ran on DeepInfra, where a 100-turn cell took 50 minutes: watch the
       wall time of the first runs. DeepSeek's own endpoint trains on prompts and the account's data policy excludes
-      it (a pinned call is refused); Baidu charged cached tokens in full on 2026-10-28.
+      it (a pinned call is refused); Baidu charged cached tokens in full on 2026-10-28. Pinned to Cohere's fp8
+      endpoint since 2026-11-23 evening at the user's word ("try Cohere's"): DeepInfra's standard tier answered 429
+      from its shared pool from 18:25 on (status -2, 60% up over five minutes at 19:11), two runs of
+      ian_influencers_0 ended on it and one crawled. Cohere serves the same precision at 0.115/0.0025/0.40, 1.19
+      times DeepInfra's cost on our token mix. A live check that evening (three repeated calls, a tool call, a
+      control) showed 0.5 seconds a repeated call, the cache read and billed at this price, tool calls working and
+      a bogus host refused. The runs of ian_influencers_0 launched before 19:20 that day ran on DeepInfra.
   deepseek-v4-pro-openrouter:
     inspect: openrouter/deepseek/deepseek-v4-pro
     provider: openrouter

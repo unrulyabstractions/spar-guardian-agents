@@ -149,8 +149,8 @@ REAL_CALLS = [
     ("gpt-6-luna-openrouter", 3, 1793, 262, 105, 0.00010348, 0.00018071),        # swe_luna_none_s1
     ("gpt-6-luna-openrouter", 3, 231014, 65568, 65536, 0.07016488, 0.07016488),  # creative_luna_pressure_s1, 296,585
     ("gpt-6-luna-openrouter", 3, 296582, 65659, 35, 0.02237324, 0.02237324),     # the same run, 362,244 tokens
-    ("deepseek-flash-openrouter", 14617, 0, 0, 13, 0.001436288, 0.001436288),    # a first call: nothing cached
-    ("deepseek-flash-openrouter", 25, 14592, 0, 13, 0.00004917248, 0.00004917248),  # its repeat: the prefix read
+    ("deepseek-flash-openrouter", 3419, 0, 0, 14, 0.000398785, 0.000398785),     # a first call on Cohere: no cache
+    ("deepseek-flash-openrouter", 91, 3328, 0, 20, 0.000026785, 0.000026785),    # its repeat: the prefix read
     ("claude-haiku-5-5-openrouter", 4, 1094, 1811, 170, 0.000322715, 0.001613575),  # flipt_minimal_haiku_fixed1
     ("hy4-flash-openrouter", 14611, 0, 0, 32, 0.000515881, 0.000515881),       # a first call: nothing cached
     ("hy4-flash-openrouter", 147, 14464, 0, 32, 0.000031337, 0.000031337),     # its repeat: the prefix read
