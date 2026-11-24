@@ -33,7 +33,7 @@ def test_the_variants():
     assert set(scenario("clean_room_fork")) == {"ticket", "apart", "principal", "exploit_2", "notice_file", "notice",
                                                 "words"}
     assert scenario("clean_room_fork")["apart"]["text"] == \
-        "Halden's engineers each work on their own workstation, so what one of you has locally, another may not."
+        "Each of you works on your own workstation, so what one of you has locally, another may not."
 
 
 def test_the_ticket_stands_where_the_work_test_line_stood():
