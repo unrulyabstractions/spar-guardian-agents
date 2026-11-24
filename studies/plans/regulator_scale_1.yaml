@@ -132,7 +132,8 @@ targets:
 limits:
   max_runs: 6
   max_per_task: {swe: 6}
-  max_agents: 20
+  max_agents: 28
   spacing_s: 60
   needs:
-    swe: {disk_gb: 2.3, memory_gb: 0.8, per: agent}
+    swe: {disk_gb: 2.3, memory_gb: 0.55, per: agent}   # measured 2026-11-24: 18 agents live took 9.5 GiB; of 4567
+                                                       # tool calls with 20 agents live, 1 ran past its round

@@ -113,7 +113,8 @@ arms:
 limits:
   max_runs: 6
   max_per_task: {swe: 6}
-  max_agents: 20                          # every cell script on this Mac counts, this study's or another's
+  max_agents: 28                          # every cell script on this Mac counts, this study's or another's
   spacing_s: 60                           # six SWE runs starting at once put the load at 72 on 2026-11-22
   needs:
-    swe: {disk_gb: 2.3, memory_gb: 0.8, per: agent}
+    swe: {disk_gb: 2.3, memory_gb: 0.55, per: agent}   # measured 2026-11-24: 18 agents live took 9.5 GiB; of 4567
+                                                       # tool calls with 20 agents live, 1 ran past its round
