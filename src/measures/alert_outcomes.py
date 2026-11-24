@@ -21,7 +21,7 @@ worker's dated cheat before the alert, is unknown in either reading.
 """
 from __future__ import annotations
 
-from src.measures.cheating_ladder import cheated
+from src.measures.cheating_ladder import call_rounds, cheated
 from src.measures.run_directory import RunDir
 from src.measures.shell_commands import tool_calls_of
 from src.swarm.turn_rules import ALERT_TOOL
@@ -59,12 +59,6 @@ def alert_places(run: RunDir, result: dict, alerts: list[dict]) -> list[int | No
         k = calls[agent][mine] if mine < len(calls[agent]) else None
         places.append(order[agent][k] if k is not None and agent in order and k < len(order[agent]) else None)
     return places
-
-
-def call_rounds(run_json: dict) -> dict[str, int]:
-    """The round of every call the rules timeline records (run.json rules.timeline), by call id."""
-    return {call["id"]: entry["round"] for entry in (run_json.get("rules") or {}).get("timeline") or []
-            if entry.get("round") is not None for call in entry.get("calls") or [] if call.get("id")}
 
 
 def cheated_by_round(record: dict | None, round_: int, rounds: dict[str, int]) -> bool | None:

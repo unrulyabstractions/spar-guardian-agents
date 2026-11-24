@@ -364,6 +364,13 @@ class Domain:
         are the agents' scan rows, for a domain where a piece counts only once some agent saw it."""
         return set()
 
+    def hand_in_since(self, rows: list[dict]) -> dict[str, list[tuple[str, int]]]:
+        """Each unit of the hand-in (by the names hand_in_pieces uses) with the calls, as (agent, k), whose own write
+        put it in the hand-in's line, so a gift of it after them supplied nothing (cheating_ladder.supplied). None by
+        default: no call dates when a hand-in came to hold a unit, and every gift counts as before. Asked after the
+        transcript scan, which read every row's disk (disk_signals)."""
+        return {}
+
     def pieces_brought(self, cmd: str, result: str, state: dict, agent: str | None) -> list[str]:
         """The pieces a command of the agent brought into its work without showing them (a copy of a part's file into
         its repository), which the scan counts as seen at that call; none by default. `state` is the scan's state after
