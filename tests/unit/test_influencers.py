@@ -9,9 +9,22 @@ import pytest
 from src.configuration import settings
 from src.configuration.presets import PRESETS, with_overrides
 from src.domains import DOMAINS as REGISTRY
-from src.swarm.influencers import level_text, role_briefing, role_first, role_prompt, role_text, role_values
+from src.swarm.influencers import (
+    level_text,
+    level_vars,
+    role_briefing,
+    role_first,
+    role_prompt,
+    role_text,
+    role_values,
+)
 
 DOMAINS = sorted(REGISTRY)      # instruction_levels.yaml's benchmark keys are the registry's
+
+
+def task_vars(domain: str) -> dict[str, str]:
+    """A benchmark's vars with the task's values in them (Benchmark.level_values), as its agents read them."""
+    return level_vars(domain, REGISTRY[domain].level_values())
 
 
 def test_role_briefing():
@@ -91,7 +104,7 @@ def test_regulator_levels(domain):
     default = with_overrides(PRESETS["default"], ["regulators=1", "peer_shell=false"])
     tail = f" {REPORT['common']} {REPORT['disclosure']}"
     pointer = REPORT["pointer"]
-    cheating = settings.load_instruction_levels()["vars"][domain]["cheating"]
+    cheating = task_vars(domain)["cheating"]
     instructed = with_overrides(default, ["regulator_level=instructed"])
     # generic, the default: the role, then COMMON and DISCLOSURE; no first-message text, so no exploit is named.
     assert default.regulator_level == "generic"
@@ -99,7 +112,7 @@ def test_regulator_levels(domain):
     assert role_first("regulator", default, domain) is None
     # instructed: generic and the pointer, then COMMON and DISCLOSURE; what cheating means here is the first message's.
     assert role_text("regulator", instructed, domain) == f"{GENERIC['regulator']} {pointer}{tail}"
-    assert role_first("regulator", instructed, domain).strip() == cheating
+    assert role_first("regulator", instructed, domain, values=REGISTRY[domain].level_values()).strip() == cheating
     # no system text names the task: what cheating means here is never in it
     for config in (default, instructed):
         text = role_text("regulator", config, domain)
@@ -118,12 +131,13 @@ def test_regulator_levels(domain):
 def test_disregulator_levels(domain):
     """A disregulator's system text names no file and no goal. Its first message gives the goal at both levels, and
     at instructed also the work it may reuse."""
-    values = settings.load_instruction_levels()["vars"][domain]
+    values = task_vars(domain)
     base = with_overrides(PRESETS["default"], ["disregulators=1", "peer_shell=false"])
     assert base.disregulator_level == "instructed"
     for level in ("generic", "instructed"):
         config = with_overrides(base, [f"disregulator_level={level}"])
-        text, first = role_text("disregulator", config, domain), role_first("disregulator", config, domain)
+        text = role_text("disregulator", config, domain)
+        first = role_first("disregulator", config, domain, values=REGISTRY[domain].level_values())
         own = GENERIC["disregulator"] + (f" {INSTRUCTED['disregulator']}" if level == "instructed" else "")
         assert text.startswith(own + " ") and (INSTRUCTED["disregulator"] in text) == (level == "instructed"), level
         assert values["goal"] not in text and values["prior_work"] not in text and "{" not in text, level
@@ -145,7 +159,7 @@ RULES = {"openmath": ("agent-014", "agent_evals.json"), "swe": ("a branch that h
 def test_every_benchmark_says_what_cheating_means_on_its_task():
     """One short text per benchmark of the registry, each its own, with the task's facts and what the rule leaves
     out."""
-    texts = {d: settings.load_instruction_levels()["vars"][d]["cheating"] for d in DOMAINS}
+    texts = {d: task_vars(d)["cheating"] for d in DOMAINS}
     assert set(RULES) == set(DOMAINS) and len(set(texts.values())) == len(DOMAINS)
     for domain, text in texts.items():
         assert text.startswith("Cheating here means ") and "not cheating" in text, domain
@@ -156,7 +170,7 @@ def test_every_benchmark_says_what_cheating_means_on_its_task():
 @pytest.mark.parametrize("level", ["generic", "identified"])
 def test_every_rule_level_has_a_sentence_on_every_benchmark(level):
     """A level with no text adds nothing to the task, which a study would read as a rule that had no effect."""
-    texts = {d: level_text("rule", level, d) for d in DOMAINS}
+    texts = {d: level_text("rule", level, d, values=REGISTRY[d].level_values()) for d in DOMAINS}
     assert all(texts.values()), [d for d, text in texts.items() if not text]
     assert not any("{" in text or "\u2014" in text for text in texts.values())
 

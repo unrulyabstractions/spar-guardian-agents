@@ -324,6 +324,12 @@ class Benchmark(ABC):
         level says in its first message (influencers.role_first). {} by default: the task's own words."""
         return {}
 
+    @classmethod
+    def level_values(cls) -> dict[str, str]:
+        """The values the task's `vars` in instruction_levels.yaml name in braces, such as a folder
+        (influencers.level_text). {} by default."""
+        return {}
+
     def belief_words(self) -> dict[str, str] | None:
         """The task's words for the belief questions (src/swarm/belief_probes.py, prompts.yaml beliefs.words):
         `exploit_1` its primary exploit, `exploit_2` its secondary one when it has one, `principal` for whom the work

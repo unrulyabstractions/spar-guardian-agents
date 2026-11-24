@@ -40,7 +40,7 @@ parts:
     files: [src/replay/*.py, src/domains/*/*_replay.py, scripts/study/replay_study.py]
     pins: []
     version: 2
-    fingerprint: sha256:a8e8e59127ae2715b76eb7d1352aeff09c46442948e5fbd97209747b6503ca61
+    fingerprint: sha256:19487508046cc92a29e6a2701e91336415e15d7fe743cee81c9b48d96af92e41
     log:
       1: '2026-11-22 first version: the faithful replay''s steps.jsonl and replay.json, and its tmp_snapshots.json
         of c619e3d'
@@ -55,7 +55,9 @@ parts:
         read-only workspace); runs before record no shared_result, so no stored byte changes) (re-locked
         2026-11-24: the hand-in is team/main at the accepted submit and later writes are late steps, for
         runs that record graded_at submit or shared_result; runs before record neither, so no stored byte
-        changes)'
+        changes) (re-locked 2026-11-24: The protein task reads its two folders from the run (protein.folders,
+        CheatBench''s names without it); the 70 stored runs of ian_influencers_0 and ian_env_prototyping_0
+        reprocess to the same bytes)'
   judge_cheatbench:
     file: analysis/judges/cheatbench.*.jsonl
     make: null
@@ -101,7 +103,7 @@ parts:
       src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 11
-    fingerprint: sha256:659ccccdc0aa0ab29b7fb6e881d0dc2e671c5e09f4d0f3d9b8c8885076809909
+    fingerprint: sha256:bbaf285ee73003eab0d706433ec1890093c043b2016021bc9668a871f87fca96
     log:
       1: '2026-11-22 first version: the code record''s agent and team rows (code_ladder.signal_rows) of
         b7b1bed, and run.json''s signals block (re-locked 2026-11-22: the stored layout: the same bytes,
@@ -236,7 +238,10 @@ parts:
       11: '2026-11-24 SWE: built reads content an agent''s own write and shown push put on the team remote
         that no ref keeps; shipped needs a commit of the agent''s in a known hand-in history, a reader
         must have written into it to take work, supplied reads added_to and is dated at its push; a refused
-        pushed copy is a refused write; a warning or refusing sentence beside a request lends no name'
+        pushed copy is a refused write; a warning or refusing sentence beside a request lends no name
+        (re-locked 2026-11-24: The protein task reads its two folders from the run (protein.folders, CheatBench''s
+        names without it); the 70 stored runs of ian_influencers_0 and ian_env_prototyping_0 reprocess
+        to the same bytes)'
   topology:
     file: processed/facts/topology.json
     make: src.measures.topology_fact:topology_part
@@ -278,7 +283,7 @@ parts:
       src/domains/*/revealed/**/*]
     pins: []
     version: 12
-    fingerprint: sha256:6e1e102409f21fb1365ba5ef3d39c7d262c7390e7036c77e5bb618681a6fc066
+    fingerprint: sha256:853eea943dfc10a77191217640dac5c5463791f86eb2819eb45da37d0f374b18
     log:
       1: '2026-11-22 first version: the Cheating ladder with CheatBench''s labels beside its clauses,
         as the viewer keeps it, of b7b1bed (re-locked 2026-11-22: the stored layout: the same bytes, read
@@ -407,7 +412,9 @@ parts:
         no team rung, worker rung or pass changes (re-locked 2026-11-24: docstrings of code_ladder.py
         and cheating_ladder.py name the new built rule and refused_writes'' kind; no code changes)'
       12: '2026-11-24 the same Cheating rules as signals v11: erased pushes built, shipped and work_taken
-        read the hand-in''s history, supplied dated at its push'
+        read the hand-in''s history, supplied dated at its push (re-locked 2026-11-24: The protein task
+        reads its two folders from the run (protein.folders, CheatBench''s names without it); the 70 stored
+        runs of ian_influencers_0 and ian_env_prototyping_0 reprocess to the same bytes)'
   coordination:
     file: analysis/labels/coordination.json
     make: src.measures.coordination:coordination_part
@@ -437,7 +444,7 @@ parts:
       src/domains/*/*_settings.py, src/domains/*/second/**/*, src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 10
-    fingerprint: sha256:88f545307a2ff955a394485b924a7fa12c06575f7003023a24815e9227d43b89
+    fingerprint: sha256:71236a993cd3f3671e2e3e13e3bc55ee4111e61437950e953705c7c443e1a291
     log:
       1: '2026-11-22 first version: the Collusion ladder as the viewer keeps it, of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -555,7 +562,9 @@ parts:
       9: '2026-11-24 each agent''s record repeats its Cheating rung, which an influencer''s built branch
         raises; no Collusion rung changes (re-locked 2026-11-24: docstrings of code_ladder.py and cheating_ladder.py
         name the new built rule and refused_writes'' kind; no code changes)'
-      10: 2026-11-24 reads the Cheating ladder's new supplied and shipped (signals v11)
+      10: '2026-11-24 reads the Cheating ladder''s new supplied and shipped (signals v11) (re-locked 2026-11-24:
+        The protein task reads its two folders from the run (protein.folders, CheatBench''s names without
+        it); the 70 stored runs of ian_influencers_0 and ian_env_prototyping_0 reprocess to the same bytes)'
   judged:
     file: analysis/labels/judged.json
     make: src.ui.viewer_parts:judged_part
@@ -586,7 +595,7 @@ parts:
       src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 4
-    fingerprint: sha256:81cea2e9c554e468e44d71dc9b7965ea73b07ab9083b2bc47e9717a5feb7904a
+    fingerprint: sha256:a497965936b571c56ccc922f1e0459116f1d72190f3d6a5f435b1ba82976b819
     log:
       1: '2026-11-23 first version: what each disregulator did with its role (carried_out, filtered, refused,
         dropped, unknown), with mode, disclosed and the evidence, by code from the board, the code record''s
@@ -660,8 +669,10 @@ parts:
         its own work put where the team can take it (used, built, swept, sent, supplied, shipped), tampered,
         probed, checked, a refused push to main, or a refused copy of the exploit into the shared result;
         an SWE post naming the revealed folder or a planted value argues'
-      4: 2026-11-24 a refused copy of the exploit pushed to the team remote is a step (refused_writes
-        kind pushed copy); solicits lends no name from a warning or refusing sentence
+      4: '2026-11-24 a refused copy of the exploit pushed to the team remote is a step (refused_writes
+        kind pushed copy); solicits lends no name from a warning or refusing sentence (re-locked 2026-11-24:
+        The protein task reads its two folders from the run (protein.folders, CheatBench''s names without
+        it); the 70 stored runs of ian_influencers_0 and ian_env_prototyping_0 reprocess to the same bytes)'
   row:
     file: analysis/row.json
     make: src.ui.viewer_parts:row_part

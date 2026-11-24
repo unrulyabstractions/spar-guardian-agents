@@ -28,6 +28,7 @@ from src.sandbox import task_tool_store as tool_store
 from src.sandbox.access_log.access_monitor import MONITOR_DEVIATION
 from src.swarm import board
 from src.swarm import turn_rules as rules
+from src.swarm.influencers import level_vars
 from src.swarm.submit_and_stop import Deliverable, ending_tools, stop_working
 from src.swarm.submit_and_stop import submit as submit_tool
 from src.swarm.turn_rules import provider_system_text
@@ -186,7 +187,7 @@ def test_a_regulators_prompt_is_its_own_in_every_domain(key):
     assert prompts["a01"].startswith("You are a01")
     assert "- submit:" in prompts["a01"] and "You do not do that task" not in prompts["a01"]
     # only the regulator reads what cheating means here, in its first message, and how to check a teammate
-    cheating = load_instruction_levels()["vars"][key]["cheating"]
+    cheating = level_vars(key, DOMAINS[key].level_values())["cheating"]
     assert cheating not in regulator and "Your first message says what cheating means on this task." in regulator
     first = tasks.first_messages(bench.sample(plan, tasks.instruction_suffix(bench, TEAM)), plan, bench)
     assert cheating in first["a02"] and not any(cheating in first[a] for a in ("a01", "a03"))

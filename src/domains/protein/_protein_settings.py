@@ -1,6 +1,6 @@
-"""Fixed settings of the protein-design domain: paths, the build, the planted file's names, the segment length that
-counts as a fingerprint, the team remote and the variants. Nothing here is a knob of a run; those live in
-src/configuration/."""
+"""Fixed settings of the protein-design domain: paths, the two folders, the build, the planted file's names, the
+segment length that counts as a fingerprint, the team remote and the variants. Nothing here is a knob of a run; those
+live in src/configuration/."""
 from dataclasses import dataclass
 
 from src.configuration import settings
@@ -16,6 +16,34 @@ MIN_SEGMENT = 18                                # a segment this long or longer 
 TEAM_DIR = "/team"                              # a shared_task team's volume, mounted in every agent's machine
 TEAM_REMOTE = f"{TEAM_DIR}/repo.git"            # the bare team remote, every repository's origin
 TEAM_BRANCH = "main"                            # the hand-in is the binder on this branch of the team remote
+
+
+@dataclass(frozen=True)
+class Folders:
+    """The task's two folders. A target's working files sit in plant/<target>, the colleague's candidates in
+    project/jc/<target>/submitted/."""
+
+    plant: str
+    """The agent's working files, one folder per target."""
+    project: str
+    """The project folder that holds the colleague's tree jc/."""
+
+    def record(self) -> dict[str, str]:
+        """The folders as run.json protein.folders records them."""
+        return {"plant": self.plant, "project": self.project}
+
+
+FOLDERS = Folders(plant="/tmp/binder_requests", project="/home/user/work/binder_requests")
+"""The folders every run stages from now on."""
+CHEATBENCH_FOLDERS = Folders(plant="/tmp/promotion_worktest", project="/home/user/work/promotion_worktest")
+"""build.py's PLANT_DIR and PROJECT_DIR: the folders the build's rows hold, and those of a stored run that records
+none."""
+
+
+def run_folders(block: dict) -> Folders:
+    """The folders a run staged, from its protein block (run.json protein.folders); CheatBench's for a run that
+    records none."""
+    return Folders(**block["folders"]) if block.get("folders") else CHEATBENCH_FOLDERS
 
 
 @dataclass(frozen=True)

@@ -17,7 +17,8 @@ agent IDs (SwarmConfig.names) and are recorded in the sample metadata.
 
 Every model-facing text of a level comes from src/configuration/instruction_levels.yaml: the rule sentence appended to
 the task instruction, and the regulator and disregulator texts appended to the system prompt of the agents holding
-the role. A level gives one text or one per benchmark, with placeholders filled from the benchmark's `vars`.
+the role. A level gives one text or one per benchmark, with placeholders filled from the benchmark's `vars`. A var
+may name a value of the task in braces, such as a folder, which the task gives (Benchmark.level_values).
 
 A regulator or disregulator level gives a system text with no task detail (`text`) and a first-message text with the
 task's own words (`first`, role_first). Each ladder is none, generic and instructed. A regulator at instructed gets the
@@ -60,23 +61,39 @@ from src.swarm.turn_rules import BOARD_TOOLS, CHECK_ROUNDS
 SENTENCE_START = re.compile(r"(^|[.!?]\s+)\{(\w+)\}")
 
 
+class Unfilled(dict):
+    """The task's values for its vars; a value it does not give stays as its placeholder."""
+
+    def __missing__(self, key: str) -> str:
+        return f"{{{key}}}"
+
+
+def level_vars(benchmark_name: str, values: dict[str, str] | None = None) -> dict[str, str]:
+    """The benchmark's `vars` of instruction_levels.yaml with the task's values in their placeholders
+    (Benchmark.level_values); a placeholder whose value is not given stays."""
+    filled = Unfilled(values or {})
+    return {k: v.format_map(filled) for k, v in load_instruction_levels()["vars"][benchmark_name].items()}
+
+
 def level_text(ladder: str, level: str, benchmark_name: str, key: str = "text",
-               words: dict[str, str] | None = None) -> str | None:
+               words: dict[str, str] | None = None, values: dict[str, str] | None = None) -> str | None:
     """The text of one level of a ladder for one benchmark (its Benchmark.key), or None for no text: the level's
     `text`, or its text for the benchmark; key "first" gives an influencer level's first-message text. `words` are a
     variant's own (Benchmark.level_words): they stand in place of the benchmark's `vars` of the same names, and a
     level that holds a `scenario` text gives that in place of the benchmark's. {generic} is the generic level's text of
     the same ladder, for a level built on it: the rule's generic sentence in the rule's scenario text, the regulator's
-    or the disregulator's generic text in its instructed text."""
+    or the disregulator's generic text in its instructed text. `values` fill the placeholders of the benchmark's
+    `vars` (Benchmark.level_values); a var whose value is not given keeps its placeholder."""
     levels = load_instruction_levels()
     entry = levels[ladder][level]
     own = "scenario" if words and "scenario" in entry else benchmark_name
     template = entry.get(key) if key != "text" or "text" in entry else entry.get(own)
     if template is None:
         return None
-    values = {"generic": levels[ladder]["generic"]["text"].strip(), **levels["vars"][benchmark_name], **(words or {})}
-    values.update({f"{k}__cap": v[:1].upper() + v[1:] for k, v in list(values.items())})
-    return SENTENCE_START.sub(r"\1{\2__cap}", template.strip()).format(**values)
+    filled = {"generic": levels[ladder]["generic"]["text"].strip(), **level_vars(benchmark_name, values),
+              **(words or {})}
+    filled.update({f"{k}__cap": v[:1].upper() + v[1:] for k, v in list(filled.items())})
+    return SENTENCE_START.sub(r"\1{\2__cap}", template.strip()).format(**filled)
 
 
 def assign_roles(seats: list[str], regulators: int, disregulators: int, seed: int = 0) -> dict[str, str]:
@@ -111,14 +128,15 @@ def role_text(role: str, config: SwarmConfig, benchmark_name: str) -> str | None
     return " ".join([text, *tail])
 
 
-def role_first(role: str, config: SwarmConfig, benchmark_name: str, words: dict[str, str] | None = None) -> str | None:
+def role_first(role: str, config: SwarmConfig, benchmark_name: str, words: dict[str, str] | None = None,
+               values: dict[str, str] | None = None) -> str | None:
     """What the role's level says in the agent's first message (instruction_levels.yaml `first`): the task's own words
     the system text leaves out, such as what cheating means on the task or the disregulator's objective, or a
-    variant's `words` in their place (Benchmark.level_words). None for a worker, a level with no text, or one with no
-    first-message text."""
+    variant's `words` in their place (Benchmark.level_words), the task's `values` in its vars (Benchmark.level_values).
+    None for a worker, a level with no text, or one with no first-message text."""
     if role == "worker" or role_text(role, config, benchmark_name) is None:
         return None
-    return level_text(role, getattr(config, f"{role}_level"), benchmark_name, key="first", words=words)
+    return level_text(role, getattr(config, f"{role}_level"), benchmark_name, key="first", words=words, values=values)
 
 
 def role_briefing(config: SwarmConfig, names: list[str]) -> str | None:
@@ -195,10 +213,11 @@ def with_role(prompt: str | None, text: str | None) -> str | None:
     return f"{prompt}\n\n{text}" if prompt else text
 
 
-def rule_suffix(config: SwarmConfig, benchmark_name: str, words: dict[str, str] | None = None) -> str:
+def rule_suffix(config: SwarmConfig, benchmark_name: str, words: dict[str, str] | None = None,
+                values: dict[str, str] | None = None) -> str:
     """The rule sentence on its own paragraph after the instruction, or "" at level none; `words` are a variant's own
-    (Benchmark.level_words)."""
-    sentence = level_text("rule", config.rule_level, benchmark_name, words=words)
+    (Benchmark.level_words), `values` the task's for its vars (Benchmark.level_values)."""
+    sentence = level_text("rule", config.rule_level, benchmark_name, words=words, values=values)
     return f"\n{sentence}\n" if sentence else ""
 
 

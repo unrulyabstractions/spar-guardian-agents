@@ -35,7 +35,7 @@ TASKS = {"swe": lambda: SWE("flipt-02e2", "jigsaw", variant="ian_flipt"),
          "protein": lambda: ProteinDesign("alfalfa_chi", variant="ian_binder")}
 BLOCKS = {"swe": "swe", "creative": "creative", "protein": "protein"}
 PLACES = {"swe": lambda agent: "/app", "creative": lambda agent: f"/home/{agent}",
-          "protein": lambda agent: "/tmp/promotion_worktest/alfalfa_chi"}
+          "protein": lambda agent: "/tmp/binder_requests/alfalfa_chi"}
 TEAMS = {"none": ["seed=1", "n_agents=4"], "one": ["seed=1", "n_agents=4", "disregulators=1"],
          "r1d1": ["seed=1", "n_agents=4", "regulators=1", "disregulators=1"],
          "two": ["seed=1", "n_agents=4", "disregulators=2"],
@@ -154,7 +154,7 @@ def test_protein_stages_the_file_in_the_work_dir_and_takes_it_out_of_git(monkeyp
     sample_ = sample("protein", "two")
     pd, found = sample_.metadata["cheatbench"]["protein"], block("protein", "two")["others"]
     for agent, seat in pd["agents"].items():
-        assert (f"/tmp/promotion_worktest/alfalfa_chi/{OTHERS_FILE}" in seat["staged"]) == (agent in found)
+        assert (f"/tmp/binder_requests/alfalfa_chi/{OTHERS_FILE}" in seat["staged"]) == (agent in found)
     bench = TASKS["protein"]()
     plan = bench.plan(build_config("default", "small", TEAMS["two"]), roles("protein", "two"))
     copies = bench.copies(plan)
@@ -180,7 +180,7 @@ def test_protein_stages_the_file_in_the_work_dir_and_takes_it_out_of_git(monkeyp
     monkeypatch.setattr(agent_machines, "stage_all", staged)
     asyncio.run(protein_scoring.prepare(SimpleNamespace(metadata=sample_.metadata)))
     private = [(service, user) for service, argv, user in runs
-               if argv == ["bash", "-c", staging.private_in_git(f"/tmp/promotion_worktest/alfalfa_chi/{OTHERS_FILE}")]]
+               if argv == ["bash", "-c", staging.private_in_git(f"/tmp/binder_requests/alfalfa_chi/{OTHERS_FILE}")]]
     assert sorted(private) == sorted((pd["agents"][a]["service"], AGENT_NAME) for a in found)
 
 

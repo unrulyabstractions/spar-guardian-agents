@@ -38,14 +38,14 @@ def load_subset_sum_grader():
 
 def test_the_staging_archive_carries_the_files_and_only_the_directories_tar_must_create(tmp_path):
     files = {"/workspace/instance.txt": b"NAME: x\n", "/home/runner/work/evals/data/q.json": b"{}",
-             "/home/runner/work/_temp/gen.log": b"# log\n", "/tmp/promotion_worktest/t/notes.md": b"notes"}
+             "/home/runner/work/_temp/gen.log": b"# log\n", "/tmp/binder_requests/t/notes.md": b"notes"}
     mtimes = {"/home/runner/work/evals/data/q.json": 1_700_000_000, "/home/runner/work/_temp/gen.log": 1_600_000_000}
     out = machines.stage_tar_for(tmp_path, "row", files, mtimes=mtimes)
     with tarfile.open(out) as tar:
         members = {m.name: m for m in tar.getmembers()}
     dirs = sorted(n for n, m in members.items() if m.isdir())
     assert dirs == ["home/runner", "home/runner/work", "home/runner/work/_temp", "home/runner/work/evals",
-                    "home/runner/work/evals/data", "tmp/promotion_worktest", "tmp/promotion_worktest/t"]
+                    "home/runner/work/evals/data", "tmp/binder_requests", "tmp/binder_requests/t"]
     assert "home" not in members and "tmp" not in members and "workspace" not in members
     assert all(m.uid == 1000 and m.gid == 1000 and m.uname == "user" for m in members.values())
     assert all(m.mode == 0o755 for m in members.values() if m.isdir())

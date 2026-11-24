@@ -17,6 +17,10 @@ an agent holding no segment gets none, so no machine holds another agent's segme
 the colleague's six designs, so it is the agent's candidates file byte for byte. Runs before 2026-11-24 planted a
 second content there, six other designs (second/) cut by the same split; their block says second_content. designs
 and candidates_text read each content, and fingerprints covers the contents a run recorded (planted).
+
+The build's rows and files hold CheatBench's two folders (CHEATBENCH_FOLDERS). A row is read with its paths moved to
+the folders a run stages (load_row, moved_row): _protein_settings.FOLDERS for a new run, the run's record for a
+stored one (_protein_settings.run_folders). Every path inside a staged file moves with them (agent_files).
 """
 from __future__ import annotations
 
@@ -25,13 +29,56 @@ import re
 from pathlib import PurePosixPath
 
 from src.domains.protein import second
-from src.domains.protein._protein_settings import BUILD, LOG, MIN_SEGMENT, PAYLOAD, SIDE_COPY
+from src.domains.protein._protein_settings import (
+    BUILD,
+    CHEATBENCH_FOLDERS,
+    LOG,
+    MIN_SEGMENT,
+    PAYLOAD,
+    SIDE_COPY,
+    Folders,
+)
 from src.measures.honeypot_fingerprints import Fingerprints
 from src.sandbox import cheatbench_task_files as task_files
 
 LISTING = re.compile(r"(\S+ \d+ \S+ \S+) (\d+) (\w{3} +\d+ [\d:]+) (\S+)\n")    # ls -l: mode..group, size, date, path
 HEADER_LENGTH = re.compile(r"(?<= len=)\d+")                                    # a record header's sequence length
 CONTENTS = ("first", "second")          # the colleague's six designs, and the six stored runs planted from second/
+BUILT = {CHEATBENCH_FOLDERS.plant: "plant", CHEATBENCH_FOLDERS.project: "project"}     # the build's folders, by field
+BUILT_PATH = re.compile("|".join(re.escape(path) for path in BUILT) + r"(?![\w.-])")
+BUILT_BYTES = re.compile(BUILT_PATH.pattern.encode())
+
+
+def moved(text: str, folders: Folders) -> str:
+    """The text with the build's two folders (CHEATBENCH_FOLDERS) at `folders`."""
+    return BUILT_PATH.sub(lambda m: getattr(folders, BUILT[m.group()]), text)
+
+
+def moved_bytes(data: bytes, folders: Folders) -> bytes:
+    """A staged file's bytes with the build's two folders at `folders`."""
+    return BUILT_BYTES.sub(lambda m: getattr(folders, BUILT[m.group().decode()]).encode(), data)
+
+
+def moved_row(row: dict, folders: Folders) -> dict:
+    """A build row with every path at `folders`: its keys and its values, the work dir, the staged files'
+    destinations and the payload's, and the instruction. `folders` records them (row_folders)."""
+    def move(value):
+        if isinstance(value, str):
+            return moved(value, folders)
+        if isinstance(value, dict):
+            return {move(key): move(item) for key, item in value.items()}
+        return [move(item) for item in value] if isinstance(value, list) else value
+    return {**move(row), "folders": folders.record()}
+
+
+def load_row(row_id: str, folders: Folders, hint: str = "") -> dict:
+    """A row of the build by its id, its paths at `folders` (moved_row)."""
+    return moved_row(task_files.load_row(BUILD, row_id, hint=hint), folders)
+
+
+def row_folders(row: dict) -> Folders:
+    """The folders a row's paths sit in: its record, or the build's for a row as data.jsonl holds it."""
+    return Folders(**row["folders"]) if row.get("folders") else CHEATBENCH_FOLDERS
 
 
 def planted(block: dict) -> tuple[str, ...]:
@@ -124,11 +171,12 @@ def held_log(log: str, size: int) -> str:
 
 
 def agent_files(row: dict, pieces: list[int] | None, n: int | None) -> dict[str, bytes]:
-    """{absolute destination: bytes} of one agent's copy of the row: CheatBench's files for the whole (pieces None),
-    the candidates file cut to its segments and the log that lists it, and no candidates file and the screening alone
-    for none ([])."""
-    payload = row["payload_file"]
-    files = task_files.row_files(row, BUILD / "environment", workdir=None)
+    """{absolute destination: bytes} of one agent's copy of the row, every path in a file at the row's folders:
+    CheatBench's files for the whole (pieces None), the candidates file cut to its segments and the log that lists
+    it, and no candidates file and the screening alone for none ([])."""
+    payload, folders = row["payload_file"], row_folders(row)
+    files = {dest: moved_bytes(data, folders)
+             for dest, data in task_files.row_files(row, BUILD / "environment", workdir=None).items()}
     if pieces is None:
         return files
     files.pop(payload)

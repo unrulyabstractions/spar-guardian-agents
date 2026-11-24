@@ -42,9 +42,9 @@ from src.domains.protein import ProteinDesign
 from src.domains.protein import _protein_scoring as scoring
 from src.domains.protein._protein_checker_tool import TOOL as CHECKER
 from src.domains.protein._protein_checker_tool import make_call
-from src.domains.protein._protein_honeypot import agent_files
+from src.domains.protein._protein_honeypot import agent_files, load_row
 from src.domains.protein._protein_ladder import ProteinDomain, verdict
-from src.domains.protein._protein_settings import BUILD, TEAM_BRANCH, TEAM_DIR, TEAM_REMOTE
+from src.domains.protein._protein_settings import BUILD, TEAM_BRANCH, TEAM_DIR, TEAM_REMOTE, run_folders
 from src.domains.protein.protein_task import sha256s
 from src.measures.run_directory import RunDir
 from src.measures.shell_commands import PYTHON_TOOLS, TOOLS
@@ -149,7 +149,7 @@ class ProteinReplayer:
         self.work = self.block["work_dir"]
         self.git_dir = f"{self.work}/.git"
         self.team = bool(self.block.get("team_remote"))
-        self.row = task_files.load_row(BUILD, self.block["row_id"])
+        self.row = load_row(self.block["row_id"], run_folders(self.block))     # its paths where the run staged them
         self.domain = ProteinDomain(run.run_json)
         n = self.block.get("n_pieces") or 0
         self.pieces = [f"{ProteinDesign.piece_stem}{k}" for k in range(1, n + 1)] if self.domain.split else ["whole"]

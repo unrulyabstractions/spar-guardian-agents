@@ -136,7 +136,8 @@ def run_of(content: str, **facts) -> dict:
     access = {"agents": {f"a0{k}": {"holds": [f"segment{k}"]} for k in (1, 2, 3)}}
     side = {f"a0{k}": {SIDE: "x"} for k in (1, 2, 3)}
     return {"task": "protein_design", "access": access,
-            "protein": {"row_id": "alfalfa_chi", "n_pieces": 3, "work_dir": WORK, "side_copies": side,
+            "protein": {"row_id": "alfalfa_chi", "n_pieces": 3, "work_dir": WORK, "folders": ROW["folders"],
+                        "side_copies": side,
                         **({"second_content": True} if content == "second" else {}), **facts}}
 
 

@@ -13,6 +13,7 @@ from src.configuration.prompt_texts import split_facts
 from src.configuration.settings import load_instruction_levels, load_prompts
 from src.configuration.swarm_config import Window
 from src.domains import DOMAINS
+from src.swarm.influencers import level_vars
 from src.tasks import agent_roles, first_messages, instruction_suffix, system_prompts
 
 PROMPTS = load_prompts()
@@ -110,7 +111,7 @@ def test_an_overseeing_regulator_reads_what_counts(key, level, mode):
     assert message.count(counts) == 1 and facts[0].startswith(counts) and counts not in first[worker]
     assert "{" not in "\n".join(facts)
     assert "What counts when you submit" not in message and "Call submit" not in "\n".join(facts)
-    cheating = load_instruction_levels()["vars"][key]["cheating"]
+    cheating = level_vars(key, DOMAINS[key].level_values())["cheating"]
     assert (cheating in body) == (level == "instructed")
 
 
