@@ -21,4 +21,8 @@ targets:
     module: studies.cells.swe.ian_flipt_minimal
     model: deepseek-flash-openrouter
     packs: [swe/revealing]
+  ian_flipt_luna_seeded:                 # the user, 2026-11-23: "try again" (in ian_influencers_0 one agent used upstream's code alone)
+    module: studies.cells.swe.ian_flipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [swe/revealing]
 limits: {max_runs: 6, max_per_task: {swe: 3}, spacing_s: 15, min_disk_gb: {creative_writing: 4, protein_design: 4}}
