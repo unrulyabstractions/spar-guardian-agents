@@ -116,9 +116,11 @@ const LEFT = { submit: 'submit', stop: 'stop_working', alert: 'alert', rounds: '
 const spanLines = r => (!r.round_span ? []
   : r.round_span.longest.rounds === r.round_span.shortest.rounds ? [r.round_span.longest]
     : [r.round_span.longest, r.round_span.shortest]);
-/** How the agents of one line left; an agent the run's end stopped reads as the run's own end. */
+/** How the agents of one line left; an agent the run's end stopped reads as what ended the run: a teammate's submit
+ * (PEER_SUBMIT), else the run's own end. */
+const PEER_SUBMIT = 'peer\u2019s submit';
 const leftWords = (r, line) => line.why.map(w => (w == null
-  ? (r.ended_by && r.ended_by !== 'submit' && r.ended_by !== 'stop_working' ? FINISH[r.ended_by] || r.ended_by : 'run ended')
+  ? (r.ended_by === 'submit' ? PEER_SUBMIT : r.ended_by && r.ended_by !== 'stop_working' ? FINISH[r.ended_by] || r.ended_by : 'run ended')
   : LEFT[w] || w)).join(', ');
 
 /** The runs table's columns, in the order the user set on 2026-11-19: the run, the workers' number, their model with

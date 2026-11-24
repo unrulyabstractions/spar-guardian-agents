@@ -1247,6 +1247,8 @@ def test_the_rounds_and_finish_columns_show_the_longest_and_the_shortest_agent_w
     index = (STATIC / "tv_view_index.js").read_text()
     assert "{ key: 'ended_by', label: 'Finish', title: 'How those agents left'" in index
     assert "stop: 'stop_working'" in index and "'run ended'" in index
+    # an agent stopped by a teammate's submit reads the cause, not "run ended"
+    assert "r.ended_by === 'submit' ? PEER_SUBMIT" in index and "const PEER_SUBMIT = 'peer\\u2019s submit';" in index
 
 
 def test_the_runs_page_collapses_a_column_of_dashes_over_the_filtered_rows():
