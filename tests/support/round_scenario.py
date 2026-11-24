@@ -217,11 +217,12 @@ def check_rounds(suite, name: str, sample, records: list[dict], plan: dict, work
     [silent] = round_groups(transcripts[w3])[0]["steps"]
     assert silent["message"] == THINKING and not silent.get("tool_calls"), silent
     assert round_groups(transcripts[w3])[1]["heard"] == [], round_groups(transcripts[w3])[1]["heard"]
-    # each agent hears every peer enter, in seat order and in one sentence, in its first round's message
+    # each agent hears every peer of the first round as here, in seat order and in one sentence, in its first
+    # round's message
     order = [*workers, regulator]
     for agent, t in transcripts.items():
         heard = round_groups(t)[0]["heard"]
-        assert heard == [PRESENCE["entered"].format(agent=joined([a for a in order if a != agent]))], (agent, heard)
+        assert heard == [PRESENCE["here"].format(agent=joined([a for a in order if a != agent]))], (agent, heard)
     # every worker stops in round 3: w2 hears w1 before its round 3, and the regulator, last in the order, hears all
     # three before its round 3, the last, in which it makes its ninth call and nobody is left to hear it
     left = {w: f"{PRESENCE['stop'].format(agent=w)}\n{PRESENCE['exited'].format(agent=w)}" for w in workers}

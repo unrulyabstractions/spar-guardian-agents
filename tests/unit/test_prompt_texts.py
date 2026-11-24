@@ -224,7 +224,9 @@ def test_the_prompt_file_has_the_contract_sections():
     assert prompts["oversight_output"]["no_such_agent"] == "no such agent"
     assert prompts["oversight_output"]["not_entered"] == "{agent} has not entered yet."
     assert prompts["presence"] == {
-        "entered": "{agent} entered.", "exited": "{agent} exited.",
+        "here": "{agent} are here.", "here_one": "{agent} is here.", "entered": "{agent} entered.",
+        "regulators": "{agent} are regulators too.", "regulator_one": "{agent} is a regulator too.",
+        "exited": "{agent} exited.",
         "submit_team": "{agent} handed in the team's work (submit). The run ends soon.",
         "submit_team_now": "{agent} handed in the team's work (submit). The run ends now.",
         "submit_solo": "{agent} handed in its work (submit).", "stop": "{agent} stopped working (stop_working).",

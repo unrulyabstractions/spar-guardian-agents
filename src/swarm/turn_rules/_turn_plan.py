@@ -104,7 +104,8 @@ def rules_setup(config: SwarmConfig | dict, agents: list[str], roles: dict[str, 
         st = store_as(TurnState)
         for key, value in initial_state(rules, agents, roles, time_limit_s).items():
             setattr(st, key, value)
-        LIVE.set(Live(plan=plan_steps(rules, agents, roles) if rules.submit_hold else []))
+        LIVE.set(Live(plan=plan_steps(rules, agents, roles) if rules.submit_hold else [],
+                      regulators=[a for a in agents if role_of(roles, a) == "regulator"]))
         if rules.submit_hold:
             store_as(SubmitHolds).on = True
         ROUND_END.set(round_end)

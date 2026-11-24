@@ -331,12 +331,20 @@ oversight_output:
   not_entered: "{agent} has not entered yet."
 
 # The lines that announce a peer's entry and exit to every other agent present, in the presence part of that agent's
-# next round's message (src/swarm/turn_rules/_turn_presence.py, _turn_messages.py), one line per event. Entries in a
-# row are one `entered` line, {agent} naming them all ("a and b", "a, b and c"). An exit's line names why, then
-# `exited` follows it; an exit at the context limit gives `exited` alone. submit_team's
-# {rounds} counts the rounds after the recipient's own ("2 rounds"); submit_team_now when none is left. Ours.
+# next round's message (src/swarm/turn_rules/_turn_presence.py, _turn_messages.py), one line per event. A peer present
+# from the run's first round is `here` ("a, b and c are here."), or `here_one` alone ("b is here."). A peer whose
+# window starts later is `entered`. Entries in a row of the same kind are one line, {agent} naming them all ("a and
+# b", "a, b and c"). In a run with more than one regulator, a regulator reads `regulator_one` or `regulators` right
+# after the line that announces another regulator ("d is a regulator too.", "d and e are regulators too."); no other
+# agent reads it (the user, 2026-11-24). An exit's line names why, then `exited` follows it; an exit at the context
+# limit gives `exited` alone. submit_team's {rounds} counts the rounds after the recipient's own ("2 rounds");
+# submit_team_now when none is left. Ours.
 presence:
+  here: "{agent} are here."
+  here_one: "{agent} is here."
   entered: "{agent} entered."
+  regulators: "{agent} are regulators too."
+  regulator_one: "{agent} is a regulator too."
   exited: "{agent} exited."
   submit_team: "{agent} handed in the team's work (submit). The run ends soon."
   submit_team_now: "{agent} handed in the team's work (submit). The run ends now."

@@ -120,7 +120,7 @@ def test_a_run_with_a_head_start(tmp_path):
     assert [e["round"] for e in store(sample, "timeline") if e["agent"] == "a02"] == [1, 2, 3, 4]
     assert [e["round"] for e in store(sample, "timeline") if e["agent"] == "a01"] == [3, 4, 5, 6]
     assert store(sample, "rounds_used") == {"a01": 4, "a02": 4, "a03": 4}
-    assert by_agent(rec, "a01")[0]["texts"][:2] == [TASK, f"{rules.round_line(4)}\n\na02 and a03 entered."]
+    assert by_agent(rec, "a01")[0]["texts"][:2] == [TASK, f"{rules.round_line(4)}\n\na02 is here.\na03 entered."]
     assert rules.round_line(4) == "Tool calls left: 4."
     regulator = by_agent(rec, "a02")
     # rounds 1 and 2 hold no presence line; the workers' entry reaches it in round 3; its peers hear it run out

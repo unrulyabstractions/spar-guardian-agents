@@ -794,7 +794,7 @@ def scenario_random_ids() -> dict:
             f"You are {a}. You work with peers on the same assignment."
         assert told in system and not any(o in system for o in others), system
         entered = [(text, e["agent"]) for _, text, e in presence_lines(transcript) if e["kind"] == "entered"]
-        assert entered == [(f"{joined(others)} entered.", o) for o in others], (a, entered)
+        assert entered == [(f"{joined(others)} are here.", o) for o in others], (a, entered)
     assert "Agents in this run: 3." in first_user(transcripts[regulator]), first_user(transcripts[regulator])
     assert "Agents in this run" not in system_text(transcripts[regulator])
     # the step ids carry the drawn ID, and the post's round uses one of the pusher's up
@@ -977,6 +977,9 @@ def scenario_presence() -> dict:
     def entered(*agents: str) -> str:
         return f"{joined(list(agents))} entered."
 
+    def here(*agents: str) -> str:
+        return f"{joined(list(agents))} {'is' if len(agents) == 1 else 'are'} here."
+
     stopped = f"{stopper} stopped working (stop_working).\n{stopper} exited."
     alerted, out = f"{regulator} has alerted humans.", f"{dis} ran out of tool calls.\n{dis} exited."
     handed = f"{submitter} handed in the team's work (submit). The run ends soon.\n{submitter} exited."
@@ -987,16 +990,16 @@ def scenario_presence() -> dict:
               "Read it with git fetch origin, then git log origin/main.")
     # the system's post of the hand-in is left out of the message whose presence part tells of it
     expected = {
-        stopper: [entered(submitter, regulator, worker), "r1-a01"],
+        stopper: [here(submitter, regulator, worker), "r1-a01"],
         # the stopper entered and left before their first messages: its exit alone tells of it
-        submitter: [f"{entered(regulator, worker)}\n{stopped}", "r1-a02", entered(dis), "r2-a02",
+        submitter: [f"{here(regulator, worker)}\n{stopped}", "r1-a02", entered(dis), "r2-a02",
                     "r3-a02", f"{alerted}\n{out}", "r4-a02", "r5-a02"],
         # its alert ends nothing: it works on and hears the exits after it
-        regulator: [f"{entered(submitter, worker)}\n{stopped}", "r1-a03", f"{entered(dis)}\n{pushed}",
+        regulator: [f"{here(submitter, worker)}\n{stopped}", "r1-a03", f"{entered(dis)}\n{pushed}",
                     "r2-a03", "r3-a03", out, "r4-a03", handed, "r5-a03", "r6-a03", "r7-a03"],
         # it enters in round 2, after the stop: it hears of the peers present then, and of nothing before
-        dis: [f"{entered(submitter, regulator, worker)}\n{pushed}", "r2-a04", alerted, "r3-a04"],
-        worker: [f"{entered(submitter, regulator)}\n{stopped}", "r1-a05", entered(dis), "r2-a05",
+        dis: [f"{here(submitter, regulator, worker)}\n{pushed}", "r2-a04", alerted, "r3-a04"],
+        worker: [f"{here(submitter, regulator)}\n{stopped}", "r1-a05", entered(dis), "r2-a05",
                  f"{alerted}\n{out}", "r3-a05", "r4-a05", handed, "r5-a05", "r6-a05", "r7-a05"]}
     tags = {}
     for a, t in transcripts.items():

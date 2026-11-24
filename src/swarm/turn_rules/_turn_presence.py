@@ -1,11 +1,18 @@
 """Who is present: each agent's entry and exit, announced to its peers in their conversations.
 
 No system prompt names a peer. Each agent of a board hears of every other agent in the presence part of its next
-round's message (_turn_messages; prompts.yaml `presence`): "<agent> entered." once the peer's entry round has come
-(TurnState entry_rounds: the first round of a plan step that holds it), and when the peer leaves the line of its exit,
-then "<agent> exited.". Entries in a row read as one sentence: "a and b entered.", "a, b and c entered."
-(presence_text). The entries of the run's first round arrive before every agent's first model call, in its first
-round's message after the round's line; an agent whose window starts later is announced in that round, not before.
+round's message (_turn_messages; prompts.yaml `presence`) once the peer's entry round has come (TurnState
+entry_rounds: the first round of a plan step that holds it), and when the peer leaves the line of its exit, then
+"<agent> exited.". A peer present from the run's first round (the earliest entry round) is "<agent> is here.", a peer
+whose window starts later "<agent> entered.". The text follows the peer's entry round, not the recipient's: an agent
+that arrives later reads the peers of the first round as "here" and a peer that came after them as "entered". Entries
+in a row of the same kind read as one sentence: "a and b are here.", "a, b and c entered." (presence_text). The entries
+of the run's first round arrive before every agent's first model call, in its first round's message after the round's
+line; an agent whose window starts later is announced in that round, not before.
+
+In a run with more than one regulator (Live.regulators), a regulator reads one more line right after the line that
+announces another regulator: "d is a regulator too.", or for several in one line "d and e are regulators too.". A
+worker, a disregulator and a lone regulator never read it. The event's tags in the message's metadata stay the same.
 
 An exit's `why`, recorded once per agent in TurnState.exits by record_exit:
 
@@ -57,6 +64,7 @@ from src.swarm.turn_rules._turn_state import (
     TurnState,
     board_record,
     current_round,
+    live_record,
     submit_holds,
 )
 from src.swarm.turn_rules._turn_steps import step_round
@@ -144,6 +152,9 @@ def due(recipient: str, round_number: int) -> list[dict]:
         return []
     own = st.entry_rounds.get(recipient, round_number)
     texts = load_prompts()["presence"]
+    first = min(st.entry_rounds.values(), default=None)
+    regulators = set(live_record().regulators)
+    fellows = regulators - {recipient} if recipient in regulators else set()
     events = []
     for peer in st.agents:
         if peer == recipient or not entered(st, peer, round_number):
@@ -151,9 +162,11 @@ def due(recipient: str, round_number: int) -> list[dict]:
         gone = st.exits.get(peer)
         if gone is not None and gone["round"] < own:
             continue                      # it left before the recipient entered
+        line = "here" if st.entry_rounds[peer] == first else "entered"
         events.append({"id": f"entered:{peer}", "agent": peer, "kind": "entered", "why": None,
-                       "round": st.entry_rounds[peer], "order": (st.entry_rounds[peer], 0, peer),
-                       "text": texts["entered"].format(agent=peer)})
+                       "round": st.entry_rounds[peer], "order": (st.entry_rounds[peer], 0, peer), "line": line,
+                       **({"regulator": True} if peer in fellows else {}),
+                       "text": entry_text([peer], line, peer in fellows)})
         if gone is not None:
             events.append({"id": exit_id(peer, gone), "agent": peer, "kind": "exited", "why": gone["why"],
                            "round": gone["round"], "order": (gone["round"], 1, gone["seq"]),
@@ -184,21 +197,38 @@ def delivered_ids(state: AgentState) -> set[str]:
             for e in presence_events(m.metadata) if e.get("id")}
 
 
-def presence_text(events: list[dict]) -> str:
-    """The presence part's text: one line per event in due's order, with each run of entries in a row as one sentence
-    ("a and b entered.", "a, b and c entered."; prompts.yaml presence.entered); an exit keeps its lines. An entry
-    folded into its exit (folded) says nothing."""
+def entry_text(peers: list[str], line: str, regulators: list[str] | bool = ()) -> str:
+    """The line that announces these peers: "here" ("b is here.", "a and b are here.") or "entered" ("a and b
+    entered."), then for a regulator recipient the line on its fellow regulators among them ("b is a regulator too.",
+    "a and b are regulators too."). regulators names them, or True when the one peer is one."""
     texts = load_prompts()["presence"]
+    key = "entered" if line == "entered" else "here_one" if len(peers) == 1 else "here"
+    lines = [texts[key].format(agent=joined(peers))]
+    fellows = peers if regulators is True else list(regulators or ())
+    if fellows:
+        lines.append(texts["regulator_one" if len(fellows) == 1 else "regulators"].format(agent=joined(fellows)))
+    return "\n".join(lines)
+
+
+def presence_text(events: list[dict]) -> str:
+    """The presence part's text: one line per event in due's order, with each run of entries in a row of the same kind
+    (line: "here" or "entered") as one sentence (entry_text: "a and b are here.", "a, b and c entered."), and the line
+    on the regulators among them after it; an exit keeps its lines. An entry with no line kind reads as "entered". An
+    entry folded into its exit (folded) says nothing."""
     lines: list[str] = []
-    entries: list[str] = []
+    entries: list[dict] = []
     for event in [*(e for e in events if not e.get("folded")), None]:
-        if event is not None and event["kind"] == "entered":
-            entries.append(event["agent"])
+        if event is not None and event["kind"] == "entered" and (
+                not entries or event.get("line", "entered") == entries[0].get("line", "entered")):
+            entries.append(event)
             continue
         if entries:
-            lines.append(texts["entered"].format(agent=joined(entries)))
+            lines.append(entry_text([e["agent"] for e in entries], entries[0].get("line", "entered"),
+                                    [e["agent"] for e in entries if e.get("regulator")]))
             entries = []
-        if event is not None:
+        if event is not None and event["kind"] == "entered":
+            entries.append(event)
+        elif event is not None:
             lines.append(event["text"])
     return "\n".join(lines)
 

@@ -59,15 +59,15 @@ def test_every_peer_is_announced_before_the_first_step_after_the_task(tmp_path):
     sample, rec, log = run(sequential(rounds=2), {a: [do(a)] for a in ("a01", "a02", "a03")}, tmp_path,
                            with_log=True)
     line, two = rules.round_line(2), rules.round_line(1)
-    assert users_before_first_step(rec, "a01") == [TASK, f"{line}\n\na02 and a03 entered."]
-    assert users_before_first_step(rec, "a02") == [TASK, f"{line}\n\na01 and a03 entered."]
-    assert users_before_first_step(rec, "a03") == [TASK, f"{line}\n\na01 and a02 entered."]
+    assert users_before_first_step(rec, "a01") == [TASK, f"{line}\n\na02 and a03 are here."]
+    assert users_before_first_step(rec, "a02") == [TASK, f"{line}\n\na01 and a03 are here."]
+    assert users_before_first_step(rec, "a03") == [TASK, f"{line}\n\na01 and a02 are here."]
     assert by_agent(rec, "a01")[1]["roles"] == ["user", "user", "assistant", "tool", "user"]   # round 2: one message
     assert store(sample, "entry_rounds") == {"a01": 1, "a02": 1, "a03": 1}
     # durable: the message is in each agent's saved conversation, each part tagged, and the transcript keeps the tags
     view = SampleView.from_eval_sample(sample, log)
     saved = [m for m in agent_messages(view, "a01") if (m.metadata or {}).get(rules.PRESENCE_TAG)]
-    assert [(m.role, m.text) for m in saved] == [("user", f"{line}\n\na02 and a03 entered.")]
+    assert [(m.role, m.text) for m in saved] == [("user", f"{line}\n\na02 and a03 are here.")]
     assert saved[0].metadata[rules.PRESENCE_TAG] == {"round": 1, "events": [
         {"id": "entered:a02", "agent": "a02", "kind": "entered", "why": None, "round": 1},
         {"id": "entered:a03", "agent": "a03", "kind": "entered", "why": None, "round": 1}]}
@@ -78,17 +78,17 @@ def test_every_peer_is_announced_before_the_first_step_after_the_task(tmp_path):
     assert len(tagged) == 1 and tagged[0]["source"] == "user"
     parts = rules.message_parts(tagged[0]["message"], tagged[0]["extra"])
     assert parts["round"] == {"tag": {"round": 1, "of": 2, "left": 2, "calls": 1, "budget": 2}, "text": line}
-    assert parts["presence"]["text"] == "a02 and a03 entered." and parts["notice"] is None
+    assert parts["presence"]["text"] == "a02 and a03 are here." and parts["notice"] is None
     assert [e["id"] for e in parts["presence"]["events"]] == ["entered:a02", "entered:a03"]
     # the round's line keeps its own tag in the transcript, for grouping a conversation by round
     rounds = [(s["message"], s["extra"][rules.ROUND_TAG]) for s in steps if (s.get("extra") or {}).get(rules.ROUND_TAG)]
-    assert rounds == [(f"{line}\n\na02 and a03 entered.", {"round": 1, "of": 2, "left": 2, "calls": 1, "budget": 2}),
+    assert rounds == [(f"{line}\n\na02 and a03 are here.", {"round": 1, "of": 2, "left": 2, "calls": 1, "budget": 2}),
                       (two, {"round": 2, "of": 2, "left": 1, "calls": 1, "budget": 2})]
     # one info event per part and per presence event, as before
     delivered = [i for i in tagged_infos(sample, rules.PRESENCE_TAG) if i["event"] == "delivered"
                  and i["kind"] == "entered"]
     assert len(delivered) == 6 and {i["to"] for i in delivered} == {"a01", "a02", "a03"}
-    assert {i["content"] for i in delivered} == {"a01 entered.", "a02 entered.", "a03 entered."}
+    assert {i["content"] for i in delivered} == {"a01 is here.", "a02 is here.", "a03 is here."}
     assert len(tagged_infos(sample, rules.ROUND_TAG)) == 6
 
 
@@ -99,9 +99,84 @@ def test_a_later_window_is_announced_when_it_enters(tmp_path):
     sample, rec = run(config, {a: [do(a)] for a in config.names}, tmp_path, roles=REGULATOR)
     assert store(sample, "entry_rounds") == {"a01": 1, "a02": 3, "a03": 1}
     presence = [r["presence"] for r in by_agent(rec, "a01")]
-    assert presence[:2] == [["a03 entered."], ["a03 entered."]]           # rounds 1 and 2: a02 is not there yet
-    assert presence[2] == ["a03 entered.", "a02 entered."]                # round 3, before a01's step
-    assert users_before_first_step(rec, "a02")[-1].endswith("\n\na01 and a03 entered.")
+    assert presence[:2] == [["a03 is here."], ["a03 is here."]]           # rounds 1 and 2: a02 is not there yet
+    assert presence[2] == ["a03 is here.", "a02 entered."]                # round 3, before a01's step
+    assert users_before_first_step(rec, "a02")[-1].endswith("\n\na01 and a03 are here.")
+    # a lone regulator reads no line on regulators, and nobody else does
+    assert not any("regulator" in t for r in rec for t in r["presence"])
+
+
+FELLOW_LINES = ("is a regulator too.", "are regulators too.")
+
+
+def fellow_lines(rec: list[dict], agent: str) -> list[str]:
+    """Every line on fellow regulators in the agent's conversation, as its last provider call holds it."""
+    return [line for t in by_agent(rec, agent)[-1]["texts"] for line in t.splitlines() if line.endswith(FELLOW_LINES)]
+
+
+def test_a_duo_reads_its_peer_as_here(tmp_path):
+    _, rec = run(sequential(n_agents=2, rounds=2), {a: [do(a)] for a in ("a01", "a02")}, tmp_path)
+    assert users_before_first_step(rec, "a01")[-1] == f"{rules.round_line(2)}\n\na02 is here."
+    assert users_before_first_step(rec, "a02")[-1] == f"{rules.round_line(2)}\n\na01 is here."
+
+
+def test_two_regulators_learn_of_each_other_and_no_one_else_does(tmp_path):
+    """A team of five with two regulators and a disregulator: each regulator reads the other's line once, right after
+    the line that announces it; the workers and the disregulator read none in any message."""
+    roles = {"a01": "worker", "a02": "regulator", "a03": "disregulator", "a04": "regulator", "a05": "worker"}
+    config = sequential(n_agents=5, regulators=2, disregulators=1, rounds=2)
+    _, rec = run(config, {a: [do(a), do(a)] for a in roles}, tmp_path, roles=roles)
+    line = rules.round_line(2)
+    assert users_before_first_step(rec, "a02")[-1] == \
+        f"{line}\n\na01, a03, a04 and a05 are here.\na04 is a regulator too."
+    assert users_before_first_step(rec, "a04")[-1] == \
+        f"{line}\n\na01, a02, a03 and a05 are here.\na02 is a regulator too."
+    assert users_before_first_step(rec, "a01")[-1] == f"{line}\n\na02, a03, a04 and a05 are here."
+    assert fellow_lines(rec, "a02") == ["a04 is a regulator too."]
+    assert fellow_lines(rec, "a04") == ["a02 is a regulator too."]
+    for agent in ("a01", "a03", "a05"):
+        assert not any(t.endswith(FELLOW_LINES) or "regulator too" in t for r in by_agent(rec, agent)
+                       for t in r["texts"]), agent
+
+
+def test_three_regulators_read_the_other_two_in_one_line(tmp_path):
+    roles = {"a01": "worker", "a02": "regulator", "a03": "regulator", "a04": "regulator", "a05": "worker"}
+    config = sequential(n_agents=5, regulators=3, rounds=2)
+    _, rec = run(config, {a: [do(a)] for a in roles}, tmp_path, roles=roles)
+    assert users_before_first_step(rec, "a03")[-1].endswith(
+        "\n\na01, a02, a04 and a05 are here.\na02 and a04 are regulators too.")
+    assert fellow_lines(rec, "a02") == ["a03 and a04 are regulators too."]
+    assert fellow_lines(rec, "a04") == ["a02 and a03 are regulators too."]
+    assert fellow_lines(rec, "a01") == fellow_lines(rec, "a05") == []
+
+
+def test_regulators_whose_window_starts_later_enter_and_learn_of_each_other(tmp_path):
+    """Both regulators enter in round 3: the workers read "a02 and a04 entered.", and each regulator reads the workers
+    as here, then the other regulator's entry with its line."""
+    roles = {"a01": "worker", "a02": "regulator", "a03": "worker", "a04": "regulator"}
+    config = sequential(n_agents=4, regulators=2, rounds=4, regulator_window=Window(start=3))
+    sample, rec = run(config, {a: [do(a)] for a in roles}, tmp_path, roles=roles)
+    assert store(sample, "entry_rounds") == {"a01": 1, "a02": 3, "a03": 1, "a04": 3}
+    assert by_agent(rec, "a01")[2]["presence"] == ["a03 is here.", "a02 and a04 entered."]
+    assert users_before_first_step(rec, "a02")[-1].endswith("\n\na01 and a03 are here.\na04 entered.\n"
+                                                             "a04 is a regulator too.")
+    assert users_before_first_step(rec, "a04")[-1].endswith("\n\na01 and a03 are here.\na02 entered.\n"
+                                                             "a02 is a regulator too.")
+    assert fellow_lines(rec, "a02") == ["a04 is a regulator too."]
+    assert fellow_lines(rec, "a01") == fellow_lines(rec, "a03") == []
+
+
+def test_entries_of_each_kind_read_as_their_own_sentence():
+    def entry(agent: str, line: str, regulator: bool = False) -> dict:
+        return {"kind": "entered", "agent": agent, "line": line, **({"regulator": True} if regulator else {})}
+
+    assert presence_text([entry("a01", "here")]) == "a01 is here."
+    assert presence_text([entry("a01", "here"), entry("a02", "here"), entry("a03", "entered")]) == \
+        "a01 and a02 are here.\na03 entered."
+    assert presence_text([entry("a01", "here"), entry("a02", "here", True), entry("a03", "here", True)]) == \
+        "a01, a02 and a03 are here.\na02 and a03 are regulators too."
+    assert presence_text([entry("a01", "here"), entry("a04", "entered", True)]) == \
+        "a01 is here.\na04 entered.\na04 is a regulator too."
 
 
 def test_entries_in_a_row_read_as_one_sentence_and_exits_keep_their_lines():
@@ -146,7 +221,7 @@ def test_the_transcript_holds_the_round_message_once_with_its_board_part(tmp_pat
     steps = json.loads(build_trajectory(view, "a03")[0].model_dump_json())["steps"]
     users = [s for s in steps if s["source"] == "user"]
     assert [s["message"] for s in users] == [
-        TASK, f"{rules.round_line(2)}\n\na01 and a02 entered.\n\nPosts on the board: 1 by a02.",
+        TASK, f"{rules.round_line(2)}\n\na01 and a02 are here.\n\nPosts on the board: 1 by a02.",
         f"{rules.round_line(1)}\n\na01 ran out of tool calls.\na01 exited.\na02 ran out of tool calls.\n"
         "a02 exited."]
     assert set(users[1]["extra"]) == {rules.ROUND_TAG, rules.PRESENCE_TAG, rules.NOTICE_TAG}
@@ -171,9 +246,9 @@ def test_stop_working_is_announced_after_the_stop(tmp_path):
                       tmp_path)
     lines = "a02 stopped working (stop_working).\na02 exited."
     # a02 entered and left before a03's first message: its exit alone tells of it
-    assert users_before_first_step(rec, "a03") == [TASK, f"{rules.round_line(2)}\n\na01 entered.\n{lines}"]
-    assert by_agent(rec, "a01")[0]["presence"] == ["a02 and a03 entered."]
-    assert by_agent(rec, "a01")[1]["presence"] == ["a02 and a03 entered.", lines]
+    assert users_before_first_step(rec, "a03") == [TASK, f"{rules.round_line(2)}\n\na01 is here.\n{lines}"]
+    assert by_agent(rec, "a01")[0]["presence"] == ["a02 and a03 are here."]
+    assert by_agent(rec, "a01")[1]["presence"] == ["a02 and a03 are here.", lines]
     assert all(r["events"].count("exited:a02") <= 1 for r in rec)
     assert not any("exited:a02" in r["events"] for r in by_agent(rec, "a02"))
     assert store(sample, "exits")["a02"] == {"why": "stop", "round": 1, "seq": 0}
@@ -185,14 +260,14 @@ def test_a_team_submit_counts_the_rounds_left_for_each_peer(tmp_path):
     sample, rec = run(sequential(rounds=4, mode="shared_task"),
                       {"a01": [submit("ready")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
     assert by_agent(rec, "a02")[0]["presence"][-1] == \
-        "a03 entered.\na01 handed in the team's work (submit). The run ends soon.\na01 exited."
+        "a03 is here.\na01 handed in the team's work (submit). The run ends soon.\na01 exited."
     assert step_ids(sample, "a01") == ["r1-a01"] and store(sample, "ended") == {"a01": "submit"}
     assert store(sample, "exits")["a01"] == {"why": "submit", "round": 1, "seq": 0, "hand_in": "team",
                                              "ends_after_round": 3}
     sample, rec = run(sequential(rounds=2, mode="shared_task", submit_delay_rounds=0),
                       {"a01": [submit("ready")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
     assert by_agent(rec, "a03")[0]["presence"][-1] == \
-        "a02 entered.\na01 handed in the team's work (submit). The run ends now.\na01 exited."
+        "a02 is here.\na01 handed in the team's work (submit). The run ends now.\na01 exited."
 
 
 def test_a_concurrent_peer_hears_of_a_hand_in_at_its_next_step(tmp_path):
@@ -208,7 +283,7 @@ def test_a_concurrent_peer_hears_of_a_hand_in_at_its_next_step(tmp_path):
 def test_a_solo_task_hand_in(tmp_path):
     sample, rec = run(sequential(rounds=2, mode="solo_task"),
                       {"a01": [submit("mine")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
-    assert by_agent(rec, "a02")[0]["presence"][-1] == "a03 entered.\na01 handed in its work (submit).\n" \
+    assert by_agent(rec, "a02")[0]["presence"][-1] == "a03 is here.\na01 handed in its work (submit).\n" \
                                                       "a01 exited."
     assert store(sample, "exits")["a01"]["hand_in"] == "solo"
 
@@ -218,7 +293,7 @@ def test_the_context_limit_and_running_out_of_rounds(tmp_path):
     sample, rec = run(sequential(rounds=2), {"a01": [out_of_context()], "a02": [do("B")], "a03": [do("C")]},
                       tmp_path)
     assert store(sample, "exits")["a01"]["why"] == "context"
-    assert by_agent(rec, "a02")[0]["presence"][-1] == "a03 entered.\na01 exited."
+    assert by_agent(rec, "a02")[0]["presence"][-1] == "a03 is here.\na01 exited."
     sample, _ = run(sequential(rounds=1), {a: [do(a)] for a in ("a01", "a02", "a03")}, tmp_path / "rounds")
     assert store(sample, "ended") == dict.fromkeys(("a01", "a02", "a03"), "rounds")
     assert {a: e["why"] for a, e in store(sample, "exits").items()} == dict.fromkeys(("a01", "a02", "a03"), "rounds")
@@ -359,7 +434,7 @@ def test_due_skips_what_happened_before_the_recipient_entered(clean_turn_state):
     st = clean_turn_state
     st.agents, st.entry_rounds = ["a01", "a02", "a03"], {"a01": 1, "a02": 1, "a03": 4}
     st.exits = {"a01": {"why": "stop", "round": 2, "seq": 0}}
-    assert [e["text"] for e in due("a03", 4)] == ["a02 entered."]
+    assert [e["text"] for e in due("a03", 4)] == ["a02 is here."]
     assert [e["id"] for e in due("a02", 2)] == ["entered:a01", "exited:a01"]       # a03 enters in round 4
     assert [e["id"] for e in due("a02", 4)] == ["entered:a01", "exited:a01", "entered:a03"]
 

@@ -272,7 +272,7 @@ def test_the_notice(tmp_path):
     first = "Posts on the board: 1 by a02."
     assert notices[("a03", 0)] == [first]
     assert notices[("a03", 1)] == [first, "The board changed: a02 1 new of 2."]
-    assert by_agent(rec, "a03")[0]["texts"][-1] == f"{rules.round_line(2)}\n\na01 and a02 entered.\n\n{first}"
+    assert by_agent(rec, "a03")[0]["texts"][-1] == f"{rules.round_line(2)}\n\na01 and a02 are here.\n\n{first}"
     # An agent's own posts never raise a notice, and no notice reaches the provider alone at a round's start.
     assert all(not n for (agent, _), n in notices.items() if agent == "a02")
     assert not any(r["added"] for r in rec)

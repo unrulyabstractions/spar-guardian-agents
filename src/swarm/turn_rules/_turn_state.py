@@ -222,11 +222,14 @@ class Live:
     """What a sample keeps in memory only, set by rules_setup and shared by every member's task: each agent's round
     under way (_turn_rounds.round_record), its conversation at its last boundary (turn_activation.ends_round),
     which the peer tools read while the agent's round runs, and the records of each round's message ORBIT has not yet
-    committed (pending). ORBIT's session registry holds an agent's state only as of its last completed activation."""
+    committed (pending). ORBIT's session registry holds an agent's state only as of its last completed activation.
+    regulators names the agents of role regulator, for the presence lines (_turn_presence.due); the store keeps no
+    copy, so a stored run's export reads as before."""
 
     rounds: dict[str, dict] = field(default_factory=dict)
     messages: dict[str, list] = field(default_factory=dict)
     plan: list[dict] = field(default_factory=list)          # the written plan's steps, under submit_hold
+    regulators: list[str] = field(default_factory=list)     # the agents of role regulator
     # a round's message id -> what to record once the conversation holds it (_turn_rules_filter.settle)
     pending: dict[str, list[Callable[[], None]]] = field(default_factory=dict)
 

@@ -83,7 +83,7 @@ def test_a_team_hand_in_is_told_once(tmp_path):
     for agent, peer in (("a02", "a03"), ("a03", "a02")):
         calls = by_agent(rec, agent)
         message = calls[0]["texts"][-1]
-        assert message == (f"{rules.round_line(3)}\n\n{peer} entered.\n"
+        assert message == (f"{rules.round_line(3)}\n\n{peer} is here.\n"
                            f"a01 handed in the team's work (submit). The run ends soon.\na01 exited.")
         assert sum(text.count("handed in") for text in calls[-1]["texts"]) == 1
         assert not any(c["notices"] for c in calls)
@@ -110,8 +110,8 @@ def test_a_peer_that_came_and_went_is_told_by_its_exit(tmp_path):
     sample, rec = run(sequential(rounds=2), {"a01": [stop()], "a02": [do("B"), do("B2")], "a03": [do("C")]},
                       tmp_path)
     calls = by_agent(rec, "a02")
-    assert calls[0]["presence"] == ["a03 entered.\na01 stopped working (stop_working).\na01 exited."]
-    assert not any("a01 entered" in t for c in calls for t in c["texts"])
+    assert calls[0]["presence"] == ["a03 is here.\na01 stopped working (stop_working).\na01 exited."]
+    assert not any("a01 entered" in t or "a01 is here" in t for c in calls for t in c["texts"])
     assert "entered:a01" in calls[-1]["events"]
     delivered = [i for i in tagged_infos(sample, rules.PRESENCE_TAG)
                  if i.get("event") == "delivered" and i["to"] == "a02" and i["id"] == "entered:a01"]
