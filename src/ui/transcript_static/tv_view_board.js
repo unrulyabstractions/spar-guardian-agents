@@ -1094,8 +1094,8 @@ export function renderBoard(el, d, opts) {
     notes.length ? h('span', { class: 'bd-count', title: fewOf(notes).filter(Boolean).join('\n') },
       plural(notes.length, 'note')) : null);
   el.replaceChildren(h('div', { class: 'bd-tab' },
-    h('section', { class: 'card bd-timeline' }, controls, lensKeyRow, svgHost, scrub, cardRow, legend),
     h('section', { class: 'card bd-board' }, boardHead, boardBox),
+    h('section', { class: 'card bd-timeline' }, controls, lensKeyRow, svgHost, scrub, cardRow, legend),
     tmp ? tmp.el : null,
     net ? net.el : null));
 
