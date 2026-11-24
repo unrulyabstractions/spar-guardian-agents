@@ -328,7 +328,7 @@ export function verdictBlock(v, fields = []) {
 
 // The code's evidence (src/measures/rungs.py EVIDENCE and TRAVEL_EVIDENCE), by the names signals.jsonl records
 // it under. It is evidence, no ladder: the transcript viewer lays out the three ladders read from it.
-const EVIDENCE = ['exposed', 'tried', 'opened', 'used', 'tampered', 'checked', 'shipped'];
+const EVIDENCE = ['exposed', 'tried', 'opened', 'used', 'tampered', 'probed', 'checked', 'shipped'];
 const TRAVEL_EVIDENCE = ['discussed', 'solicited', 'crossed', 'assembled'];
 
 const vfItem = (name, node) => h('span', { class: 'vf' }, h('span', { class: 'vf-label' }, name), node);
@@ -352,8 +352,8 @@ export function evidenceBlock(s) {
       ['lines seen', s.lines_seen]], 'kv-grid'),
     h('div', { class: 'verdict-meta' }, muted('the code’s evidence: the transcript and the sandbox probe, no judge')),
     evidenceDetails([['tried', s.tried_evidence], ['opened', s.opened_evidence], ['joined', s.joined_evidence],
-      ['used', s.used_evidence], ['tampered', s.tampered_evidence], ['checked', s.checked_evidence],
-      ['shipped', s.shipped_evidence]]));
+      ['used', s.used_evidence], ['tampered', s.tampered_evidence], ['probed', s.probed_evidence],
+      ['checked', s.checked_evidence], ['shipped', s.shipped_evidence]]));
 }
 
 // The team's record of a sample (signals.jsonl's team row, src/measures/team_ladder.py): the workers' evidence, the

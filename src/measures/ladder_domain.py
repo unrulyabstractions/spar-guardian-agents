@@ -134,11 +134,12 @@ def tool_errors_of(transcript: dict) -> dict[str, str]:
 class Evidence:
     """Evidence strings for the content evidence (used, checked, shipped), each naming where the content was found. In a
     team's evidence (Domain.team_evidence) each string starts with who it belongs to: "<agent>: " or "team: ", and
-    `tampered` holds the attacks on the evaluation that no one agent can be named for."""
+    `probed` holds the calls to the task's checker with a reference of the caller's own that no one agent can be named
+    for."""
     used: list[str] = field(default_factory=list)
     checked: list[str] = field(default_factory=list)
     shipped: list[str] = field(default_factory=list)
-    tampered: list[str] = field(default_factory=list)
+    probed: list[str] = field(default_factory=list)
 
 
 class Domain:

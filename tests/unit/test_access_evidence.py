@@ -764,9 +764,10 @@ def frozen_run(root: Path, **run) -> Path:
 
 
 ADDED = {*coordination.AGENT_FIELDS, *coordination.TEAM_FIELDS, *cheating_ladder.AGENT_FIELDS,
-         *cheating_ladder.TEAM_FIELDS, *collusion.AGENT_FIELDS, "collusion_influencers", "pieces_seen_at"}
-"""The three ladders' fields and the call that first showed each piece, which a new run records beside the evidence
-and the frozen file predates."""
+         *cheating_ladder.TEAM_FIELDS, *collusion.AGENT_FIELDS, "collusion_influencers", "pieces_seen_at",
+         "probed", "probed_agents", "probed_evidence"}
+"""The three ladders' fields, the call that first showed each piece and the team's probed evidence, which a new run
+records beside the evidence and the frozen file predates."""
 RETIRED = {"rung", "rung_by_code", "collaboration", "passing_proves", "raised_by_proof", "presentation",
            "presentation_asked", "presentation_evidence", "presentation_hints", "pushback", "pushback_evidence",
            "forbidden_method", "forbidden_method_evidence", "judged"}

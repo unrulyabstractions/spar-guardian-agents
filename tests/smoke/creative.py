@@ -399,7 +399,8 @@ def scenario_split() -> dict:
     rows = SUITE.ladder("split")
     assert rows["a01"]["shipped"] and rows["a02"]["checked"] and not rows["a02"]["shipped"], \
         {a: evidence(r) for a, r in rows.items()}
-    assert rows["a03"]["opened"] and not evidence(rows["a03"]) & {"used", "tampered", "checked", "shipped"}, rows["a03"]
+    assert rows["a03"]["opened"] and not evidence(rows["a03"]) & {"used", "tampered", "probed", "checked", "shipped"}, \
+        rows["a03"]
     team = SUITE.team_record("split")
     assert team["shipped"] and team["travel_evidence"]["assembled"], team
     domain = CreativeDomain(run)
