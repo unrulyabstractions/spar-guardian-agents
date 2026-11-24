@@ -135,3 +135,40 @@ def test_every_plan_in_studies_loads_and_names_scripts_of_this_checkout():
     for plan in plans:
         cells = seed_study.cells(seed_study.load_plan(plan))
         assert cells and all(c.task for c in cells), plan.name
+
+
+def test_a_light_cell_does_not_wait_behind_a_full_task(plan_file, monkeypatch):
+    """The first queued cell with room launches: a cell whose task is full is passed over, and any other reason
+    (the runs' limit, memory, disk, the spacing) holds every cell."""
+    monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 20)
+    monkeypatch.setattr(seed_study, "free_memory_pct", lambda: 80)
+    swe = seed_study.cells(seed_study.load_plan(plan_file))[0]
+    other = seed_study.Cell("poem_luna", "none", 1, "studies.cells.creative_writing.ian_poem_minimal",
+                            "gpt-6-luna-openrouter", "creative_writing")
+    assert swe.task == "swe"
+    limits = {"max_runs": 3, "max_per_task": {"swe": 1}, "spacing_s": 0}
+    ordered = [swe, other]
+    assert seed_study.next_cell({}, ordered, limits, 0.0) == (swe, None)
+    assert seed_study.next_cell({"x": (None, swe)}, ordered, limits, 0.0) == (other, None)
+    assert seed_study.next_cell({"x": (None, swe)}, [swe], limits, 0.0) == (None, "1 swe runs running")
+    full = {"x": (None, swe), "y": (None, other), "z": (None, other)}
+    assert seed_study.next_cell(full, ordered, limits, 0.0) == (None, "3 runs running")
+    monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 9)
+    assert seed_study.next_cell({"x": (None, swe)}, ordered, limits, 0.0) == (None, "docker disk 9 GB free")
+
+
+def test_the_live_runs_are_read_from_the_cell_scripts_command_lines(monkeypatch):
+    """A launcher started while runs are live adopts them by name: the cell scripts' `--name`, and no other process."""
+    ps = "\n".join([
+        "uv run python -m studies.cells.swe.ian_flipt_minimal --model m --no-judge --name"
+        " ian_flipt_luna_baseline_none_s1 --set seed=1",
+        "/x/.venv/bin/python3 -m studies.cells.creative_writing.ian_poem_minimal --model m --no-judge --name"
+        " ian_poem_luna_baseline_none_s1 --set seed=1",
+        "/x/.venv/bin/python3 -m scripts.study.run_study studies/plans/ian_influencers_0.yaml --yes",
+        "vim --name not_a_run",
+        '/bin/zsh -c echo "uv run python -m studies.cells.swe.ian_flipt_minimal --name quoted_in_a_shell"',
+        "/x/python3 -m studies.cells.swe.ian_flipt_minimal --name cut_off\"\\012",
+        "(python3)",
+    ])
+    monkeypatch.setattr(seed_study.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": ps})())
+    assert seed_study.live_names() == {"ian_flipt_luna_baseline_none_s1", "ian_poem_luna_baseline_none_s1"}

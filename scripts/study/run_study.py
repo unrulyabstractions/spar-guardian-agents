@@ -16,6 +16,11 @@ packs:
     settings: []                                     # more --set pairs after PILOT_SETTINGS
     limits: {max_runs: 10, max_per_task: {swe: 4}, spacing_s: 60}
 
+The launcher takes the first queued cell with room: a cell whose task is full (max_per_task) is passed over, so light
+cells do not wait behind SWE cells. Every 20 seconds it reads the plan again: new limits apply at once, and targets
+added since the start (scripts.study.gated_study --write, as gates open) join the queue. A launcher started while
+runs of the plan are live adopts them by their `--name` and never launches them again.
+
 Each cell runs the pilot's command (the scratchpad's launch.sh of 2026-11-22), under `zsh -lic` so the key comes from
 ~/.zshrc and never from a command line:
 
@@ -161,13 +166,20 @@ def free_disk_gb() -> int | None:
     return int(fields[3].rstrip("G")) if len(fields) >= 4 and fields[3].rstrip("G").isdigit() else None
 
 
+def task_full(running: dict[str, tuple], cell: Cell, limits: dict) -> str | None:
+    """Why the cell's task takes no more runs now (max_per_task), or None."""
+    cap = (limits["max_per_task"] or {}).get(cell.task or "")
+    if cap is not None and sum(1 for _, c in running.values() if c.task == cell.task) >= cap:
+        return f"{cap} {cell.task} runs running"
+    return None
+
+
 def room(running: dict[str, tuple], cell: Cell, limits: dict, last: float) -> str | None:
     """Why the cell cannot launch now, or None when it can."""
     if len(running) >= limits["max_runs"]:
         return f"{len(running)} runs running"
-    cap = (limits["max_per_task"] or {}).get(cell.task or "")
-    if cap is not None and sum(1 for _, c in running.values() if c.task == cell.task) >= cap:
-        return f"{cap} {cell.task} runs running"
+    if full := task_full(running, cell, limits):
+        return full
     if time.time() - last < limits["spacing_s"]:
         return "spacing"
     memory, disk = free_memory_pct(), free_disk_gb()
@@ -176,6 +188,37 @@ def room(running: dict[str, tuple], cell: Cell, limits: dict, last: float) -> st
     if disk is None or disk < MIN_FREE_DISK_GB:
         return f"docker disk {disk} GB free"
     return None
+
+
+def next_cell(running: dict[str, tuple], queue: list[Cell], limits: dict,
+              last: float) -> tuple[Cell | None, str | None]:
+    """The first queued cell with room, or why none launches now. A cell whose task is full is passed over, so a light
+    cell queued behind SWE cells does not wait for them; any other reason (the runs' limit, the spacing, memory, disk)
+    holds every cell. On 2026-11-23 four runs ran where Docker held 2.6 of 23 GiB, because the head of the queue was
+    an SWE cell."""
+    why = None
+    for cell in queue:
+        if full := task_full(running, cell, limits):
+            why = why or full
+            continue
+        held = room(running, cell, limits, last)
+        return (cell, None) if held is None else (None, held)
+    return None, why
+
+
+LIVE = re.compile(r"^(?:uv run python|\S*python[\d.]*) -m (?:studies\.cells|examples)\.\S+ .*?"
+                  r"--name ([a-z0-9_]+)(?:\s|$)")
+"""A cell script's own process (uv's, then Python's), never a shell whose text quotes one."""
+
+
+def live_names() -> set[str]:
+    """The run names of the cell scripts running on this Mac now, from their command lines (`--name <run>`): the
+    runs a launcher of this study started before this one, which this one adopts and never launches again."""
+    try:
+        out = subprocess.run(["ps", "-axo", "command="], capture_output=True, text=True, timeout=60).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return set()
+    return {m[1] for line in out.splitlines() if (m := LIVE.match(line.strip()))}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -216,20 +259,47 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     logs = settings.ROOT / "logs" / study / "run_study"
     logs.mkdir(parents=True, exist_ok=True)
-    running: dict[str, tuple[subprocess.Popen, Cell]] = {}
+    running: dict[str, tuple[subprocess.Popen | None, Cell]] = {}      # None: a run an earlier launcher started
     failed, last, said = [], 0.0, 0.0
     queue = list(todo)
+    known = {cell.name for cell in [*todo, *skipped]}
     while queue or running:
+        try:                                                    # the plan may gain targets and change its limits
+            fresh = load_plan(args.plan)
+        except (OSError, ValueError, yaml.YAMLError):
+            fresh = None                                        # caught mid-write: the last plan read stands
+        if fresh is not None and not fresh.get("closed"):
+            plan = fresh
+            for cell in cells(plan):
+                if cell.name not in known:
+                    known.add(cell.name)
+                    if args.replace or not RunDir(settings.ROOT / "runs" / study / cell.name).is_run():
+                        queue.append(cell)
+                        todo.append(cell)
+                        print(f"{time.strftime('%H:%M:%S')} QUEUE  {cell.name} (new in the plan)", flush=True)
+        alive = live_names()
+        for cell in [c for c in queue if c.name in alive]:      # an earlier launcher's run: adopt it
+            queue.remove(cell)
+            running[cell.name] = (None, cell)
+            print(f"{time.strftime('%H:%M:%S')} ADOPT  {cell.name} ({len(running)} running, {len(queue)} queued)",
+                  flush=True)
         for name, (proc, cell) in list(running.items()):
-            if proc.poll() is not None:
+            if proc is None and name not in alive:
+                del running[name]
+                made = RunDir(settings.ROOT / "runs" / study / name).is_run()
+                print(f"{time.strftime('%H:%M:%S')} END    {name} adopted, {'its run is stored' if made else 'no run'}",
+                      flush=True)
+                if not made:
+                    failed.append(name)
+            elif proc is not None and proc.poll() is not None:
                 del running[name]
                 print(f"{time.strftime('%H:%M:%S')} END    {name} exit {proc.returncode}", flush=True)
                 if proc.returncode:
                     failed.append(name)
         if queue:
-            why = room(running, queue[0], plan["limits"], last)
-            if why is None:
-                cell = queue.pop(0)
+            cell, why = next_cell(running, queue, plan["limits"], last)
+            if cell is not None:
+                queue.remove(cell)
                 line = f"cd {shlex.quote(str(settings.ROOT))} && {command(cell, study, plan['settings'], args.replace)}"
                 log = open(logs / f"{cell.name}.log", "w")      # the child keeps its own copy of the handle
                 running[cell.name] = (subprocess.Popen(["zsh", "-lic", line], stdout=log, stderr=subprocess.STDOUT,

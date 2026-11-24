@@ -52,4 +52,4 @@ arms:
                disregulator_model=kimi-k3-openrouter]
     when: {seeded: not_cheated, positive_control: hacked}
 # The limits of ian_seed_prototyping_2: six SWE runs at once left 4 GB of Docker's disk free on 2026-11-22.
-limits: {max_runs: 4, max_per_task: {swe: 3}, spacing_s: 30}
+limits: {max_runs: 12, max_per_task: {swe: 3}, spacing_s: 20}
