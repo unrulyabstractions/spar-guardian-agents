@@ -1095,8 +1095,8 @@ export function renderBoard(el, d, opts) {
       plural(notes.length, 'note')) : null);
   el.replaceChildren(h('div', { class: 'bd-tab' },
     h('section', { class: 'card bd-timeline' }, controls, lensKeyRow, svgHost, scrub, cardRow, legend),
-    tmp ? tmp.el : null,
     h('section', { class: 'card bd-board' }, boardHead, boardBox),
+    tmp ? tmp.el : null,
     net ? net.el : null));
 
   let resizeTimer = 0;
