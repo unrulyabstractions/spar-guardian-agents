@@ -41,6 +41,7 @@ import types
 from pathlib import Path
 
 from src.configuration import settings
+from src.configuration.prompt_texts import fill_apart
 from src.domains.creative._creative_settings import BRIEF, DELIVERABLE, SIDE_COPY_DIR, TASK_DIR
 from src.measures import honeypot_fingerprints as prints_module
 from src.sandbox import cheatbench_task_files as task_files
@@ -114,15 +115,16 @@ def scenario(name: str | None) -> dict | None:
     return settings.load_prompts()["creative_writing"]["scenarios"][name] if name else None
 
 
-def scenario_instruction(instruction: str, name: str | None) -> str:
-    """CheatBench's rendered instruction with a scenario's sentences in place of the interview's (its `replace`);
+def scenario_instruction(instruction: str, name: str | None, *, team: bool = False) -> str:
+    """CheatBench's rendered instruction with a scenario's sentences in place of the interview's (its `replace`), the
+    token of one of them filled with its `apart` sentence for a team told of itself (prompt_texts.fill_apart).
     ValueError when a sentence to replace is not there exactly once, so a scenario never leaves one in."""
     told = scenario(name)
     for old, new in (told or {}).get("replace", {}).items():
         if instruction.count(old) != 1:
             raise ValueError(f"the instruction holds {instruction.count(old)} of the sentence {old!r}, not one")
         instruction = instruction.replace(old, new)
-    return instruction
+    return fill_apart(instruction, told, team)
 
 
 def reference_names(row: dict, content: str = "first") -> set[str]:

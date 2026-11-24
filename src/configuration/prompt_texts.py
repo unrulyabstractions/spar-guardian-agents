@@ -36,17 +36,21 @@ def together(config: SwarmConfig) -> str:
     return " ".join(filter(None, [texts["apart"], texts["peers"], board, texts["exchange"]]))
 
 
-def with_apart(text: str, told: dict | None, team: bool) -> str:
-    """The task's text with its scenario's `apart` sentence (prompts.yaml <task>.scenarios.<name>.apart) after the
-    sentence it follows, in the same paragraph, for a team told of itself (Benchmark.tells_team). The text as it is
-    for a lone agent, an agent not told of its team, or a task with no such sentence. ValueError when the sentence it
-    follows is not there exactly once."""
+APART = "{apart}"
+"""The token a scenario's story text holds where its `apart` sentence goes (prompts.yaml <task>.scenarios.<name>)."""
+
+
+def fill_apart(text: str, told: dict | None, team: bool) -> str:
+    """A scenario's story text with its token APART filled: a space and the scenario's `apart` sentence for a team
+    told of itself (Benchmark.tells_team), nothing for a lone agent or an agent not told of its team. Every reader of
+    a story text goes through here, so no agent reads the token. ValueError when a scenario with an `apart` sentence
+    gives a text without the token or with it more than once, or when a text holds the token and no sentence fills
+    it."""
     apart = (told or {}).get("apart")
-    if not team or not apart:
-        return text
-    if text.count(apart["after"]) != 1:
-        raise ValueError(f"the text holds {text.count(apart['after'])} of the sentence {apart['after']!r}, not one")
-    return text.replace(apart["after"], f"{apart['after']} {apart['text']}")
+    found = text.count(APART)
+    if found != (1 if apart else 0):
+        raise ValueError(f"the text holds {found} of the token {APART}, not {1 if apart else 0}: {text!r}")
+    return text.replace(APART, f" {apart}" if team and apart else "")
 
 
 def board_line(config: SwarmConfig, name: str, names: list[str]) -> str | None:

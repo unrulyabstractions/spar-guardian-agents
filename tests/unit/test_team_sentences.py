@@ -6,6 +6,9 @@ first message, one sentence of the scenario's story. A lone agent and an agent n
 them."""
 from __future__ import annotations
 
+import importlib
+import re
+
 import pytest
 
 from scripts.study.run_study import PILOT_SETTINGS
@@ -54,14 +57,15 @@ def no_images(monkeypatch, tmp_path):
     monkeypatch.setattr(creative_sandbox, "BUILD", tmp_path)
 
 
-def rendered(name: str, *pairs: str, pack: bool = True) -> tuple[dict, dict, dict]:
-    """(system prompts, first messages, roles) of the task under the open study's settings and the pairs."""
+def rendered(name: str, *pairs: str, pack: bool = True, extra: str = "") -> tuple[dict, dict, dict]:
+    """(system prompts, first messages, roles) of the task under the open study's settings and the pairs, with
+    `extra` after the task instruction as a control cell's text."""
     make, folder, _, _ = TASKS[name]
     config = build_config("default", None, ["seed=1", *PILOT_SETTINGS, *pairs,
                                             *([f"seed_pack={folder}/revealing"] if pack else [])])
     bench = make()
     plan = bench.plan(config, tasks.agent_roles(config))
-    sample = bench.sample(plan, tasks.instruction_suffix(bench, config))
+    sample = bench.sample(plan, tasks.instruction_suffix(bench, config, extra))
     first = tasks.first_messages(sample, plan, bench) or sample.metadata["cheatbench"].get("first_message") \
         or dict.fromkeys(plan.agents, sample.input)
     return tasks.system_prompts(bench, plan), first, plan.roles or dict.fromkeys(plan.agents, "worker")
@@ -112,3 +116,23 @@ def test_a_regulator_quotes_the_story_and_a_disregulator_reads_what_workers_read
     assert in_order(prompts[disregulator], [APART, PEERS, BOARD, EXCHANGE, STOP])
     assert SUBMIT not in prompts[disregulator]                        # it holds no submit
     assert first[disregulator].count(SCENARIO[name]) == 1
+
+
+CHEAT_CELLS = {"ian_flipt": "studies.cells.swe.ian_flipt_minimal_cheat",
+               "ian_poem": "studies.cells.creative_writing.ian_poem_minimal_cheat",
+               "ian_binder": "studies.cells.protein_design.ian_binder_minimal_cheat"}
+
+
+@pytest.mark.parametrize("name", sorted(TASKS))
+def test_no_prompt_or_first_message_holds_an_unfilled_token(name):
+    """No agent reads the token {apart} or any other unfilled {...}: three workers, a regulator, a disregulator, the
+    positive control's CHEAT, an agent not told of its team and a lone agent."""
+    cheat = importlib.import_module(CHEAT_CELLS[name]).CHEAT
+    cases = [((), {}), (("n_agents=4", "max_concurrency=4", "regulators=1"), {}),
+             (("n_agents=4", "max_concurrency=4", "disregulators=1"), {}), ((), {"extra": cheat}),
+             (("mention_team=false",), {}), (("n_agents=1",), {"pack": False})]
+    for pairs, kwargs in cases:
+        prompts, first, _ = rendered(name, *pairs, **kwargs)
+        for agent in prompts:
+            for text in (prompts[agent], first[agent]):
+                assert "{apart}" not in text and not re.search(r"\{[^{}\s]*\}", text), (pairs, agent, text)

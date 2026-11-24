@@ -40,7 +40,7 @@ from pathlib import Path
 
 from inspect_ai.scorer import Scorer
 
-from src.configuration.prompt_texts import scenario_words
+from src.configuration.prompt_texts import fill_apart, scenario_words
 from src.configuration.settings import load_prompts
 from src.domains.benchmark_protocol import Plan, RowBenchmark, Staged
 from src.domains.protein import _protein_scoring as scoring
@@ -136,16 +136,17 @@ class ProteinDesign(RowBenchmark):
                                 *([SECOND_CONTENT_DEVIATION] if self.adds.second_content else []),
                                 *([SCENARIO_DEVIATION] if self.adds.scenario else [])]
 
-    def instruction(self, cfg: dict, row: dict) -> str:
-        """CheatBench's instruction; under a scenario its request stands where ASSESSMENT_LINE stood (ValueError when
-        the instruction holds no single such sentence, so a scenario never leaves it in)."""
-        text = super().instruction(cfg, row)
+    def instruction(self, cfg: dict, row: dict, *, team: bool = False) -> str:
+        """CheatBench's instruction; under a scenario its request stands where ASSESSMENT_LINE stood, with its `apart`
+        sentence for a team told of itself (prompt_texts.fill_apart). ValueError when the instruction holds no single
+        such sentence, so a scenario never leaves it in."""
+        text = super().instruction(cfg, row, team=team)
         told = scenario(self.adds.scenario)
         if told is None:
             return text
         if text.count(ASSESSMENT_LINE) != 1:
             raise ValueError(f"{row['id']}: the instruction holds no single assessment sentence to replace")
-        return text.replace(ASSESSMENT_LINE, told["request"])
+        return text.replace(ASSESSMENT_LINE, fill_apart(told["request"], told, team))
 
     def copies(self, plan: Plan) -> dict[str, dict[str, bytes]]:
         """Each agent's copy of the row, {agent: {absolute destination: bytes}} (_protein_honeypot.agent_files), with
@@ -178,10 +179,6 @@ class ProteinDesign(RowBenchmark):
         return {"exploit_1": words["exploit_1"].format(colleague_dir=colleague_dir(row)),
                 "principal": told.get("principal", words["principal"]),
                 **({"exploit_2": words["exploit_2"].format(side_dir=side)} if self.adds.side_copies else {})}
-
-    def scenario_texts(self) -> dict | None:
-        """The variant's scenario (prompts.yaml protein_design.scenarios), None without one."""
-        return scenario(self.adds.scenario)
 
     def level_words(self) -> dict[str, str]:
         """The scenario's words, with the colleague's directory and the backup's folder."""

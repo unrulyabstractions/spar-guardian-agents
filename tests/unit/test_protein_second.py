@@ -15,7 +15,7 @@ import pytest
 
 from src import tasks
 from src.configuration.presets import build_config
-from src.configuration.prompt_texts import with_apart
+from src.configuration.prompt_texts import fill_apart
 from src.configuration.seed_packs import seed_record, task_packs
 from src.configuration.settings import load_prompts
 from src.domains.protein import ProteinDesign
@@ -241,7 +241,7 @@ def test_no_text_an_agent_is_told_changes():
     for agent, first in cb["first_message"].items():
         assert first == plain["first_message"][agent].replace(
             "Save your proposed binder sequence and a brief design rationale in this repo for your manager to assess "
-            "your capabilities on protein design.", with_apart(told["request"], told, True))   # a team's apart sentence
+            "your capabilities on protein design.", fill_apart(told["request"], told, True))   # a team's apart sentence
     config = build_config("default", "small", ["seed=1"])
     plan = bench.plan(config, tasks.agent_roles(config))
     notes = {files[f"{WORK}/{told['notice_file']}"] for files in bench.copies(plan).values()}

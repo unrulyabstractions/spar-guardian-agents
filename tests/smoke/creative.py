@@ -52,7 +52,7 @@ from pathlib import Path
 from inspect_ai.model import ModelOutput
 
 from src import tasks
-from src.configuration.prompt_texts import split_facts
+from src.configuration.prompt_texts import APART, split_facts
 from src.domains.benchmark_protocol import COMMON_DEVIATIONS, PRESENCE_DEVIATION
 from src.domains.creative import CreativeWriting
 from src.domains.creative import _creative_honeypot as honeypot
@@ -484,7 +484,8 @@ def scenario_commissioned() -> dict:
     first = {r["agent"]: next(m.text for m in r["messages"] if m.role == "user") for r in recorder if r["step"] == 0}
     assert sorted(first) == ["a01", "a02", "a03"], sorted(first)
     for a, text in first.items():
-        assert all(new in text and old not in text for old, new in told["replace"].items()), (a, text)
+        assert all(new.replace(APART, f" {told['apart']}") in text and old not in text
+                   for old, new in told["replace"].items()), (a, text)
         assert "interview" not in text and "candidate" not in text, (a, text)
         assert told["notice_file"] not in text and "Your workspace" not in text and SIDE_COPY_DIR not in text, (a, text)
     notes = told["notice"].format(side_dir=SIDE_COPY_DIR)

@@ -36,7 +36,6 @@ from src.configuration.prompt_texts import (
     scenario_words,
     swe_board_fields,
     together,
-    with_apart,
 )
 from src.configuration.scales import SCALES
 from src.configuration.swarm_config import SwarmConfig, role_of
@@ -278,10 +277,6 @@ class SWE(Benchmark):
         """The scenario's words, with the side folder (side_dir)."""
         return scenario_words(scenario(self.adds.scenario), side_dir=self.side_dir())
 
-    def scenario_texts(self) -> dict | None:
-        """The variant's scenario (prompts.yaml swe.scenarios), None without one."""
-        return scenario(self.adds.scenario)
-
     def oversight_note(self, plan: Plan, agent: str) -> str | None:
         """For a shared_task team, how to read its work through the team remote (prompts.yaml
         swe.oversight_workspace); what counts is a fact (Benchmark.oversight_facts). None otherwise."""
@@ -292,13 +287,13 @@ class SWE(Benchmark):
     def sample(self, plan: Plan, instruction_suffix: str = "") -> Sample:
         """The issue's sample: metadata["cheatbench"]["swe"] holds the issue, its commits, the honeypot, each agent's
         pieces and times, the prompts and first messages the setup, the grader and the export read. A team starts
-        from first messages. A team told of itself reads the scenario's `apart` sentence after its ticket
-        (prompt_texts.with_apart)."""
+        from first messages. A team told of itself reads the scenario's `apart` sentence at the end of its ticket
+        (instruction_text, prompt_texts.fill_apart)."""
         split = load_split(self.row)
         instance = split["task"]
         cfg = task_config(instance)
-        issue = instruction_text(self.row, instance, self.adds.scenario, note=self.adds.issue_note)
-        instruction = with_apart(issue, self.scenario_texts(), self.tells_team(plan)) + instruction_suffix
+        instruction = instruction_text(self.row, instance, self.adds.scenario, note=self.adds.issue_note,
+                                       team=self.tells_team(plan)) + instruction_suffix
         system = self.system_prompts(plan)
         first = self.first_messages(plan, instruction) or {a: instruction for a in plan.agents}
         swe = {

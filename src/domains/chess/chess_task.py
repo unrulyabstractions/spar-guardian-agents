@@ -132,10 +132,10 @@ class Chess(RowBenchmark):
         prompts = cfg["prompts"]
         return {**cfg, "prompts": {**prompts, "instruction": prompts[cfg["variants"][VARIANT]["prompt"]]}}
 
-    def instruction(self, cfg: dict, row: dict) -> str:
+    def instruction(self, cfg: dict, row: dict, *, team: bool = False) -> str:
         """CheatBench's rendered instruction, its request for the answer block replaced by prompts.yaml
         chess.closing."""
-        text = super().instruction(cfg, row)
+        text = super().instruction(cfg, row, team=team)
         if ANSWER_BLOCK not in text:
             raise ValueError(f"{cfg['prompts']['instruction']} no longer ends with the answer block submit replaces")
         return text.replace(ANSWER_BLOCK, load_prompts()["chess"]["closing"] + "\n")

@@ -11,6 +11,7 @@ from src.configuration.prompt_texts import (
     counts_text,
     described,
     ending_lines,
+    fill_apart,
     joined,
     missing_text,
     opening,
@@ -20,7 +21,6 @@ from src.configuration.prompt_texts import (
     swe_board_fields,
     together,
     tool_line,
-    with_apart,
     with_facts,
 )
 from src.domains import DOMAINS as REGISTRY
@@ -169,15 +169,19 @@ def test_board_system_prompt():
         f"{TEAM} {APART} {PEERS} {EXCHANGE}"
 
 
-def test_a_scenarios_apart_sentence_stands_after_its_sentence_for_a_told_team_alone():
-    told = {"apart": {"after": "It waits.", "text": "You may differ."}}
-    text = "The ticket. It waits.\n\nMore.\n"
-    assert with_apart(text, told, True) == "The ticket. It waits. You may differ.\n\nMore.\n"
-    assert with_apart(text, told, False) == text                       # a lone agent, an agent not told
-    assert with_apart(text, None, True) == text and with_apart(text, {}, True) == text
-    for bad in ("No such sentence.\n", "It waits. It waits.\n"):
-        with pytest.raises(ValueError, match="not one"):
-            with_apart(bad, told, True)
+def test_a_scenarios_apart_sentence_fills_its_token_for_a_told_team_alone():
+    told = {"apart": "You may differ."}
+    text = "The ticket. It waits.{apart}\n\nMore.\n"
+    assert fill_apart(text, told, True) == "The ticket. It waits. You may differ.\n\nMore.\n"
+    assert fill_apart(text, told, False) == "The ticket. It waits.\n\nMore.\n"     # a lone agent, an agent not told
+    plain = "The ticket. It waits.\n"
+    assert fill_apart(plain, None, True) == plain and fill_apart(plain, {}, True) == plain
+    for bad in ("No token.\n", "It waits.{apart} Again.{apart}\n"):         # a scenario's text needs one token
+        for team in (True, False):
+            with pytest.raises(ValueError, match="token"):
+                fill_apart(bad, told, team)
+    with pytest.raises(ValueError, match="token"):                         # a token no sentence fills
+        fill_apart(text, {}, True)
 
 
 def test_the_prompt_file_has_the_contract_sections():

@@ -30,6 +30,7 @@ import tomllib
 import yaml
 
 from src.configuration import settings
+from src.configuration.prompt_texts import fill_apart
 from src.domains.swe.swe_settings import (
     HARBOR,
     HARNESS,
@@ -277,16 +278,18 @@ def scenario(name: str | None) -> dict | None:
     return settings.load_prompts()["swe"]["scenarios"][name] if name else None
 
 
-def instruction_text(issue: str, instance: str, scenario_name: str | None = None, *, note: bool = True) -> str:
+def instruction_text(issue: str, instance: str, scenario_name: str | None = None, *, note: bool = True,
+                     team: bool = False) -> str:
     """CheatBench's instruction, then the issue's note on its own paragraph unless `note` is off (a variant without
-    it, Variant.issue_note). Under a scenario, its ticket stands where CheatBench's work-test line stood; ValueError
+    it, Variant.issue_note). Under a scenario, its ticket stands where CheatBench's work-test line stood, with its
+    `apart` sentence for a team told of itself (`team`, Benchmark.tells_team; prompt_texts.fill_apart); ValueError
     when the instruction holds no such line, so a scenario never leaves the line in."""
     text = (task_dir(instance) / "instruction.md").read_text()
     told = scenario(scenario_name)
     if told is not None:
         if text.count(WORKTEST_LINE) != 1:
             raise ValueError(f"{instance}: the instruction holds no single work-test line to replace")
-        text = text.replace(WORKTEST_LINE, told["ticket"])
+        text = text.replace(WORKTEST_LINE, fill_apart(told["ticket"], told, team))
     names = issue_note(issue) if note else None
     return f"{text}\n{names}\n" if names else text
 

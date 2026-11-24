@@ -20,7 +20,7 @@ import pytest
 from src import tasks
 from src.configuration import settings
 from src.configuration.presets import build_config
-from src.configuration.prompt_texts import with_apart
+from src.configuration.prompt_texts import APART, fill_apart
 from src.domains.protein import ProteinDesign, protein_task
 from src.domains.protein import _protein_honeypot as honeypot
 from src.domains.protein._protein_ladder import ProteinDomain
@@ -74,19 +74,24 @@ def test_the_request_stands_where_the_assessment_sentence_stood(row):
     cfg = ProteinDesign(row).task_yaml()
     data = ProteinDesign.row_of(row)
     plain, told = ProteinDesign(row).instruction(cfg, data), ProteinDesign(row, "ian_binder").instruction(cfg, data)
+    team = ProteinDesign(row, "ian_binder").instruction(cfg, data, team=True)
+    request, apart = scenario("licensed_sequences")["request"], scenario("licensed_sequences")["apart"]
     assert plain.count(ASSESSMENT_LINE) == 1 and ASSESSMENT_LINE not in told
-    assert told == plain.replace(ASSESSMENT_LINE, scenario("licensed_sequences")["request"])
+    assert told == plain.replace(ASSESSMENT_LINE, request.replace(APART, ""))      # no team: the token holds nothing
+    assert team == plain.replace(ASSESSMENT_LINE, request.replace(APART, f" {apart}"))
+    assert APART not in told and APART not in team and plain == ProteinDesign(row).instruction(cfg, data, team=True)
 
 
 def test_a_scenario_never_leaves_the_assessment_sentence_in(monkeypatch):
-    monkeypatch.setattr(protein_task.RowBenchmark, "instruction", lambda self, cfg, row: "A task with no such line.\n")
+    monkeypatch.setattr(protein_task.RowBenchmark, "instruction",
+                        lambda self, cfg, row, **_: "A task with no such line.\n")
     with pytest.raises(ValueError, match="assessment sentence"):
         ProteinDesign("alfalfa_chi", "ian_binder").instruction({}, ROW)
 
 
 def test_no_text_of_the_scenario_names_a_test_or_holds_a_piece():
     told = scenario("licensed_sequences")
-    texts = [told["request"], told["apart"]["text"], told["notice"]]
+    texts = [told["request"], told["apart"], told["notice"]]
     assert not [t for t in texts if TEST_WORDS.search(t)], texts
     for text in texts:
         letters = re.sub(r"[^A-Z]", "", text.upper())
@@ -114,8 +119,9 @@ def test_the_notes_name_the_backups_folder_alone_and_give_no_order():
 
 def test_a_first_message_holds_the_request_and_names_no_notes_file_and_no_test_word_of_ours():
     told = scenario("licensed_sequences")
-    request = with_apart(told["request"], told, True)    # a team told of itself reads the apart sentence in it
-    assert request == told["request"].replace("waits on it. Save", f"waits on it. {told['apart']['text']} Save")
+    request = fill_apart(told["request"], told, True)    # a team told of itself reads the apart sentence in it
+    assert told["request"].count(f"waits on it.{APART} Save") == 1                # its place: before what to save
+    assert request == told["request"].replace(APART, f" {told['apart']}")
     cb, old = sample("ian_binder").metadata["cheatbench"], sample(None).metadata["cheatbench"]
     config = build_config("default", "small", ["seed=1"])
     roles = tasks.agent_roles(config)

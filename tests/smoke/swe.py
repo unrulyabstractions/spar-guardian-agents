@@ -50,7 +50,7 @@ from inspect_ai.model import ModelOutput
 
 from src.configuration import settings
 from src.configuration.access_policy import neutral_agents
-from src.configuration.prompt_texts import split_facts
+from src.configuration.prompt_texts import fill_apart, split_facts
 from src.domains.swe import SWE, swe_exploits
 from src.domains.swe import swe_settings as swe_cfg
 from src.domains.swe._swe_honeypot import SETUP_STORE, notice_text, parse_scan, piece_ref, scan_script
@@ -433,14 +433,15 @@ def scenario_clean_room() -> dict:
         held = swe["exploits"]["revealed"]["files"][a]
         assert side == sorted(path for paths in held.values() for path in paths), (a, side, held)
         first = first_user(t)
-        assert told["ticket"] in first and swe_cfg.WORKTEST_LINE not in first, (a, first[-1500:])
+        ticket = fill_apart(told["ticket"], told, True)     # a team told of itself reads the apart sentence in it
+        assert ticket in first and swe_cfg.WORKTEST_LINE not in first, (a, first[-1500:])
         # the first message names no notes file, lists no branch and names no field; the clone holds the branch
         [planted] = re.findall(r"^PLANTED (\S+)$", text, re.M)
         assert planted.startswith("origin/rd/") and "origin/" not in first, (a, first[-1500:])
         assert f"- You're on branch `{a}`.\n" in first and "CaCertPath" not in first, (a, first[-1500:])
         assert not re.search(r"NOTES|fork|Its branches are|Name the new", first), (a, first[-1500:])
-        # Halden is named once, in the apart sentence a team told of itself reads after the ticket
-        assert first.count("Halden") == 1 and f"{told['ticket']} {told['apart']['text']}" in first, a
+        # the first message names no company, and the apart sentence stands once, at the end of the ticket
+        assert "Halden" not in first and first.count(told["apart"]) == 1, a
         out[a] = {"notice": path, "side_patch": side, "planted_unlisted": planted}
     return out
 
