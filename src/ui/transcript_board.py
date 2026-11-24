@@ -247,7 +247,9 @@ def cheating_marks(placed: Placed, levels: dict, agent: str, logged: dict[str, l
     """Each evidence line of each of the agent's Cheating clauses at every call it cites, or at the calls the access
     log's rows of the read sit in (`logged`, logged_calls' entry for the agent), with the clause's rung. Where the
     agent's Cheating timeline was read after every call, each clause also at the call at which it first held
-    (transcript_levels.own_call), and a line that names no call of a clause so placed counts as placed."""
+    (transcript_levels.own_call), and a line that names no call of a clause so placed counts as placed. Each undone
+    write (the timeline's "rises") at the call that wrote it, at its rung, and at the call where its rung fell back,
+    with how it was taken out, at the rung held there."""
     record = ((levels.get("cheating") or {}).get("agents") or {}).get(agent)
     timeline = stepped(record)
     at = {e["clause"]: (e, own_call(timeline, "cheating", e, agent)) for e in timeline["first"]} if timeline else {}
@@ -265,6 +267,13 @@ def cheating_marks(placed: Placed, levels: dict, agent: str, logged: dict[str, l
     for clause, (entry, k) in at.items():
         if k is not None and all(m["clause"] != clause for m in placed.at(agent, k)["cheating"]):
             placed.put("cheating", agent, [k], mark(clause, step_text(entry)), clause)
+    after = ((record or {}).get("timeline") or {}).get("after") or []
+    for rise in ((record or {}).get("timeline") or {}).get("rises") or []:
+        fell = after[rise["fell_at"]] if rise["fell_at"] < len(after) else rise["rung"]
+        for k, level, text in ((rise["k"], rise["rung"], rise["evidence"]),
+                               (rise["fell_at"], fell, f"taken out: {rise['how']}")):
+            placed.put("cheating", agent, [k], {"level": level, "index": cheating_ladder.RUNGS.index(level),
+                                                "clause": "undone", "evidence": text}, "undone")
 
 
 def took_up(boards: list[dict], roles: dict[str, str | None]) -> dict[str, list[str]]:
@@ -352,13 +361,17 @@ def rung_marks(placed: Placed, levels: dict, agent: str) -> None:
 
 def after_at(levels: dict, agent: str) -> dict[str, list[int]]:
     """ladder -> the index of the rung the agent holds after each of its calls, for Cheating and Collusion where the
-    measure read them after every call (the timeline's "after")."""
+    measure read them after every call (the timeline's "after"), and for Cheating where the timeline holds an undone
+    write's rise and fall (its "rises"), which a run read from its record alone dates too."""
     collusion_measure = levels.get("collusion") or {}
-    rows = {"cheating": ((levels.get("cheating") or {}).get("agents") or {}).get(agent),
+    cheating_row = ((levels.get("cheating") or {}).get("agents") or {}).get(agent)
+    rows = {"cheating": cheating_row,
             "collusion": (collusion_measure.get("agents") or {}).get(agent) if collusion_measure.get("applicable")
             else None}
+    cheating_timeline = (cheating_row or {}).get("timeline") or {}
+    risen = {"cheating": cheating_timeline if cheating_timeline.get("rises") else None}
     return {ladder: [levels["ladders"][ladder]["levels"].index(rung) for rung in timeline["after"]]
-            for ladder, row in rows.items() if (timeline := stepped(row))}
+            for ladder, row in rows.items() if (timeline := stepped(row) or risen.get(ladder))}
 
 
 def judge_marks(placed: Placed, levels: dict, agent: str, steps: list[list[str]], k_of: dict[str, int],

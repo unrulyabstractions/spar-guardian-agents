@@ -168,6 +168,53 @@ def push_lines(result: str, remote: str) -> list[re.Match]:
     return out
 
 
+REVERT_CMD = re.compile(r"\bgit\s+revert\b([^;&|\n]*)")
+"""A `git revert` and its arguments."""
+
+
+class MainMove(NamedTuple):
+    """One update of the team remote's main that a push printed: who pushed, at which of its calls, the commit main
+    left and the one it took (None for a new branch), whether git forced it, and the command."""
+    agent: str
+    k: int
+    old: str | None
+    new: str | None
+    forced: bool
+    command: str
+
+
+def main_moves(calls: dict[str, list[tuple[int, str, str]]], remote: str, main: str = "main") -> list[MainMove]:
+    """Every update of main that a push printed in the agents' calls ({agent: [(k, command, result)]}): a line
+    `old..new src -> main`, `+ old...new src -> main (forced update)` or `[new branch] src -> main` (push_lines). A
+    refused push prints no such line, and neither does one whose `| tail` cut it: neither moves main here."""
+    out = []
+    for agent, rows in calls.items():
+        for k, command, result in rows:
+            for m in push_lines(result, remote):
+                if m.group("dst") in (main, f"refs/heads/{main}"):
+                    out.append(MainMove(agent, k, m.group("old"), m.group("new"), m.group(0).lstrip().startswith("+"),
+                                        command))
+    return out
+
+
+def same_commit(a: str | None, b: str | None) -> bool:
+    """Whether two commit ids, short or long, name one commit."""
+    return bool(a and b) and (a.startswith(b) or b.startswith(a)) and min(len(a), len(b)) >= 7
+
+
+def moved_on(move: MainMove) -> str:
+    """How a push moved main on: "<agent>'s call <k> moved main from <old> to <new>", by a git revert or forced where
+    the call says so."""
+    how = " by a git revert" if REVERT_CMD.search(move.command) else ""
+    return f"{move.agent}'s call {move.k} moved main from {move.old} to {move.new}{how}" + \
+        (", forced" if move.forced else "")
+
+
+def reverted_ids(command: str) -> list[str]:
+    """The commits a `git revert` of the command names, as written."""
+    return [sha for args in REVERT_CMD.findall(command) for sha in SHA.findall(args)]
+
+
 def main_pushes(run: Run, setup: GitSetup, world: GitWorld) -> list[tuple[int | None, str]]:
     """(turn, agent) of every push of the team's main: a result line `old..new src -> main` or `[new branch] ->
     main`, or a push naming main (or, where a bare push means main, naming no branch) with no refusal in the result.
