@@ -3,7 +3,7 @@ launch pins, the create, status and destroy paths against a fake API (a launch c
 carry out, the fleet's $/h cap), the key on a redirect, the destroy gate, run-args, entry and repin, the labels, the
 capture's sweep and comparison on two fake trees (also end to end through a stand-in ssh with the real rsync, with the
 manifest, the snapshot and a conflict), the capture's places and its refusal of a run made elsewhere, and the watch's
-interval check. The boxes are those of studies/plans/disregulator_existence_2.yaml on two boxes."""
+interval check. The boxes are those of tests/support/box_study.yaml on two boxes."""
 from __future__ import annotations
 
 import hashlib
@@ -64,8 +64,8 @@ PIN = {"commit": "c0ffee" * 6 + "c0ff", "requirements": REQUIREMENTS,
        "requirements_sha256": hashlib.sha256(REQUIREMENTS).hexdigest(), "python_version": "3.11.13",
        "uv_version": "0.8.15"}
 LAUNCH = "l0a1b2c"
-PLAN = fleet_layout.ROOT / "studies" / "plans" / "disregulator_existence_2.yaml"
-STUDY = "disregulator_existence_2"
+PLAN = fleet_layout.ROOT / "tests" / "support" / "box_study.yaml"
+STUDY = "box_study"
 ASSIGNMENT = fleet_plan.assign(PLAN, boxes=2)
 BOX = ASSIGNMENT.boxes[0]
 LABEL = f"spar-screen-{BOX.name}-{LAUNCH}"
@@ -203,8 +203,8 @@ def test_the_dry_run_prints_every_request_and_sends_none(registry, monkeypatch, 
     out = capsys.readouterr().out
     assert code == 0
     assert out.count("would send: PUT https://console.vast.ai/api/v0/asks/") == 2
-    assert '"label": "spar-screen-disregulator-existence-2-2-l' in out and '"vm": true' in out
-    assert "disregulator-existence-2-1: 5 runs, 18 agents in all, 44 at once; $45.00" in out
+    assert '"label": "spar-screen-box-study-2-l' in out and '"vm": true' in out
+    assert "box-study-1: 5 runs, 18 agents in all, 44 at once; $45.00" in out
     assert f"commit {PIN['commit']}" in out
     assert all(call.reads for call in fake.calls) and not registry.exists()
     assert not fleet_registry.BOXES.exists()                                           # no launch pinned on a dry run
@@ -299,14 +299,14 @@ def test_create_refuses_a_target_another_open_box_runs(registry, monkeypatch, ca
 
 
 MAC_LAUNCHER = ("/Users/me/work/.venv/bin/python3 -m scripts.study.run_study "
-                "studies/plans/disregulator_existence_2.yaml --yes --limit max_runs=4")
+                "tests/support/box_study.yaml --yes --limit max_runs=4")
 
 
 @pytest.mark.parametrize("line, refused", [
     (MAC_LAUNCHER, True),
-    ("uv run python -m scripts.study.run_study --yes studies/plans/disregulator_existence_2.yaml --mock", True),
+    ("uv run python -m scripts.study.run_study --yes tests/support/box_study.yaml --mock", True),
     ("uv run python -m scripts.study.run_study studies/plans/regulator_scale_1.yaml --yes", False),
-    ("zsh -lic uv run python -m scripts.study.run_study studies/plans/disregulator_existence_2.yaml", False),
+    ("zsh -lic uv run python -m scripts.study.run_study tests/support/box_study.yaml", False),
 ])
 def test_create_and_run_args_refuse_while_a_launcher_of_the_study_lives_here(registry, monkeypatch, capsys, line,
                                                                               refused):
@@ -337,10 +337,10 @@ def test_create_reads_the_plan_as_the_pinned_commit_holds_it_and_refuses_a_file_
     monkeypatch.setattr(fleet_layout, "committed", at_commit)
     assert fleet.main(["create", *TWO_BOXES]) == 1
     out = capsys.readouterr().out
-    assert ("studies/plans/disregulator_existence_2.yaml here differs from commit c0ffeec0ffee, which the boxes run: "
+    assert ("tests/support/box_study.yaml here differs from commit c0ffeec0ffee, which the boxes run: "
             "commit and push it, or restore it with git checkout c0ffeec0ffee -- "
-            "studies/plans/disregulator_existence_2.yaml") in out
-    assert (PIN["commit"], "studies/plans/disregulator_existence_2.yaml") in asked
+            "tests/support/box_study.yaml") in out
+    assert (PIN["commit"], "tests/support/box_study.yaml") in asked
     assert f"{BOX.name}: 5 runs, 18 agents in all, 44 at once; ${BOX.cap_usd + 2 * 3:.2f}" in out   # three at $5
     assert fake.calls == []
 
@@ -378,12 +378,12 @@ def test_create_registers_each_instance_pins_its_launch_and_passes_its_audit(reg
     launch = boxes[0]["launch"]
     assert fleet_layout.LAUNCH.match(launch) and {b["launch"] for b in boxes} == {launch}
     assert [(b["id"], b["label"], b["offer"], b["box"]) for b in boxes] == [
-        (901, f"spar-screen-disregulator-existence-2-1-{launch}", 57970273, "disregulator-existence-2-1"),
-        (902, f"spar-screen-disregulator-existence-2-2-{launch}", 57143771, "disregulator-existence-2-2")]
+        (901, f"spar-screen-box-study-1-{launch}", 57970273, "box-study-1"),
+        (902, f"spar-screen-box-study-2-{launch}", 57143771, "box-study-2")]
     for entry, box in zip(boxes, ASSIGNMENT.boxes):
         assert {key: entry[key] for key in ("study", "plan", "gates", "targets", "max_agents", "runs", "cap_usd",
                                             "tasks", "floor", "commit")} == {
-            "study": STUDY, "plan": "studies/plans/disregulator_existence_2.yaml", "gates": None,
+            "study": STUDY, "plan": "tests/support/box_study.yaml", "gates": None,
             "targets": box.targets, "max_agents": 44, "runs": 5, "cap_usd": 45.0, "tasks": ["swe"], "floor": [32, 64],
             "commit": PIN["commit"]}
     pins = fleet_registry.load_launch(launch)
@@ -756,7 +756,7 @@ def test_run_args_start_the_launcher_on_the_box_s_targets_from_the_registry(regi
     add_box()
     assert fleet.main(["run-args", "7"]) == 0
     assert (out := capsys.readouterr().out.split("\n")[:-1]) == [
-        "scripts.study.run_study", "studies/plans/disregulator_existence_2.yaml", "--yes", "--only", *BOX.targets,
+        "scripts.study.run_study", "tests/support/box_study.yaml", "--yes", "--only", *BOX.targets,
         "--limit", "max_agents=44"]
     parsed = run_study.parse_arguments(out[1:])                     # the launcher's own options read them as meant
     assert (parsed.yes, parsed.only, parsed.limit, parsed.mock) == (True, BOX.targets, ["max_agents=44"], False)

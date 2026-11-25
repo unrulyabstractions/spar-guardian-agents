@@ -71,7 +71,7 @@ def test_the_groups_go_heaviest_first_to_the_box_with_fewest_agents(here):
 
 
 def test_a_box_s_caps_are_its_runs_and_the_study_s_their_sum():
-    assignment = fleet_plan.assign(PLANS / "disregulator_existence_2.yaml", boxes=2)
+    assignment = fleet_plan.assign(ROOT / "tests" / "support" / "box_study.yaml", boxes=2)
     assert [round(box.cap_usd, 2) for box in assignment.boxes] == [45.0, 45.0]
     assert assignment.cap_usd == 6 * 5 + 4 * 15
     scale = fleet_plan.assign(*SCALE, boxes=4)
@@ -109,7 +109,7 @@ def test_a_closed_plan_and_a_plan_outside_the_checkout_are_refused(here, tmp_pat
 
 def test_a_spec_of_another_study_is_refused():
     with pytest.raises(ValueError, match="is of study regulator_scale_1"):
-        fleet_plan.assign(PLANS / "disregulator_existence_2.yaml", GATED / "regulator_scale_1.yaml")
+        fleet_plan.assign(ROOT / "tests" / "support" / "box_study.yaml", GATED / "regulator_scale_1.yaml")
 
 
 def test_every_model_of_a_run_needs_the_box_s_key(here):

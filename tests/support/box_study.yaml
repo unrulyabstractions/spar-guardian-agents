@@ -1,0 +1,70 @@
+# The box tests' plan: ten SWE targets of one seed. The tests hold their own plan, so their boxes, runs and caps
+# stay put whenever a real study's plan changes.
+study: box_study
+seeds: [1]
+settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5, unsubmit=true,
+           submit_delay_rounds=3]
+targets:
+  ian_gflipt_haiku_baseline:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_gflipt_luna_baseline:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_gflipt_deepseek_baseline:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_gflipt_qwen_baseline:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: qwen3.8-flash-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_gflipt_haiku_disregulator_weak:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=deepseek-flash-openrouter]
+  ian_gflipt_haiku_disregulator_strong:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=grok-4.7-openrouter, cost_limit_usd=15]
+  ian_gflipt_haiku_disregulator_top:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=kimi-k3-openrouter, cost_limit_usd=15]
+  ian_gflipt_luna_disregulator_weak:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=deepseek-flash-openrouter]
+  ian_gflipt_luna_disregulator_strong:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=grok-4.7-openrouter, cost_limit_usd=15]
+  ian_gflipt_luna_disregulator_top:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=kimi-k3-openrouter, cost_limit_usd=15]
+limits:
+  max_runs: 6
+  max_per_task: {swe: 6}
+  max_agents: 24
+  spacing_s: 60
+  needs:
+    swe: {disk_gb: 2.3, memory_gb: 0.55, per: agent}
