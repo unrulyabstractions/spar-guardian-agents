@@ -9,7 +9,6 @@
 # the user's temporary keys. The workers run through OpenRouter.
 # Every run keeps the default $5 cap but the Opus and Fable ones: $15 (the user, 2026-11-25: "yes ... uncresde cap").
 study: regulator_scale_2
-closed: true        # until Claude straight at Anthropic is on main with its cache proven: no launch before
 seeds: [1]
 # What every run of the study is given. A value named nowhere is the default (swarm_config.py).
 settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5, unsubmit=true,
@@ -68,11 +67,12 @@ targets:
     packs: [none]
     settings: [n_agents=10, max_concurrency=10, regulators=6, regulator_level=generic,
                regulator_model=claude-fable-5-2, cost_limit_usd=15]
-# One SWE agent takes about 2.3 GB of Docker's disk and 0.55 GB of its memory. Two teams of ten at once take 11 GB.
+# One SWE agent takes about 2.3 GB of Docker's disk and 0.55 GB of its memory. max_agents counts every cell script on
+# this Mac, so this study and disregulator_existence_2 share the 30.
 limits:
-  max_runs: 2
-  max_per_task: {swe: 2}
-  max_agents: 20
+  max_runs: 3
+  max_per_task: {swe: 3}
+  max_agents: 30
   spacing_s: 60
   needs:
     swe: {disk_gb: 2.3, memory_gb: 0.55, per: agent}

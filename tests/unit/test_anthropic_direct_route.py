@@ -242,10 +242,12 @@ def mixed_run(monkeypatch, tmp_path, proven: bool, model: str = QWEN) -> tuple[i
 
     def recorded(name):
         entry = entry_of(name)
-        if proven and entry and cache.claude_route(entry["inspect"]):
-            entry = {**entry, "caching_verified": {"date": "2026-11-25", "inspect": cache.installed_inspect(),
-                                                   "route": "anthropic", "entry": models.entry_name(name)}}
-        return entry
+        if not entry or not cache.claude_route(entry["inspect"]):
+            return entry
+        stamp = {"date": "2026-11-25", "inspect": cache.installed_inspect(), "route": "anthropic",
+                 "entry": models.entry_name(name)}
+        unchecked = {k: v for k, v in entry.items() if k != "caching_verified"}
+        return {**unchecked, "caching_verified": stamp} if proven else unchecked
 
     monkeypatch.setattr(models, "prepare_env", lambda model: prepared.append(model) or prepare_env(model))
     monkeypatch.setattr(models, "entry_of", recorded)

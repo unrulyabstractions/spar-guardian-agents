@@ -155,16 +155,18 @@ def test_a_stamp_proves_only_its_own_route_and_entry(monkeypatch, entry):
     cache.require_proven([f"swarm/{entry}", models.resolve(entry)])
 
 
-def test_every_recorded_check_names_its_date_inspect_route_and_entry_and_no_direct_entry_has_one():
+def test_every_recorded_check_names_its_date_inspect_route_and_entry_and_an_unchecked_entry_is_refused():
     stamped = {name for name in CLAUDE + DIRECT if models.entries()[name].get("caching_verified") is not None}
-    assert stamped == set(CLAUDE)
+    assert set(CLAUDE) <= stamped
     for name in stamped:
         verified = models.entries()[name]["caching_verified"]
         assert set(verified) == {"date", "inspect", "route", "entry"}, name
-        assert (verified["route"], verified["entry"]) == ("openrouter", name)
+        assert (verified["route"], verified["entry"]) == (cache.claude_route(name), name)
         assert cache.same_commit(str(verified["inspect"]), cache.installed_inspect()), name
-    cache.require_proven(CLAUDE)          # the three OpenRouter stamps still pass
-    for name in DIRECT:
+    cache.require_proven(sorted(stamped))          # every recorded check passes for its own route and entry
+    unchecked = sorted(set(DIRECT) - stamped)
+    assert unchecked                               # the older direct entries were never checked
+    for name in unchecked:
         with pytest.raises(ValueError, match="Claude at Anthropic is refused until"):
             cache.require_proven([name])
 
