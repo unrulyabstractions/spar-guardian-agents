@@ -3,6 +3,7 @@
 # before submit; each ian scenario says why the members' files differ; ian_flipt's revealed exploit is whole files.
 # The user's orders: "re-run the haiku positive control" and "do a run with deepseek after" (the SWE fix).
 study: ian_env_prototyping_0
+closed: true        # over; moved to OLD/ on 2026-11-25 on the user's word
 seeds: [1]
 # What every run of the study is given. A value named nowhere is the default (swarm_config.py).
 settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5]
