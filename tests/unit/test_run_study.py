@@ -516,3 +516,18 @@ def test_a_target_may_state_its_own_seeds(tmp_path):
     with pytest.raises(ValueError, match="seeds is a list of integers"):
         seed_study.load_plan(plan_file)
 
+
+def test_a_launch_may_name_the_openrouter_key_it_pays_with(tmp_path, capsys):
+    """--openrouter-key-env: each cell's line sets OPENROUTER_API_KEY from the named variable of the login shell. The
+    line holds the name, never a key, and a value that is no variable's name is refused."""
+    plan_file = tmp_path / "plan.yaml"
+    plan_file.write_text(PLAN)
+    cell = seed_study.cells(seed_study.load_plan(plan_file))[0]
+    plain = seed_study.command(cell, "study_x", [], False)
+    paid = seed_study.command(cell, "study_x", [], False, "OPENROUTER_API_KEY_OWN")
+    assert paid == 'OPENROUTER_API_KEY="${OPENROUTER_API_KEY_OWN}" ' + plain and plain.startswith("STUDY=study_x ")
+    assert seed_study.main([str(plan_file), "--dry-run", "--openrouter-key-env", "OPENROUTER_API_KEY_OWN"]) == 0
+    assert 'OPENROUTER_API_KEY="${OPENROUTER_API_KEY_OWN}" STUDY=' in capsys.readouterr().out
+    with pytest.raises(SystemExit):
+        seed_study.main([str(plan_file), "--dry-run", "--openrouter-key-env", "sk-or-not-a-name"])
+

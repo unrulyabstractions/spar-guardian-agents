@@ -30,7 +30,9 @@ with one GATES line each time. It queues no cell outside the spec. A live run wh
 Inspect sample buffer have not changed for STALL_MINUTES is printed once as `STALL <name> <minutes>`; nothing is
 killed.
 
-Each cell runs one command, under `zsh -lic` so the key comes from ~/.zshrc and never from a command line:
+Each cell runs one command, under `zsh -lic` so the key comes from ~/.zshrc and never from a command line.
+--openrouter-key-env NAME makes the cell pay with the OpenRouter key in the login shell's variable NAME (the line then
+opens with OPENROUTER_API_KEY="${NAME}", the name and never the key):
 
     STUDY=<study> uv run python -m <module> --model <model> --no-judge --name <target>_<pack>_s<seed>
         --set seed=<seed> [--set <each of the plan's settings>] [--set <each of the target's settings>]
@@ -107,6 +109,10 @@ TARGET_OPTIONAL = {"settings", "stage", "seeds"}
 0 by default; the queue launches the lower stages first. seeds: the target's own seeds, in place of the plan's (one
 target of a study run three times, the others once)."""
 NAME = re.compile(r"[a-z0-9_]+")
+OPENROUTER_KEY = "OPENROUTER_API_KEY"
+"""The variable every OpenRouter model's key is read from (src/models/model_registry.yaml)."""
+KEY_ENV = re.compile(r"[A-Z][A-Z0-9_]*")
+"""A variable's name, as --openrouter-key-env takes it."""
 
 
 @dataclass
@@ -237,9 +243,12 @@ def module_task(module: str) -> str | None:
     return parts[2] if len(parts) == 4 and parts[:2] == ["studies", "cells"] else None
 
 
-def command(cell: Cell, study: str, extra: list[str], replace: bool) -> str:
-    """The shell line that runs the cell from the checkout's root."""
-    return f"STUDY={shlex.quote(study)} exec uv run python -m {cell.module} {shlex.join(cell.argv(extra, replace))}"
+def command(cell: Cell, study: str, extra: list[str], replace: bool, key_env: str | None = None) -> str:
+    """The shell line that runs the cell from the checkout's root. key_env names the variable of the login shell whose
+    OpenRouter key the cell pays with (--openrouter-key-env); the line holds the variable's name, never the key."""
+    key = f'{OPENROUTER_KEY}="${{{key_env}}}" ' if key_env else ""
+    argv = shlex.join(cell.argv(extra, replace))
+    return f"{key}STUDY={shlex.quote(study)} exec uv run python -m {cell.module} {argv}"
 
 
 def free_memory_pct() -> int | None:
@@ -475,7 +484,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--replace", action="store_true", help="run a cell whose run exists again (the example's "
                                                                  "--replace sets the old one aside)")
     parser.add_argument("--gates", type=Path, help="a gated spec whose gates the launcher opens itself after each run")
+    parser.add_argument("--openrouter-key-env", metavar="NAME", help="the variable of the login shell that holds the "
+                        f"OpenRouter key this launch pays with, in place of {OPENROUTER_KEY}")
     args = parser.parse_args(argv)
+    if args.openrouter_key_env and not KEY_ENV.fullmatch(args.openrouter_key_env):
+        parser.error("--openrouter-key-env takes a variable's name, such as OPENROUTER_API_KEY_OWN")
     plan = load_plan(args.plan)
     study = args.study or plan["study"]
     allowed = None                                              # with --gates: the spec's run names alone
@@ -501,7 +514,7 @@ def main(argv: list[str] | None = None) -> int:
     for cell in todo:
         print(f"  {'plan' if args.dry_run else 'queue'}   {cell.name}  ({cell.n_agents} agents, "
               f"${cell.cap_usd(plan['settings']):.2f} cap" + (f", stage {cell.stage})" if cell.stage else ")"))
-        print(f"         {command(cell, study, plan['settings'], args.replace)}")
+        print(f"         {command(cell, study, plan['settings'], args.replace, args.openrouter_key_env)}")
     if args.dry_run:
         print(f"  now    memory {free_memory_pct()}% free (needs {MIN_FREE_MEMORY_PCT}%), docker disk "
               f"{free_disk_gb()} GB free (needs {MIN_FREE_DISK_GB}), agents live {live_agents({}, plan['limits'])}; "
@@ -580,7 +593,8 @@ def main(argv: list[str] | None = None) -> int:
             cell, why = next_cell(running, queue, plan["limits"], last)
             if cell is not None:
                 queue.remove(cell)
-                line = f"cd {shlex.quote(str(settings.ROOT))} && {command(cell, study, plan['settings'], args.replace)}"
+                line = (f"cd {shlex.quote(str(settings.ROOT))} && "
+                        f"{command(cell, study, plan['settings'], args.replace, args.openrouter_key_env)}")
                 log = open(logs / f"{cell.name}.log", "w")      # the child keeps its own copy of the handle
                 running[cell.name] = (subprocess.Popen(["zsh", "-lic", line], stdout=log, stderr=subprocess.STDOUT,
                                                        stdin=subprocess.DEVNULL), cell)
