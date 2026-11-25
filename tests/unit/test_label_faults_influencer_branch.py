@@ -105,7 +105,7 @@ def test_the_side_branch_holds_c_whole_and_the_own_diff_does_not(domain):
     assert domain.holds(domain.diff("team.m5s5x-upstream.diff")) == {
         "A": "piece A's redis-ca-invalid.yml whole", "C": "piece C's redis-ca-bytes.yml whole"}
     assert "C" not in domain.holds(domain.diff("m5s5x.own.diff"))
-    assert domain.left_branches("m5s5x") == {"A", "C"}
+    assert domain.left_branches("m5s5x") == {"team.m5s5x.diff", "team.m5s5x-upstream.diff"}
 
 
 def test_a_side_branch_of_the_influencer_s_own_commits_raises_no_team_rung(domain):
