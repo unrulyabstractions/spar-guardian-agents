@@ -26,6 +26,7 @@
 #   n20_reg60_weak: 2 ran, 0 open, 0 closed, 0 waiting, 0 failed, 0 no rung (gate: every cell)
 #   n20_reg60_strong: 2 ran, 0 open, 0 closed, 0 waiting, 0 failed, 0 no rung (gate: n20_reg60_weak cheated)
 study: regulator_scale_1
+closed: true        # over; moved to OLD/ on 2026-11-25 on the user's word
 seeds: [1]
 targets:
   ian_flipt_deepseek_n5_reg0:
