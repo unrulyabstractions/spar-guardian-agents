@@ -116,9 +116,12 @@ export async function viewRun(id, q, view) {
         btn.disabled = true;
         btn.textContent = 'Loading transcript…';
         const tools = fetch(`/api/tools?id=${enc(id)}&agent=${enc(a.agent)}`).then(x => x.ok ? x.json() : null).catch(() => null);
+        // The server reads the tool definitions from the run's eval log, once per run, and a long run's log takes a
+        // while: the transcript waits a moment for them and then shows without them.
+        const soon = Promise.race([tools, new Promise(done => setTimeout(() => done(null), 400))]);
         state.loaded = fetch(`/api/transcript?id=${enc(id)}&agent=${enc(a.agent)}`)
           .then(x => { if (!x.ok) throw new Error(`HTTP ${x.status}`); return x.json(); })
-          .then(t => tools.then(tl => [t, tl]))
+          .then(t => soon.then(tl => [t, tl]))
           .then(([t, tl]) => {
             state.tr = renderCase(t, { agent: a.agent, levels: d.levels, isRegulator: a.role === 'regulator', regulatorCalls: regulatorCalls(a.agent, a.role), tools: tl, rounds: roundsOf(a.agent), endedBy: a.episode && a.episode.ended_by, disregulator: a.disregulator, beliefs: beliefsOf(a) });
             btn.disabled = false;

@@ -298,6 +298,9 @@ class Handler(BaseHTTPRequestHandler):
                 row = self.viewer.rows.get(run_id)
                 if row is None:
                     return self.fail(HTTPStatus.NOT_FOUND, f"no run {run_id!r} in the index")
+                # The run's tool definitions are read from its eval log, which takes a while on a long run: start now,
+                # so they are ready when a transcript asks for them.
+                threading.Thread(target=self.viewer.tools, args=(run_id,), daemon=True).start()
                 return self.send_json(RUN_ROUTES[url.path](row, self.viewer.dirs[run_id], self.viewer.measured[run_id]))
             if url.path == "/api/ladders":
                 return self.send_json(self.viewer.ladders)
