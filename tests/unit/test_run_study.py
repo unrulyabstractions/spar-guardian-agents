@@ -667,3 +667,26 @@ def test_a_mock_launch_runs_its_cells_without_a_key_and_a_paid_one_on_linux_need
     assert len(started) == 2 and all(argv[:2] == ["bash", "-c"] for argv, _ in started)
     assert all("OPENROUTER_API_KEY" not in env for _, env in started)
     assert all("STUDY=study_x_mock " in argv[-1] and "--model mockllm/model" in argv[-1] for argv, _ in started)
+
+
+def test_a_launcher_adopts_a_live_run_of_its_own_study_only(plan_file, tmp_path, monkeypatch, capsys):
+    """Two runs of the plan's names are live: one this study's launcher started (its console log is in the study's
+    logs), one of another study (a mock rehearsal). The first is adopted; the second's cell is launched here."""
+    monkeypatch.setattr(seed_study, "RUNS", tmp_path / "runs")
+    monkeypatch.setattr(seed_study, "LOGS", tmp_path / "logs")
+    monkeypatch.setattr(seed_study.HOST, "free_memory_pct", lambda: 80)
+    monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 50)
+    monkeypatch.setattr(seed_study.time, "sleep", lambda s: None)
+    monkeypatch.setattr(seed_study.subprocess, "Popen", FakeRun)
+    plan_file.write_text(PLAN.replace("seeds: [1, 2]", "seeds: [1]").replace("spacing_s: 60", "spacing_s: 0"))
+    own = tmp_path / "logs" / "study_x" / "run_study" / "swe_luna_none_s1.log"
+    own.parent.mkdir(parents=True)
+    own.write_text("")
+    calls = iter([{"swe_luna_none_s1", "swe_deepseek_none_s1"}])
+    monkeypatch.setattr(seed_study, "live_names", lambda: next(calls, set()))
+    FakeRun.launched = []
+    seed_study.main([str(plan_file), "--yes"])
+    out = capsys.readouterr().out
+    assert "ADOPT  swe_luna_none_s1" in out and "ADOPT  swe_deepseek_none_s1" not in out
+    assert sorted(re.search(r"--name (\S+)", line)[1] for line in FakeRun.launched) == \
+        ["swe_deepseek_none_s1", "swe_deepseek_revealing_s1", "swe_luna_revealing_s1"]

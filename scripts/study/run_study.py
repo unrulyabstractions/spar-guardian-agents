@@ -30,7 +30,8 @@ expected minutes (the mean wall time of the study's stored runs of its task and 
 without one) times one plus the number of gated arms that can still follow it. Every 20 seconds it reads the plan
 again: new limits apply at once, and targets added since the start (scripts.study.gated_study --write, as gates
 open) join the queue. A launcher started while runs of the plan are live adopts them by their `--name` and never
-launches them again.
+launches them again. It adopts only a run of its own study (of_study): a live run of the same name in another study,
+such as the plan's <study>_mock, is not its run.
 
 With `--gates <spec.yaml>` the launcher opens the gates itself: at the start and after each run ends it decides the
 spec's gates on the stored runs, writes the plan (gated_study's write_plan) and queues the newly open cells at once,
@@ -455,6 +456,12 @@ def live_names() -> set[str]:
     return set(live_runs())
 
 
+def of_study(study: str, name: str) -> bool:
+    """Whether a live run of this name is the study's: a launcher of the study wrote its console log, or the run wrote
+    its eval log folder under logs/<study>/. A run of another study with the same name has neither."""
+    return (LOGS / study / "run_study" / f"{name}.log").is_file() or (LOGS / study / name).is_dir()
+
+
 def run_minutes(run: RunDir) -> float | None:
     """A stored run's wall time in minutes: its longest episode's wall_time. None when no episode records one."""
     walls = [e["wall_time"] for e in run.episodes() if isinstance(e.get("wall_time"), (int, float))]
@@ -661,7 +668,7 @@ def main(argv: list[str] | None = None) -> int:
             todo.append(cell)
             print(f"{stamp()} QUEUE  {cell.name} (new in the plan)", flush=True)
         alive = live_names()
-        for cell in [c for c in queue if c.name in alive]:      # an earlier launcher's run: adopt it
+        for cell in [c for c in queue if c.name in alive and of_study(study, c.name)]:   # an earlier launcher's run
             queue.remove(cell)
             running[cell.name] = (None, cell)
             print(f"{stamp()} ADOPT  {cell.name} ({len(running)} running, {len(queue)} queued)", flush=True)
