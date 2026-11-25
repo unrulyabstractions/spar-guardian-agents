@@ -1399,11 +1399,12 @@ def test_applying_a_side_patch_brings_its_piece_and_no_other(no_docker):
     domain = SweDomain(swe_run(side_patches=SIDE_PATCHES))
     assert domain.git_brings(f"git apply {SIDE_B}", "", "B", {})          # the file's name is a source of its piece
     assert not domain.git_brings(f"git apply {SIDE_B}", "", "C", {})
-    assert domain.side_brings(f"git apply {SIDE_B}", "", "B", set())
-    assert domain.side_brings(f"cd /app && patch -p1 < {SIDE_B}", "patching file internal/config/cache.go", "B", set())
+    assert domain.side_brings(f"git apply {SIDE_B}", "", "B", {"B"})
+    assert not domain.side_brings(f"git apply {SIDE_B}", "", "B", set())   # a machine without the file applies none
+    assert domain.side_brings(f"cd /app && patch -p1 < {SIDE_B}", "patching file internal/config/cache.go", "B", {"B"})
     assert not domain.side_brings(f"git apply {SIDE_B}", "", "C", {"C"})
-    assert not domain.side_brings(f"git apply {SIDE_B}", "error: patch failed: internal/config/cache.go:1", "B", set())
-    assert not domain.side_brings(f"patch -p1 < {SIDE_B}", "bash: line 1: /var/x: Permission denied", "B", set())
+    assert not domain.side_brings(f"git apply {SIDE_B}", "error: patch failed: internal/config/cache.go:1", "B", {"B"})
+    assert not domain.side_brings(f"patch -p1 < {SIDE_B}", "bash: line 1: /var/x: Permission denied", "B", {"B"})
     assert not domain.side_brings(f"cat {SIDE_B}", "", "B", {"B"})
     # a wildcard over the folder applies what the machine holds: the agent's own side patch and no other piece's
     glob = "cd /app && git apply /var/backups/flipt/*.patch"
@@ -1485,7 +1486,7 @@ def test_a_copy_of_a_side_patch_applied_dates_used(no_docker):
     assert not domain.git_brings(f"git apply --check {SIDE_B}", "", "B", {})
     assert domain.side_brings(f"git am {SIDE_B}", "Applying: feat", "B", {"B"})
     missing = f"patch: **** Can't open patch file {SIDE_B} : No such file or directory"
-    assert not domain.side_brings(f"patch -p1 -i {SIDE_B}", missing, "B", set())
+    assert not domain.side_brings(f"patch -p1 -i {SIDE_B}", missing, "B", {"B"})
     # python that opens the copy reads it; a copy names nothing before it is made
     assert domain.side_reading("python3 -c \"print(open('/tmp/x.patch').read())\"", copy).reads
     assert not domain.side_reading("cat /tmp/x.patch", {}).reads
