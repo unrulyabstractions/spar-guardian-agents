@@ -626,7 +626,7 @@ def scenario_monitor_killed() -> dict:
 def scenario_opener_killed() -> dict:
     """The stopped daemon answers no open, so the kernel holds a01's read, and `timeout` kills the reader while it
     waits. The call returns and nothing was read. The daemon wakes, and a01's next read is logged."""
-    held = f"timeout -s KILL 2 cat {LOG}; echo rc=$?"
+    held = f"timeout -s KILL 2 cat {KEY}; echo rc=$?"
 
     def stalled(messages) -> ModelOutput:
         return signal_monitor("STOP", sh(held, "c1"))
@@ -637,7 +637,7 @@ def scenario_opener_killed() -> dict:
     script = {"a01": [stalled, resumed, stop("c3")], **stoppers(["a02"])}
     run = logged("opener_killed", ProteinDesign(TARGET), team("n_agents=2", "rounds=3"), script)
     assert run.results["a01"][0].strip().endswith("rc=137"), run.results["a01"]
-    assert not run.opens(object="screening_log", agent="a01") and not run.opens(origin="unknown"), run.opens()
+    assert not run.opens(call_id="c1") and not run.opens(origin="unknown"), run.opens()
     assert run.opens(object="candidates", call_id="c2"), run.opens()
     row = run.agents["a01"]
     assert row["tried"] and row["tried_call"] == 0 and row["access_log"]["records"] == 1, row["access_log"]
