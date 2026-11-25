@@ -117,6 +117,7 @@ import json
 import re
 import subprocess
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import NamedTuple
 
@@ -1999,24 +2000,46 @@ class SweDomain(Domain):
                         shipped=found(hand_ins, kept - set(theirs)))
 
     def handed_in_by(self, rows: list[dict]) -> str | None:
-        """The worker of `rows` who handed in team/main: the submitter (run.json team_submission.agent), else a worker
-        whose push put team/main at the graded commit (a printed move of main, git_takes.main_moves, or a push to main,
-        to_main, whose result names that commit). None without the team remote, or where no worker did either."""
+        """The worker of `rows` who handed in team/main: the submitter (run.json team_submission.agent) where its
+        snapshot is the graded commit, else the worker whose push last put team/main at the graded commit by the clock
+        (started: a printed move of main, git_takes.main_moves, or a push to main, to_main, whose result names that
+        commit). Else, where every agent's transcript is stored (episodes.jsonl), the agent whose push to main went
+        through last, before the submit where the run graded main at the submit, names the worker that put main at the
+        graded commit, as `git push -q team FETCH_HEAD:main` prints nothing: by the clock, or the one agent that pushed
+        main. None without the team remote, or where none of these names a worker."""
         team = self.swe.get("team") or {}
         graded = team.get("graded") or team.get("main")
         workers = {row["agent"]: row for row in rows}
         if self.hand_in_ref is None:
             return None
-        if (submitter := (self.run.get("team_submission") or {}).get("agent")) in workers:
-            return submitter
+        submission = self.run.get("team_submission") or {}
+        if submission.get("agent") in workers and (not graded or not submission.get("snapshot")
+                                                   or same_commit(submission["snapshot"], graded)):
+            return submission["agent"]
         if self.folder is None or not graded:
             return None
-        calls = {a: self.shell_calls(self.folder.transcript(row["episode"])) for a, row in workers.items()
-                 if "episode" in row}
-        moved = [m.agent for m in main_moves(calls, "team") if same_commit(m.new, graded)]
-        quiet = [a for a, found in calls.items() for _, cmd, result in found
+        transcripts = {a: self.folder.transcript(row["episode"]) for a, row in workers.items() if "episode" in row}
+        calls = {a: self.shell_calls(found) for a, found in transcripts.items()}
+        starts = {a: self.started(found) for a, found in transcripts.items()}
+        moved = [(m.agent, m.k) for m in main_moves(calls, "team") if same_commit(m.new, graded)]
+        quiet = [(a, k) for a, found in calls.items() for k, cmd, result in found
                  if to_main(cmd, result) and any(same_commit(sha, graded) for sha in SHA.findall(result))]
-        return next(iter(moved + quiet), None)
+        if moved or quiet:
+            return max(moved + quiet, key=lambda act: starts[act[0]].get(act[1], float("-inf")))[0]
+        for episode in self.folder.with_transcripts():
+            if episode.get("agent") not in transcripts:
+                transcripts[episode["agent"]] = self.folder.transcript(episode["episode"])
+        submitted = submission.get("time") if self.late else None
+        if set(self.run.get("agents") or []) - set(transcripts) or (self.late and not submitted):
+            return None
+        cut = datetime.fromisoformat(submitted).timestamp() if submitted else None
+        pushes = [(self.started(found).get(k), a) for a, found in transcripts.items()
+                  for k, cmd, result in self.shell_calls(found) if to_main(cmd, result) and pushed(result)]
+        if any(t is None for t, _ in pushes) and (cut is not None or len({a for _, a in pushes}) > 1):
+            return None
+        last = max(((t, a) for t, a in pushes if cut is None or t < cut), key=lambda push: push[0] or 0.0,
+                   default=(None, None))[1]
+        return last if last in workers else None
 
     # ---------------------------------------------------------------- the travel evidence
     def history_pieces(self, agent: str) -> dict[str, str]:

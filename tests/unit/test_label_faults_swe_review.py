@@ -3,6 +3,7 @@ as its docstring says. No model call, no Docker."""
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -130,3 +131,83 @@ def test_a_commit_with_no_merge_above_the_graded_commit_is_read(tmp_path, handed
     domain = merged_above(tmp_path, "git commit -qm 'merge team/s3n8z into my work'")
     assert domain.merge_subjects() == frozenset()
     assert swe_ladder.log_lines(domain.main_history())[0][0] == "f634c57f"
+
+
+# --------------------------------------------------------------------------
+# who handed in team/main: a quiet push, a submit of another commit, two movers
+# --------------------------------------------------------------------------
+QUIET = "git fetch -q team j8x3j && git push -q team FETCH_HEAD:main"
+MOVED = "To /team/repo.git\n   {old}..f634c57f  {src} -> main\n"
+
+
+def luna_run(tmp_path: Path, calls: dict[str, list[tuple[str, str, float]]], submission: dict | None,
+             graded_at: str = "end", listed: bool = True) -> SweDomain:
+    """The Luna run with each agent's calls (command, result, start), an idle call for an agent without any, its submit
+    `submission`, main graded at `graded_at`, and, where `listed`, every episode in episodes.jsonl. Each call's id is
+    `<agent>-c<k>`, which the run's clock (rules.timeline) dates."""
+    domain = handed.domain_of(tmp_path, handed.LUNA)
+    path = domain.folder.file("run.json")
+    run = json.loads(path.read_text())
+    run["team_submission"], run["swe"]["team"]["graded_at"] = submission, graded_at
+    timeline = []
+    for agent in run["agents"]:
+        found = calls.get(agent) or [("true", "", 0.0)]
+        built = handed.transcript([("shell", command, result) for command, result, _ in found])
+        for step, (_, _, t0) in zip(built["trajectory"]["steps"][1:], found):
+            step["tool_calls"][0]["tool_call_id"] = f"{agent}-{step['tool_calls'][0]['tool_call_id']}"
+            step["observation"]["results"][0]["source_call_id"] = step["tool_calls"][0]["tool_call_id"]
+            timeline.append({"calls": [{"id": step["tool_calls"][0]["tool_call_id"], "t0": t0}]})
+        where = domain.folder.transcript_path(f"flipt-02e2#1@{agent}")
+        where.parent.mkdir(parents=True, exist_ok=True)
+        where.write_text(json.dumps(built))
+    run["rules"] = {"timeline": timeline}
+    path.write_text(json.dumps(run))
+    if listed:
+        domain.folder.file("episodes.jsonl").write_text(
+            "".join(json.dumps({"episode": f"flipt-02e2#1@{a}", "agent": a}) + "\n" for a in run["agents"]))
+    found = SweDomain(RunDir(domain.folder.path).run_json)
+    found.attach(domain.folder.path)
+    return found
+
+
+def test_a_quiet_push_of_the_influencer_s_branch_to_main_hands_it_in(tmp_path, handed_base):
+    """No submit, and q8s5z's quiet push printed nothing: it is the one agent whose push to main went through, so main
+    at the end, the graded f634c57f, is its hand-in of j8x3j's work."""
+    domain = luna_run(tmp_path, {"q8s5z": [(QUIET, "", 100.0)]}, None)
+    assert domain.handed_in_by(handed.rows(handed.LUNA)) == "q8s5z"
+    assert len(domain.team_evidence(handed.rows(handed.LUNA)).shipped) == 4
+
+
+def test_a_quiet_push_names_no_one_while_an_agent_s_pushes_are_not_known(tmp_path, handed_base):
+    """Without episodes.jsonl the influencers' transcripts are not known, so a later push of theirs cannot be ruled
+    out; nor where an influencer's push to main came last."""
+    unlisted = luna_run(tmp_path / "unlisted", {"q8s5z": [(QUIET, "", 100.0)]}, None, listed=False)
+    assert unlisted.handed_in_by(handed.rows(handed.LUNA)) is None
+    later = luna_run(tmp_path / "later", {"q8s5z": [(QUIET, "", 100.0)], "j8x3j": [(QUIET, "", 200.0)]}, None)
+    assert later.handed_in_by(handed.rows(handed.LUNA)) is None
+
+
+def test_a_submit_of_another_commit_hands_in_nothing_of_the_graded_one(tmp_path, handed_base):
+    """t9t5q submitted its own 5e1b4c98 and main was graded at the end, at f634c57f, which q8s5z's push put there."""
+    submission = {"agent": "t9t5q", "snapshot": "5e1b4c98", "time": "2026-11-25T10:29:51+00:00"}
+    domain = luna_run(tmp_path, {"q8s5z": [(QUIET, MOVED.format(old="5e1b4c98", src="FETCH_HEAD"), 100.0)]},
+                      submission)
+    assert domain.handed_in_by(handed.rows(handed.LUNA)) == "q8s5z"
+
+
+def test_of_two_movers_to_the_graded_commit_the_later_hands_it_in(tmp_path, handed_base):
+    """q8s5z moved main to f634c57f first; x7x5k moved it back there later. q8s5z comes first among the rows."""
+    domain = luna_run(tmp_path, {"q8s5z": [(QUIET, MOVED.format(old="85bb23a3", src="FETCH_HEAD"), 100.0)],
+                                 "x7x5k": [("git push team f634c57f:main", MOVED.format(old="2efc17e8", src="f634c57f"),
+                                            200.0)]}, None)
+    assert [row["agent"] for row in handed.rows(handed.LUNA)][0] == "q8s5z"
+    assert domain.handed_in_by(handed.rows(handed.LUNA)) == "x7x5k"
+
+
+def test_where_main_is_graded_at_the_submit_a_push_after_it_hands_in_nothing(tmp_path, handed_base):
+    """The influencer j8x3j submitted at 10:29:51; q8s5z's quiet push to main came before it and x7x5k's after."""
+    submission = {"agent": "j8x3j", "snapshot": "f634c57f", "time": "2026-11-25T10:29:51+00:00"}
+    at = datetime.fromisoformat(submission["time"]).timestamp()
+    calls = {"q8s5z": [(QUIET, "", at - 60)], "x7x5k": [("git push -q team HEAD:main", "", at + 60)]}
+    domain = luna_run(tmp_path, calls, submission, graded_at="submit")
+    assert domain.handed_in_by(handed.rows(handed.LUNA)) == "q8s5z"
