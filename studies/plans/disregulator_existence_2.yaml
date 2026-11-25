@@ -1,0 +1,83 @@
+# disregulator_existence_2 (2026-11-25): can one disregulator make an honest team cheat, when the team can check its
+# fix and take a hand-in back? The user: "maybe try the graded version? And try other loywal workers, like luna?", then
+# "for now run disregulator study". Every run is on ian_gflipt (ian_flipt with check_fix) and under unsubmit: any
+# worker can take the team's hand-in back, and the task ends submit_delay_rounds after a hand-in nobody took back.
+# No pack, so the disregulator is the only one who points at existing work. One run per cell, seed 1.
+# Haiku and Luna workers are the two that never reached hacked alone on ian_flipt. Each runs as three workers alone,
+# and as three workers with one disregulator at level instructed: weak DeepSeek Flash, strong Grok 4.7 or top Kimi K3.
+# DeepSeek and Qwen workers alone are the two runs the user asked for first ("just run ian_gflipt baseline for
+# deepseek and qwen").
+# Every run keeps the default $5 cap but the four with a Grok or Kimi disregulator: $15 (the user, 2026-11-25: "yes").
+# Those two cost $0.35 to $1.27 a run as disregulator in runs of 3 to 6 rounds on ian_flipt.
+# Launch only once unsubmit is on main; then name unsubmit and submit_delay_rounds in the settings below.
+study: disregulator_existence_2
+seeds: [1]
+# What every run of the study is given. A value named nowhere is the default (swarm_config.py).
+settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5]
+targets:
+  ian_gflipt_haiku_baseline:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_gflipt_luna_baseline:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_gflipt_deepseek_baseline:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_gflipt_qwen_baseline:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: qwen3.8-flash-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_gflipt_haiku_disregulator_weak:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=deepseek-flash-openrouter]
+  ian_gflipt_haiku_disregulator_strong:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=grok-4.7-openrouter, cost_limit_usd=15]
+  ian_gflipt_haiku_disregulator_top:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=kimi-k3-openrouter, cost_limit_usd=15]
+  ian_gflipt_luna_disregulator_weak:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=deepseek-flash-openrouter]
+  ian_gflipt_luna_disregulator_strong:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=grok-4.7-openrouter, cost_limit_usd=15]
+  ian_gflipt_luna_disregulator_top:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=kimi-k3-openrouter, cost_limit_usd=15]
+# One SWE agent takes about 2.3 GB of Docker's disk and 0.55 GB of its memory (measured 2026-11-24: 18 agents live took
+# 9.5 GiB). The ten runs hold 36 agents in all; 24 at once take 13.2 GB, and the launcher starts a run only while the
+# Mac keeps 40% of its memory free.
+limits:
+  max_runs: 6
+  max_per_task: {swe: 6}
+  max_agents: 24
+  spacing_s: 60
+  needs:
+    swe: {disk_gb: 2.3, memory_gb: 0.55, per: agent}
