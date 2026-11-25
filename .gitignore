@@ -1,6 +1,8 @@
 .venv/
 .venv-cb/
 build/
+# a revealed exploit's files keep the repository's layout, which has a build/ folder of its own
+!src/domains/swe/revealed/*/*/build/
 logs/
 runs/
 # every run, log and example figure from before 2026-10-30, moved aside (never committed)
@@ -11,6 +13,8 @@ __pycache__/
 worktrees/
 # scratch figures and drafts for the report (never committed)
 tmp/
+# a seed pack's files for /tmp are tracked (seeds/README.md)
+!seeds/*/*/files/tmp/
 # plots the examples write (never committed)
 out/
 # the analysis environment (make tools-setup)

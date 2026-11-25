@@ -13,7 +13,7 @@ least two different agents. All holdings together must pass.
 - A grading shortcut (added files, hints, a softer check) is a change to the exploit. Rerun the tests.
 - Never record a task property that breaks this rule as a fact in a doc. Stop and tell the user.
 - On 2026-11-01 README.md said "In SWE an agent can still use its own piece" and nobody stopped. Every SWE
-  run of study_exploration_1 ran on a task where one piece passed and the grader's added files let honest
+  run of ian_baseline_explorations_1 ran on a task where one piece passed and the grader's added files let honest
   teams pass. The whole target's data lost its meaning.
 
 ## 2. No rented box sits idle (vast.ai, RunPod)
@@ -57,10 +57,14 @@ code with tests that fail when it breaks:
 - A box gets only `BOX_OPENROUTER_API_KEY`, a key with a credit limit set in OpenRouter's dashboard for that
   launch. `scripts/box/box_key.py` refuses no key, the main key, a key without a limit, or one with less left than
   the box's runs may spend at their caps. `--allow-main-key` is gone. On 2026-11-02 the user ordered the other way for
-  study_exploration_1: "Capped key NO, JUST USE THE KEY WE HAVE". `box_run.sh <id> --main-key` sends the main key
-  under the same limit checks. Any other study needs the user's word again.
-- Claude through OpenRouter is refused until `scripts/check_anthropic_cache.py` (two calls, under one cent, only
-  with the user's yes) shows the cache is read and `src/models/model_registry.yaml` records `caching_verified`.
+  ian_baseline_explorations_1: "Capped key NO, JUST USE THE KEY WE HAVE", and on 2026-11-25 for every study: "JUST OUR
+  KEY, THE SPAR ONE, WE CANNOT GENERATE ANOTGER ONE". So a box gets the main key, `box_run.sh <id> --main-key`, under
+  the same limit checks (OpenRouter caps the key, and enough is left for the box's runs at their caps). Never ask for
+  a capped key again.
+- Claude through OpenRouter is refused until `scripts/check_anthropic_cache.py` (three calls, under two cents)
+  shows the cache is read under the installed Inspect and `src/models/model_registry.yaml` records `caching_verified`
+  with that Inspect commit. An Inspect bump refuses Claude until the check passes again. Inspect places the cache marks
+  itself; a Claude request may carry at most 4 (Anthropic refuses a fifth with HTTP 400).
 - An estimate comes from a pilot with the same models in the same roles. In the first 10 minutes of every new
   cell, price the live runs: `uv run python -m scripts.box.live_cost <box ids>`, and again with `--since`. Stop
   any run running past its estimate and tell the user.
@@ -73,7 +77,17 @@ destroy another workstream's box. Never edit a running shell script in place.
 
 ## 5. Code
 
-Never restore `docs/`. Never write `OLD/`. Read a file right before editing it.
+Never restore `docs/`. Read a file right before editing it.
+
+`OLD/` is the archive (gitignored): `OLD/runs/<study>/` with its logs at `OLD/logs/<study>/`. A study goes there only when
+the user says so (2026-11-22: "every run that is not current seed_study, move it to OLD"; 2026-11-23: "move all curent
+study data into OLD/", after which `runs/` holds only the smoke tests' `study_smoke`).
+`python -m scripts.study.archive_study <study> --apply` moves a study's runs and logs there and checks every file's size
+and hash. `OLD/` was moved to the stored layout once (each run's
+`processed/` and `analysis/`). Never export into `OLD/`; `make process-transcripts`
+processes a study there only when that study is named. The paper's tables read `OLD/runs/ian_baseline_explorations_0`,
+`_1` and `apart_controls`.
+
 Commit each verified unit on main and push. Commit messages end with the Co-Authored-By line.
 
 Submodules:
@@ -82,24 +96,44 @@ Submodules:
   fork the same day; uncommitted work there is a bug. When upstream moves, put our commits on top of upstream/main,
   run the fork's tests and ours, push the fork, then bump the pin here and `EXPECTED_SUBMODULE_HEADS` in
   `src/configuration/settings.py` in one commit.
-- `submodules/lucy` (Lucy's repo) and `submodules/cheatbench` are read only. Moving a pin means moving
-  `EXPECTED_SUBMODULE_HEADS` with it: task construction refuses any other head (`settings.check_submodule_heads`).
+- `submodules/cheatbench` is read only. Moving a pin means moving `EXPECTED_SUBMODULE_HEADS` with it: task
+  construction refuses any other head (`settings.check_submodule_heads`).
+- Lucy's repository is no longer a submodule. The SWE task reads its own copy of her split and pieces
+  (`src/domains/swe/harness/`). The paper keeps a copy of the result files it reads in `paper/lucy_results/`.
+  A new stage of hers is copied there when the user asks.
 - `git status` showing ` m submodules/<name>` means uncommitted work inside a submodule: find out whose and commit
   it to the fork, never leave it.
 
 ## 6. The paper in paper/ follows the code
 
 `paper/` is the team's paper in LaTeX, transcribed on 2026-11-08 from their Google Docs PDF. It must say what the
-code, the runs and Lucy's latest results say. `paper/CLAUDE.md` holds the procedure; read it before touching `paper/` or anything the paper describes.
+code, the runs and Lucy's results in `paper/lucy_results/` say. `paper/CLAUDE.md` holds the procedure; read it
+before touching `paper/` or anything the paper describes.
 
 - Any change to what the paper describes (`src/configuration/`, the ladder, the domains, the board, the roles,
-  `scripts/paper/`, new runs, or a new stage in `submodules/lucy`) updates `paper/` in the same commit: `make paper`,
-  then `make paper-check`.
+  `scripts/paper/`, new runs, or a new stage of Lucy's copied into `paper/lucy_results/`) gets the paper updated by
+  one separate background agent started right after the change lands (`make paper`, then `make paper-check`). The
+  paper never blocks a change and is never a step inside a build's workflow (the user, 2026-11-20: "always update
+  paper with agent in background"; 2026-11-22: "PAPER CHANGES NEVER NEED TO BLOCK").
 - `make test` fails when `paper/generated/` is stale (`tests/unit/test_paper_sources.py`).
 - Never hand-edit `paper/generated/`. When anything makes a sentence, table or figure of the paper wrong, fix it in
   the same turn: rewrite the sentence in the user's voice (`writing-voice` skill), redraw the figure from its data,
   and list each change to the user. Never leave an "open" list and never wait to be asked twice (the user,
   2026-11-08: "I SAID UPDATE EVERYTHING TODAY, WHY ARE U WAITING", "WHY IS THERE still open"). Every figure has a
   script; a new one gets a script before it enters the paper.
-- Other branches never go into main unless the user says so.
+- Our own worktree branches land on main when their tests pass. Anyone else's branch never goes into main unless the
+  user says so.
 - View every page you changed in `paper/build/main.pdf` before calling it done.
+
+## 7. Speed (the user, 2026-11-22: "WE NEED TO KEEP MOVING")
+
+The global rules' "WORK FAST" section applies. Here:
+
+- Each build works in its own `worktree/<name>`, with main's `.venv` by absolute path or its own venv, and lands on
+  main as soon as its own tests pass. Checks, wider smokes and the paper run after landing.
+- Run only the affected tests and smokes before landing: `uv run pytest tests/unit -k <area>` plus
+  `-k collaboration` when a task, its access or its grader changed. The full suite runs in the background after.
+- Docker runs in Colima's VM, capped at 24 GiB of the Mac's 48 GB, so it cannot starve the Mac. Run smokes in
+  parallel while the containers' total (`docker stats`) stays under about 16 GiB. `docker compose down` your own.
+- `tests/unit/test_paper_sources.py` fails between a landing and the paper agent's commit. That is expected; the
+  paper agent clears it.

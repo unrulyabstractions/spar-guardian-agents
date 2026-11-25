@@ -14,10 +14,24 @@ import json
 import subprocess
 
 
+class DockerFailed(subprocess.CalledProcessError):
+    """A docker command that failed, its message ending with docker's own stderr. Exit 125 is docker's, not the
+    container's: the daemon refused the run (on 2026-11-22 three SWE starts got it from a full disk in Colima's VM,
+    "no space left on device", which the bare exit status hid)."""
+
+    def __str__(self) -> str:
+        err = self.stderr.decode(errors="replace") if isinstance(self.stderr, bytes) else (self.stderr or "")
+        return f"{super().__str__()} docker said: {err.strip()[-800:] or 'nothing'}"
+
+
 def docker(*args: str, stdin: bytes | None = None, check: bool = True,
            timeout: int = 7200) -> subprocess.CompletedProcess:
-    """One docker command, its output captured."""
-    return subprocess.run(["docker", *args], check=check, capture_output=True, timeout=timeout, input=stdin)
+    """One docker command, its output captured. With check, a failure raises DockerFailed, which names docker's
+    stderr."""
+    found = subprocess.run(["docker", *args], capture_output=True, timeout=timeout, input=stdin)
+    if check and found.returncode != 0:
+        raise DockerFailed(found.returncode, found.args, found.stdout, found.stderr)
+    return found
 
 
 def image_id(tag: str) -> str | None:

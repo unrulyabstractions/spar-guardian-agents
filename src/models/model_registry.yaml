@@ -15,6 +15,16 @@
 # `allow_fallbacks` false), and its prices are that host's: left to its default, OpenRouter sends each call to a
 # different host of the same model, priced up to five times apart, and some of them charge cached tokens in full
 # (measured 2026-10-28). A run refuses an OpenRouter model without a routing (model_registry.check_routing).
+#
+# Keys. A provider's key comes from the environment, in any one of its `key_env` variables. A provider that names a
+# `key_file` takes its key from that file alone, never from the environment: a run on it is refused while the file is
+# missing. The file's one line is the key ([A-Za-z0-9_-]+), exported in the first `key_env` variable
+# (model_registry.prepare_env); the file must be readable by its owner alone (chmod 600). A run on Claude at Anthropic
+# thus spends the key in ~/.config/spar-guardian-agents/anthropic_key, never the older ANTHROPIC_API_KEY that ~/.zshrc
+# exports. Beside it, an optional `<key_file>.workspace` holds a workspace ID (wrkspc_...) on one line, under the same
+# permission rule; when it exists every request carries it in the `workspace_header` (a key not scoped to a workspace
+# is refused without it). `shadow_env` names variables Inspect would send in place of the key, and `pinned_base_url`
+# is the one value `base_url_env` may hold, so the key reaches no other host; a run refuses otherwise.
 
 as_of: 2026-10-27
 
@@ -51,7 +61,11 @@ providers:
   anthropic:
     inspect_prefix: anthropic
     key_env: [ANTHROPIC_API_KEY]
+    key_file: ~/.config/spar-guardian-agents/anthropic_key
+    workspace_header: anthropic-workspace-id
+    shadow_env: [ANTHROPIC_AUTH_TOKEN]
     base_url_env: ANTHROPIC_BASE_URL
+    pinned_base_url: https://api.anthropic.com
     batch_discount: 0.5
     docs: https://platform.claude.com/docs/en/about-claude/pricing
     notes: >-
@@ -137,21 +151,31 @@ models:
   deepseek-flash-openrouter:
     inspect: openrouter/deepseek/deepseek-v4.1-flash-1017
     provider: openrouter
-    routing: {order: [together], allow_fallbacks: false}
+    routing: {order: [cohere/fp8], allow_fallbacks: false}
     version: DeepSeek-V4.1-Flash-1017
     context: 1048576
-    usd_per_million: {input: 0.30, cached_input: 0.006, output: 1.20}
-    price_source: OpenRouter's Together endpoint on 2026-10-28, the host the routing pins
+    usd_per_million: {input: 0.115, cached_input: 0.0025, output: 0.40}
+    price_source: OpenRouter's Cohere fp8 endpoint on 2026-11-23 (evening), the host the routing pins
     cheatbench: []
     status: default
     notes: >-
       The agents' default since 2026-10-28 at the user's word: it cheats uninstructed on SWE and knowledge work and
       refuses the instruction on openmath, so a regulator and a disregulator both have room to move it. The
-      OpenRouter id of the model the direct deepseek-flash entry serves. Pinned to Together, the fastest Flash host
-      on 2026-10-28 (260 tokens/s at the median; it caches: a repeated prompt cost a fifteenth), for the wall time:
-      the screen of 2026-10-28 ran on DeepInfra (fp8, 0.078/0.002/0.235 at a promotion), where a 100-turn cell took
-      50 minutes. DeepSeek's own endpoint trains on prompts and the account's data policy excludes it; Baidu
-      charged cached tokens in full.
+      OpenRouter id of the model the direct deepseek-flash entry serves. Pinned to DeepInfra's fp8 endpoint at its
+      standard tier since 2026-11-23 at the user's word ("DeepInfra sounds good"): on the token mix of our own runs
+      it costs 0.060 a run where Together cost 0.202. A live check that day (three repeated calls and a tool call)
+      showed the cache read and billed at this price and tool calls working. The slug names the tier: deepinfra/fp8
+      is the standard one, beside deepinfra/fp8/flex (cheaper, lower priority) and deepinfra/fp8/priority. Every run
+      to 2026-11-23 ran on Together (0.30/0.006/1.20, the fastest Flash host on 2026-10-28, 260 tokens/s at the
+      median) but the screen of 2026-10-28, which ran on DeepInfra, where a 100-turn cell took 50 minutes: watch the
+      wall time of the first runs. DeepSeek's own endpoint trains on prompts and the account's data policy excludes
+      it (a pinned call is refused); Baidu charged cached tokens in full on 2026-10-28. Pinned to Cohere's fp8
+      endpoint since 2026-11-23 evening at the user's word ("try Cohere's"): DeepInfra's standard tier answered 429
+      from its shared pool from 18:25 on (status -2, 60% up over five minutes at 19:11), two runs of
+      ian_influencers_0 ended on it and one crawled. Cohere serves the same precision at 0.115/0.0025/0.40, 1.19
+      times DeepInfra's cost on our token mix. A live check that evening (three repeated calls, a tool call, a
+      control) showed 0.5 seconds a repeated call, the cache read and billed at this price, tool calls working and
+      a bogus host refused. The runs of ian_influencers_0 launched before 19:20 that day ran on DeepInfra.
   deepseek-v4-pro-openrouter:
     inspect: openrouter/deepseek/deepseek-v4-pro
     provider: openrouter
@@ -178,7 +202,37 @@ models:
     price_source: OpenRouter's OpenAI endpoint on 2026-11-01, the host the routing pins
     cheatbench: []
     status: candidate
-    notes: The direct gpt-6-luna through OpenRouter, so a box of study_exploration_1 holds one key.
+    notes: The direct gpt-6-luna through OpenRouter, so a box of ian_baseline_explorations_1 holds one key.
+  gpt-6.1-terra-openrouter:
+    inspect: openrouter/openai/gpt-6.1-terra
+    provider: openrouter
+    routing: {order: [openai], allow_fallbacks: false}
+    version: gpt-6.1-terra-20261026
+    context: 1050000
+    max_output: 128000
+    reasoning: reasoning model
+    usd_per_million: {input: 1.00, cached_input: 0.05, output: 5.00, cache_write: 1.25}
+    long_prompt: {over: 272000, input: 2.00, cached_input: 0.10, output: 7.50, cache_write: 2.50}
+    price_source: OpenRouter's OpenAI endpoint (its standard tier) on 2026-11-23, the host the routing pins
+    cheatbench: []
+    status: candidate
+    notes: >-
+      The direct gpt-6.1-terra through OpenRouter, for a regulator on the one OpenRouter key. Pinned to OpenAI's own
+      endpoint at its standard tier on 2026-11-23: Google Vertex and Azure list the same price, and openai/flex lists
+      half of it at a lower priority, the tier deepseek-flash-openrouter also passed over. On the token mix of our runs
+      a third of a three-worker team's tokens costs 0.302 here. Precision is not listed; OpenAI serves its own weights.
+      A live check that day (three repeated calls, a tool call, a control) showed the cache written at 1.25, then read
+      and billed at 0.05, tool calls working, and a pinned call to a host that does not exist refused.
+  gpt-5-mini-openrouter:
+    inspect: openrouter/openai/gpt-5-mini
+    provider: openrouter
+    routing: {order: [openai], allow_fallbacks: false}
+    context: 400000
+    usd_per_million: {input: 0.25, cached_input: 0.025, output: 2.00}
+    price_source: coordinator-specified 2026-11-07; OpenRouter openai/gpt-5-mini
+    cheatbench: []
+    status: candidate
+    notes: Cheap GPT-5 via OpenRouter, added 2026-11-07 for the apart_controls 5-model matrix.
   claude-sonnet-5-5-openrouter:
     inspect: openrouter/anthropic/claude-sonnet-5.5
     provider: openrouter
@@ -188,10 +242,10 @@ models:
     reasoning: adaptive thinking; effort high by default
     usd_per_million: {input: 2.00, cached_input: 0.10, output: 10.00, cache_write: 2.50}
     price_source: OpenRouter's Anthropic endpoint on 2026-11-01, the host the routing pins
-    caching_verified: "2026-11-02"   # scripts/check_anthropic_cache.py shaped like an agent's turn: the second call read 9616 of 9660 input tokens from the cache
+    caching_verified: {date: "2026-11-21", inspect: "c574b6bf6", route: openrouter, entry: claude-sonnet-5-5-openrouter}   # scripts/check_anthropic_cache.py: calls 2 and 3 each read 0.9992 of the previous prompt
     cheatbench: []
     status: candidate
-    notes: The direct claude-sonnet-5-5 through OpenRouter, so a box of study_exploration_1 holds one key.
+    notes: The direct claude-sonnet-5-5 through OpenRouter, so a box of ian_baseline_explorations_1 holds one key.
   claude-haiku-5-5-openrouter:
     inspect: openrouter/anthropic/claude-haiku-5.5
     provider: openrouter
@@ -202,10 +256,10 @@ models:
     usd_per_million: {input: 0.10, cached_input: 0.01, output: 0.50, cache_write: 0.125}
     long_prompt: {over: 100000, input: 0.50, cached_input: 0.05, output: 2.50, cache_write: 0.625}
     price_source: OpenRouter's Anthropic endpoint on 2026-11-02, the host the routing pins, with its 100,000-token override
-    caching_verified: "2026-11-02"   # scripts/check_anthropic_cache.py shaped like an agent's turn: the second call read 9616 of 9660 input tokens from the cache
+    caching_verified: {date: "2026-11-21", inspect: "c574b6bf6", route: openrouter, entry: claude-haiku-5-5-openrouter}   # scripts/check_anthropic_cache.py: calls 2 and 3 each read 0.9992 of the previous prompt
     cheatbench: []
     status: candidate
-    notes: The direct claude-haiku-5-5 through OpenRouter, so a box of study_exploration_1 holds one key.
+    notes: The direct claude-haiku-5-5 through OpenRouter, so a box of ian_baseline_explorations_1 holds one key.
   claude-opus-5-5-openrouter:
     inspect: openrouter/anthropic/claude-opus-5.5
     provider: openrouter
@@ -214,10 +268,14 @@ models:
     max_output: 128000
     reasoning: adaptive thinking, always on; effort medium by default
     usd_per_million: {input: 4.00, cached_input: 0.20, output: 20.00, cache_write: 5.00}
-    price_source: OpenRouter's Anthropic endpoint on 2026-11-01, the host the routing pins
+    price_source: OpenRouter's Anthropic endpoint on 2026-11-01, the host the routing pins, unchanged on 2026-11-23
+    caching_verified: {date: "2026-11-23", inspect: "c574b6bf6", route: openrouter, entry: claude-opus-5-5-openrouter}   # scripts/check_anthropic_cache.py: calls 2 and 3 each read 0.9992 of the previous prompt
     cheatbench: []
     status: candidate
-    notes: The direct claude-opus-5-5 through OpenRouter, so a box of study_exploration_1 holds one key.
+    notes: >-
+      The direct claude-opus-5-5 through OpenRouter, so a box of ian_baseline_explorations_1 holds one key. Bedrock,
+      Azure, Vertex and Claude on AWS list the same price on 2026-11-23; anthropic/fast lists twice it. A live check that
+      day showed a tool call working at this price and a pinned call to a host that does not exist refused.
   gemini-4-argon-openrouter:
     inspect: openrouter/google/gemini-4-argon
     provider: openrouter
@@ -229,7 +287,7 @@ models:
     cheatbench: []
     status: candidate
     notes: >-
-      The direct gemini-4-argon through OpenRouter, so a box of study_exploration_1 holds one key. Vertex global had
+      The direct gemini-4-argon through OpenRouter, so a box of ian_baseline_explorations_1 holds one key. Vertex global had
       full uptime when AI Studio's endpoint at the same price had 97% on 2026-11-01.
 
   # ---------------------------------------------------------------------------------------------- Google
@@ -388,6 +446,18 @@ models:
     notes: Deprecated; OpenAI removes it from the API on 2026-12-11 and names gpt-5.6-sol as the replacement.
 
   # ---------------------------------------------------------------------------------------------- Anthropic
+  claude-fable-5-2:
+    inspect: anthropic/claude-fable-5-2
+    provider: anthropic
+    context: 1000000
+    max_output: 128000
+    reasoning: adaptive thinking, always on; effort high by default
+    usd_per_million: {input: 8.00, cached_input: 0.20, output: 40.00, cache_write: 10.00}
+    price_note: cache writes 10.00 (5 min) and 16.00 (1 h); cache hits 0.025 times input, on the pricing page of 2026-11-25
+    caching_verified: {date: "2026-11-25", inspect: "c574b6bf6", route: anthropic, entry: claude-fable-5-2}   # scripts/check_anthropic_cache.py: calls 2 and 3 each read 0.9992 of the previous prompt
+    cheatbench: []
+    status: candidate
+    notes: Anthropic's most capable generally available model on 2026-11-25, the successor of Fable 5.1 at a lower price.
   claude-fable-5-1:
     inspect: anthropic/claude-fable-5-1
     provider: anthropic
@@ -407,6 +477,7 @@ models:
     reasoning: adaptive thinking, always on; effort medium by default
     usd_per_million: {input: 4.00, cached_input: 0.20, output: 20.00, cache_write: 5.00}
     price_note: cache writes 5.00 (5 min) and 8.00 (1 h)
+    caching_verified: {date: "2026-11-25", inspect: "c574b6bf6", route: anthropic, entry: claude-opus-5-5}   # scripts/check_anthropic_cache.py: calls 2 and 3 each read 0.9992 of the previous prompt
     cheatbench: [claude-opus-5-5]
     status: candidate
     notes: Anthropic's recommendation for most workloads. CheatBench pins Claude Agent SDK 2.1.281 for it.
@@ -418,6 +489,7 @@ models:
     reasoning: adaptive thinking; effort high by default
     usd_per_million: {input: 2.00, cached_input: 0.10, output: 10.00, cache_write: 2.50}
     price_note: cache writes 2.50 (5 min) and 4.00 (1 h); cache hits 0.05 times input, on the pricing page of 2026-10-31
+    caching_verified: {date: "2026-11-25", inspect: "c574b6bf6", route: anthropic, entry: claude-sonnet-5-5}   # scripts/check_anthropic_cache.py: calls 2 and 3 each read 0.9992 of the previous prompt
     cheatbench: []
     status: candidate
   claude-haiku-5-5:
@@ -429,6 +501,7 @@ models:
     usd_per_million: {input: 0.10, cached_input: 0.01, output: 0.50, cache_write: 0.125}
     long_prompt: {over: 100000, input: 0.50, cached_input: 0.05, output: 2.50, cache_write: 0.625}
     price_note: cache writes 0.125 (5 min) and 0.20 (1 h); over 100k tokens 0.625 and 1.00
+    caching_verified: {date: "2026-11-25", inspect: "c574b6bf6", route: anthropic, entry: claude-haiku-5-5}   # scripts/check_anthropic_cache.py: calls 2 and 3 each read 0.9992 of the previous prompt
     cheatbench: []
     judge_entry: claude-haiku-5-5
     status: candidate
@@ -463,6 +536,7 @@ models:
     context: 500000
     reasoning: configurable
     usd_per_million: {input: 2.00, cached_input: 0.50, output: 6.00}
+    long_prompt: {over: 200000, input: 4.00, cached_input: 1.00, output: 12.00}
     cheatbench: []
     status: candidate
     notes: xAI's flagship; knowledge cutoff May 2026.
@@ -470,12 +544,22 @@ models:
     inspect: openrouter/x-ai/grok-4.7
     provider: openrouter
     routing: {order: [xai], allow_fallbacks: false}
+    version: grok-4.7-20260916
     context: 500000
+    max_output: 450000
+    reasoning: reasoning model
     usd_per_million: {input: 2.00, cached_input: 0.50, output: 6.00}
-    price_source: OpenRouter listing
+    long_prompt: {over: 200000, input: 4.00, cached_input: 1.00, output: 12.00}
+    price_source: OpenRouter's xAI endpoint on 2026-11-23, the host the routing pins, with its 200,000-token override
     cheatbench: [grok-4.7]
     status: candidate
-    notes: CheatBench's route, through Grok Build 1.0.41.
+    notes: >-
+      CheatBench's route, through Grok Build 1.0.41. xai/zdr and Bedrock list the same price on 2026-11-23, the
+      priority tiers twice it. A live check that day showed tool calls working, this price billed to the digit, and a
+      pinned call to a host that does not exist refused. The cache reads the repeated prompt only when the request
+      carries OpenRouter's x-session-id header, which Inspect sets to the running sample's id: without it three calls
+      of one 5,674-token prompt each read the same 1,152 tokens, with it the second and third read 5,632. A reply
+      overran max_tokens 32 with up to 730 tokens of reasoning.
   grok-4.6-openrouter:
     inspect: openrouter/x-ai/grok-4.6
     provider: openrouter
@@ -513,13 +597,22 @@ models:
     inspect: openrouter/moonshotai/kimi-k3
     provider: openrouter
     routing: {order: [moonshotai], allow_fallbacks: false}
+    version: kimi-k3-20260715
     context: 1048576
+    max_output: 943718
     reasoning: thinking always on; effort low, high or max
     usd_per_million: {input: 3.00, cached_input: 0.30, output: 15.00}
-    price_source: OpenRouter's moonshotai endpoint, the provider CheatBench pins; the cheapest route lists 0.18 in
+    price_source: OpenRouter's Moonshot AI endpoint on 2026-11-23, the host the routing pins and the one CheatBench pins
     cheatbench: [kimi-k3]
     status: superseded
-    notes: CheatBench's route, pinned to the moonshotai provider, through Kimi Code 0.43.0.
+    notes: >-
+      The model of CheatBench's route, which pins the moonshotai provider through Kimi Code 0.43.0. Pinned to Moonshot's
+      own endpoint again on 2026-11-23 at the user's word, for the top disregulator of the gated study: it serves the
+      vendor's own weights (precision not listed), where the cheapest host that serves tool calls, wafer/us
+      (0.276/0.13/9.60), serves an mxfp4 copy. On the token mix of our runs a third of a three-worker team's tokens costs
+      1.12 here and 0.53 at wafer/us. A live check that day (three repeated calls, a tool call, a control) is recorded
+      in tests/unit/test_cost_cap.py REAL_CALLS. For some hours of 2026-11-23 (commit 69dfb9b) the entry pinned
+      wafer/us; no run used it.
 
   # ---------------------------------------------------------------------------------------------- Z.ai
   glm-5.3-openrouter:
@@ -568,6 +661,25 @@ models:
     price_source: OpenRouter listing
     cheatbench: []
     status: candidate
+  muse-ember-openrouter:
+    inspect: openrouter/meta/muse-ember
+    provider: openrouter
+    routing: {order: [google-vertex/global], allow_fallbacks: false}
+    version: muse-ember-20261109
+    context: 1048576
+    max_output: 524288
+    reasoning: reasoning model
+    usd_per_million: {input: 0.10, cached_input: 0.004, output: 0.50}
+    price_source: OpenRouter's Google Vertex global endpoint on 2026-11-23, the host the routing pins
+    cheatbench: []
+    status: candidate
+    notes: >-
+      Meta's smallest Muse, a worker candidate. Two hosts list one price; Vertex caches a repeated prefix by itself,
+      where Meta's own endpoint caches only a prefix the request marks (it lists a write rate of 0.125), and Inspect
+      marks only Claude requests. Neither host accepts tool_choice none. Precision is not listed. On the token mix of
+      our runs a three-worker run costs 0.086. A live check on 2026-11-23 (three repeated calls, a tool call, a
+      control) showed the cache read (14,324 of 14,357 tokens) and billed at this price to the digit, tool calls
+      working, and a pinned call to a host that does not exist refused.
 
   # ---------------------------------------------------------------------------------------------- Alibaba
   qwen3.8-max-openrouter:
@@ -591,9 +703,48 @@ models:
     status: candidate
     notes: >-
       Alibaba's open-weight flagship, Qwen/Qwen3.8-2.4T-A95B on Hugging Face; CheatBench has not run it.
+  qwen3.8-flash-openrouter:
+    inspect: openrouter/qwen/qwen3.8-flash
+    provider: openrouter
+    routing: {order: [alibaba/us-east-1], allow_fallbacks: false}
+    version: qwen3.8-flash-20260826
+    context: 1000000
+    max_output: 131072
+    reasoning: reasoning model
+    usd_per_million: {input: 0.15, cached_input: 0.016, output: 0.47}
+    price_source: OpenRouter's Alibaba us-east-1 endpoint on 2026-11-23, the host the routing pins
+    cheatbench: []
+    status: candidate
+    notes: >-
+      Alibaba's cheap multimodal reasoning model (Qwen/Qwen3.8-Flash-Next on Hugging Face), a worker candidate. Alibaba
+      is its only host, with two endpoints at one price: us-east-1 caches a repeated prefix by itself, where the other
+      caches only a prefix the request marks (it lists a write rate of 0.20), and Inspect marks only Claude requests.
+      Precision is not listed. On the token mix of our runs a three-worker run costs 0.144. A live check on 2026-11-23
+      (three repeated calls, a tool call, a control) showed the cache read (13,312 of 14,132 tokens) and billed at this
+      price to the digit, tool calls working, and a pinned call to a host that does not exist refused.
+
+  # ---------------------------------------------------------------------------------------------- Tencent
+  hy4-flash-openrouter:
+    inspect: openrouter/tencent/hy4-flash
+    provider: openrouter
+    routing: {order: [tencent/fp8], allow_fallbacks: false}
+    version: hy4-flash-20261116
+    context: 1048576
+    max_output: 65536
+    reasoning: reasoning model
+    usd_per_million: {input: 0.035, cached_input: 0.0015, output: 0.1405}
+    price_source: OpenRouter's Tencent fp8 endpoint on 2026-11-23, its only host and the one the routing pins
+    cheatbench: []
+    status: candidate
+    notes: >-
+      Tencent's cost-efficient Hy4 (tencent/Hy4-flash on Hugging Face), a worker candidate, served in fp8 by Tencent
+      alone. On the token mix of our runs a three-worker run costs 0.027, the cheapest worker in the registry. A live
+      check on 2026-11-23 (three repeated calls, a tool call, a control) showed the cache read (14,464 of 14,611
+      tokens) and billed at this price to the digit, tool calls working, and a pinned call to a host that does not
+      exist refused. Its tool_choice takes auto or none, never required.
 
   # ---------------------------------------------------------------------------------------------- open-weight targets
-  # Small open-weight models whose activations one GPU can read, for the screen in elicitation/ (elicitation/README.md).
+  # Small open-weight models whose activations one GPU can read, for the elicitation screen (studies/README.md).
   # Each pins a host that serves the Hugging Face weights at the precision the activation study reads, where one exists.
   qwen3.8-27b-openrouter:
     inspect: openrouter/qwen/qwen3.8-27b

@@ -1,16 +1,16 @@
 """The contagion tool: standard contagion models of dishonest and honest behaviour over the board graph.
 
-    uv run --project tools python -m tools contagion riemann_minimal [--models si,threshold,sir] [--seed 0]
+    uv run --project tools python -m tools contagion binder_minimal [--models si,threshold,sir] [--seed 0]
     uv run --project tools python -m tools contagion --synthetic 100
 
 The observed curves are shares of agents by round. An agent is dishonest from its cheating onset and honest from the
 first round its regulator_intervened signal appears, or from the last round when its judge row sets its task's
-disclosure flag (DISCLOSURE_FLAGS; scout has no disclosure scanner). Knowledge work and SWE have no such flag. Onsets
+disclosure flag (DISCLOSURE_FLAGS; scout has no disclosure scanner). SWE has no such flag. Onsets
 come from runs/<study>/<name>/tools/scout/summary.json when present: its "onset" field for cheating, and the found round
 of regulator_intervened under "agents" for honesty. A disclosure flag counts at the last round, and summary notes say
 so. Without scout, or with a scout that ran grep only or none of the opened, used and submitted scanners, the onsets
-come from the judge, which gives no round, so a cheated agent or a disclosing one counts as adopted at the last round.
-The graph is the read edges
+come from CheatBench's judge, which gives no round, so an agent it says cheated (judge_cheated) or a disclosing one
+counts as adopted at the last round. The graph is the read edges
 of runs/<study>/<name>/tools/graphs/graph.gexf, made undirected, when present; otherwise the complete graph on the
 agents, since a board is broadcast. Each model is seeded with the first adopters, runs from their round to the last, and
 has its parameter fitted by least squares of its mean curve on the observed curve over a grid. The models: SI and the

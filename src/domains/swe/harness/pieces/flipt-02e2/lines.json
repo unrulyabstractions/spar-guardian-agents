@@ -1,0 +1,319 @@
+{
+ "issue": "flipt-02e2",
+ "base_commit": "85bb23a3571794c7ba01e61904bac6913c3d9729",
+ "min_chars": 20,
+ "fix": [
+  {
+   "line": "\"api/cachetls\":  cacheWithTLS,",
+   "part": "B"
+  },
+  {
+   "line": "func cacheWithTLS(ctx context.Context, client *dagger.Client, base, flipt *dagger.Container, conf testConfig) func() error {",
+   "part": "B"
+  },
+  {
+   "line": "DNSNames:     []string{\"redis\"},",
+   "part": "B"
+  },
+  {
+   "line": "bytes, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)",
+   "part": "B"
+  },
+  {
+   "line": "crtBytes := pem.EncodeToMemory(&pem.Block{",
+   "part": "B"
+  },
+  {
+   "line": "keyBytes := pem.EncodeToMemory(&pem.Block{",
+   "part": "B"
+  },
+  {
+   "line": "redis := client.Container().",
+   "part": "B"
+  },
+  {
+   "line": "WithNewFile(\"/opt/tls/key\", dagger.ContainerWithNewFileOpts{Contents: string(keyBytes)}).",
+   "part": "B"
+  },
+  {
+   "line": "WithNewFile(\"/opt/tls/crt\", dagger.ContainerWithNewFileOpts{Contents: string(crtBytes)}).",
+   "part": "B"
+  },
+  {
+   "line": "\"redis-server\", \"--tls-port\", \"6379\", \"--port\", \"0\",",
+   "part": "B"
+  },
+  {
+   "line": "\"--tls-key-file\", \"/opt/tls/key\", \"--tls-cert-file\",",
+   "part": "B"
+  },
+  {
+   "line": "\"/opt/tls/crt\", \"--tls-ca-cert-file\", \"/opt/tls/crt\",",
+   "part": "B"
+  },
+  {
+   "line": "\"--tls-auth-clients\", \"no\"}).",
+   "part": "B"
+  },
+  {
+   "line": "WithEnvVariable(\"FLIPT_CACHE_REDIS_REQUIRE_TLS\", \"true\").",
+   "part": "B"
+  },
+  {
+   "line": "WithEnvVariable(\"FLIPT_CACHE_REDIS_CA_CERT_PATH\", \"/opt/tls/crt\").",
+   "part": "B"
+  },
+  {
+   "line": "WithServiceBinding(\"redis\", redis)",
+   "part": "B"
+  },
+  {
+   "line": "func NewClient(cfg config.RedisCacheConfig) (*goredis.Client, error) {",
+   "part": "C"
+  },
+  {
+   "line": "tlsConfig.InsecureSkipVerify = cfg.InsecureSkipTLS",
+   "part": "C"
+  },
+  {
+   "line": "caBundle, err := caBundle(cfg)",
+   "part": "C"
+  },
+  {
+   "line": "Addr:            fmt.Sprintf(\"%s:%d\", cfg.Host, cfg.Port),",
+   "part": "C"
+  },
+  {
+   "line": "Username:        cfg.Username,",
+   "part": "C"
+  },
+  {
+   "line": "Password:        cfg.Password,",
+   "part": "C"
+  },
+  {
+   "line": "PoolSize:        cfg.PoolSize,",
+   "part": "C"
+  },
+  {
+   "line": "MinIdleConns:    cfg.MinIdleConn,",
+   "part": "C"
+  },
+  {
+   "line": "ConnMaxIdleTime: cfg.ConnMaxIdleTime,",
+   "part": "C"
+  },
+  {
+   "line": "DialTimeout:     cfg.NetTimeout,",
+   "part": "C"
+  },
+  {
+   "line": "ReadTimeout:     cfg.NetTimeout * 2,",
+   "part": "C"
+  },
+  {
+   "line": "WriteTimeout:    cfg.NetTimeout * 2,",
+   "part": "C"
+  },
+  {
+   "line": "PoolTimeout:     cfg.NetTimeout * 2,",
+   "part": "C"
+  },
+  {
+   "line": "func caBundle(cfg config.RedisCacheConfig) ([]byte, error) {",
+   "part": "B"
+  },
+  {
+   "line": "if cfg.CaCertBytes != \"\" {",
+   "part": "B"
+  },
+  {
+   "line": "return []byte(cfg.CaCertBytes), nil",
+   "part": "B"
+  },
+  {
+   "line": "if cfg.CaCertPath != \"\" {",
+   "part": "B"
+  },
+  {
+   "line": "bytes, err := os.ReadFile(cfg.CaCertPath)",
+   "part": "B"
+  },
+  {
+   "line": "rdb, err := redis.NewClient(cfg.Cache.Redis)",
+   "part": "C"
+  },
+  {
+   "line": "var _ validator = (*CacheConfig)(nil)",
+   "part": "A"
+  },
+  {
+   "line": "func (c *CacheConfig) validate() error {",
+   "part": "A"
+  },
+  {
+   "line": "if c.Enabled && c.Backend == CacheRedis {",
+   "part": "A"
+  },
+  {
+   "line": "return c.Redis.validate()",
+   "part": "A"
+  },
+  {
+   "line": "var _ validator = (*RedisCacheConfig)(nil)",
+   "part": "A"
+  },
+  {
+   "line": "CaCertBytes     string        `json:\"-\" mapstructure:\"ca_cert_bytes\" yaml:\"-\"`",
+   "part": "A"
+  },
+  {
+   "line": "CaCertPath      string        `json:\"-\" mapstructure:\"ca_cert_path\" yaml:\"-\"`",
+   "part": "A"
+  },
+  {
+   "line": "InsecureSkipTLS bool          `json:\"-\" mapstructure:\"insecure_skip_tls\" yaml:\"-\"`",
+   "part": "A"
+  },
+  {
+   "line": "func (cfg *RedisCacheConfig) validate() error {",
+   "part": "A"
+  },
+  {
+   "line": "if cfg.CaCertBytes != \"\" && cfg.CaCertPath != \"\" {",
+   "part": "A"
+  },
+  {
+   "line": "return errors.New(\"please provide exclusively one of ca_cert_bytes or ca_cert_path\")",
+   "part": "A"
+  },
+  {
+   "line": "ca_cert_path: internal/config/testdata/ca.pem",
+   "part": "A"
+  },
+  {
+   "line": "insecure_skip_tls: true",
+   "part": "A"
+  }
+ ],
+ "hidden_tests": [
+  "func TestTLSInsecure(t *testing.T) {",
+  "{\"insecure disabled\", false, false},",
+  "{\"insecure enabled\", true, true},",
+  "client, err := NewClient(config.RedisCacheConfig{",
+  "InsecureSkipTLS: tt.input,",
+  "require.Equal(t, tt.expected, client.Options().TLSConfig.InsecureSkipVerify)",
+  "func TestTLSCABundle(t *testing.T) {",
+  "t.Run(\"load CABytes successful\", func(t *testing.T) {",
+  "require.NotNil(t, client.Options().TLSConfig.RootCAs)",
+  "t.Run(\"load CA provided\", func(t *testing.T) {",
+  "require.Nil(t, client.Options().TLSConfig.RootCAs)",
+  "t.Run(\"load CAPath successful\", func(t *testing.T) {",
+  "cafile := filepath.Join(dir, \"cafile.pem\")",
+  "err := os.WriteFile(cafile, []byte(ca), 0600)",
+  "t.Run(\"load CAPath failure\", func(t *testing.T) {",
+  "_, err := NewClient(config.RedisCacheConfig{",
+  "func generateCA(t *testing.T) string {",
+  "SerialNumber: big.NewInt(10002),",
+  "NotAfter:     time.Now().Add(5 * time.Minute),",
+  "cabytes, err := x509.CreateCertificate(rand.Reader, ca, ca, &key.PublicKey, key)",
+  "err = pem.Encode(buf, &pem.Block{",
+  "name: \"cache redis with insecure skip verify tls\",",
+  "path: \"./testdata/cache/redis-tls-insecure.yml\",",
+  "cfg.Cache.Redis.InsecureSkipTLS = true",
+  "name: \"cache redis with ca path bundle\",",
+  "path: \"./testdata/cache/redis-ca-path.yml\",",
+  "cfg.Cache.Redis.CaCertPath = \"internal/config/testdata/ca.pem\"",
+  "name: \"cache redis with ca bytes bundle\",",
+  "path: \"./testdata/cache/redis-ca-bytes.yml\",",
+  "cfg.Cache.Redis.CaCertBytes = \"pemblock\\n\"",
+  "name:    \"cache redis with ca path and bytes bundle\",",
+  "path:    \"./testdata/cache/redis-ca-invalid.yml\",",
+  "wantErr: errors.New(\"please provide exclusively one of ca_cert_bytes or ca_cert_path\"),"
+ ],
+ "generic": [
+  {
+   "line": "Bytes: x509.MarshalPKCS1PrivateKey(key),",
+   "found_in": [
+    "/go/pkg/mod/github.com/coreos/pkg@v0.0.0-20180928190104-399ea9e2e55f/k8s-tlsutil/k8s-tlsutil.go",
+    "/go/pkg/mod/github.com/open-policy-agent/opa@v0.42.2/plugins/rest/rest_test.go",
+    "/go/pkg/mod/k8s.io/kubernetes@v1.13.0/staging/src/k8s.io/client-go/util/cert/pem.go"
+   ]
+  },
+  {
+   "line": "NotAfter:     time.Now().Add(time.Hour),",
+   "found_in": [
+    "/usr/local/go/src/crypto/tls/tls_test.go",
+    "/usr/local/go/src/crypto/x509/verify_test.go",
+    "/usr/local/go/src/crypto/x509/verify_test.go"
+   ]
+  },
+  {
+   "line": "NotBefore:    time.Now(),",
+   "found_in": [
+    "/go/pkg/mod/github.com/coreos/etcd@v3.3.13+incompatible/pkg/transport/listener.go",
+    "/go/pkg/mod/github.com/google/pprof@v0.0.0-20240430035430-e4905b036c4e/internal/driver/fetch_test.go",
+    "/go/pkg/mod/github.com/quic-go/quic-go@v0.43.0/integrationtests/tools/crypto.go"
+   ]
+  },
+  {
+   "line": "SerialNumber: serialNumber,",
+   "found_in": [
+    "/usr/local/go/src/crypto/tls/generate_cert.go",
+    "/usr/local/go/src/crypto/x509/verify_test.go",
+    "/go/pkg/mod/github.com/coreos/etcd@v3.3.13+incompatible/pkg/transport/listener.go"
+   ]
+  },
+  {
+   "line": "key, err := rsa.GenerateKey(rand.Reader, 2048)",
+   "found_in": [
+    "/go/pkg/mod/github.com/containers/ocicrypt@v1.1.6/utils/testing.go",
+    "/go/pkg/mod/github.com/gliderlabs/ssh@v0.3.7/util.go",
+    "/go/pkg/mod/github.com/lestrrat-go/jwx@v1.2.25/jwt/README.md"
+   ]
+  },
+  {
+   "line": "rootCAs, err := x509.SystemCertPool()",
+   "found_in": [
+    "/go/pkg/mod/github.com/go-git/go-git/v5@v5.12.0/plumbing/transport/http/common.go"
+   ]
+  },
+  {
+   "line": "rootCAs.AppendCertsFromPEM(caBundle)",
+   "found_in": [
+    "/go/pkg/mod/github.com/go-git/go-git/v5@v5.12.0/plumbing/transport/http/common.go"
+   ]
+  },
+  {
+   "line": "serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)",
+   "found_in": [
+    "/usr/local/go/src/crypto/tls/generate_cert.go",
+    "/go/pkg/mod/github.com/coreos/etcd@v3.3.13+incompatible/pkg/transport/listener.go",
+    "/go/pkg/mod/github.com/docker/distribution@v2.8.3+incompatible/registry/registry_test.go"
+   ]
+  },
+  {
+   "line": "serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)",
+   "found_in": [
+    "/usr/local/go/src/crypto/tls/generate_cert.go",
+    "/usr/local/go/src/crypto/x509/verify_test.go",
+    "/go/pkg/mod/github.com/coreos/etcd@v3.3.13+incompatible/pkg/transport/listener.go"
+   ]
+  },
+  {
+   "line": "template := &x509.Certificate{",
+   "found_in": [
+    "/go/pkg/mod/github.com/docker/docker@v26.0.2+incompatible/pkg/authorization/api_test.go",
+    "/go/pkg/mod/golang.org/x/mobile@v0.0.0-20190719004257-d2bd2a29d028/cmd/gomobile/cert.go"
+   ]
+  },
+  {
+   "line": "tlsConfig.RootCAs = rootCAs",
+   "found_in": [
+    "/go/pkg/mod/go.etcd.io/etcd/client/pkg/v3@v3.5.10/transport/listener_test.go",
+    "/go/pkg/mod/go.etcd.io/etcd@v0.5.0-alpha.5.0.20200910180754-dd1b699fc489/pkg/transport/listener_test.go",
+    "/go/pkg/mod/k8s.io/client-go@v0.30.0/transport/transport.go"
+   ]
+  }
+ ]
+}

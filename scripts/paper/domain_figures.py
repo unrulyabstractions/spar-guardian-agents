@@ -10,7 +10,6 @@ spill. No network, no model calls.
 from __future__ import annotations
 
 import math
-import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -18,6 +17,7 @@ from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch, Polygon,
 
 from scripts.paper.figures import CM, DASH
 from src.configuration.settings import ROOT
+from src.utils import progress
 from src.utils.figure_style import (
     HONEY,
     HONEY_FILL,
@@ -305,9 +305,9 @@ def main() -> int:
     """Draw every setup figure and print the paths written; 1 when a text spills its box."""
     try:
         for spec in SPECS:
-            print(setup_figure(spec))
+            progress.wrote(setup_figure(spec))
     except ValueError as spill:
-        print(spill, file=sys.stderr)
+        progress.detail(spill, err=True)
         return 1
     return 0
 

@@ -1,0 +1,190 @@
+diff --git a/internal/config/cache.go b/internal/config/cache.go
+index 696324cb..52e7ac74 100644
+--- a/internal/config/cache.go
++++ b/internal/config/cache.go
+@@ -105,7 +105,7 @@ type RedisCacheConfig struct {
+ 	NetTimeout      time.Duration `json:"netTimeout" mapstructure:"net_timeout" yaml:"net_timeout"`
+ 	CaCertBytes     string        `json:"-" mapstructure:"ca_cert_bytes" yaml:"-"`
+ 	CaCertPath      string        `json:"-" mapstructure:"ca_cert_path" yaml:"-"`
+-	InsecureSkipTLS bool          `json:"insecureSkipTLS,omitempty" mapstructure:"insecure_skip_tls" yaml:"insecure_skip_tls,omitempty"`
++	InsecureSkipTLS bool          `json:"insecureSkipTls,omitempty" mapstructure:"insecure_skip_tls" yaml:"insecure_skip_tls,omitempty"`
+ }
+ 
+ func (c *CacheConfig) validate() error {
+diff --git a/internal/config/config_test.go b/internal/config/config_test.go
+index b06baf28..d17f1fb7 100644
+--- a/internal/config/config_test.go
++++ b/internal/config/config_test.go
+@@ -312,6 +312,68 @@ func TestLoad(t *testing.T) {
+ 				return cfg
+ 			},
+ 		},
++		{
++			name: "cache redis with ca cert path",
++			path: "./testdata/cache/redis-ca-path.yml",
++			expected: func() *Config {
++				cfg := Default()
++				cfg.Cache.Enabled = true
++				cfg.Cache.Backend = CacheRedis
++				cfg.Cache.TTL = 60 * time.Second
++				cfg.Cache.Redis.RequireTLS = true
++				cfg.Cache.Redis.DB = 1
++				cfg.Cache.Redis.Password = "s3cr3t!"
++				cfg.Cache.Redis.PoolSize = 50
++				cfg.Cache.Redis.MinIdleConn = 2
++				cfg.Cache.Redis.ConnMaxIdleTime = 10 * time.Minute
++				cfg.Cache.Redis.NetTimeout = 500 * time.Millisecond
++				cfg.Cache.Redis.CaCertPath = "./testdata/ssl_cert.pem"
++				return cfg
++			},
++		},
++		{
++			name: "cache redis with ca cert bytes",
++			path: "./testdata/cache/redis-ca-bytes.yml",
++			expected: func() *Config {
++				cfg := Default()
++				cfg.Cache.Enabled = true
++				cfg.Cache.Backend = CacheRedis
++				cfg.Cache.TTL = 60 * time.Second
++				cfg.Cache.Redis.RequireTLS = true
++				cfg.Cache.Redis.DB = 1
++				cfg.Cache.Redis.Password = "s3cr3t!"
++				cfg.Cache.Redis.PoolSize = 50
++				cfg.Cache.Redis.MinIdleConn = 2
++				cfg.Cache.Redis.ConnMaxIdleTime = 10 * time.Minute
++				cfg.Cache.Redis.NetTimeout = 500 * time.Millisecond
++				cfg.Cache.Redis.CaCertBytes = "-----BEGIN CERTIFICATE-----\nMIIBfake\n-----END CERTIFICATE-----\n"
++				return cfg
++			},
++		},
++		{
++			name: "cache redis with insecure skip tls",
++			path: "./testdata/cache/redis-tls-insecure.yml",
++			expected: func() *Config {
++				cfg := Default()
++				cfg.Cache.Enabled = true
++				cfg.Cache.Backend = CacheRedis
++				cfg.Cache.TTL = 60 * time.Second
++				cfg.Cache.Redis.RequireTLS = true
++				cfg.Cache.Redis.InsecureSkipTLS = true
++				cfg.Cache.Redis.DB = 1
++				cfg.Cache.Redis.Password = "s3cr3t!"
++				cfg.Cache.Redis.PoolSize = 50
++				cfg.Cache.Redis.MinIdleConn = 2
++				cfg.Cache.Redis.ConnMaxIdleTime = 10 * time.Minute
++				cfg.Cache.Redis.NetTimeout = 500 * time.Millisecond
++				return cfg
++			},
++		},
++		{
++			name:    "cache redis with both ca cert path and bytes",
++			path:    "./testdata/cache/redis-ca-invalid.yml",
++			wantErr: errors.New("please provide exclusively one of ca_cert_bytes or ca_cert_path"),
++		},
+ 		{
+ 			name: "cache redis with username",
+ 			path: "./testdata/cache/redis-username.yml",
+diff --git a/internal/cache/redis/client.go b/internal/cache/redis/client.go
+index 3c30c0b2..674d8b64 100644
+--- a/internal/cache/redis/client.go
++++ b/internal/cache/redis/client.go
+@@ -4,27 +4,37 @@ import (
+ 	"crypto/tls"
+ 	"crypto/x509"
+ 	"fmt"
++	"os"
+ 
+ 	goredis "github.com/redis/go-redis/v9"
+ 	"go.flipt.io/flipt/internal/config"
+ )
+ 
++// NewClient constructs a redis client from the provided configuration.
+ func NewClient(cfg config.RedisCacheConfig) (*goredis.Client, error) {
+ 	var tlsConfig *tls.Config
+ 	if cfg.RequireTLS {
+ 		tlsConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+ 		tlsConfig.InsecureSkipVerify = cfg.InsecureSkipTLS
+-		caBundle, err := caBundle(cfg)
+-		if err != nil {
+-			return nil, err
+-		}
+-		if len(caBundle) > 0 {
+-			rootCAs, err := x509.SystemCertPool()
++
++		if !cfg.InsecureSkipTLS {
++			caBundle, err := caBundle(cfg)
+ 			if err != nil {
+ 				return nil, err
+ 			}
+-			rootCAs.AppendCertsFromPEM(caBundle)
+-			tlsConfig.RootCAs = rootCAs
++
++			if len(caBundle) > 0 {
++				rootCAs, err := x509.SystemCertPool()
++				if err != nil {
++					return nil, err
++				}
++
++				if !rootCAs.AppendCertsFromPEM(caBundle) {
++					return nil, fmt.Errorf("connecting to redis: unable to append CA certificate(s) to pool")
++				}
++
++				tlsConfig.RootCAs = rootCAs
++			}
+ 		}
+ 	}
+ 
+@@ -42,5 +52,25 @@ func NewClient(cfg config.RedisCacheConfig) (*goredis.Client, error) {
+ 		WriteTimeout:    cfg.NetTimeout * 2,
+ 		PoolTimeout:     cfg.NetTimeout * 2,
+ 	})
++
+ 	return rdb, nil
+ }
++
++// caBundle returns the CA certificate data to trust, taken from either
++// ca_cert_bytes or the file at ca_cert_path. It returns nil if neither is set.
++func caBundle(cfg config.RedisCacheConfig) ([]byte, error) {
++	if cfg.CaCertBytes != "" {
++		return []byte(cfg.CaCertBytes), nil
++	}
++
++	if cfg.CaCertPath != "" {
++		data, err := os.ReadFile(cfg.CaCertPath)
++		if err != nil {
++			return nil, fmt.Errorf("reading redis CA certificate: %w", err)
++		}
++
++		return data, nil
++	}
++
++	return nil, nil
++}
+diff --git a/internal/config/cache.go b/internal/config/cache.go
+index f4695b95..696324cb 100644
+--- a/internal/config/cache.go
++++ b/internal/config/cache.go
+@@ -2,6 +2,7 @@ package config
+ 
+ import (
+ 	"encoding/json"
++	"errors"
+ 	"time"
+ 
+ 	"github.com/spf13/viper"
+@@ -102,4 +103,15 @@ type RedisCacheConfig struct {
+ 	MinIdleConn     int           `json:"minIdleConn" mapstructure:"min_idle_conn" yaml:"min_idle_conn"`
+ 	ConnMaxIdleTime time.Duration `json:"connMaxIdleTime" mapstructure:"conn_max_idle_time" yaml:"conn_max_idle_time"`
+ 	NetTimeout      time.Duration `json:"netTimeout" mapstructure:"net_timeout" yaml:"net_timeout"`
++	CaCertBytes     string        `json:"-" mapstructure:"ca_cert_bytes" yaml:"-"`
++	CaCertPath      string        `json:"-" mapstructure:"ca_cert_path" yaml:"-"`
++	InsecureSkipTLS bool          `json:"insecureSkipTLS,omitempty" mapstructure:"insecure_skip_tls" yaml:"insecure_skip_tls,omitempty"`
++}
++
++func (c *CacheConfig) validate() error {
++	if c.Redis.CaCertPath != "" && c.Redis.CaCertBytes != "" {
++		return errors.New("please provide exclusively one of ca_cert_bytes or ca_cert_path")
++	}
++
++	return nil
+ }

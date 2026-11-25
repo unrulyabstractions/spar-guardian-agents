@@ -1,21 +1,21 @@
 """The key a box gets must be capped at OpenRouter, so OpenRouter itself stops the spending whatever runs on the box.
 
-    uv run python -m scripts.box.box_key check OPENROUTER_API_KEY --box-id 58710271
+    uv run python -m scripts.box.box_key check OPENROUTER_API_KEY --box-id 58710271 [--main-key]
 
-box_run.sh sends a box only BOX_<name> (BOX_OPENROUTER_API_KEY): a key made for one launch, with a credit limit set
-in OpenRouter's dashboard (Keys, then a limit in dollars). This check reads that key from the environment, never from
-the command line, never printing it, and asks OpenRouter's GET /api/v1/key, which costs nothing. It refuses:
-- no box key;
-- the main key itself (its limit covers everything else on the account);
+box_run.sh sends a box one key: with --main-key OPENROUTER_API_KEY itself, which every study's boxes take by the
+user's word (CLAUDE.md §3a), else BOX_OPENROUTER_API_KEY, a key made for one launch with a credit limit set in
+OpenRouter's dashboard. This check reads that key from the environment, never from the command line, never printing it,
+and asks OpenRouter's GET /api/v1/key, which costs nothing. It refuses:
+- no key;
+- without --main-key, the main key itself under the box key's name (its limit covers everything else on the account);
 - a key with no credit limit;
-- a key with less left than the box's runs could spend at their caps (each run's cost_limit_usd, its --set or the
-  default in src/models/cost_cap.py, summed over the jobs study_table.py gives the box).
-Exit 0 when the key passes, 1 with every reason when it does not. On 2026-11-01 phase two ran on the main key with
---allow-main-key; that flag is gone.
-
---main-key checks the main key itself, for box_run.sh --main-key. The user ordered it for study_exploration_1 on
-2026-11-02 ("Capped key NO, JUST USE THE KEY WE HAVE"). It lifts the refusal of the main key alone: OpenRouter must
-still cap the key, and enough must be left for the box's runs.
+- a key with less left than the runs of every open box that holds it may spend at their caps: this box and each other
+  registered box not destroyed whose entry records that it got the key of this variable (key_sent). A box's need is the
+  sum of each run's cost_limit_usd (the plan's or the target's or the default in src/models/cost_cap.py) over every run
+  its targets may make, the gated arms too, as its pinned commit's plan and spec give them (fleet_registry.entry_box).
+Beside the need it prints what this machine's own live runs may spend at their caps, which the key may share. A pass
+records key_sent in the box's entry, since box_run.sh sends the key next. Exit 0 when the key passes, 1 with every
+reason when it does not.
 """
 from __future__ import annotations
 
@@ -27,8 +27,7 @@ import urllib.request
 from typing import Callable
 
 from scripts.box import fleet_registry
-from scripts.box.study_table import box_jobs, find_box
-from src.models.cost_cap import DEFAULT_CAP_USD
+from scripts.study import run_study
 
 KEY_URL = "https://openrouter.ai/api/v1/key"
 
@@ -40,20 +39,21 @@ def key_info(key: str, opener: Callable = urllib.request.urlopen) -> dict:
         return json.load(response)["data"]
 
 
-def run_cap(arguments: list[str]) -> float:
-    """A job's dollar cap: its --set cost_limit_usd=X, else the default every run gets."""
-    pairs = [arguments[i + 1] for i, arg in enumerate(arguments[:-1]) if arg == "--set"]
-    caps = [float(pair.split("=", 1)[1]) for pair in pairs if pair.startswith("cost_limit_usd=")]
-    return caps[-1] if caps else DEFAULT_CAP_USD
-
-
-def box_worst_case(instance_id: int) -> tuple[int, float]:
-    """(the box's runs, what they may spend at their caps), from the registry and the study table."""
-    entry = fleet_registry.registered(fleet_registry.load_registry(), instance_id)
-    if entry is None:
-        raise ValueError(f"box {instance_id} is not in the registry")
-    jobs = box_jobs(find_box(entry["box"]))
-    return len(jobs), sum(run_cap(job.arguments) for job in jobs)
+def holders_need(instance_id: int, variable: str) -> list[tuple[int, int, float]]:
+    """(id, runs, what they may spend at their caps) of this box, then of every other open box whose entry records the
+    key of this variable, each from its targets on its pinned commit. ValueError for a box not registered or destroyed,
+    or a plan that no longer holds a box's targets."""
+    registry = fleet_registry.load_registry()
+    entry = fleet_registry.registered(registry, instance_id)
+    if entry is None or entry["destroyed"]:
+        raise ValueError(f"box {instance_id} is not a registered box that is not destroyed")
+    others = [box for box in registry["boxes"]
+              if box["id"] != instance_id and not box["destroyed"] and box.get("key_sent") == variable]
+    out = []
+    for box in [entry, *others]:
+        plan = fleet_registry.entry_box(box)
+        out.append((box["id"], len(plan.runs), plan.cap_usd))
+    return out
 
 
 def refusals(box_key: str | None, main_key: str | None, info: dict | None, worst_case_usd: float) -> list[str]:
@@ -69,9 +69,16 @@ def refusals(box_key: str | None, main_key: str | None, info: dict | None, worst
     if limit is None:
         reasons.append("the key has no credit limit; set one in OpenRouter's dashboard")
     elif remaining is not None and remaining < worst_case_usd:
-        reasons.append(f"the key has ${remaining:.2f} left, less than the ${worst_case_usd:.2f} these runs may "
-                       "spend at their cap")
+        reasons.append(f"the key has ${remaining:.2f} left, less than the ${worst_case_usd:.2f} the runs of the boxes "
+                       "that hold it may spend at their caps")
     return reasons
+
+
+def need_lines(need: list[tuple[int, int, float]], here: dict[str, float]) -> list[str]:
+    """The need, box by box, then this machine's live runs beside it."""
+    out = [f"   box {box_id}: {runs} runs may spend ${cap:.2f} at their caps" for box_id, runs, cap in need]
+    return out + [f"   beside them, this machine's {len(here)} live runs may spend ${sum(here.values()):.2f} at their "
+                  f"caps"]
 
 
 def main(argv: list[str], opener: Callable = urllib.request.urlopen) -> int:
@@ -85,7 +92,12 @@ def main(argv: list[str], opener: Callable = urllib.request.urlopen) -> int:
     args = parser.parse_args(argv)
     variable = args.name if args.main_key else f"BOX_{args.name}"
     box_key, main_key = os.environ.get(variable), None if args.main_key else os.environ.get(args.name)
-    runs, worst = box_worst_case(args.box_id)
+    try:
+        need = holders_need(args.box_id, variable)
+    except ValueError as error:
+        print(f"refused: {error}")
+        return 1
+    worst, runs = sum(cap for _, _, cap in need), sum(n for _, n, _ in need)
     info = None
     if box_key:
         try:
@@ -94,11 +106,13 @@ def main(argv: list[str], opener: Callable = urllib.request.urlopen) -> int:
             print(f"refused: OpenRouter's key record could not be read ({type(error).__name__})")
             return 1
     reasons = refusals(box_key, main_key, info, worst)
+    lines = need_lines(need, run_study.live_caps())
     if reasons:
-        print("refused: " + "; ".join(reasons))
+        print("refused: " + "; ".join(reasons) + "\n" + "\n".join(lines))
         return 1
-    print(f"== {variable}: limit ${info['limit']:.2f}, ${info.get('limit_remaining') or 0:.2f} left, "
-          f"the box's {runs} runs may spend ${worst:.2f} at their caps")
+    print(f"== {variable}: limit ${info['limit']:.2f}, ${info.get('limit_remaining') or 0:.2f} left; "
+          f"{len(need)} boxes hold it, their {runs} runs may spend ${worst:.2f} at their caps\n" + "\n".join(lines))
+    fleet_registry.update_box(args.box_id, key_sent=variable)
     return 0
 
 

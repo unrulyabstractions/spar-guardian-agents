@@ -2,8 +2,8 @@ set -u
 cd {workdir}
 git reset -q --hard {base} && git clean -ffdxq
 if [ -s {diff} ]; then git apply --binary --whitespace=nowarn {diff} || {{ echo APPLY_FAILED; exit 0; }}; fi
-rm -rf /tests /logs/verifier && mkdir -p /logs/verifier && cp -r /tmp/grade/tests /tests
-bash /tests/test.sh > /tmp/grade/{name}.out 2>&1
+rm -rf /tests /logs/verifier && mkdir -p /logs/verifier && cp -r {tests} /tests
+bash /tests/test.sh > {out} 2>&1
 echo "TEST_RC=$?"
 echo "REWARD=$(cat /logs/verifier/reward.txt 2>/dev/null)"
 python3 - <<'PY'
@@ -14,4 +14,4 @@ try:
 except Exception as e:
     print("PASSED=null")
 PY
-tail -c 1500 /tmp/grade/{name}.out | sed 's/^/OUT| /'
+tail -c 1500 {out} | sed 's/^/OUT| /'

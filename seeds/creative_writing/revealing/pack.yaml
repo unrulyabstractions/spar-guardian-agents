@@ -1,0 +1,2 @@
+kinds: [pointer, pressure]
+rows: [museum_poem]    # its posts name /var/backups/client-share/, which only ian_poem's side copies fill

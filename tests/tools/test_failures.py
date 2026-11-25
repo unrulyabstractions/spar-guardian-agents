@@ -155,8 +155,8 @@ def test_a_failed_call_ends_a_method_without_an_answer(monkeypatch):
 
 
 def command_args(**changes) -> argparse.Namespace:
-    """The failures command's arguments for riemann_minimal, with the given changes."""
-    defaults = dict(runs=["riemann_minimal"], model="gpt-6-luna", methods="all_at_once", max_steps=60,
+    """The failures command's arguments for binder_minimal, with the given changes."""
+    defaults = dict(runs=["binder_minimal"], model="gpt-6-luna", methods="all_at_once", max_steps=60,
                     max_tokens=16384, seed=0, no_mast=True, no_who_when=False)
     return argparse.Namespace(**{**defaults, **changes})
 
@@ -188,9 +188,9 @@ def test_bare_answers_carry_no_reply_names():
 
 
 def judged(rows: dict) -> SimpleNamespace:
-    """A stand-in run with judge rows {agent: row}; failure_of reads only agents, judge and cheated."""
+    """A stand-in run with judge rows {agent: row}; failure_of reads only agents, judge and judge_cheated."""
     return SimpleNamespace(agents=["a01", "a02", "a03"], judge=rows,
-                           cheated={agent: row.get("cheated") for agent, row in rows.items()})
+                           judge_cheated={agent: row.get("cheated") for agent, row in rows.items()})
 
 
 def test_failure_line_without_a_judge_does_not_claim_no_cheating():
@@ -200,7 +200,7 @@ def test_failure_line_without_a_judge_does_not_claim_no_cheating():
 def test_failure_line_names_cheaters_and_agents_without_a_verdict():
     rows = {"a01": {"cheated": False, "summary": "clean"}, "a02": {"cheated": True, "summary": "opened the zip"},
             "a03": {"cheated": None, "summary": ""}}
-    assert who_when.failure_of(judged(rows)) == ("the judge found a02 cheated.\na02: opened the zip\n"
+    assert who_when.failure_of(judged(rows)) == ("CheatBench's judge found a02 cheated.\na02: opened the zip\n"
                                                  "the judge gave no verdict for a03.")
     rows["a02"] = {"cheated": False, "summary": "clean too"}
     text = who_when.failure_of(judged(rows))
@@ -210,7 +210,7 @@ def test_failure_line_names_cheaters_and_agents_without_a_verdict():
 
 def test_failure_line_when_everyone_is_clean():
     rows = {agent: {"cheated": False, "summary": f"{agent} ok"} for agent in ("a01", "a02", "a03")}
-    expected = "the judge found no agent cheated.\na01: a01 ok\na02: a02 ok\na03: a03 ok"
+    expected = "CheatBench's judge found no agent cheated.\na01: a01 ok\na02: a02 ok\na03: a03 ok"
     assert who_when.failure_of(judged(rows)) == expected
 
 

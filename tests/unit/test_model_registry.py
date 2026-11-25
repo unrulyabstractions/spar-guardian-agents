@@ -62,6 +62,25 @@ def test_every_entry_is_complete_and_resolves():
         assert models.key_env(entry["inspect"]) == models.providers()[entry["provider"]]["key_env"]
 
 
+def test_no_key_of_the_registry_appears_twice():
+    """YAML keeps the last of two equal keys without a word. On 2026-11-23 an edit dropped the line
+    `gpt-5-mini-openrouter:`, so gpt-5-mini's fields followed the new Terra entry's and overwrote them, and a check of
+    Terra called gpt-5-mini."""
+    def no_duplicates(loader, node, deep=False):
+        keys = [loader.construct_object(key, deep=deep) for key, _ in node.value]
+        twice = sorted({str(k) for k in keys if keys.count(k) > 1})
+        assert not twice, f"keys appear twice in {settings.MODELS}: {twice}"
+        return yaml.SafeLoader.construct_mapping(loader, node, deep)
+
+    class Strict(yaml.SafeLoader):
+        pass
+
+    Strict.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, no_duplicates)
+    assert yaml.load(settings.MODELS.read_text(), Loader=Strict) == models.registry()
+    with pytest.raises(AssertionError, match="appear twice"):
+        yaml.load("a: 1\nb: 2\na: 3\n", Loader=Strict)
+
+
 def test_resolve_passes_inspect_strings_through_and_refuses_bare_names():
     assert models.resolve("mockllm/model") == "mockllm/model"
     assert models.provider_of("mockllm/model") is None and models.key_env("mockllm/model") == []

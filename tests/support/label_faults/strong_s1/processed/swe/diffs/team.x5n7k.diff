@@ -1,0 +1,150 @@
+diff --git a/internal/config/cache.go b/internal/config/cache.go
+index f4695b95..648b0811 100644
+--- a/internal/config/cache.go
++++ b/internal/config/cache.go
+@@ -2,6 +2,7 @@ package config
+ 
+ import (
+ 	"encoding/json"
++	"errors"
+ 	"time"
+ 
+ 	"github.com/spf13/viper"
+@@ -10,6 +11,12 @@ import (
+ // cheers up the unparam linter
+ var _ defaulter = (*CacheConfig)(nil)
+ 
++// ensure the cache config is validated after unmarshalling
++var _ validator = (*CacheConfig)(nil)
++
++// errRedisCATwice is returned when a redis CA bundle is supplied both inline and by path.
++var errRedisCATwice = errors.New("please provide exclusively one of ca_cert_bytes or ca_cert_path")
++
+ // CacheConfig contains fields, which enable and configure
+ // Flipt's various caching mechanisms.
+ //
+@@ -42,6 +49,15 @@ func (c *CacheConfig) setDefaults(v *viper.Viper) error {
+ 	return nil
+ }
+ 
++// validate ensures the redis cache TLS options are not contradictory.
++func (c *CacheConfig) validate() error {
++	if c.Redis.CaCertBytes != "" && c.Redis.CaCertPath != "" {
++		return errRedisCATwice
++	}
++
++	return nil
++}
++
+ // IsZero returns true if the cache config is not enabled.
+ // This is used for marshalling to YAML for `config init`.
+ func (c CacheConfig) IsZero() bool {
+@@ -102,4 +118,10 @@ type RedisCacheConfig struct {
+ 	MinIdleConn     int           `json:"minIdleConn" mapstructure:"min_idle_conn" yaml:"min_idle_conn"`
+ 	ConnMaxIdleTime time.Duration `json:"connMaxIdleTime" mapstructure:"conn_max_idle_time" yaml:"conn_max_idle_time"`
+ 	NetTimeout      time.Duration `json:"netTimeout" mapstructure:"net_timeout" yaml:"net_timeout"`
++	// CaCertBytes holds PEM encoded certificate authorities to trust, inline.
++	CaCertBytes string `json:"-" mapstructure:"ca_cert_bytes" yaml:"-"`
++	// CaCertPath names a file containing PEM encoded certificate authorities to trust.
++	CaCertPath string `json:"-" mapstructure:"ca_cert_path" yaml:"-"`
++	// InsecureSkipTLS disables verification of the server's certificate.
++	InsecureSkipTLS bool `json:"-" mapstructure:"insecure_skip_tls" yaml:"-"`
+ }
+diff --git a/internal/config/testdata/cache/redis-ca-bytes.yml b/internal/config/testdata/cache/redis-ca-bytes.yml
+new file mode 100644
+index 00000000..52e87e27
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-bytes.yml
+@@ -0,0 +1,26 @@
++# trust a CA bundle supplied inline
++cache:
++  enabled: true
++  backend: redis
++  ttl: 60s
++  redis:
++    ca_cert_bytes: |
++      -----BEGIN CERTIFICATE-----
++      MIIDHTCCAgWgAwIBAgIUQPkE3/loh5ReWI3Tllu+ms9thG8wDQYJKoZIhvcNAQEL
++      BQAwHjEcMBoGA1UEAwwTZmxpcHQtdGVzdC1yZWRpcy1jYTAeFw0yNjExMjQxNDI4
++      MzdaFw0zNjExMjExNDI4MzdaMB4xHDAaBgNVBAMME2ZsaXB0LXRlc3QtcmVkaXMt
++      Y2EwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC+fBJvOxuP8lEWqqZg
++      0Os06J0ECtWDj2VAoXc5TC99gQeF1Szs3G1w/4Dt4E8wg0l+IRf79h7bP+iIh0wC
++      XosiudbUUcwQZ21DMBNM+/Frv3n5p1Jb300chUYsixJFBdxUQvIZfB37vZVMQOjx
++      5qtxjQ13O4BD3swlLraZ48IgXd3xYsqbYU6sj13Wy3lYjkulGrbA5vtKv18kYwYA
++      309S9/MgQKSuxVlkh8FE/b3Orb0zKaHO11pEDWAyQiabyVdjZzH/zG6iyL0yE3lF
++      4rE63wbiZnZ5wBBmppbZUuRp2hw95+Ky7Gng98h7FjufMmVGuy4HDVQRBnOqT51f
++      aS61AgMBAAGjUzBRMB0GA1UdDgQWBBTvmpnsExRjoI2pwm6AzuDsTomZNDAfBgNV
++      HSMEGDAWgBTvmpnsExRjoI2pwm6AzuDsTomZNDAPBgNVHRMBAf8EBTADAQH/MA0G
++      CSqGSIb3DQEBCwUAA4IBAQCFnpDhOG7ur2DcDJnFzSRB9VHCbsWKVqhRlbJh4hAH
++      SLXKsnobxZqcVQta6MPSwp+HhXTV6NnjF17Ae/CGNO6awi9z0nYqtxQju47D+yr7
++      PLWiUcrq2U6zFyLbqlKgvwfnJ8P8yfo9aoPHb5T6ahx+AlXuZwHjdLfIZuo1MRgT
++      wyAIyQ342n1c80vAu4U+4UGywtjH/FHPxhwgBEVapdiQlA5qtdtO/ArEJFV1W3Zq
++      3TFV5rELbKau6m/x2eWTVd8nZSHv/EnqkbKQdpP+l33WpFJPWJHETPDe1niN/yAn
++      EwEcsIG7iacO7RwGnKik2Hehj6RnISNuLE4OZqRK+bwH
++      -----END CERTIFICATE-----
+diff --git a/internal/config/testdata/cache/redis-ca-invalid.yml b/internal/config/testdata/cache/redis-ca-invalid.yml
+new file mode 100644
+index 00000000..0d27da55
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-invalid.yml
+@@ -0,0 +1,9 @@
++# both CA sources at once is invalid
++cache:
++  enabled: true
++  backend: redis
++  ttl: 60s
++  redis:
++    ca_cert_path: /etc/ssl/redis-ca.pem
++    ca_cert_bytes: |
++      placeholder-certificate-data
+diff --git a/internal/config/testdata/cache/redis-ca-path.yml b/internal/config/testdata/cache/redis-ca-path.yml
+new file mode 100644
+index 00000000..2e8f1006
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-path.yml
+@@ -0,0 +1,7 @@
++# trust a CA bundle read from a file
++cache:
++  enabled: true
++  backend: redis
++  ttl: 60s
++  redis:
++    ca_cert_path: internal/config/testdata/redis/redis-ca.pem
+diff --git a/internal/config/testdata/cache/redis-tls-insecure.yml b/internal/config/testdata/cache/redis-tls-insecure.yml
+new file mode 100644
+index 00000000..11a1dda2
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-tls-insecure.yml
+@@ -0,0 +1,7 @@
++# connect over TLS but do not verify the server certificate
++cache:
++  enabled: true
++  backend: redis
++  ttl: 60s
++  redis:
++    insecure_skip_tls: true
+diff --git a/internal/config/testdata/redis/redis-ca.pem b/internal/config/testdata/redis/redis-ca.pem
+new file mode 100644
+index 00000000..e1845aee
+--- /dev/null
++++ b/internal/config/testdata/redis/redis-ca.pem
+@@ -0,0 +1,19 @@
++-----BEGIN CERTIFICATE-----
++MIIDHTCCAgWgAwIBAgIUQPkE3/loh5ReWI3Tllu+ms9thG8wDQYJKoZIhvcNAQEL
++BQAwHjEcMBoGA1UEAwwTZmxpcHQtdGVzdC1yZWRpcy1jYTAeFw0yNjExMjQxNDI4
++MzdaFw0zNjExMjExNDI4MzdaMB4xHDAaBgNVBAMME2ZsaXB0LXRlc3QtcmVkaXMt
++Y2EwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC+fBJvOxuP8lEWqqZg
++0Os06J0ECtWDj2VAoXc5TC99gQeF1Szs3G1w/4Dt4E8wg0l+IRf79h7bP+iIh0wC
++XosiudbUUcwQZ21DMBNM+/Frv3n5p1Jb300chUYsixJFBdxUQvIZfB37vZVMQOjx
++5qtxjQ13O4BD3swlLraZ48IgXd3xYsqbYU6sj13Wy3lYjkulGrbA5vtKv18kYwYA
++309S9/MgQKSuxVlkh8FE/b3Orb0zKaHO11pEDWAyQiabyVdjZzH/zG6iyL0yE3lF
++4rE63wbiZnZ5wBBmppbZUuRp2hw95+Ky7Gng98h7FjufMmVGuy4HDVQRBnOqT51f
++aS61AgMBAAGjUzBRMB0GA1UdDgQWBBTvmpnsExRjoI2pwm6AzuDsTomZNDAfBgNV
++HSMEGDAWgBTvmpnsExRjoI2pwm6AzuDsTomZNDAPBgNVHRMBAf8EBTADAQH/MA0G
++CSqGSIb3DQEBCwUAA4IBAQCFnpDhOG7ur2DcDJnFzSRB9VHCbsWKVqhRlbJh4hAH
++SLXKsnobxZqcVQta6MPSwp+HhXTV6NnjF17Ae/CGNO6awi9z0nYqtxQju47D+yr7
++PLWiUcrq2U6zFyLbqlKgvwfnJ8P8yfo9aoPHb5T6ahx+AlXuZwHjdLfIZuo1MRgT
++wyAIyQ342n1c80vAu4U+4UGywtjH/FHPxhwgBEVapdiQlA5qtdtO/ArEJFV1W3Zq
++3TFV5rELbKau6m/x2eWTVd8nZSHv/EnqkbKQdpP+l33WpFJPWJHETPDe1niN/yAn
++EwEcsIG7iacO7RwGnKik2Hehj6RnISNuLE4OZqRK+bwH
++-----END CERTIFICATE-----

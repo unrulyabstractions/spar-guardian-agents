@@ -1,0 +1,45 @@
+{
+ "issue": "flipt-02e2",
+ "ok": true,
+ "problems": [],
+ "applies_alone": {
+  "whole": true,
+  "A": true,
+  "B": true,
+  "C": true
+ },
+ "builds_alone": {
+  "A": true,
+  "B": false,
+  "C": false
+ },
+ "build_output": {
+  "B": "status=1\n# go.flipt.io/flipt/internal/cache/redis\ninternal/cache/redis/client.go:10:9: cfg.CaCertBytes undefined (type \"go.flipt.io/flipt/internal/config\".RedisCacheConfig has no field or method CaCertBytes)\ninternal/cache/redis/client.go:11:21: cfg.CaCertBytes undefined (type \"go.flipt.io/flipt/internal/config\".RedisCacheConfig has no field or method CaCertBytes)\ninternal/cache/redis/client.go:13:9: cfg.CaCertPath undefined (type \"go.flipt.io/flipt/internal/config\".RedisCacheConfig has no field or method CaCertPath)\ninternal/cache/redis/client.go:14:33: cfg.CaCertPath undefined (type \"go.flipt.io/flipt/internal/config\".RedisCacheConfig has no field or method CaCertPath)",
+  "C": "status=1\n# go.flipt.io/flipt/internal/cache/redis\ninternal/cache/redis/client.go:16:38: cfg.InsecureSkipTLS undefined (type \"go.flipt.io/flipt/internal/config\".RedisCacheConfig has no field or method InsecureSkipTLS)\ninternal/cache/redis/client.go:17:20: undefined: caBundle"
+ },
+ "added_lines": {
+  "whole": 184,
+  "A": 62,
+  "B": 78,
+  "C": 50
+ },
+ "distinctive_lines": {
+  "fix": 48,
+  "A": 13,
+  "B": 21,
+  "C": 14,
+  "hidden_tests": 33
+ },
+ "shared_scaffolding": [
+  "return nil, err",
+  ")",
+  "package redis",
+  "import (",
+  "if err != nil {",
+  "})",
+  "\"go.flipt.io/flipt/internal/config\"",
+  "}"
+ ],
+ "repeated_lines": {},
+ "generic_lines_dropped": 11
+}

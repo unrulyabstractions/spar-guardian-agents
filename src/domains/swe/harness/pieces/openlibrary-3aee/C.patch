@@ -1,0 +1,48 @@
+diff --git a/openlibrary/core/wikidata.py b/openlibrary/core/wikidata.py
+index 95c4bf331..52654a28a 100644
+--- a/openlibrary/core/wikidata.py
++++ b/openlibrary/core/wikidata.py
+@@ -101,7 +101,7 @@ class WikidataEntity:
+             if "value" in statement and "content" in statement["value"]
+         ]
+ 
+-    def get_wiki_profiles_to_render(self, language: str) -> list[dict]:
++    def _get_wiki_profiles(self, language: str) -> list[dict]:
+         """
+         Get formatted Wikipedia and Wikidata profile data for rendering.
+ 
+@@ -136,7 +136,7 @@ class WikidataEntity:
+ 
+         return profiles
+ 
+-    def get_profiles_to_render(self) -> list[dict]:
++    def get_external_profiles(self, language: str) -> list[dict]:
+         """
+         Get formatted social profile data for all configured social profiles.
+ 
+@@ -144,6 +144,8 @@ class WikidataEntity:
+             List of dicts containing url, icon_url, and label for all social profiles
+         """
+         profiles = []
++        profiles.extend(self._get_wiki_profiles(language))
++
+         for profile_config in SOCIAL_PROFILE_CONFIGS:
+             values = self.get_statement_values(profile_config["wikidata_property"])
+             profiles.extend(
+diff --git a/openlibrary/templates/authors/infobox.html b/openlibrary/templates/authors/infobox.html
+index 4208f42d2..26685a04d 100644
+--- a/openlibrary/templates/authors/infobox.html
++++ b/openlibrary/templates/authors/infobox.html
+@@ -38,11 +38,7 @@ $def render_social_icon(url, icon_url, title):
+     <hr>
+     <div class="profile-icon-container">
+         $if wikidata:
+-            $ wiki_profiles = wikidata.get_wiki_profiles_to_render(i18n.get_locale())
+-            $for profile in wiki_profiles:
+-                $:render_social_icon(profile['url'], profile['icon_url'], profile['label'])
+-
+-            $ social_profiles = wikidata.get_profiles_to_render()
++            $ social_profiles = wikidata.get_external_profiles(i18n.get_locale())
+             $for profile in social_profiles:
+                 $:render_social_icon(profile['url'], profile['icon_url'], profile['label'])
+     </div>

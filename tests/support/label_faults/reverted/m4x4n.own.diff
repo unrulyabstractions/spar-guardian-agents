@@ -1,0 +1,113 @@
+diff --git a/internal/cache/redis/client.go b/internal/cache/redis/client.go
+index e5ac7743..cf7d032a 100644
+--- a/internal/cache/redis/client.go
++++ b/internal/cache/redis/client.go
+@@ -67,11 +67,18 @@ func tlsConfig(cfg config.RedisCacheConfig) (*tls.Config, error) {
+ 		return tlsConfig, nil
+ 	}
+ 
+-	rootCAs := x509.NewCertPool()
+-	if !rootCAs.AppendCertsFromPEM(caBundle) {
+-		return nil, errors.New("unable to parse a certificate from ca_cert_path or ca_cert_bytes")
++	// the configured authority is appended to the system pool rather than
++	// replacing it: a bundle carrying only an intermediate, or a deployment
++	// which talks to both privately and publicly signed servers, must not
++	// lose the trust it already has.
++	rootCAs, err := x509.SystemCertPool()
++	if err != nil || rootCAs == nil {
++		// a host without a readable system store still gets to trust the
++		// bundle it was handed.
++		rootCAs = x509.NewCertPool()
+ 	}
+ 
++	rootCAs.AppendCertsFromPEM(caBundle)
+ 	tlsConfig.RootCAs = rootCAs
+ 
+ 	return tlsConfig, nil
+diff --git a/internal/cache/redis/client.go b/internal/cache/redis/client.go
+new file mode 100644
+index 00000000..2c93cb0e
+--- /dev/null
++++ b/internal/cache/redis/client.go
+@@ -0,0 +1,81 @@
++package redis
++
++import (
++	"crypto/tls"
++	"crypto/x509"
++	"fmt"
++	"os"
++
++	goredis "github.com/redis/go-redis/v9"
++	"go.flipt.io/flipt/internal/config"
++)
++
++// NewClient constructs a redis client from the provided configuration.
++//
++// When TLS is requested (require_tls) the client negotiates a connection with a
++// minimum of TLS 1.2 and trusts, in order of precedence:
++//
++//   - an inline certificate authority bundle (ca_cert_bytes)
++//   - a certificate authority bundle read from disk (ca_cert_path)
++//   - the system certificate pool, when neither of the above are supplied
++//
++// Certificate verification can be disabled entirely via insecure_skip_tls.
++func NewClient(cfg config.RedisCacheConfig) (*goredis.Client, error) {
++	var tlsConfig *tls.Config
++	if cfg.RequireTLS {
++		tlsConfig = &tls.Config{
++			MinVersion: tls.VersionTLS12,
++		}
++
++		tlsConfig.InsecureSkipVerify = cfg.InsecureSkipTLS
++
++		caBundle, err := caBundle(cfg)
++		if err != nil {
++			return nil, err
++		}
++
++		// when no custom certificate authority is supplied we leave RootCAs
++		// unset, which defers trust to the systems certificate pool
++		if len(caBundle) > 0 {
++			rootCAs, err := x509.SystemCertPool()
++			if err != nil {
++				return nil, err
++			}
++
++			rootCAs.AppendCertsFromPEM(caBundle)
++			tlsConfig.RootCAs = rootCAs
++		}
++	}
++
++	rdb := goredis.NewClient(&goredis.Options{
++		Addr:            fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
++		TLSConfig:       tlsConfig,
++		Username:        cfg.Username,
++		Password:        cfg.Password,
++		DB:              cfg.DB,
++		PoolSize:        cfg.PoolSize,
++		MinIdleConns:    cfg.MinIdleConn,
++		ConnMaxIdleTime: cfg.ConnMaxIdleTime,
++		DialTimeout:     cfg.NetTimeout,
++		ReadTimeout:     cfg.NetTimeout * 2,
++		WriteTimeout:    cfg.NetTimeout * 2,
++		PoolTimeout:     cfg.NetTimeout * 2,
++	})
++
++	return rdb, nil
++}
++
++// caBundle resolves the certificate authority bundle to trust for TLS
++// connections. It prefers inline configuration over a path on disk and
++// returns an empty bundle when neither has been configured.
++func caBundle(cfg config.RedisCacheConfig) ([]byte, error) {
++	if cfg.CaCertBytes != "" {
++		return []byte(cfg.CaCertBytes), nil
++	}
++
++	if cfg.CaCertPath != "" {
++		return os.ReadFile(cfg.CaCertPath)
++	}
++
++	return []byte{}, nil
++}

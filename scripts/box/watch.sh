@@ -2,13 +2,14 @@
 # Watch the boxes: scripts/box/watch.sh [--once] [--every MINUTES] [<instance-id> ...]
 #
 # Every few minutes (3 by default), for each box (the given ids, else every registered box not destroyed): rsync its
-# runs/, logs/ and out/ down into this repository's with --update, and its /root/screen.log, /root/setup.log and
-# Inspect's data folder (traces, sample buffers) into logs/boxes/<id>/files/, then check that /root/box_id names the
-# box and print what box_runner.py status says there (runs finished, running, failed, incomplete, hung, lost),
-# prefixed with the time and the box. Each pass starts with what the watched boxes bill per hour. A box that cannot be
-# reached, a failed rsync, a box that reports trouble, and a box whose runs all ended (it bills until it is captured
-# and destroyed) get a line starting with !!. One box failing never stops the watch of the others. The watch only
-# reads and copies: it never starts, stops or destroys anything. --once makes one pass and exits nonzero on any !!.
+# runs/ and logs/ down into this repository's with --update, its /root/launcher.log into logs/<study>/boxes/<id>/, and
+# its /root/setup.log and a mirror of Inspect's data folder (traces, live sample buffers) into logs/boxes/<id>/files/,
+# then check that /root/box_id names the box and print what box_probe.py status reads there (the launcher, the live
+# cells, the last write, the runs stored), prefixed with the time and the box. Each pass starts with what the watched
+# boxes bill per hour. A box that cannot be reached, a failed rsync, a box that reports trouble, and a box whose runs
+# all ended (it bills until it is captured and destroyed) get a line starting with !!. One box failing never stops the
+# watch of the others. The watch only reads and copies, and its mirror of Inspect's data folder drops what the box
+# dropped: it never starts, stops or destroys anything on a box. --once makes one pass and exits nonzero on any !!.
 # rsync is Homebrew's: the Mac's /usr/bin/rsync is openrsync.
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
@@ -66,11 +67,14 @@ prefix() {
   done
 }
 
-# pull ID WHAT ARGS...: one rsync from the box, its messages flagged; 0 when it succeeded (24: files vanished).
+# pull ID WHAT ARGS...: one rsync from the box, its messages flagged; 0 when it succeeded (24: files vanished). A file
+# that vanished during the copy is no trouble (a run that ends takes its sample buffer away), so those lines are left
+# out.
 pull() {
   local id=$1 what=$2 code
   shift 2
   "$rsync_bin" -a --update --timeout=300 -e "ssh -F $root/logs/boxes/$id/ssh_config" "$@" 2>&1 \
+    | sed -e '/^file has vanished: /d' -e '/some files vanished before they could be transferred/d' \
     | prefix "!! $id rsync $what: "
   code=${PIPESTATUS[0]}
   if [ "$code" -ne 0 ] && [ "$code" -ne 24 ]; then
@@ -80,21 +84,29 @@ pull() {
 }
 
 watch_box() {
-  local id=$1 dph=$2 status trouble=0 qid
+  local id=$1 dph=$2 status trouble=0 qid study
   qid=$(printf %q "$id")
+  study=$(uv run python -m scripts.box.fleet entry "$id" study) || return 1
   if [ ! -f "$root/logs/boxes/$id/ssh_config" ]; then
     echo "!! $(date -u +%H:%M:%S) $id: no ssh config; run uv run python -m scripts.box.fleet status"
     return 1
   fi
-  # One rsync of the clone limited to runs/, logs/ and out/: a folder the box has not made yet is no error.
-  pull "$id" outputs --include='/runs/***' --include='/logs/***' --include='/out/***' --exclude='*' \
+  # One rsync of the clone limited to runs/ and logs/: a folder the box has not made yet is no error.
+  pull "$id" outputs --include='/runs/***' --include='/logs/***' --exclude='*' \
     box:/root/work/ "$root/" || trouble=1
-  mkdir -p "$root/logs/boxes/$id/files"
-  pull "$id" "the screen's logs" --relative --ignore-missing-args box:/root/screen.log box:/root/setup.log \
-    box:/root/.local/share/inspect_ai/ "$root/logs/boxes/$id/files/" || trouble=1
+  mkdir -p "$root/logs/boxes/$id/files" "$root/logs/$study/boxes/$id"
+  pull "$id" "the launcher's output" --ignore-missing-args box:/root/launcher.log "$root/logs/$study/boxes/$id/" \
+    || trouble=1
+  pull "$id" "the setup's log" --relative --ignore-missing-args box:/root/setup.log \
+    "$root/logs/boxes/$id/files/" || trouble=1
+  # Inspect's data folder mirrors the box's: a run that ends takes its sample buffer away there, and so here. No
+  # slash after the source, so a box that has run nothing yet is no error.
+  mkdir -p "$root/logs/boxes/$id/files/root/.local/share"
+  pull "$id" "Inspect's data" --delete --ignore-missing-args box:/root/.local/share/inspect_ai \
+    "$root/logs/boxes/$id/files/root/.local/share/" || trouble=1
   if ! status=$("$here/box_ssh.sh" "$id" "[ \"\$(cat /root/box_id 2> /dev/null)\" = $qid ] \
 || { echo \"/root/box_id does not name $qid: the endpoint reaches another box\"; exit 3; }; \
-cd /root/work && .venv/bin/python -m scripts.box.box_runner status" 2>&1); then
+python3 - status" < "$here/box_probe.py" 2>&1); then
     printf '%s\n' "$status" | prefix "!! $(date -u +%H:%M:%S) $id: "
     trouble=1
   else

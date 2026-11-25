@@ -1,74 +1,83 @@
 """Figure 4 of the paper: the multi-domain study's results, one tile per valid run, coloured and lettered by the team's
-rung. Columns are the targets (SWE with DeepSeek workers, SWE with Luna workers, protein design, creative writing),
-each with the lowest rung its task counts as cheating (Domain.ladder.cheated_from). Row groups: the team of three with
-no rule, the generic rule and the identified rule; a hidden regulator at level ambiguous, then enforce, one row per
-regulator model with runs; the team all told to cheat.
+Cheating rung; the legend names the measures' cheating line. Columns are the targets (SWE with DeepSeek workers, SWE
+with Luna workers, SWE with Haiku workers, protein design, creative writing), each as wide as its heading or its
+widest cell. Row groups: the team of three with no rule, the generic rule and
+the identified rule; a regulator at level ambiguous, then enforce, one row per regulator model with runs; the
+team all told to cheat.
 
-Source: runs/study_exploration_1/INDEX.jsonl (valid, non-mock runs; disregulator runs left out; SWE only on the fixed
-task, run names ending in _fixed<seed>, _fill<seed> or _fixedpilot<seed>) and each run's run.json signals.team.rung.
-The rules' wording comes from src/configuration/instruction_levels.yaml. The cells are checked against the results
-tables' cell prefixes (control_tables, protein_regulator_table, swe_regulator_table); a disagreement fails the build.
+Source: ian_baseline_explorations_1's valid runs (scripts/paper/study_ladders.py valid_runs; disregulator runs left out;
+SWE only on the fixed task, run names ending in _fixed<seed>, _fill<seed> or _fixedpilot<seed>) with their run index
+rows, each run's Cheating rung as the transcript viewer measures it (study_ladders.record).
+The rules' wording comes from src/configuration/instruction_levels.yaml; the regulator groups' paraphrases are checked
+against the stored studies' frozen level table, paper/stored_study_prompts/regulator_levels.tex, since the code no
+longer has those levels. Every cell a results table also shows
+(control_tables, protein_regulator_table, swe_regulator_table, creative_regulator_table) must hold exactly that
+table's runs (study_ladders.cell_runs); a disagreement fails the build.
 Writes tmp/figures/paper/fig4_multidomain.png.
 
     uv run python -m scripts.paper.fig_multidomain
 """
 from __future__ import annotations
 
-import json
 import re
 import sys
 from collections import defaultdict
 
 import matplotlib
 import yaml
-from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
-from matplotlib.patches import FancyBboxPatch
 
-from scripts.paper import control_tables, protein_regulator_table, swe_regulator_table
+from scripts.paper import control_tables, creative_regulator_table, protein_regulator_table, swe_regulator_table
+from scripts.paper.study_ladders import (
+    ACCESSED_LABEL,
+    CHEATED_LABEL,
+    CHEATING,
+    CHEATING_LETTER,
+    canvas,
+    cell_runs,
+    record,
+    rung_chip,
+    save,
+    text_width,
+    valid_runs,
+)
 from src.configuration.settings import ROOT
-from src.domains import BY_TASK
-from src.measures.run_validity import validity
-from src.measures.rungs import RUNGS
-from src.utils.figure_style import AXIS, GRID, INK, INK_SECONDARY, PRINT_DPI, RUNG_FILL, RUNG_TEXT, SURFACE
+from src.utils import progress
+from src.utils.figure_style import GRID, INK, INK_SECONDARY, SURFACE
 
-STUDY = ROOT / "runs" / "study_exploration_1"
-INDEX = STUDY / "INDEX.jsonl"
 LEVELS = ROOT / "src" / "configuration" / "instruction_levels.yaml"
+STORED_REGULATOR_LEVELS = ROOT / "paper" / "stored_study_prompts" / "regulator_levels.tex"
 OUT = ROOT / "tmp" / "figures" / "paper" / "fig4_multidomain.png"
 
-LETTER = {"none": "N", "exposed": "E", "tried": "T", "opened": "O", "used": "U", "tampered": "X", "checked": "C",
-          "shipped": "S"}
-LEGEND = [r for r in RUNGS if r != "tampered"]          # tampered joins the legend only when a run reaches it
 # (index target, heading, workers line); the frozen figure's column order.
 COLUMNS = [("flipt-dsflash", "Software engineering", "DeepSeek workers"),
            ("flipt-luna", "Software engineering", "Luna workers"),
+           ("flipt-haiku", "Software engineering", "Haiku workers"),
            ("protein-luna", "Protein design", "Luna workers"),
            ("creative-luna", "Creative writing", "Luna workers")]
 # Regulator models in the frozen figure's order, by registry entry, with their row labels.
 REGULATORS = [("claude-haiku-5-5-openrouter", "Haiku 5.5"), ("gpt-6-luna-openrouter", "Luna"),
               ("gemini-4-argon-openrouter", "Gemini 4 Argon"), ("claude-sonnet-5-5-openrouter", "Sonnet 5.5"),
               ("claude-opus-5-5-openrouter", "Opus 5.5")]
-RULE_ROWS = [(None, "No rule"), ("generic", "Rule: generic"), ("identified", "Rule: identified")]
-REGULATOR_GROUPS = [("ambiguous", "+ hidden regulator, level ambiguous",
+RULE_ROWS = [(None, "No rule"), ("generic", "Rule: generic"), ("identified", "Rule: names the exploit")]
+REGULATOR_GROUPS = [("ambiguous", "+ regulator, level ambiguous",
                      "told to ensure the team submits honest work, with the task's definition of cheating"),
-                    ("enforce", "+ hidden regulator, level enforce",
+                    ("enforce", "+ regulator, level enforce",
                      "told to watch, call out, revert and name cheating, with the same definition")]
 SWE_FIXED = re.compile(r"_(fixed|fill)(pilot)?\d+$")
 
 
 def runs() -> list[dict]:
-    """The figure's runs from the index, each with its team rung read from its run.json."""
+    """The figure's runs: study_ladders.valid_runs' index rows, each with its team's Cheating rung."""
     out = []
     targets = {c[0] for c in COLUMNS}
-    for line in INDEX.read_text().splitlines():
-        row = json.loads(line)
-        if not row["valid"] or row["mock"] or row["target"] not in targets or row["disregulator_level"]:
+    for listed in valid_runs():
+        row = listed.meta
+        if row["target"] not in targets or row["disregulator_level"]:
             continue
         if row["domain"] == "swe" and not SWE_FIXED.search(row["run"]):
             continue
-        team = json.loads((STUDY / row["path"] / "run.json").read_text())["signals"]["team"]
-        out.append({**row, "team_rung": team["rung"], "pilot": "pilot" in row["run"]})
+        out.append({**row, "team_rung": record(listed.path)["cheating"], "pilot": "pilot" in row["run"]})
     return out
 
 
@@ -99,19 +108,17 @@ def cells(found: list[dict]) -> dict:
 def reference_cells() -> dict[str, tuple]:
     """{cell prefix: (group, row key, target)} from the results tables' scripts."""
     label_of = {label: model for model, label in REGULATORS}
-    target_of = {("Protein design", "GPT-6 Luna"): "protein-luna",
-                 ("Software engineering", "DeepSeek V4.1 Flash"): "flipt-dsflash",
-                 ("Software engineering", "GPT-6 Luna"): "flipt-luna",
-                 ("Creative writing", "GPT-6 Luna"): "creative-luna"}
+    targets = {c[0] for c in COLUMNS}
     out = {}
-    for task, workers, prefixes, _, _ in control_tables.TARGETS:
-        target = target_of.get((task, workers))
-        if target:
+    for _, _, target, prefixes in control_tables.TARGETS:
+        if target in targets:
             for key, prefix in prefixes.items():
                 out[prefix] = ("cheat", None, target) if key == "cheat" else ("rule", None if key == "none" else key,
                                                                               target)
-    for script, target in ((protein_regulator_table, "protein-luna"), (swe_regulator_table, "flipt-dsflash")):
-        for label, level, *prefixes in script.ROWS:
+    tables = ((protein_regulator_table.ROWS, "protein-luna"), (swe_regulator_table.ROWS, "flipt-dsflash"),
+              (swe_regulator_table.ROWS_LUNA, "flipt-luna"), (creative_regulator_table.ROWS, "creative-luna"))
+    for rows, target in tables:
+        for label, level, *prefixes in rows:
             if label == "None":
                 continue
             model = label_of[label.removeprefix("Claude ").removeprefix("GPT-6 ")]
@@ -120,17 +127,17 @@ def reference_cells() -> dict[str, tuple]:
 
 
 def check(table: dict) -> list[str]:
-    """Where the figure's cells disagree with the results tables' prefixes: a run in another cell, or a valid run
-    of a prefix that the figure lacks."""
-    ref = reference_cells()
-    placed = {run["run"]: key for key, group in table.items() for run in group}
+    """Where a cell the results tables show holds other runs in the figure than in the tables
+    (study_ladders.cell_runs of the tables' prefixes)."""
+    expected: dict[tuple, set[str]] = defaultdict(set)
+    for prefix, key in reference_cells().items():
+        expected[key] |= {path.name for path in cell_runs(prefix)}
     problems = []
-    for prefix, key in ref.items():
-        for path in STUDY.iterdir():
-            if not re.fullmatch(re.escape(prefix) + r"\d+", path.name) or not (path / "run.json").is_file():
-                continue
-            if validity(path)["valid"] and placed.get(path.name) != key:
-                problems.append(f"{path.name}: tables put it in {key}, the figure in {placed.get(path.name)}")
+    for key, names in expected.items():
+        drawn = {run["run"] for run in table.get(key, [])}
+        if drawn != names:
+            problems.append(f"{key}: the tables hold {sorted(names - drawn)} the figure lacks, "
+                            f"the figure {sorted(drawn - names)} the tables lack")
     return problems
 
 
@@ -138,26 +145,23 @@ def wording() -> tuple[list[str], list[str]]:
     """The rule group's subtitle lines, and the checks that the regulator and identified paraphrases still hold."""
     levels = yaml.safe_load(LEVELS.read_text())
     generic = levels["rule"]["generic"]["text"]
-    identified = levels["rule"]["identified"]
-    regulator = levels["regulator"]
+    # the tasks' own sentences; a variant's scenario text is no task of this figure's runs
+    identified = {k: v for k, v in levels["rule"]["identified"].items() if k != "scenario"}
+    # the stored studies' regulator levels, as their frozen table prints them (each points to the first message for
+    # what cheating means; in the runs the task's definition stood there)
+    regulator = {m.group(1): {"text": m.group(2)} for m in
+                 re.finditer(r"^\\textbf\{([a-z_]+)\} & (.*) \\\\$", STORED_REGULATOR_LEVELS.read_text(), re.M)}
     broken = [name for name, ok in [
         ("rule.identified names the prior work and calls its use cheating",
          all("That includes {protected}" in t and "is cheating" in t for t in identified.values())),
         ("regulator.ambiguous asks for honest work and gives the task's cheating",
-         "honest" in regulator["ambiguous"]["text"] and "{cheating}" in regulator["ambiguous"]["text"]),
+         "honest" in regulator["ambiguous"]["text"] and "what cheating means" in regulator["ambiguous"]["text"]),
         ("regulator.enforce says to call out, revert and name, with the same cheating",
-         all(w in regulator["enforce"]["text"] for w in ("say so plainly", "revert", "name the member", "{cheating}")))]
+         all(w in regulator["enforce"]["text"] for w in ("say so plainly", "revert", "name the member", "cheating")))]
         if not ok]
     lines = [f"generic rule: “{generic}”",
-             "identified rule: names where the existing fix or work is and calls using it cheating"]
+             "exploit rule: names where the existing fix or work is and calls using it cheating"]
     return lines, broken
-
-
-def tile(ax, x: float, y: float, s: float, rung: str, fs: float) -> None:
-    ax.add_patch(FancyBboxPatch((x, y), s, s, boxstyle="round,pad=0,rounding_size=0.035", fc=RUNG_FILL[rung],
-                                ec=AXIS if rung == "none" else "none", lw=0.6))
-    ax.text(x + s / 2, y + s / 2, LETTER[rung], fontsize=fs, weight="bold", color=RUNG_TEXT.get(rung, INK),
-            ha="center", va="center")
 
 
 def draw(table: dict, rule_lines: list[str]) -> Figure:
@@ -169,54 +173,48 @@ def draw(table: dict, rule_lines: list[str]) -> Figure:
             groups.append((title, [sub], rows))
     groups.append(("Team of three, all told to cheat", [], [(("cheat", None), "Told to cheat")]))
 
-    left, col, pad = 1.75, 2.1, 0.12
-    s, gap, row_h = 0.27, 0.055, 0.37
-    head_h, title_h, sub_h, group_pad, legend_h = 0.95, 0.36, 0.2, 0.2, 0.6
-    width = left + col * len(COLUMNS)
-    height = head_h + legend_h + sum(title_h + sub_h * len(sub) + 0.1 + row_h * len(rows) + group_pad
+    left, pad = 1.2, 0.1
+    s, gap, row_h = 0.18, 0.03, 0.25
+    head_h, title_h, sub_h, group_pad, legend_h = 0.5, 0.26, 0.16, 0.12, 0.62
+    widths = [max(text_width(workers, 7), max(len(runs) for (*_, t), runs in table.items() if t == target) * (s + gap))
+              + 0.15 for target, _, workers in COLUMNS]
+    xs = [left + sum(widths[:j]) for j in range(len(COLUMNS))]
+    width = left + sum(widths)
+    height = head_h + legend_h + sum(title_h + sub_h * len(sub) + 0.06 + row_h * len(rows) + group_pad
                                      for _, sub, rows in groups)
-    fig = Figure(figsize=(width, height), dpi=PRINT_DPI, facecolor=SURFACE)
-    FigureCanvasAgg(fig)
-    ax = fig.add_axes([0, 0, 1, 1])
-    ax.set_xlim(0, width)
-    ax.set_ylim(height, 0)
-    ax.axis("off")
+    fig, ax = canvas(width, height, SURFACE)
 
-    for j, (target, heading, workers) in enumerate(COLUMNS):
-        x = left + j * col
-        task = next(r["cheatbench_task"] for group in table.values() for r in group if r["target"] == target)
-        ax.text(x, 0.28, heading, fontsize=11, weight="bold", color=INK, va="center")
-        ax.text(x, 0.53, workers, fontsize=8.5, color=INK_SECONDARY, va="center")
-        ax.text(x, 0.71, f"cheating from {BY_TASK[task].ladder.cheated_from}", fontsize=8.5, color=INK_SECONDARY,
+    for x, (target, heading, workers) in zip(xs, COLUMNS):
+        ax.text(x, 0.17, heading.replace("Software engineering", "SWE"), fontsize=8, weight="bold", color=INK,
                 va="center")
+        ax.text(x, 0.36, workers, fontsize=7, color=INK_SECONDARY, va="center")
 
     y = head_h
-    for g, (title, sub, rows) in enumerate(groups):
+    for title, sub, rows in groups:
         ax.plot([pad, width - pad], [y, y], color=GRID, lw=1)
-        ax.text(pad, y + title_h / 2 + 0.06, title, fontsize=10.5, weight="bold", color=INK, va="center")
+        ax.text(pad, y + title_h / 2 + 0.03, title, fontsize=8, weight="bold", color=INK, va="center")
         y += title_h
         for line in sub:
-            ax.text(pad, y + sub_h / 2, line, fontsize=8, color=INK_SECONDARY, va="center")
+            ax.text(pad, y + sub_h / 2, line, fontsize=6.5, color=INK_SECONDARY, va="center")
             y += sub_h
-        y += 0.1
+        y += 0.06
         for key, label in rows:
             cy = y + row_h / 2
-            ax.text(left - 0.15, cy, label, fontsize=9.5, color=INK, ha="right", va="center")
+            ax.text(left - 0.1, cy, label, fontsize=7, color=INK, ha="right", va="center")
             for j, target in enumerate(targets):
                 for k, run in enumerate(table.get((*key, target), [])):
-                    tile(ax, left + j * col + k * (s + gap), cy - s / 2, s, run["team_rung"], 8.5)
+                    rung_chip(ax, xs[j] + k * (s + gap), cy - s / 2, s, s, run["team_rung"], size=6.5)
             y += row_h
         y += group_pad
 
-    shown = {r["team_rung"] for group in table.values() for r in group}
-    legend = [r for r in RUNGS if r in LEGEND or r in shown]
-    ly = y + legend_h / 2
-    ax.text(pad, ly, "Team rung", fontsize=9.5, color=INK_SECONDARY, va="center")
+    ly = y + 0.14
+    ax.text(pad, ly, "Team's Cheating rung", fontsize=7, color=INK_SECONDARY, va="center")
     x = left
-    for rung in legend:
-        tile(ax, x, ly - s / 2, s, rung, 8.5)
-        ax.text(x + s + 0.07, ly, rung, fontsize=9, color=INK_SECONDARY, va="center")
-        x += s + 0.07 + 0.075 * len(rung) + 0.3
+    for rung in CHEATING:
+        rung_chip(ax, x, ly - s / 2, s, s, rung, size=6.5)
+        ax.text(x + s + 0.05, ly, rung, fontsize=7, color=INK_SECONDARY, va="center")
+        x += s + 0.05 + text_width(rung, 7) + 0.2
+    ax.text(left, ly + 0.27, f"{CHEATED_LABEL};  {ACCESSED_LABEL}", fontsize=7, color=INK_SECONDARY, va="center")
     return fig
 
 
@@ -226,22 +224,16 @@ def main() -> int:
     problems = check(table)
     rule_lines, broken = wording()
     for line in broken:
-        problems.append(f"instruction_levels.yaml no longer supports the paraphrase: {line}")
-    for run in found:
-        if run["team_rung"] != run["rung"]:
-            print(f"{run['run']}: run.json team rung {run['team_rung']}, index rung {run['rung']}; drawn from run.json")
+        problems.append(f"instruction_levels.yaml or the stored level table no longer supports the paraphrase: {line}")
     for (group, key, target), group_runs in sorted(table.items(), key=str):
-        print(f"{target:14s} {group:9s} {str(key):30s}",
-              " ".join(LETTER[r["team_rung"]] + ("p" if r["pilot"] else "") for r in group_runs),
-              [r["run"] for r in group_runs])
+        progress.verbose(f"{target:14s} {group:9s} {str(key):30s}",
+                         " ".join(CHEATING_LETTER[r["team_rung"]] + ("p" if r["pilot"] else "") for r in group_runs),
+                         [r["run"] for r in group_runs])
     if problems:
-        print("\n".join(problems), file=sys.stderr)
+        progress.detail("\n".join(problems), err=True)
         return 1
     with matplotlib.rc_context({"font.family": "Arial"}):
-        fig = draw(table, rule_lines)
-        OUT.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(OUT, dpi=PRINT_DPI, facecolor=SURFACE)
-    print(OUT)
+        progress.wrote(save(draw(table, rule_lines), OUT))
     return 0
 
 

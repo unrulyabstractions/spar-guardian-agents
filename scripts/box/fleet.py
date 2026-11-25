@@ -1,58 +1,60 @@
 """The vast.ai fleet's command line. scripts/box/README.md gives the order of the steps.
 
-    uv run python -m scripts.box.fleet jobs [<stage>]
+    uv run python -m scripts.box.fleet plan <plan> [--gates <spec>] [--boxes N] [--max-agents M]
     uv run python -m scripts.box.fleet offers [--top 20] [--max-dph 1.0]
-    uv run python -m scripts.box.fleet create --stage <stage> --count N [--only <box> ...]
-                                              [--label-prefix spar-screen] [--max-dph 1.0] [--max-fleet-dph 15]
-                                              [--commit SHA] [--dry-run]
+    uv run python -m scripts.box.fleet create --plan <plan> [--gates <spec>] --boxes N [--max-agents M]
+                                              [--only <box> ...] [--label-prefix spar-screen] [--max-dph 1.0]
+                                              [--skip-machine <machine> ...] [--max-fleet-dph 15] [--commit SHA]
+                                              [--dry-run]
     uv run python -m scripts.box.fleet status
     uv run python -m scripts.box.fleet ids [--dph] [<id> ...]
     uv run python -m scripts.box.fleet entry <id> <field> ...
     uv run python -m scripts.box.fleet repin <id> ... --commit SHA
     uv run python -m scripts.box.fleet run-args <id> [--mock]
+    uv run python -m scripts.box.fleet stop <id>
     uv run python -m scripts.box.fleet destroy <id> [--dry-run] [--accept-loss REASON]
 
-jobs prints a stage's boxes and every run with its flags, from study_table.py alone: it needs no key and sends nothing.
-offers reads the on-demand offers that can hold a box. create is fleet_create.py, status fleet_status.py and destroy
-fleet_destroy.py. ids prints the registered boxes not yet destroyed. entry prints a box's fields for the shell scripts.
-repin moves boxes to a commit origin/main holds, when the launch's package list is still the .venv's. run-args prints
-box_runner.py run's arguments for a box. It refuses a model that needs a key a box does not hold, and a run name this
-machine holds from a run made elsewhere, which the watch would overwrite.
+plan prints a plan's assignment to boxes (fleet_plan.py): it needs no key and sends nothing. offers reads the
+on-demand offers that can hold a box. create is fleet_create.py, status fleet_status.py and destroy fleet_destroy.py.
+ids prints the registered boxes not yet destroyed. entry prints a box's fields for the shell scripts. repin moves boxes
+to a commit origin/main holds, when the launch's package list is still the .venv's, and sets each box's runs and caps to
+what that commit's plan gives its targets. run-args prints, one per line, what box_run.sh starts on a box after
+`.venv/bin/python -m`: the launcher on the box's plan, its targets and its agents at once, as its pinned commit holds
+them. It refuses a model that needs a key a box does not hold, a run of the box of which this checkout holds a trace
+the box did not make (the watch would mix the two), and a launcher of the study live on this machine. stop sends
+vast.ai's stop, which keeps the disk and bills storage alone, to a registered box of this repository.
 """
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from collections import Counter
+from dataclasses import replace
+from pathlib import Path
 
-from scripts.box import fleet_registry
-from scripts.box.fleet_create import MAX_FLEET_DPH, cmd_create
-from scripts.box.fleet_destroy import cmd_destroy
-from scripts.box.fleet_layout import LABEL_PREFIX, REMOTE_REPO, capacity_of, floor_of
-from scripts.box.fleet_registry import load_registry, open_entry, update_box
+from scripts.box import fleet_layout, fleet_plan, fleet_registry
+from scripts.box.fleet_create import MAX_FLEET_DPH, cmd_create, launcher_problems
+from scripts.box.fleet_destroy import cmd_destroy, identity_refusals
+from scripts.box.fleet_layout import LABEL_PREFIX, REMOTE_REPO, now_iso
+from scripts.box.fleet_registry import entry_box, load_registry, open_entry, registered, update_box
 from scripts.box.fleet_status import cmd_status
-from scripts.box.study_table import STAGES, box_jobs, find_box, jobs_sha256, key_problems, stage_boxes
-from scripts.box.vast_api import Vast
+from scripts.box.vast_api import Call, Vast, instance
 from scripts.box.vast_offers import MAX_DPH, OFFER_HEADER, candidates, offer_row, rejections, search_call
-from src.configuration import settings
+from scripts.study import run_study
+from src.measures.run_directory import RunDir
 
-ENTRY_FIELDS = ("task", "stage", "box", "key", "label", "launch", "commit", "requirements", "requirements_sha256",
-                "python_version", "uv_version", "cores", "ram_gb", "dph", "min_cores", "min_ram_gb", "min_disk_gb")
+ENTRY_FIELDS = ("study", "plan", "gates", "tasks", "box", "key", "label", "launch", "commit", "requirements",
+                "requirements_sha256", "python_version", "uv_version", "cores", "ram_gb", "dph", "min_cores",
+                "min_ram_gb", "min_disk_gb", "max_agents", "runs", "cap_usd")
 
 
-def cmd_jobs(args: argparse.Namespace) -> int:
-    for stage in [args.stage] if args.stage else STAGES:
-        boxes = stage_boxes(stage)
-        print(f"== {stage}: {len(boxes)} boxes, {sum(len(box_jobs(box)) for box in boxes)} runs, "
-              f"{sum(box.agents for box in boxes)} agents")
-        for box in boxes:
-            cores, ram_gb = floor_of(box.task)
-            print(f"{box.name}: {box.task}, at least {cores} cores and {ram_gb} GB of RAM, {box.agents} agents at once "
-                  f"of the {capacity_of(box.task)} it holds")
-            for job in box_jobs(box):
-                print(f"   {job.name:52s} examples.{job.cell} --model {job.model} --set seed={job.seed} "
-                      + " ".join(job.flags))
+def cmd_plan(args: argparse.Namespace) -> int:
+    try:
+        assignment = fleet_plan.assign(args.plan, args.gates, args.boxes, args.max_agents)
+    except (OSError, ValueError) as error:
+        print(f"refused: {error}", file=sys.stderr)
+        return 2
+    print("\n".join(fleet_plan.lines(assignment)))
     return 0
 
 
@@ -92,7 +94,8 @@ def cmd_entry(args: argparse.Namespace) -> int:
         print(f"refused: {error}", file=sys.stderr)
         return 1
     for name in args.fields:
-        print("" if values.get(name) is None else values[name])
+        value = values.get(name)
+        print("" if value is None else ",".join(value) if isinstance(value, list) else value)
     return 0
 
 
@@ -108,61 +111,109 @@ def cmd_repin(args: argparse.Namespace) -> int:
         print(f"refused: the .venv's package list is not the one {other} pinned; a new list takes a new launch",
               file=sys.stderr)
         return 1
-    for entry in entries:
-        update_box(entry["id"], commit=pin["commit"])
-        print(f"{entry['id']}: {entry['commit']} to {pin['commit']}; run box_setup.sh {entry['id']} before box_run.sh")
+    try:
+        moved = [(entry, entry_box(entry, pin["commit"])) for entry in entries]
+    except ValueError as error:
+        print(f"refused: {error}", file=sys.stderr)
+        return 1
+    for entry, box in moved:
+        update_box(entry["id"], commit=pin["commit"], runs=len(box.runs), cap_usd=round(box.cap_usd, 2))
+        print(f"{entry['id']}: {entry['commit']} to {pin['commit']}; runs {entry['runs']} to {len(box.runs)}, caps "
+              f"${entry['cap_usd']:.2f} to ${box.cap_usd:.2f}; run box_setup.sh {entry['id']} before box_run.sh")
     return 0
 
 
-def made_elsewhere(name: str) -> str | None:
-    """What this machine holds of a run of this name that no box made: a run.json whose eval log is not under the
-    box's clone, or a screen log whose command is not the box's."""
-    run = settings.RUNS / name / "run.json"
-    if run.exists():
-        eval_log = json.loads(run.read_text()).get("eval_log") or ""
-        if not eval_log.startswith(REMOTE_REPO + "/"):
-            return f"{run.parent} (its eval log {eval_log or 'unknown'})"
-    log = settings.LOGS / "screen" / f"{name}.log"
-    if log.exists():
-        with open(log) as handle:
-            if f"{REMOTE_REPO}/" not in handle.readline():
-                return str(log)
-    return None
+def foreign_traces(study: str, name: str) -> list[str]:
+    """The traces this checkout holds of a run of this name (fleet_plan.traces_here), unless they are a box's run the
+    watch pulled: a run.json naming an eval log in a box's clone."""
+    run = RunDir(run_study.RUNS / study / name)
+    if run.is_run() and (run.run_json.get("eval_log") or "").startswith(REMOTE_REPO + "/"):
+        return []
+    return fleet_plan.traces_here(study, name)
+
+
+def launcher_args(entry: dict, mock: bool) -> list[str]:
+    """What the box starts after `.venv/bin/python -m`: the launcher on the plan, the spec, the box's targets and its
+    agents at once, as the registry records them. The launcher decides no gates under --mock, so a mock launch drops
+    the spec and names only the box's targets the pinned commit's plan holds. ValueError when it holds none of them."""
+    gates, targets = ["--gates", entry["gates"]] if entry["gates"] else [], entry["targets"]
+    if mock:
+        pinned = fleet_layout.committed(entry["commit"], entry["plan"])
+        in_plan = run_study.load_plan(Path(entry["plan"]), pinned)["targets"]
+        gates, targets = [], [target for target in targets if target in in_plan]
+        if not targets:
+            raise ValueError(f"{entry['plan']} holds none of the box's targets yet: --mock runs only open targets")
+    return ["scripts.study.run_study", entry["plan"], "--yes", *gates, "--only", *targets,
+            "--limit", f"max_agents={entry['max_agents']}", *(["--mock"] if mock else [])]
+
+
+def run_refusals(entry: dict, mock: bool) -> list[str]:
+    """Why the box may not start its launcher: a model that needs another key, a run of the box of which this checkout
+    holds a trace the box did not make, or a launcher of the study live on this machine. Its runs are those of its
+    pinned commit's plan; a mock launch's carry run_study.MOCK_SUFFIX in their study and names."""
+    box = entry_box(entry)
+    problems = [] if mock else fleet_plan.key_problems(box)
+    suffix = run_study.MOCK_SUFFIX if mock else ""
+    for name in (replace(run, suffix=suffix).name for run in box.runs):
+        if traces := foreign_traces(entry["study"] + suffix, name):
+            problems.append(fleet_plan.trace_problem(name, traces))
+    return problems + launcher_problems(entry["study"])
 
 
 def cmd_run_args(args: argparse.Namespace) -> int:
     try:
-        values = open_entry(args.id)
-        jobs = box_jobs(find_box(values["box"]), args.mock)
+        entry = open_entry(args.id)
+        problems = run_refusals(entry, args.mock)
+        launcher = [] if problems else launcher_args(entry, args.mock)
     except (RuntimeError, OSError, KeyError, ValueError) as error:
-        print(f"refused: {error}", file=sys.stderr)
-        return 1
-    problems = key_problems(jobs)
+        problems = [str(error)]
     if problems:
         print("refused: " + "; ".join(problems), file=sys.stderr)
         return 1
-    clashes = list(filter(None, (made_elsewhere(job.name) for job in jobs)))
-    if clashes:
-        print("refused: this machine holds runs of these names made elsewhere, which the watch would overwrite: "
-              + ", ".join(clashes), file=sys.stderr)
-        return 1
-    print("\n".join(["--box", values["box"], "--commit", values["commit"], "--jobs-sha256", jobs_sha256(jobs),
-                     *(["--mock"] if args.mock else [])]))
+    print("\n".join(launcher))
     return 0
+
+
+def cmd_stop(args: argparse.Namespace) -> int:
+    """vast.ai's stop for a registered box of this repository: its disk stays, and it bills storage alone."""
+    vast = Vast(writes=True)
+    entry = registered(load_registry(), args.id)
+    refusals = identity_refusals(args.id, entry, instance(vast, args.id) if entry else None)
+    if refusals:
+        print("refused:\n  " + "\n  ".join(refusals))
+        return 1
+    reply = vast.send(Call("PUT", f"/api/v0/instances/{args.id}/", body={"state": "stopped"}))
+    if reply.get("success") is not True:
+        print(f"!! vast.ai did not stop {args.id}: {str(reply)[:300]}")
+        return 1
+    update_box(args.id, stopped=now_iso())
+    print(f"== stopped {args.id} {entry['label']}: its disk stays and bills storage; capture it before any destroy")
+    return 0
+
+
+def add_assignment_arguments(parser: argparse.ArgumentParser, plan_flag: bool) -> None:
+    """The plan, its spec, the boxes and their agents at once, as plan and create take them."""
+    if plan_flag:
+        parser.add_argument("--plan", type=Path, required=True, help="a plan file, e.g. studies/plans/<study>.yaml")
+    else:
+        parser.add_argument("plan", type=Path, help="a plan file, e.g. studies/plans/<study>.yaml")
+    parser.add_argument("--gates", type=Path, help="the plan's gated spec, e.g. studies/gated/<study>.yaml")
+    parser.add_argument("--boxes", type=int, required=plan_flag, default=1, help="the boxes the plan runs on")
+    parser.add_argument("--max-agents", type=int, help="each box's agents at once, in place of its estimate")
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest="command", required=True)
-    jobs = commands.add_parser("jobs", help="every box, run and flag of a stage or of the study (reads the table)")
-    jobs.add_argument("stage", nargs="?", choices=list(STAGES))
+    plan = commands.add_parser("plan", help="a plan's assignment to boxes (reads this checkout, sends nothing)")
+    add_assignment_arguments(plan, plan_flag=False)
     offers = commands.add_parser("offers", help="the offers that can hold a box, cheapest first (reads only)")
     offers.add_argument("--top", type=int, default=20)
     offers.add_argument("--max-dph", type=float, default=MAX_DPH, help="the dearest offer, $/h with the disk")
-    create = commands.add_parser("create", help="rent one stage's boxes and register each")
-    create.add_argument("--stage", required=True, choices=list(STAGES))
-    create.add_argument("--count", type=int, required=True, help="the number of boxes, which must match")
-    create.add_argument("--only", nargs="+", metavar="BOX", help="only these boxes of the stage, for a replacement")
+    create = commands.add_parser("create", help="rent a plan's boxes and register each")
+    add_assignment_arguments(create, plan_flag=True)
+    create.add_argument("--only", nargs="+", metavar="BOX", help="only these boxes of the assignment, for a "
+                                                                 "replacement")
     create.add_argument("--label-prefix", default=LABEL_PREFIX)
     create.add_argument("--skip-machine", nargs="+", type=int, default=[], metavar="MACHINE",
                         help="machines to take no offer from: a VM there came up smaller than its offer")
@@ -181,9 +232,11 @@ def main(argv: list[str] | None = None) -> int:
     repin = commands.add_parser("repin", help="move boxes to a commit origin/main holds; box_setup.sh checks it out")
     repin.add_argument("ids", type=int, nargs="+")
     repin.add_argument("--commit", required=True, help="what the boxes run from now on")
-    run_args = commands.add_parser("run-args", help="box_runner.py run's arguments for a box, one per line")
+    run_args = commands.add_parser("run-args", help="the launcher's arguments for a box, one per line")
     run_args.add_argument("id", type=int)
-    run_args.add_argument("--mock", action="store_true", help="the box's arms on the mock model, one seed each")
+    run_args.add_argument("--mock", action="store_true", help="every model of the box's runs is Inspect's mock model")
+    stop = commands.add_parser("stop", help="stop one registered box: its disk stays, it bills storage alone")
+    stop.add_argument("id", type=int)
     destroy = commands.add_parser("destroy", help="destroy one box once its capture holds")
     destroy.add_argument("id", type=int)
     destroy.add_argument("--dry-run", action="store_true", help="every gate, the capture check and the snapshot; no "
@@ -191,8 +244,8 @@ def main(argv: list[str] | None = None) -> int:
     destroy.add_argument("--accept-loss", metavar="REASON",
                          help="destroy a box that can never pass the capture, recording what is lost and why")
     args = parser.parse_args(argv)
-    command = {"jobs": cmd_jobs, "offers": cmd_offers, "create": cmd_create, "status": cmd_status, "ids": cmd_ids,
-               "entry": cmd_entry, "repin": cmd_repin, "run-args": cmd_run_args,
+    command = {"plan": cmd_plan, "offers": cmd_offers, "create": cmd_create, "status": cmd_status, "ids": cmd_ids,
+               "entry": cmd_entry, "repin": cmd_repin, "run-args": cmd_run_args, "stop": cmd_stop,
                "destroy": cmd_destroy}[args.command]
     return command(args)
 

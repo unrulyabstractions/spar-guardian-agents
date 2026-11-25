@@ -1,27 +1,30 @@
 #!/usr/bin/env bash
-# Start a box's runs: scripts/box/box_run.sh <instance-id> [--mock] [--main-key]
+# Start a box's launcher: scripts/box/box_run.sh <instance-id> [--mock] [--main-key]
 #
-# The box's name, commit and jobs digest come from the registry through fleet.py run-args, which refuses a model that
-# needs a key a box does not hold and a run name this machine holds from a run made elsewhere. The box runs the jobs
-# study_table.py gives it and no other box's, and running this again starts what is not finished.
+# The launcher is the Mac's own, scripts/study/run_study.py, on the box's plan: `run_study <plan> --yes [--gates
+# <spec>] --only <the box's targets> --limit max_agents=<its agents at once>`, all from the box's registry entry and its
+# pinned commit's plan through fleet.py run-args. That refuses a model that needs a key a box does not hold, a run of
+# the box of which this machine holds a trace the box did not make, and a launcher of the study live on this machine.
+# --mock passes --mock without --gates and with only the targets the pinned plan holds: every model is Inspect's mock
+# model, the runs go to <study>_mock under names that end in _mock, no key goes to the box and nothing is paid. Running
+# this again on a box whose launcher ended starts the runs not stored.
 #
 # A box holds one key, OPENROUTER_API_KEY. It goes from this shell's environment to /root/.box_env (mode 600) through
-# ssh's standard input: never on a command line, never printed. The box checks only its length. The key sent is
-# BOX_OPENROUTER_API_KEY alone: a key made for this launch with a credit limit in OpenRouter's dashboard, revoked after
-# the destroys. scripts/box/box_key.py refuses it first unless OpenRouter caps it and enough is left for the box's runs
-# at their dollar caps. --main-key sends OPENROUTER_API_KEY instead, the user's order of 2026-11-02 for
-# study_exploration_1, under those same two checks. Nothing else sends the main key (--allow-main-key stays refused).
+# ssh's standard input: never on a command line, never printed. The box checks only its length. --main-key sends
+# OPENROUTER_API_KEY itself, which every study's boxes take (CLAUDE.md §3a); without it the key sent is
+# BOX_OPENROUTER_API_KEY, a key made for the launch. scripts/box/box_key.py refuses either unless OpenRouter caps it
+# and enough is left for every run of every open box that holds the key at its dollar cap, and records that this box
+# holds it.
 #
-# Once /root/box_id shows the endpoint reaches this instance, box_runner.py run starts the jobs under nohup setsid, with
-# /root/.box_env sourced. Its output goes to /root/screen.log and its pid to /root/screen.pid. A runner alive on the box
-# is refused. --mock rehearses the box on Inspect's mock model, one seed per arm: no key goes to the box, nothing is
-# paid, and the run names end in mock<k>, so they never stand in for real runs.
+# Once /root/box_id shows the endpoint reaches this instance, the launcher starts under nohup setsid with /root/.box_env
+# sourced, uv on its PATH and UV_NO_SYNC set (the cells' `uv run` uses the .venv the launch pinned as it is). Its output
+# goes to /root/launcher.log and its pid to /root/launcher.pid. A launcher alive on the box is refused.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 cd "$root"
 if [ $# -lt 1 ]; then
-  sed -n '2,18p' "$0"
+  sed -n '2,21p' "$0"
   exit 2
 fi
 id=$1
@@ -31,23 +34,21 @@ main_key=0
 pass=()
 for arg in "$@"; do
   case $arg in
-    --allow-main-key) echo "refused: --allow-main-key is gone; export BOX_OPENROUTER_API_KEY, a key with a credit limit" \
-      "made for this launch in OpenRouter's dashboard"; exit 1 ;;
     --main-key) main_key=1 ;;
     --mock) mock=1; pass+=("$arg") ;;
-    *) pass+=("$arg") ;;
+    *) echo "refused: box_run.sh takes --mock and --main-key, not $arg"; exit 2 ;;
   esac
 done
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 uv run python -m scripts.box.fleet run-args "$id" ${pass[@]+"${pass[@]}"} > "$work/args"
-runner=()
+launcher=()
 while IFS= read -r line; do
-  runner+=("$line")
+  launcher+=("$line")
 done < "$work/args"
 name=$(uv run python -m scripts.box.fleet entry "$id" key)
-echo "== box $id: box_runner.py run ${runner[*]}"
+echo "== box $id: python -m ${launcher[*]}"
 
 # send_key: the box's key into /root/.box_env, its length checked on the box; never printed.
 send_key() {
@@ -84,9 +85,10 @@ else
   send_key
 fi
 
-echo "== the runner"
-"$here/box_ssh.sh" "$id" "bash -s -- $(printf '%q ' "$id" "${runner[@]}")" <<'REMOTE'
+echo "== the launcher"
+"$here/box_ssh.sh" "$id" "bash -s -- $(printf '%q ' "$id" "${launcher[@]}")" <<'REMOTE'
 set -euo pipefail
+alive() { [ -f /root/launcher.pid ] && grep -qs scripts.study.run_study "/proc/$(cat /root/launcher.pid)/cmdline"; }
 start() {
   local id=$1
   shift
@@ -96,30 +98,30 @@ start() {
     exit 1
   fi
   cd /root/work
-  if [ -f /root/screen.pid ] && grep -qs box_runner "/proc/$(cat /root/screen.pid)/cmdline"; then
-    echo "refused: a runner is alive (pid $(cat /root/screen.pid))"
+  if alive; then
+    echo "refused: a launcher is alive (pid $(cat /root/launcher.pid))"
     exit 1
   fi
-  rm -f /root/screen.pid
-  echo "== $(date -u +%FT%TZ) box_run: $*" >> /root/screen.log
-  # shellcheck disable=SC2016  # the inner bash expands "$@"
-  # The .venv's bin on PATH, as uv run gives it: creative writing's scorer compiles with the python3.11 it finds there.
-  nohup setsid bash -c 'export PATH=/root/work/.venv/bin:$PATH; [ ! -f /root/.box_env ] || . /root/.box_env; \
-exec .venv/bin/python -m scripts.box.box_runner run "$@"' runner "$@" >> /root/screen.log 2>&1 &
+  rm -f /root/launcher.pid
+  echo "== $(date -u +%FT%TZ) box_run: $*" >> /root/launcher.log
+  # shellcheck disable=SC2016  # the inner bash expands "$@" and $$
+  nohup setsid bash -c 'export PATH=/root/work/.venv/bin:/root/.local/bin:$PATH UV_NO_SYNC=1; \
+[ ! -f /root/.box_env ] || . /root/.box_env; echo $$ > /root/launcher.pid; exec .venv/bin/python -m "$@"' \
+    launcher "$@" >> /root/launcher.log 2>&1 &
   local launched=$! waited
   for waited in $(seq 1 60); do
-    if [ -f /root/screen.pid ] && grep -qs box_runner "/proc/$(cat /root/screen.pid)/cmdline"; then
-      echo "   runner pid $(cat /root/screen.pid), started after ${waited} s"
+    if alive; then
+      echo "   launcher pid $(cat /root/launcher.pid), started after ${waited} s"
       sleep 15
-      tail -n 5 /root/screen.log
-      grep -qs box_runner "/proc/$(cat /root/screen.pid)/cmdline" || { echo "!! the runner ended at once"; exit 1; }
+      tail -n 5 /root/launcher.log
+      alive || { echo "!! the launcher ended at once"; exit 1; }
       exit 0
     fi
     kill -0 "$launched" 2> /dev/null || break
     sleep 1
   done
-  echo "!! no runner; the end of /root/screen.log:"
-  tail -n 30 /root/screen.log
+  echo "!! no launcher; the end of /root/launcher.log:"
+  tail -n 30 /root/launcher.log
   exit 1
 }
 start "$@" < /dev/null

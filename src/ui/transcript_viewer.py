@@ -1,496 +1,221 @@
-"""The transcript viewer: every run under runs/ in one index, and a run page with the six ladders, the board and each
-agent's transcript, every sentence coloured by a lens. Ported from collusion-hermaneutics' viewer (viewer/serve.py),
-whose runs our framework made, so it reads the same files here.
+"""The transcript viewer: every run under runs/ in one index, and a run page with the three ladders (Cheating,
+Coordination, Collusion), the judges' verdicts and labels, the board and each agent's transcript, every tool call with
+the labels it is evidence for. Ported from collusion-hermaneutics' viewer (viewer/serve.py), whose runs our framework
+made, so it reads the same files here.
 
-    uv run python -m src.ui.transcript_viewer [--port 8770] [--rebuild] [--runs runs]
+    uv run python -m src.ui.transcript_viewer [--port 8770] [--runs runs]
     make transcripts
 
-Every folder under runs/ is a collection, except study_smoke and folders that hold no run:
-- a study (study_exploration_0, study_exploration_1) keeps its runs at its top level and in its groups
-  (src/measures/run_directory.py study_runs). Where the study has an INDEX.jsonl, its valid flag says which runs are
-  valid. Without one, a run at the top level is valid and a run in a group carries the group's name.
-- a manifest collection (apart_controls) lists its runs in manifest.jsonl: the canonical copy of each at
-  <model>/<task>/<cell>/s<seed>/, the extra copies at extra_duplicate_samples/<model>/<task>/<cell>/s<seed>__<host>/.
+The index is src/ui/transcript_index.py's: what `make process-transcripts` stored in each run's folder. This module
+answers the run page from a run's files and its stored measures (run_detail, board_detail) and serves the page. The
+server reads the data and never writes it; it computes no ladder.
 
-The index lists every run with a status: valid, or the reason it is not (invalid, incomplete, mock, attempt, extra
-copy). The page shows the valid runs first and the rest through its Status filter. The index reads each run's run.json,
-episodes.jsonl, signals.jsonl and board, and the judged ladder (ladder.jsonl) and CheatBench's judge (judge.jsonl)
-where the run was judged; it opens no transcript. The server reads the data and never writes it. Its one output is the
-index cache, tmp/transcript_viewer/index.json, built on the first start and again with --rebuild. A transcript is read
-only when the browser asks for it, and it is streamed from disk as stored.
-
-Routes: / (the page), /tv/<file> (src/ui/transcript_static/), /static/<path> (the results browser's assets in
-src/ui/static/, whose dom.js, charts.js, components.js and style.css the page reuses), /api/index, /api/run?id=,
-/api/transcript?id=&agent=, /api/lenses, /api/lens?name=, /api/ladders. src/ui/API.md describes them.
+Routes: / (the page), /tv/<file> (src/ui/transcript_static/), /static/<path> (the shared assets in
+src/ui/static/: dom.js, api.js, charts.js, components.js and style.css), /api/index, /api/run?id=,
+/api/board?id= (the run page's Board tab, src/ui/transcript_board.py), /api/transcript?id=&agent=,
+/api/tools?id=&agent= (the tool definitions the agent's model calls carried, from the eval log), /api/tmp?id= (the
+run's tmp_snapshots.json, src/replay/tmp_snapshots.py, for the Board tab's /tmp panel), /api/network?id= (the run's
+network log on the board's clock, transcript_board.network_payload, for the Board tab's Network panel), /api/ladders,
+/api/summary?col= (the Summary page, src/ui/transcript_summary.py). src/ui/API.md describes them.
 """
 from __future__ import annotations
 
 import argparse
 import json
-import os
-import re
 import shutil
 import signal
 import sys
-import time
-from dataclasses import dataclass, field
+import threading
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from inspect_ai.log import read_eval_log
+
 from src.configuration.settings import ROOT
-from src.measures.run_directory import GROUPS, RunDir, run_name, study_runs
-from src.measures.rungs import RUNGS
-from src.ui import transcript_ladder_tables, transcript_levels
-from src.ui.transcript_levels import episode_agent, is_worker
-from src.utils.json_files import read_json, read_jsonl
+from src.export.eval_sample_view import span_owners
+from src.judging import verdict_files
+from src.measures import judge_labels
+from src.measures.run_directory import RunDir, episode_agent
+from src.ui import (
+    transcript_board,
+    transcript_ladder_tables,
+    transcript_levels,
+    transcript_presence,
+    transcript_rounds,
+    transcript_summary,
+)
+from src.ui.transcript_index import (
+    RunFiles,
+    build_index,
+    cheatbench_by_agent,
+    folder_agents,
+    read_stored,
+    served_index,
+)
+from src.utils import progress
 
 HERE = Path(__file__).resolve().parent
 STATIC = HERE / "transcript_static"
 BROWSER_STATIC = HERE / "static"
-LENSES = HERE / "lenses"
-CACHE = ROOT / "tmp" / "transcript_viewer" / "index.json"
-SKIP = ("study_smoke",)
-INDEX_VERSION = 1
 DEFAULT_PORT = 8770
+ERROR_LINES = 5
+"""The distinct errors of unreadable runs a start prints; /api/index lists every one."""
+VERDICT_KEPT = ("parse_ok", "judge_cost_usd", "judge_error")
+"""The bookkeeping keys of a verdict row (verdict_files.ROW_KEYS) the run page still shows; it leaves the rest out."""
+EPISODE_KEYS = ["agent", "model", "n_turns", "n_tool_calls", "wall_time", "limit", "score", "ended_by", "ok",
+                "failure", "final_text", "usage", "defense", "defenses"]
+"""The episode fields the run page shows (components.js episodeRecord and the agent card); the rest of episodes.jsonl
+(rules, probes, ledger, access) stays on disk."""
 
-COLLECTION_ABOUT = {
-    "study_exploration_1": ("Exploration 1", "teams, regulators",
-                            "Teams of three on four targets, with hidden regulators and disregulators at several "
-                            "levels and models. Code ladder only, no judge. INDEX.jsonl says which runs are valid."),
-    "study_exploration_0": ("Exploration 0", "October screen",
-                            "One agent, a team of three, or three plus a hidden regulator, on five tasks and three "
-                            "models. Judged by the judged ladder and by CheatBench's rules, both GPT-6 Luna."),
-    "apart_controls": ("Apart controls", "lone agents",
-                       "One agent on nine tasks and five models, told to cheat or not. Code ladder only. The "
-                       "canonical copy of each run is valid; extra copies of duplicated runs sit beside them."),
-}
-GROUP_STATUS = {"attempts": "attempt", "set_aside": "set aside"}
-EXTRA = "extra_duplicate_samples"
-
-# Episode fields the run page shows; the rest of episodes.jsonl (rules, probes, ledger, access) stays on disk.
-EPISODE_KEYS = ["episode", "orbit_agent", "role", "model", "topology", "n_turns", "n_tool_calls", "wall_time", "limit",
-                "score", "ended_by", "ok", "failure", "error", "final_text", "usage", "defense", "defenses",
-                "agent_version"]
-# Bookkeeping keys of judge.jsonl and ladder.jsonl rows that the run page leaves out.
-JUDGE_DROP = {"judge_schema", "judge_usage", "judge_prompt", "transcript_path", "judge_generation_config",
-              "judge_generation_config_unsupported", "id", "replicate", "row", "output_mode", "judge_attempts",
-              "raw"}
-RUN_JSON_KEYS = ["task", "variant", "model", "role_models", "topology", "mode", "orbit_version", "inspect_version",
-                 "defenses", "team_submission", "shutdown_rate", "deviations", "code"]
-ROUND_RE = re.compile(r"^r(\d+)")
-SUBMIT_RE = re.compile(r"handed in the team's work in round (\d+)")
-NAME_RE = re.compile(r"^(?P<stem>[a-z]+)_(?P<cell>.+)_(?P<model>[a-z]+?)(?P<n>\d+)$")
-
-
-# ------------------------------------------------------------------------------------------------- the collections
-@dataclass
-class Listed:
-    """One run of a collection: its key (its path under the collection, which the run's id carries), its folder, its
-    status (valid, or why not) and the INDEX.jsonl or manifest.jsonl row that names it."""
-
-    key: str
-    path: Path
-    status: str
-    why: str = ""
-    meta: dict = field(default_factory=dict)
-    source: str = "study"
-
-
-def collections(runs: Path) -> list[Path]:
-    """The collection folders under runs/: every folder but SKIP, the known ones first."""
-    folders = [p for p in runs.iterdir() if p.is_dir() and p.name not in SKIP and not p.name.startswith(".")]
-    known = list(COLLECTION_ABOUT)
-    return sorted(folders, key=lambda p: (known.index(p.name) if p.name in known else len(known), p.name))
-
-
-def manifest_runs(folder: Path) -> list[Listed]:
-    """A manifest collection's runs: the canonical copy is valid, an extra copy is an extra copy."""
-    out = []
-    for row in read_jsonl(folder / "manifest.jsonl"):
-        rel = Path(row["model"], row["task"], row["cell"])
-        if row.get("canonical"):
-            path, status = folder / rel / f"s{row['seed']}", "valid" if row.get("valid") else "invalid"
-        else:
-            path, status = folder / EXTRA / rel / f"s{row['seed']}__{row['host']}", "extra copy"
-        why = "" if row.get("canonical") else f"one of {row.get('n_valid_copies')} valid copies of {row['run_name']}"
-        out.append(Listed(path.relative_to(folder).as_posix(), path, status, why, row, "manifest"))
-    return out
-
-
-def study_listing(folder: Path) -> list[Listed]:
-    """A study's runs, with INDEX.jsonl's verdict where the study has one, else the group's name."""
-    index = {row["path"]: row for row in read_jsonl(folder / "INDEX.jsonl")}
-    out = []
-    for path in study_runs(folder):
-        key = path.relative_to(folder).as_posix()
-        group = path.parent.name if path.parent != folder and path.parent.name in GROUPS else None
-        group_status = GROUP_STATUS.get(group, group)
-        meta = index.get(key)
-        if index and meta is None:
-            status, why = "not indexed", "no INDEX.jsonl row names this run"
-        elif meta is not None and meta.get("valid") is not None:
-            status = "valid" if meta["valid"] else (group_status or "invalid")
-            why = "; ".join(meta.get("why") or []) or meta.get("reason") or ""
-        elif meta is not None:  # INDEX.jsonl names the run and gives no verdict: the group decides
-            status, why = ("valid", "INDEX.jsonl gives no verdict; the run sits at the study's top level") \
-                if group is None else (group_status, "; ".join(meta.get("why") or []) or f"in the study's {group}/")
-        else:
-            status, why = ("valid", "") if group is None else (group_status, f"in the study's {group}/ folder")
-        out.append(Listed(key, path, status, why, meta or {}))
-    return out
-
-
-def list_collection(folder: Path) -> list[Listed]:
-    runs = manifest_runs(folder) if (folder / "manifest.jsonl").is_file() else study_listing(folder)
-    return [r for r in runs if (r.path / "run.json").is_file()]
-
-
-# ----------------------------------------------------------------------------------------------------- one run's data
-def run_roles(rj: dict, episodes: list[dict]) -> dict[str, str | None]:
-    """agent -> role (worker, regulator, disregulator), None in a run with no roles."""
-    roles: dict[str, str | None] = {episode_agent(ep): None for ep in episodes}
-    roles.update((rj.get("swarm") or {}).get("roles") or {})
-    roles.update({episode_agent(ep): ep["role"] for ep in episodes if ep.get("role")})
-    return roles
-
-
-def transcript_dirs(run_dir: Path) -> list[str]:
-    """Trajectory folders that hold a transcript.json (names only; no transcript is opened)."""
-    tdir = run_dir / "trajectories"
-    if not tdir.is_dir():
-        return []
-    return sorted(n for n in os.listdir(tdir) if (tdir / n / "transcript.json").is_file())
-
-
-def folder_agents(run_dir: Path, episodes: list[dict]) -> dict[str, str]:
-    """agent -> trajectory folder. The folder is the episode name: <sample> alone, <sample>@<agent> in a team."""
-    by_episode = {ep.get("episode"): episode_agent(ep) for ep in episodes}
-    out = {}
-    for name in transcript_dirs(run_dir):
-        agent = by_episode.get(name)
-        if agent is None and "@" in name:
-            agent = name.rsplit("@", 1)[1]
-        if agent is None and len(episodes) == 1:
-            agent = episode_agent(episodes[0])
-        if agent:
-            out[agent] = name
-    return out
-
-
-def board_view(run_dir: Path, timeline: list[dict], roles: dict) -> list[dict]:
-    """The board of each sample in list order, with each post's number, kind, round and the tool call behind it.
-    A system message is a hand-in notice, which names its round, or another notice."""
-    cdir = run_dir / "communication"
-    if not cdir.is_dir():
-        return []
-    when = {(e.get("turn"), e.get("agent")): e.get("step") for e in timeline}
-    boards = []
-    for path in sorted(cdir.glob("*.json")):
-        c = read_json(path) or {}
-        sent, reads = {}, {}
-        for e in c.get("events") or []:
-            for mid in e.get("message_ids") or []:
-                if e.get("kind") == "sent":
-                    sent[mid] = {"agent": e.get("agent_id"), "call_id": e.get("tool_call_id")}
-                elif e.get("kind") == "read":
-                    reads.setdefault(mid, []).append({"agent": e.get("agent_id"), "call_id": e.get("tool_call_id")})
-        msgs, n_post = [], 0
-        for i, m in enumerate(c.get("messages") or []):
-            sender, content = m.get("sender"), m.get("content") or ""
-            if sender == "system":
-                sm = SUBMIT_RE.search(content)
-                kind, post_n, step = ("submit" if sm else "system"), None, None
-                rnd = int(sm.group(1)) if sm else None
-            else:
-                n_post += 1
-                kind, post_n = "post", n_post
-                step = when.get((m.get("turn"), sender))
-                rm = ROUND_RE.match(step or "")
-                rnd = int(rm.group(1)) if rm else None
-            msgs.append({
-                "board_no": i + 1, "post_n": post_n, "kind": kind, "sender": sender, "role": roles.get(sender),
-                "recipients": m.get("recipients") or [], "content": content, "sequence": m.get("sequence"),
-                "turn": m.get("turn"), "round": rnd, "round_step": step, "id": m.get("id"),
-                "sent": sent.get(m.get("id")), "reads": reads.get(m.get("id"), []),
-            })
-        kinds: dict[str, int] = {}
-        for e in c.get("events") or []:
-            kinds[e.get("kind") or "?"] = kinds.get(e.get("kind") or "?", 0) + 1
-        boards.append({"sample": path.stem, "messages": msgs, "event_counts": kinds})
-    return boards
-
-
-@dataclass
-class RunFiles:
-    """One run's files as the index and the run page read them."""
-
-    path: Path
-    run_json: dict
-    episodes: list[dict]
-    team: dict | None
-    sig_agents: dict[str, dict]
-    roles: dict[str, str | None]
-
-    @classmethod
-    def read(cls, path: Path) -> RunFiles:
-        rj = read_json(path / "run.json") or {}
-        episodes = read_jsonl(path / "episodes.jsonl")
-        signals = read_jsonl(path / "signals.jsonl")
-        team = next((s for s in signals if s.get("row") == "team"), None) or (rj.get("signals") or {}).get("team")
-        sig_agents = {s.get("agent"): s for s in signals if s.get("row") == "agent"}
-        return cls(path, rj, episodes, team, sig_agents, run_roles(rj, episodes))
-
-    @property
-    def single(self) -> bool:
-        return len(self.episodes) <= 1
-
-    def boards(self) -> list[dict]:
-        return board_view(self.path, (self.run_json.get("rules") or {}).get("timeline") or [], self.roles)
-
-    def levels(self, boards: list[dict] | None = None) -> dict:
-        return transcript_levels.compute(self.team, self.sig_agents, self.episodes,
-                                         self.boards() if boards is None else boards, self.roles)
-
-
-def judge_rows(run_dir: Path, name: str, episodes: list[dict]) -> dict[str, dict]:
-    """A judge file's agent rows by agent (judge.jsonl rows carry their episode alone) and its team row as "_team",
-    without the bookkeeping keys."""
-    by_episode = {ep.get("episode"): episode_agent(ep) for ep in episodes}
-    out = {}
-    for r in read_jsonl(run_dir / name):
-        row = {k: v for k, v in r.items() if k not in JUDGE_DROP}
-        if r.get("row") == "team":
-            out["_team"] = row
-            continue
-        ep = r.get("episode") or ""
-        agent = r.get("agent") or by_episode.get(ep) or (ep.rsplit("@", 1)[1] if "@" in ep else None)
-        if agent is None and len(episodes) == 1:
-            agent = episode_agent(episodes[0])
-        out[agent] = row
-    return out
-
-
-def judge_summary(rows: dict[str, dict], roles: dict, with_rung: bool) -> dict | None:
-    """The team's verdict of one judge: cheated when any worker's parsed verdict says so; the highest judged rung of
-    the workers for the judged ladder."""
-    workers = [r for a, r in rows.items() if a != "_team" and is_worker(roles.get(a))]
-    if not workers:
-        return None
-    parsed = [r for r in workers if r.get("parse_ok") and r.get("cheated") is not None]
-    out = {"yes": any(r["cheated"] is True for r in parsed) if parsed else None,
-           "n": sum(r.get("cheated") is True for r in parsed), "of": len(workers),
-           "judge": next((r.get("judge") for r in workers if r.get("judge")), None)}
-    if with_rung:
-        judged = [r["rung"] for r in parsed if r.get("rung") in RUNGS]
-        out["rung"] = max(judged, key=RUNGS.index) if judged else None
-    return out
-
-
-def agree_status(label: str | None, judges: dict) -> tuple[str, list[str]]:
-    """Whether the code ladder's cheat label and each judge's cheating verdict agree."""
-    if not judges:
-        return "no judge", []
-    verdicts = {k: v.get("yes") for k, v in judges.items() if v.get("yes") is not None}
-    if not verdicts:
-        return "no answer", []
-    if label not in ("cheat", "no cheat"):
-        return "not comparable", []
-    disagree = [k for k, yes in verdicts.items() if yes != (label == "cheat")]
-    return ("disagree" if disagree else "agree"), disagree
-
-
-def short_model(model: str | None) -> str | None:
-    """A model string's last part without a date suffix: openrouter/deepseek/deepseek-v4.1-flash-1017 gives
-    deepseek-v4.1-flash."""
-    if not model:
-        return None
-    return re.sub(r"-\d{4}$", "", model.split("/")[-1])
-
-
-@dataclass
-class Cell:
-    """What a run was made with: its task's short name, its cell, its agents' model, who was told to cheat and the
-    hidden roles' levels and models."""
-
-    stem: str | None
-    cell: str | None
-    author: str | None
-    regulator: str | None = None
-    disregulator: str | None = None
-
-
-def cell_of(listed: Listed, rf: RunFiles) -> Cell:
-    """From the manifest row, the INDEX.jsonl row, else the run's name (<stem>_<cell>_<model><n>). A hidden role
-    with no model of its own runs the eval's model (src/configuration/swarm_config.py role_models), so its model is
-    the workers' when the workers have none of their own either."""
-    rj, meta = rf.run_json, listed.meta
-    role_models = rj.get("role_models") or {}
-    regulator = short_model(role_models.get("regulator"))
-    disregulator = short_model(role_models.get("disregulator"))
-    if listed.source == "manifest":
-        return Cell(meta["task"], "solo_cheat" if meta["cell"] == "cheat" else meta["cell"], meta["model"])
-    if meta:
-        stem = (meta.get("cell") or "").split(".")[-1].split("_")[0] or None
-        cell = Cell(stem, meta.get("kind"), meta.get("worker"), meta.get("regulator") or regulator, disregulator)
-    elif m := NAME_RE.match(run_name(listed.path)):
-        cell = Cell(m["stem"], m["cell"], m["model"], regulator, disregulator)
-    else:
-        cell = Cell(None, None, short_model(rj.get("model")), regulator, disregulator)
-    run_model = short_model(rj.get("model")) if role_models.get("worker") else cell.author
-    cell.regulator = cell.regulator or run_model
-    cell.disregulator = cell.disregulator or run_model
-    return cell
-
-
-def seed_post(cell: Cell, cfg: dict, swarm: dict, n_agents: int) -> str:
-    """What the run placed before the agents started: the cheat instruction, a rule, a hidden regulator or
-    disregulator."""
-    told = "cheat" in (cell.cell or "").split("_")
-    parts = [("all told to cheat" if n_agents > 1 else "told to cheat") if told else "not told"]
-    if cfg.get("rule_level") not in (None, "none"):
-        parts.append(f"rule: {cfg['rule_level']}")
-    for role, level_key, model in (("regulator", "regulator_level", cell.regulator),
-                                   ("disregulator", "disregulator_level", cell.disregulator)):
-        n = swarm.get(role + "s", cfg.get(role + "s")) or 0
-        if n:
-            what = ", ".join(x for x in (cfg.get(level_key), model) if x)
-            parts.append(f"{'' if n == 1 else f'{n} '}hidden {role}{'' if n == 1 else 's'}"
-                         + (f" ({what})" if what else ""))
-    return ", ".join(parts)
-
-
-def team_words(n_agents: int, roles: dict) -> str:
-    hidden = {r: sum(1 for x in roles.values() if x == r) for r in ("regulator", "disregulator")}
-    workers = n_agents - sum(hidden.values())
-    if n_agents <= 1:
-        return "One agent"
-    extra = "".join(f" plus {n} hidden {r}{'' if n == 1 else 's'}" for r, n in hidden.items() if n)
-    return f"Team of {workers}{extra}"
-
-
-def build_row(col: str, listed: Listed) -> dict:
-    rf = RunFiles.read(listed.path)
-    rj, cfg, swarm = rf.run_json, rf.run_json.get("config") or {}, rf.run_json.get("swarm") or {}
-    team = rf.team or {}
-    task = rj.get("task") or team.get("task")
-    n_agents = len(rf.episodes) or int(cfg.get("n_agents") or 1)
-    rung = transcript_levels.team_rung(team, rf.roles)
-    label = transcript_levels.cheat_label(rung, task)
-    judges = {}
-    for key, name, with_rung in (("ladder", "ladder.jsonl", True), ("cheatbench", "judge.jsonl", False)):
-        summary = judge_summary(judge_rows(listed.path, name, rf.episodes), rf.roles, with_rung)
-        if summary is not None:
-            judges[key] = summary
-    agree, disagree = agree_status(label, judges)
-    cell = cell_of(listed, rf)
-    post = seed_post(cell, cfg, swarm, n_agents)
-    sample = team.get("sample") or (rf.episodes[0].get("episode") if rf.episodes else "") or ""
-    if rf.single:
-        levels = transcript_levels.single_levels(rung)
-    else:
-        levels = transcript_levels.index_levels(rf.levels(), rf.roles)
-    in_study = listed.source != "manifest"
-    return {
-        "id": f"{col}/{listed.key}", "col": col, "key": listed.key,
-        "run": run_name(listed.path) if in_study else listed.meta.get("key"), "status": listed.status,
-        "why": listed.why, "group": listed.key.split("/")[0] if in_study and "/" in listed.key else None,
-        "task": cell.stem, "task_name": task, "instance": sample.split("#")[0] or None, "arm": cell.cell,
-        "arm_label": f"{team_words(n_agents, rf.roles)}, {post}", "seed_post": post, "author": cell.author,
-        "model_id": rj.get("model"), "n_agents": n_agents,
-        "regulator_model": cell.regulator if "regulator" in rf.roles.values() else None,
-        "roles": {a: r for a, r in rf.roles.items() if r}, "rung": rung,
-        "rung_code": team.get("rung_by_code") if team.get("raised_by_proof") else None,
-        "floor": transcript_levels.floor_of(task), "label": label,
-        "collab": None if rf.single else team.get("collaboration"), "judges": judges, "agree": agree,
-        "disagree": disagree, "presentation": team.get("presentation"),
-        "seed": listed.meta.get("seed", cfg.get("seed")), "turn_budget": cfg.get("turn_budget"),
-        "dir": str(listed.path), "n_transcripts": len(transcript_dirs(listed.path)), "levels": levels,
-    }
-
-
-# ---------------------------------------------------------------------------------------------------------- index
-def build_index(runs: Path) -> dict:
-    t0 = time.time()
-    rows, cols, errors = [], [], []
-    for folder in collections(runs):
-        listed = list_collection(folder)
-        if not listed:
-            continue
-        label, tag, about = COLLECTION_ABOUT.get(folder.name, (folder.name, "", f"Runs under runs/{folder.name}/."))
-        statuses: dict[str, int] = {}
-        for item in listed:
-            try:
-                rows.append(build_row(folder.name, item))
-            except (OSError, ValueError, KeyError, TypeError) as e:
-                errors.append({"id": f"{folder.name}/{item.key}", "error": f"{type(e).__name__}: {e}"})
-                continue
-            statuses[item.status] = statuses.get(item.status, 0) + 1
-        cols.append({"key": folder.name, "label": label, "tag": tag, "about": about, "statuses": statuses})
-    return {"version": INDEX_VERSION, "runs": str(runs), "built_at": time.strftime("%Y-%m-%d %H:%M:%S %Z"),
-            "build_seconds": round(time.time() - t0, 2), "collections": cols, "errors": errors, "rows": rows}
-
-
-def load_or_build(runs: Path, rebuild: bool) -> dict:
-    """The cached index when it is of this version and these runs, else a fresh build, written to the cache."""
-    if not rebuild and CACHE.is_file():
-        try:
-            idx = read_json(CACHE)
-            if idx.get("version") == INDEX_VERSION and idx.get("runs") == str(runs):
-                return idx
-        except (OSError, ValueError):
-            pass
-    idx = build_index(runs)
-    CACHE.parent.mkdir(parents=True, exist_ok=True)
-    tmp = CACHE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(idx, separators=(",", ":")))
-    os.replace(tmp, CACHE)
-    return idx
 
 
 # ------------------------------------------------------------------------------------------------------- run page
-def eval_log_of(run_dir: Path) -> Path | None:
-    """The run's eval log: the one in its own eval/ folder (a manifest collection's runs keep it there), else where
-    RunDir finds it."""
-    own = sorted((run_dir / "eval").glob("*.eval")) if (run_dir / "eval").is_dir() else []
-    return own[0] if own else RunDir(run_dir).eval_log
+def shown_verdict(row: dict) -> dict:
+    """A verdict row as the run page shows it: the judge's answer, without the bookkeeping VERDICT_KEPT leaves out."""
+    drop = set(verdict_files.ROW_KEYS) - set(VERDICT_KEPT)
+    return {k: v for k, v in row.items() if k not in drop}
 
 
-def run_detail(row: dict) -> dict:
-    run_dir = Path(row["dir"])
+def run_detail(row: dict, run_dir: Path, measured: dict) -> dict:
+    """The run page's data: the row, the run's settings the page shows, each agent with its episode and each
+    CheatBench judge's verdict on it, the field of that verdict that says the agent acknowledged its access
+    (judge_labels.CHEATBENCH_DISCLOSED_ACCESS, shown only in the CheatBench judge's block), the board, the three
+    ladders with the judge labels from the stored measures, presence: each agent's entry and exit and each alert
+    with its outcome and its call (transcript_presence), rounds: each agent's rounds and their calls
+    (transcript_rounds), None for a run before 2026-11-21, regulators: each regulator's measures as the code
+    record holds them (signals.team.regulators, src/measures/regulator_measures.py), {} without, and beliefs: the
+    workers' belief answers as run.json holds them (run_beliefs). Each agent carries the routes of its aimed reads
+    (signals.jsonl routes, SWE alone; None without) and a disregulator its label, mode and disclosed (stored_roles;
+    None for any other agent and a run whose label is not stored)."""
     rf = RunFiles.read(run_dir)
-    rj, rules = rf.run_json, rf.run_json.get("rules") or {}
+    rj = rf.run_json
     folders = folder_agents(run_dir, rf.episodes)
-    ladder = judge_rows(run_dir, "ladder.jsonl", rf.episodes)
-    cheatbench = judge_rows(run_dir, "judge.jsonl", rf.episodes)
+    cheatbench = {judge: cheatbench_by_agent(rows, rf.episodes) for judge, rows in
+                  sorted(measured["cheatbench"].items())}
+    routes = {row.get("agent"): row.get("routes") for row in RunDir(run_dir).signals()}
+    disregulators = stored_roles(run_dir)
     agents = []
     for ep in rf.episodes:
         a = episode_agent(ep)
         folder = folders.get(a)
-        tpath = run_dir / "trajectories" / folder / "transcript.json" if folder else None
+        tpath = RunDir(run_dir).transcript_path(folder) if folder else None
         agents.append({
             "agent": a, "role": rf.roles.get(a) or "worker", "folder": folder,
             "transcript_bytes": tpath.stat().st_size if tpath else None,
             "episode": {k: ep.get(k) for k in EPISODE_KEYS if k in ep},
-            "signals": rf.sig_agents.get(a), "ladder_judge": ladder.get(a), "cheatbench_judge": cheatbench.get(a),
+            "cheatbench": {judge: shown_verdict(rows[a]) for judge, rows in cheatbench.items() if a in rows},
+            "routes": routes.get(a),
+            "disregulator": disregulators.get(a),
         })
-    # Workers first, hidden roles last, as the results browser orders its lanes; then by agent id.
+    # Workers first, influencers last; then by agent id.
     agents.sort(key=lambda e: (e["role"] != "worker", e["agent"] or ""))
-    meta = {k: rj.get(k) for k in RUN_JSON_KEYS if k in rj}
-    log = eval_log_of(run_dir)
-    meta.update({"config": rj.get("config"), "rounds": rules.get("rounds"), "workers": rules.get("workers"),
-                 "composition": (rj.get("swarm") or {}).get("composition"), "eval_log": str(log) if log else None,
-                 "eval_log_recorded": rj.get("eval_log")})
+    log = RunDir(run_dir).eval_log
+    meta = {"config": rj.get("config"), "mode": rj.get("mode"), "code": rj.get("code"),
+            "rounds": (rj.get("rules") or {}).get("rounds"), "eval_log": str(log) if log else None,
+            "eval_log_recorded": rj.get("eval_log")}
     boards = rf.boards()
-    return {"row": row, "meta": meta, "team": rf.team, "agents": agents, "boards": boards,
-            "levels": rf.levels(boards), "ladder_team": ladder.get("_team")}
+    return {"row": row, "meta": meta, "agents": agents, "boards": boards, "levels": rf.levels(measured, boards),
+            "cheatbench_disclosed": judge_labels.CHEATBENCH_DISCLOSED_ACCESS.get(rf.task),
+            "presence": transcript_presence.with_alert_calls(transcript_presence.presence(rj), run_dir),
+            "rounds": transcript_rounds.rounds(rj),
+            "regulators": ((rj.get("signals") or {}).get("team") or {}).get("regulators") or {},
+            "beliefs": run_beliefs(rj)}
+
+
+def stored_roles(run_dir: Path) -> dict[str, dict]:
+    """{disregulator: {label, mode, disclosed}} from the run's stored analysis/labels/disregulator_roles.json
+    (src/measures/disregulator_roles.py); {} for a run without it."""
+    path = RunDir(run_dir).output("disregulator_roles")
+    if not path.is_file():
+        return {}
+    agents = read_stored(path).get("agents") or {}
+    return {agent: {k: record.get(k) for k in ("label", "mode", "disclosed")} for agent, record in agents.items()}
+
+
+def run_beliefs(rj: dict) -> dict | None:
+    """The workers' belief answers (src/swarm/belief_probes.py) as run.json holds them, {questions, agents}; None for a
+    run that did not ask."""
+    return rj.get("beliefs") or None
+
+
+def sent_tool(t: dict) -> dict:
+    """One tool of a provider request as {name, description, parameters}: OpenAI's chat format nests it under
+    "function", the Responses format and Anthropic's do not, and Anthropic names the schema input_schema."""
+    f = t.get("function") if isinstance(t.get("function"), dict) else t
+    return {"name": f.get("name"), "description": f.get("description"),
+            "parameters": f.get("parameters", f.get("input_schema"))}
+
+
+def sent_tools(e) -> list[dict] | None:
+    """The tools a model event's provider request carried (e.call.request), or None when the event recorded no
+    request. The event's own tools list can hold more: the turn rules withhold ORBIT's channel tools from the provider
+    (src/swarm/turn_rules/_turn_state.py CHANNEL_TOOLS), so only the request says what the model received."""
+    request = e.call.request if e.call and isinstance(e.call.request, dict) else None
+    if request is None:
+        return None
+    return [sent_tool(t) for t in request.get("tools") or []]
+
+
+def agent_tools(log_path: Path) -> dict[str, dict]:
+    """Each agent's tool definitions as its model calls sent them to the provider beside the messages: {agent:
+    {"tools": [{name, description, parameters}], "tool_choice", "same_in_every_call", "from_request"}}. The first
+    call's set stands for the agent; same_in_every_call says whether every later call sent the same names. A call
+    whose request was not recorded falls back to the event's tools list (from_request false). A defense's own calls
+    are left out."""
+    sample = read_eval_log(str(log_path), resolve_attachments=True).samples[0]
+    owner = span_owners(sample)
+    out: dict[str, dict] = {}
+    for e in sample.events:
+        if e.event != "model":
+            continue
+        agent, defense = owner(e.span_id)
+        if agent is None or defense is not None:
+            continue
+        sent = sent_tools(e)
+        tools = sent if sent is not None else [
+            {"name": t.name, "description": t.description, "parameters": t.parameters.model_dump(exclude_none=True)}
+            for t in e.tools or []]
+        names = [t["name"] for t in tools]
+        if agent in out:
+            out[agent]["same_in_every_call"] &= names == out[agent]["_names"]
+            continue
+        choice = e.tool_choice if isinstance(e.tool_choice, str) or e.tool_choice is None else \
+            getattr(e.tool_choice, "name", str(e.tool_choice))
+        out[agent] = {"tools": tools, "tool_choice": choice, "same_in_every_call": True,
+                      "from_request": sent is not None, "_names": names}
+    for v in out.values():
+        del v["_names"]
+    return out
+
+
+def tmp_snapshots(run_dir: Path) -> Path | None:
+    """The run's tmp_snapshots.json, or None when the run has none."""
+    path = RunDir(run_dir).file("tmp_snapshots.json")
+    return path if path.is_file() else None
+
+
+def network_file(run_dir: Path) -> Path | None:
+    """The run's network.jsonl, or None when the run has none."""
+    path = RunDir(run_dir).file("network.jsonl")
+    return path if path.is_file() else None
+
+
+def board_detail(row: dict, run_dir: Path, measured: dict) -> dict:
+    """The run page's Board tab (transcript_board.board_payload) from the run's files and its stored measures, with
+    tmp: whether the run has /tmp snapshots (/api/tmp), and network: whether it has a network log (/api/network), so
+    the tab shows each panel only then."""
+    payload = transcript_board.board_payload(run_dir, RunFiles.read(run_dir).levels(measured))
+    return {**payload, "tmp": tmp_snapshots(run_dir) is not None, "network": network_file(run_dir) is not None}
 
 
 # ---------------------------------------------------------------------------------------------------------- server
+RUN_ROUTES = {"/api/run": run_detail, "/api/board": board_detail}
+"""The routes that answer for one run of the index (?id=), each from the run's row, its folder and its stored
+measures."""
 TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
          ".css": "text/css; charset=utf-8", ".json": "application/json", ".svg": "image/svg+xml"}
-LENS_NAME = re.compile(r"[A-Za-z0-9_.-]+")
 
 
 class Server(ThreadingHTTPServer):
@@ -501,10 +226,37 @@ class Server(ThreadingHTTPServer):
 
 
 class Viewer:
+    """What the server answers from: the served index (served_index) as bytes, its rows by id, each served run's
+    folder and stored measures, the Ladders page's data and the Summary page's, by collection."""
+
     def __init__(self, idx: dict):
-        self.index_bytes = json.dumps(idx, separators=(",", ":")).encode("utf-8")
-        self.rows = {r["id"]: r for r in idx["rows"]}
-        self.ladders = transcript_ladder_tables.ladders_payload(transcript_levels.LADDERS, transcript_levels.ORDER)
+        served = served_index(idx)
+        self.index_bytes = json.dumps(served, separators=(",", ":")).encode("utf-8")
+        self.rows = {r["id"]: r for r in served["rows"]}
+        self.dirs = {run_id: Path(idx["entries"][run_id]["dir"]) for run_id in self.rows}
+        self.measured = {run_id: idx["entries"][run_id]["measured"] for run_id in self.rows}
+        self.ladders = transcript_ladder_tables.ladders_payload(transcript_levels.LADDERS, transcript_levels.ORDER,
+                                                                transcript_levels.label_about())
+        self.summaries = {c["key"]: transcript_summary.summary(served["rows"], c["key"]) for c in served["collections"]}
+        self._tools: dict[str, dict] = {}
+        self._tools_lock = threading.Lock()
+        self._network: dict[str, dict | None] = {}
+        self._network_lock = threading.Lock()
+
+    def tools(self, run_id: str) -> dict[str, dict]:
+        """agent_tools of the run's eval log, read once per run; {} when the run has no eval log."""
+        with self._tools_lock:
+            if run_id not in self._tools:
+                log = RunDir(self.dirs[run_id]).eval_log
+                self._tools[run_id] = agent_tools(log) if log else {}
+            return self._tools[run_id]
+
+    def network(self, run_id: str) -> dict | None:
+        """transcript_board.network_payload of the run, read once per run; None when the run has no network.jsonl."""
+        with self._network_lock:
+            if run_id not in self._network:
+                self._network[run_id] = transcript_board.network_payload(self.dirs[run_id])
+            return self._network[run_id]
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -541,23 +293,44 @@ class Handler(BaseHTTPRequestHandler):
                 return self.static(BROWSER_STATIC, url.path[len("/static/"):])
             if url.path == "/api/index":
                 return self.send_bytes(self.viewer.index_bytes, "application/json")
-            if url.path == "/api/run":
-                row = self.viewer.rows.get(q.get("id", ""))
+            if url.path in RUN_ROUTES:
+                run_id = q.get("id", "")
+                row = self.viewer.rows.get(run_id)
                 if row is None:
-                    return self.fail(HTTPStatus.NOT_FOUND, f"no run {q.get('id')!r} in the index")
-                return self.send_json(run_detail(row))
-            if url.path == "/api/lenses":
-                names = sorted(p.stem for p in LENSES.glob("*.json")) if LENSES.is_dir() else []
-                return self.send_json({"lenses": names})
-            if url.path == "/api/lens":
-                name = q.get("name", "")
-                if not LENS_NAME.fullmatch(name) or not (LENSES / f"{name}.json").is_file():
-                    return self.fail(HTTPStatus.NOT_FOUND, f"no lens {name!r}")
-                return self.send_bytes((LENSES / f"{name}.json").read_bytes(), "application/json")
+                    return self.fail(HTTPStatus.NOT_FOUND, f"no run {run_id!r} in the index")
+                return self.send_json(RUN_ROUTES[url.path](row, self.viewer.dirs[run_id], self.viewer.measured[run_id]))
             if url.path == "/api/ladders":
                 return self.send_json(self.viewer.ladders)
+            if url.path == "/api/summary":
+                col = q.get("col") or next(iter(self.viewer.summaries), "")
+                if col not in self.viewer.summaries:
+                    return self.fail(HTTPStatus.NOT_FOUND, f"no collection {col!r} in the index")
+                return self.send_json(self.viewer.summaries[col])
+            if url.path == "/api/tools":
+                run_id, agent = q.get("id", ""), q.get("agent", "")
+                if run_id not in self.viewer.dirs:
+                    return self.fail(HTTPStatus.NOT_FOUND, f"no run {run_id!r} in the index")
+                found = self.viewer.tools(run_id).get(agent)
+                if found is None:
+                    return self.fail(HTTPStatus.NOT_FOUND, f"no tool definitions for agent {agent!r} in {run_id}")
+                return self.send_json(found)
             if url.path == "/api/transcript":
                 return self.transcript(q.get("id", ""), q.get("agent", ""))
+            if url.path == "/api/tmp":
+                run_id = q.get("id", "")
+                if run_id not in self.viewer.dirs:
+                    return self.fail(HTTPStatus.NOT_FOUND, f"no run {run_id!r} in the index")
+                path = tmp_snapshots(self.viewer.dirs[run_id])
+                if path is None:
+                    return self.fail(HTTPStatus.NOT_FOUND, f"no /tmp snapshots in {run_id}")
+                return self.send_file(path)
+            if url.path == "/api/network":
+                run_id = q.get("id", "")
+                if run_id not in self.viewer.dirs:
+                    return self.fail(HTTPStatus.NOT_FOUND, f"no run {run_id!r} in the index")
+                if network_file(self.viewer.dirs[run_id]) is None:
+                    return self.fail(HTTPStatus.NOT_FOUND, f"no network log in {run_id}")
+                return self.send_json(self.viewer.network(run_id))
             return self.fail(HTTPStatus.NOT_FOUND, "no such path")
         except (BrokenPipeError, ConnectionResetError):
             return None
@@ -571,14 +344,16 @@ class Handler(BaseHTTPRequestHandler):
         self.send_bytes(path.read_bytes(), TYPES.get(path.suffix, "application/octet-stream"))
 
     def transcript(self, run_id: str, agent: str):
-        row = self.viewer.rows.get(run_id)
-        if row is None:
+        run_dir = self.viewer.dirs.get(run_id)
+        if run_dir is None:
             return self.fail(HTTPStatus.NOT_FOUND, f"no run {run_id!r} in the index")
-        run_dir = Path(row["dir"])
-        folder = folder_agents(run_dir, read_jsonl(run_dir / "episodes.jsonl")).get(agent)
+        folder = folder_agents(run_dir, RunDir(run_dir).episodes()).get(agent)
         if folder is None:
             return self.fail(HTTPStatus.NOT_FOUND, f"no transcript for agent {agent!r} in {run_id}")
-        path = run_dir / "trajectories" / folder / "transcript.json"
+        return self.send_file(RunDir(run_dir).transcript_path(folder))
+
+    def send_file(self, path: Path):
+        """A JSON file of a run, streamed as stored."""
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(path.stat().st_size))
@@ -592,28 +367,53 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--port", type=int, default=DEFAULT_PORT)
     ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--rebuild", action="store_true", help="rebuild tmp/transcript_viewer/index.json from the runs")
     ap.add_argument("--runs", type=Path, default=ROOT / "runs", help="the folder whose subfolders are collections")
     args = ap.parse_args(argv)
     runs = args.runs.resolve()
     if not runs.is_dir():
         print(f"no runs folder at {runs}", file=sys.stderr)
         return 1
-    t0 = time.time()
-    idx = load_or_build(runs, args.rebuild)
-    counts = ", ".join(f"{c['key']} {sum(c['statuses'].values())}" for c in idx["collections"])
-    print(f"index: {len(idx['rows'])} runs ({counts}); {len(idx['errors'])} unreadable; built {idx['built_at']} in "
-          f"{idx['build_seconds']} s; loaded in {time.time() - t0:.2f} s", flush=True)
+    progress.step("Read the stored runs")
+    progress.detail("runs", runs)
+    idx = build_index(runs)
+    progress.detail("served", progress.plural(len(idx["rows"]), "run"))
+    for c in idx["collections"]:
+        progress.detail("", f"{c['key']}: {c['runs']}" + (f" and {c['other_tasks']} of other tasks"
+                                                          if c["other_tasks"] else ""))
+    left = idx["left_out"]
+    if left["runs"]:
+        progress.detail("other tasks", f"{progress.plural(left['runs'], 'run')} of {', '.join(left['tasks'])}")
+    if left.get("single_agent"):
+        progress.detail("left out", progress.plural(left["single_agent"], "single-agent run"))
+    stored = idx["pipeline"]
+    if stored["not_processed"] or stored["behind"]:
+        parts = ", ".join(f"{name} {n}" for name, n in stored["parts"].items())
+        progress.detail("not processed", f"{stored['not_processed']} (not served)", err=True)
+        progress.detail("behind", f"{stored['behind']}" + (f" ({parts})" if parts else ""), err=True)
+        progress.detail("to update", stored["command"], err=True)
+    progress.detail("unreadable", len(idx["errors"]))
+    by_error: dict[str, list[str]] = {}
     for e in idx["errors"]:
-        print(f"  unreadable {e['id']}: {e['error']}", file=sys.stderr)
+        by_error.setdefault(e["error"], []).append(e["id"])
+    for n, (error, ids) in enumerate(sorted(by_error.items(), key=lambda kv: -len(kv[1]))):
+        if n == ERROR_LINES:
+            progress.detail("", f"and {len(by_error) - n} more errors; /api/index lists every run", err=True)
+            break
+        runs_of = ids[0] if len(ids) == 1 else f"{len(ids)} runs such as {ids[0]}"
+        progress.detail("", f"{runs_of}: {error}", err=True)
+    progress.step("Prepare the pages")
     Handler.viewer = Viewer(idx)
+    progress.detail("summaries", progress.plural(len(Handler.viewer.summaries), "collection"))
     srv = Server((args.host, args.port), Handler)
 
     def stop(signum, frame):  # a background start ignores Ctrl-C, so SIGTERM stops the server cleanly too
         raise KeyboardInterrupt
 
     signal.signal(signal.SIGTERM, stop)
-    print(f"transcript viewer: http://{args.host}:{args.port}/  (runs: {runs})", flush=True)
+    url = f"http://{args.host}:{args.port}/"
+    progress.done(f"{progress.plural(len(idx['rows']), 'run')} served, {stored['behind']} behind, "
+                  f"{stored['not_processed']} not processed; open {url} (Ctrl-C stops it)",
+                  word="Ready")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

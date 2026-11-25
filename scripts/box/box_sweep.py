@@ -17,7 +17,7 @@ The outputs under runs/, logs/ and out/ are never excluded. A clone under the ho
 since a setup can stop before it and the walk of the home would reach anything there. It also prints symbolic links with
 their targets (a link whose target exists outside the swept roots on a line of its own, since what it points at is not
 swept), special files, every path it could not read, the processes that still produce (before and after the walk: a
-runner, a screen, an example or `python -m src` by their command line, and any process holding a file under the roots
+launcher, a screen, a cell or `python -m src` by their command line, and any process holding a file under the roots
 open for writing), what Docker holds (containers running or stopped, volumes; or why it cannot tell), the box's id from
 <home>/box_id, and last a `done` line, so a cut stream fails the check. `baseline <home> <tmp>` is the same sweep before
 the repository exists: the host image's own files, which box_setup.sh records at first contact.
@@ -31,10 +31,10 @@ import stat
 import subprocess
 import sys
 
-OUTPUT_DIRS = ("runs", "logs", "out")
+OUTPUT_DIRS = ("runs", "logs")
 CACHE_NAMES = {"__pycache__": "bytecode caches, compiled from the tracked source",
                ".pytest_cache": "pytest's cache", ".ruff_cache": "ruff's cache"}
-PRODUCERS = ("examples.", "scripts.screen", "scripts.box.box_runner", "src")
+PRODUCERS = ("examples.", "studies.", "scripts.study.run_study", "scripts.study.screen", "src")
 GIT_STORES = "git's stores of the work trees, clones at the commits the work trees report"
 KEYS = "the keys box_run.sh wrote from the Mac's environment, and its temporary copy (never copied)"
 BOX_ID = "box_id"
@@ -48,7 +48,7 @@ def excluded_trees(repo: str | None, home: str, tmp: str) -> dict[str, str]:
         f"{home}/.cache/huggingface": "Hugging Face downloads", f"{home}/.local/share/uv": "uv's Python installs",
         f"{home}/.local/bin": "uv's installer binaries", f"{home}/.config/uv": "uv's installer receipt",
         f"{home}/.cache/matplotlib": "matplotlib's font cache", f"{home}/.docker": "docker's client config",
-        f"{home}/ship": "the files box_setup.sh sent from the Mac (the lucy bundle, the package list)",
+        f"{home}/ship": "the files box_setup.sh sent from the Mac (the package list and two scripts)",
     }
     trees[f"{tmp}/data-gym-cache"] = "tiktoken's encoding downloads"
     if repo:
@@ -142,7 +142,7 @@ def writing_to(proc: str, pid: str) -> list[str]:
 
 
 def producing(proc: str = "/proc", roots: tuple[str, ...] = (), skip=lambda path: False) -> list[dict]:
-    """The processes that still write the outputs: a runner, a screen, an example or `python -m src` by their command
+    """The processes that still write the outputs: a launcher, a screen, a cell or `python -m src` by their command
     line, and any other process holding a file under the roots open for writing (skip names the paths that do not
     count, such as host services' private /tmp folders)."""
     found = []
@@ -155,7 +155,7 @@ def producing(proc: str = "/proc", roots: tuple[str, ...] = (), skip=lambda path
         if args is None:
             continue
         module = args[args.index("-m") + 1] if "-m" in args[:-1] else ""
-        if module.startswith(PRODUCERS) and (module != "scripts.box.box_runner" or "run" in args):
+        if module.startswith(PRODUCERS):
             found.append({"producing": int(pid), "command": " ".join(args)[:300]})
             continue
         held = [path for path in writing_to(proc, pid) if under(path, roots) and not skip(path)]

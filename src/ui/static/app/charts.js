@@ -1,4 +1,4 @@
-/* Chart helpers of the results browser.
+/* Chart helpers the transcript viewer's page imports.
  * They hold the SVG builder, the role glyphs, the shared tooltip, the colour ramp, the axis ticks, the legend
  * glyphs and a small job queue.
  *
@@ -73,6 +73,16 @@ export const tip = (() => {
       t.style.left = Math.max(4, x) + 'px';
       t.style.top = Math.max(4, y) + 'px';
     },
+    /** The tip above an element, at the pointer's x: it covers nothing under the element. Below it only when the
+     * window has no room above. */
+    above(ev, anchor, lines) {
+      this.show(ev, lines);
+      const t = ensure();
+      const box = t.getBoundingClientRect();
+      const at = anchor.getBoundingClientRect();
+      const y = at.top - box.height - 6;
+      t.style.top = (y >= 4 ? y : at.bottom + 6) + 'px';
+    },
     hide() { if (el) el.hidden = true; },
   };
 })();
@@ -80,6 +90,17 @@ export const tip = (() => {
 /** Attach tooltip listeners to an element; lines() is called on every move. */
 export function withTip(el, lines) {
   el.addEventListener('pointermove', ev => tip.show(ev, lines()));
+  el.addEventListener('pointerleave', () => tip.hide());
+  return el;
+}
+
+/** The same, with the tip above the element (tip.above). Over a child that carries its own title the tip hides, so
+ * the child's words show alone. */
+export function withTipAbove(el, lines) {
+  el.addEventListener('pointermove', ev => {
+    const own = ev.target instanceof Element && ev.target.closest('[title]');
+    if (own && el.contains(own)) tip.hide(); else tip.above(ev, el, lines());
+  });
   el.addEventListener('pointerleave', () => tip.hide());
   return el;
 }

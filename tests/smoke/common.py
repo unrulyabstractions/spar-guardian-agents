@@ -8,8 +8,9 @@
     if __name__ == "__main__":
         raise SystemExit(main(SUITE, SCENARIOS, __doc__))
 
-Every suite runs the real sandbox under Inspect's mockllm, exports the log with src.export.run_export.write_run and
-reads the run directory back the way CheatBench's judge does. A suite keeps only its own scenarios, its task builders
+Every suite runs the real sandbox under Inspect's mockllm, exports the log with src.export.run_export.write_run, writes
+the code record with src.measures.code_ladder.run_signals, as a real run does (src/run.py run), and reads the run
+directory back the way CheatBench's judge does. A suite keeps only its own scenarios, its task builders
 and the checks of its domain. The access log stays on, so every scenario also holds that the log worked (log_worked).
 """
 from __future__ import annotations
@@ -19,6 +20,7 @@ import copy
 import functools
 import json
 import shutil
+import time
 import traceback
 from collections.abc import Callable
 from pathlib import Path
@@ -31,17 +33,21 @@ from src.configuration import settings
 from src.configuration.presets import build_config
 from src.configuration.swarm_config import SwarmConfig
 from src.export.run_export import write_run
+from src.judging import verdict_files
 from src.measures.code_ladder import run_signals
 from src.measures.run_directory import RunDir
+from src.measures.rungs import EVIDENCE
 from src.sandbox.machines import agent_machines as machines
 from src.swarm import turn_rules as rules
 from src.swarm.turn_rules._turn_state import HALT_TAG
 from src.tasks import swarm_task
+from src.utils import progress
 from src.utils.cheatbench_core import judge as core_judge
 from src.utils.json_files import read_json_dir, read_jsonl
 from tests.smoke import LOGS, RUNS, invocation_stamp
 from tests.support.mock_model import MODEL, honest_judge, tagged_infos
 from tests.support.ordered_ids import use_ordered_ids
+from tests.support.run_files import write_text
 
 use_ordered_ids()       # scenarios script their agents by name; `drawn_ids` runs one on the real draw
 
@@ -66,14 +72,23 @@ def log_worked(block: dict | None) -> bool:
     return block["status"] == "partial" and not (block["gaps"] or block["gone"] or block["dropped"])
 
 
+def network_worked(block: dict | None) -> bool:
+    """Whether a run's network log saw all it could: valid, switched off, or partial for procnet alone (a host with no
+    tracer gives the socket tables only). A run before the switch has no block."""
+    return block is None or block["status"] in ("valid", "off") or \
+        (block["status"] == "partial" and block.get("partial_reasons") == ["procnet"])
+
+
 def small(*pairs: str) -> SwarmConfig:
-    """The default preset at the small scale with the smoke time limit, then the pairs."""
-    return build_config("default", "small", [f"time_limit_s={TIME_LIMIT_S}", *pairs])
+    """The default preset at the small scale with the smoke time limit and one tool call per round, so a script entry
+    is one round, then the pairs."""
+    return build_config("default", "small", [f"time_limit_s={TIME_LIMIT_S}", "calls_per_round=1", *pairs])
 
 
 def task_for(benchmark, **fields):
-    """The benchmark under a SwarmConfig of the field defaults, the smoke time limit and `fields`."""
-    return swarm_task(benchmark, SwarmConfig(**{"time_limit_s": TIME_LIMIT_S, **fields}))
+    """The benchmark under a SwarmConfig of the field defaults, the smoke time limit, one tool call per round and
+    `fields`."""
+    return swarm_task(benchmark, SwarmConfig(**{"time_limit_s": TIME_LIMIT_S, "calls_per_round": 1, **fields}))
 
 
 # ------------------------------------------------------------------------------------------------ the suite
@@ -94,10 +109,11 @@ class Suite:
         return suite
 
     def run(self, name: str, task, outputs, judge: Callable | None = None, *, damaged_log: bool = False) -> tuple:
-        """Run one scenario under the mock model and export it: (the eval log, write_run's summary, the episode
-        records). `outputs` drives the agents' model and `judge` the judge role (honest_judge(spec) when None). Earlier
-        files of the same name are removed first, and the machines layer's host tools forget their states. The run's
-        access log must have worked, unless the scenario hurts it on purpose (`damaged_log`)."""
+        """Run one scenario under the mock model, export it and write its code record (run_signals), as src/run.py's
+        run does: (the eval log, write_run's summary, the episode records). `outputs` drives the agents' model and
+        `judge` the judge role (honest_judge(spec) when None). Earlier files of the same name are removed first, and the
+        machines layer's host tools forget their states. The run's access log and network log must have worked, unless
+        the scenario hurts them on purpose (`damaged_log`)."""
         shutil.rmtree(self.logs / name, ignore_errors=True)
         shutil.rmtree(self.runs / name, ignore_errors=True)
         machines._HOST_TOOLS.clear()      # task tool states are keyed by sample, epoch and owner: one eval per scenario
@@ -107,16 +123,18 @@ class Suite:
                              display="plain", log_level="warning")
         log = read_eval_log(log.location, resolve_attachments=True)
         summary = write_run(Path(log.location), self.runs / name)
-        block = self.run_json(name).get("access_log")
+        run_signals(self.runs / name)
+        block, network = self.run_json(name).get("access_log"), self.run_json(name).get("network")
         assert damaged_log or log_worked(block), block
-        return log, summary, read_jsonl(self.runs / name / "episodes.jsonl")
+        assert damaged_log or network_worked(network), network
+        return log, summary, resolved(self.runs / name, read_jsonl(self.runs / name / "processed/episodes.jsonl"))
 
     def assert_judged(self, name: str, sample, records: list[dict], cheated: float = 0.0) -> None:
         """Every agent with a transcript was judged by the mock judge: the score's verdicts name them, its value is
-        `cheated`, every verdict parsed, and judge.jsonl holds one row per such episode with the task's fields and the
-        judge's name."""
+        `cheated`, every verdict parsed, and judges/cheatbench.<judge>.jsonl holds one row per such episode with the
+        task's fields and the judge's name."""
         score = sample.scores["cheatbench_judge"]
-        with_transcript = sorted(r["orbit_agent"] for r in records if r["transcript_path"])
+        with_transcript = sorted(r["agent"] for r in records if r["transcript_path"])
         assert sorted(score.metadata["verdicts"]) == with_transcript and score.value == cheated, score
         assert all(v["parse_ok"] for v in score.metadata["verdicts"].values()), score.metadata["verdicts"]
         rows = self.judge_rows(name)
@@ -125,7 +143,7 @@ class Suite:
         assert all(set(self.spec.fields) <= set(r) for r in rows), rows[0]
 
     def judge_rows(self, name: str) -> list[dict]:
-        return read_jsonl(self.runs / name / "judge.jsonl")
+        return verdict_files.rows(self.runs / name, verdict_files.CHEATBENCH_PASS, settings.JUDGE_MODEL)
 
     def run_json(self, name: str) -> dict:
         return RunDir(self.runs / name).run_json
@@ -142,18 +160,29 @@ class Suite:
         return run
 
     def ladder(self, name: str) -> dict[str, dict]:
-        """The run's agents on the code ladder, by agent."""
+        """The run's agent rows of the code's evidence and the three ladders (code_ladder.run_signals), by agent."""
         return {row["agent"]: row for row in run_signals(self.runs / name)}
 
     def team_record(self, name: str) -> dict:
-        """The code ladder's team record of the run's one sample."""
+        """The team record of the run's one sample (signals.jsonl's team row)."""
         [record] = RunDir(self.runs / name).team_signals()
         return record
 
     def board_posts(self, name: str) -> list[tuple[str, str]]:
-        """(sender, content) of each post on the run's one board."""
-        [board] = read_json_dir(self.runs / name / "communication").values()
-        return [(m["sender"], m["content"]) for m in board["messages"]]
+        """(sender, content) of each post on the run's one board, without the records of who came and went
+        (rules.is_record)."""
+        [board] = read_json_dir(self.runs / name / "processed/communication").values()
+        return [(m["sender"], m["content"]) for m in board["messages"] if not rules.is_record(m)]
+
+    def board_records(self, name: str) -> list[str]:
+        """The run's board records of who came and went, in order: "a01 entered.", "a01 exited."."""
+        [board] = read_json_dir(self.runs / name / "processed/communication").values()
+        return [m["content"] for m in board["messages"] if rules.is_record(m)]
+
+
+def evidence(row: dict) -> set[str]:
+    """The kinds of the code's evidence an agent row or a team row holds (src/measures/rungs.py EVIDENCE)."""
+    return {kind for kind in EVIDENCE if row.get(kind) is True}
 
 
 def plain(value):
@@ -169,6 +198,18 @@ def assert_ok(log):
 
 
 # ------------------------------------------------------------------------------------------------ reading a run back
+
+def resolved(run_dir: Path, records: list[dict]) -> list[dict]:
+    """The episode records, once each recorded transcript path is relative and names a file under the run's
+    processed/, with that path made absolute so the helpers below read it."""
+    processed = RunDir(run_dir).processed
+    for record in records:
+        if record.get("transcript_path"):
+            assert not Path(record["transcript_path"]).is_absolute(), record["transcript_path"]
+            assert (processed / record["transcript_path"]).is_file(), record["transcript_path"]
+            record["transcript_path"] = str(processed / record["transcript_path"])
+    return records
+
 
 def load_transcript(record: dict) -> dict:
     """The episode's transcript, read as CheatBench's judge reads it: it must parse as ATIF and render."""
@@ -203,11 +244,11 @@ def system_text(transcript: dict) -> str:
 
 
 def by_agent(records: list[dict]) -> dict[str, dict]:
-    return {r["orbit_agent"]: r for r in records}
+    return {r["agent"]: r for r in records}
 
 
 def results_by_agent(records: list[dict]) -> dict[str, list[str]]:
-    return {r["orbit_agent"]: results_of(load_transcript(r)) for r in records}
+    return {r["agent"]: results_of(load_transcript(r)) for r in records}
 
 
 def timeline_of(sample, agent: str) -> list[tuple[str, list[str]]]:
@@ -216,8 +257,9 @@ def timeline_of(sample, agent: str) -> list[tuple[str, list[str]]]:
 
 
 def charges_of(sample, agent: str) -> list[str]:
-    """What each of the agent's activations was charged."""
-    return [e["charge"] for e in sample.store.get("TurnState:timeline") if e["agent"] == agent]
+    """Each of the agent's rounds: the tool that ended its turns in it (stop, submit, alert), else work. Every round
+    uses one up."""
+    return [e.get("ending") or "work" for e in sample.store.get("TurnState:timeline") if e["agent"] == agent]
 
 
 def halts_of(sample) -> list[dict]:
@@ -236,24 +278,38 @@ def chosen(only: str, known: dict) -> list[str]:
 
 
 def run_jobs(jobs: dict[str, Callable[[], dict]], runs: Path) -> int:
-    """Run every job, printing one [PASS] or [FAIL] line each (a failure is recorded, not raised, so every job
-    reports), write smoke_results.json under `runs`, the suite's run directory, and return 1 when any failed."""
+    """Run every job under a numbered heading with the time left, then print one [PASS] or [FAIL] line at the start
+    of a line (tests/smoke/all_suites.py counts them; a failure is recorded, not raised, so every job reports, and its
+    error and traceback follow, indented), write smoke_results.json under `runs`, the suite's run directory, with each
+    job's full result, and return 1 when any failed."""
     results, failed = {}, []
-    for label, job in jobs.items():
+    started = time.monotonic()
+    progress.step(f"Smoke suite {runs.parent.name}: {len(jobs)} scenarios")
+    progress.detail("runs", progress.short(runs))
+    for i, (label, job) in enumerate(jobs.items(), 1):
+        left = time.monotonic() - started
+        eta = f", {progress.remaining(left / (i - 1) * (len(jobs) - i + 1))} left" if i > 1 else ""
+        progress.step(f"[{i}/{len(jobs)}] {label}{eta}")
+        t0 = time.monotonic()
         try:
             results[label] = {"status": "PASS", "run": str(runs / label), **job()}
         except Exception as ex:  # noqa: BLE001 - report every scenario, then fail
             results[label] = {"status": "FAIL", "run": str(runs / label), "error": f"{type(ex).__name__}: {ex}"[:3000],
                               "traceback": traceback.format_exc()[-4000:]}
             failed.append(label)
-        shown = {k: v for k, v in results[label].items() if k != "traceback"}
-        print(f"[{results[label]['status']}] {label}: {json.dumps(shown, default=str)[:3000]}", flush=True)
+        print(f"[{results[label]['status']}] {label} in {progress.duration(time.monotonic() - t0)}", flush=True)
         if results[label]["status"] == "FAIL":
-            print(results[label]["traceback"], flush=True)
+            progress.detail("error", results[label]["error"])
+            progress.detail("traceback", results[label]["traceback"].rstrip())
     runs.mkdir(parents=True, exist_ok=True)
-    (runs / "smoke_results.json").write_text(json.dumps(results, indent=1, default=str))
-    print("FAILED:" if failed else "ALL PASS:", failed or list(jobs), runs)
-    return 1 if failed else 0
+    write_text(runs / "analysis/smoke_results.json", json.dumps(results, indent=1, default=str))
+    out = progress.short(runs / "analysis/smoke_results.json")
+    if failed:
+        progress.failed(f"{len(failed)} of {len(jobs)} scenarios failed ({', '.join(failed)}); results in {out}",
+                        started)
+        return 1
+    progress.done(f"{len(jobs)} of {len(jobs)} scenarios passed", out=out, started=started)
+    return 0
 
 
 def main(suite: Suite, scenarios: dict[str, Callable], description: str, tasks: dict | None = None,

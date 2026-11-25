@@ -1,5 +1,5 @@
 """tools/transect: the spec loads in Transect and each agent's spec carries its run's exploit wording, and the
-OpenClaw conversion of the generated riemann_minimal's a01 transcript is accepted by Transect's importer."""
+OpenClaw conversion of the generated binder_minimal's a01 transcript is accepted by Transect's importer."""
 from __future__ import annotations
 
 import asyncio
@@ -23,7 +23,7 @@ from tools.transect.transect_openclaw import (
     unique_call_id,
     write_telemetry,
 )
-from tools.transect.transect_reports import SPEC_PATH, agent_spec, exploit_locations, judge_agreement
+from tools.transect.transect_reports import SPEC_PATH, agent_spec, judge_agreement
 
 PHASES = ["orientation", "planning_on_board", "honest_work", "exploit_discovery", "exploit_use",
           "registration_or_submission", "regulation", "coordination"]
@@ -50,7 +50,7 @@ def test_unique_call_id_suffixes_repeats():
 
 
 def test_alignment_refuses_a_count_mismatch():
-    run = load_run("riemann_minimal")
+    run = load_run("binder_minimal")
     steps = run.agent_steps("a01")
     calls = synthetic_calls(steps, "openai/gpt-6-luna")
     assert aligned_calls(steps, calls)[0] == calls
@@ -61,7 +61,7 @@ def test_alignment_refuses_a_count_mismatch():
 
 
 def test_a01_telemetry_is_accepted_by_the_importer(tmp_path):
-    run = load_run("riemann_minimal")
+    run = load_run("binder_minimal")
     steps = run.agent_steps("a01")
     paired, why = aligned_calls(steps, model_calls_by_agent(run.eval_log)["a01"]) if run.eval_log else (None, "")
     calls = paired or synthetic_calls(steps, run.model)
@@ -89,7 +89,7 @@ def test_a01_telemetry_is_accepted_by_the_importer(tmp_path):
 
 
 def test_cli_refuses_judge_with_structural():
-    assert main(["transect", "riemann_minimal", "--structural", "--judge", "gpt-6-luna"]) == 2
+    assert main(["transect", "binder_minimal", "--structural", "--judge", "gpt-6-luna"]) == 2
 
 
 def test_cli_refuses_an_unknown_run():
@@ -115,11 +115,10 @@ def test_scan_errors_fail_the_command(capsys):
     assert report_scan_problems("r", payload) is True
 
 
-def test_agent_spec_names_the_runs_exploit_and_its_branches():
-    run = load_run("riemann_minimal")
-    assert "agent-014, agent-022" in exploit_locations(run)
+def test_agent_spec_names_the_runs_exploit():
+    run = load_run("binder_minimal")
     context = flat(agent_spec(load_spec(SPEC_PATH), run, "a02").context)
-    assert "hidden role is worker" in context and "Riemann.zip on agent-014" in context
+    assert "whose role is worker" in context
     for key in ("goal", "prior_work", "protected"):
-        assert flat(settings.load_instruction_levels()["vars"]["openmath"][key]) in context, key
-    assert "verify_subset" not in context and "the team works on one problem" in context
+        assert flat(settings.load_instruction_levels()["vars"]["protein_design"][key]) in context, key
+    assert "the team works on one" in context

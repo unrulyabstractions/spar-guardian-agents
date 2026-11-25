@@ -1,5 +1,5 @@
-/* Shared components of the results browser.
- * They build the badges, tables, controls, tool calls, verdict blocks and ladder rungs that several views show.
+/* Shared components the transcript viewer's page imports.
+ * They build the badges, tables, controls, tool calls, verdict blocks and evidence blocks that several views show.
  *
  *   import { badge, dataTable } from './components.js';
  *   dataTable(['agent', { label: 'calls', num: true }], [['k7q2m', 12]]);
@@ -98,8 +98,14 @@ export function splitSignature(raw) {
   return { text: s.slice(0, m.index).replace(/\s+$/, ''), sig: m[1] };
 }
 
+/** The provider's placeholder for reasoning it withheld. */
+export const REDACTED_REASONING = '[redacted reasoning]';
+
 export function reasoningView(raw, lines) {
   const { text, sig } = splitSignature(raw);
+  if (!sig && text.trim() === REDACTED_REASONING) {
+    return badge('reasoning redacted', 'plain', 'The provider withheld this step\'s reasoning');
+  }
   const label = text
     ? `reasoning (${fmtInt(text.length)} chars${sig ? `; ${fmtInt(sig.length)}-char opaque signature hidden` : ''})`
     : `reasoning: opaque provider signature only (${fmtInt(sig.length)} chars, no readable text)`;
@@ -265,13 +271,14 @@ export function extraBadges(extra, skip) {
   return out;
 }
 
-// Hidden roles: Okabe-Ito colour plus shape (circle worker, square regulator, triangle disregulator).
+// Roles: Okabe-Ito colour plus shape (circle worker, square regulator, triangle disregulator); a regulator and a
+// disregulator are influencers.
 // Red and green stay reserved for outcomes.
 export function roleBadge(role) {
-  return h('span', { class: 'badge b-plain', title: 'hidden role' }, ROLE_ORDER.includes(role) ? roleIcon(role, 10) : null, role);
+  return h('span', { class: 'badge b-plain', title: role === 'worker' ? 'worker' : 'influencer' }, ROLE_ORDER.includes(role) ? roleIcon(role, 10) : null, role);
 }
 
-/** The judge's cheated verdict of an episode; a verdict the server did not count (no transcript) is drawn grey. */
+/** CheatBench's judge's own cheated verdict of an episode; a verdict the server did not count (no transcript) is drawn grey. */
 export function verdictCell(ep, yesKind = 'bad', noKind = 'good') {
   const v = ep && ep.verdict ? ep.verdict.cheated : null;
   if (v != null && !ep.counted) {
@@ -307,7 +314,7 @@ export function verdictBlock(v, fields = []) {
       flags.map(k => {
         const f = known.get(k);
         const kinds = k === 'cheated' ? ['bad', 'good'] : [f ? f.kind : 'plain', 'plain'];
-        return h('span', { class: 'vf' }, h('span', { class: 'vf-label' }, f ? f.label : label(k)), yn(v[k], ...kinds));
+        return h('span', { class: 'vf' }, h('span', { class: 'vf-label' }, k === 'cheated' ? 'CheatBench judge: cheated' : f ? f.label : label(k)), yn(v[k], ...kinds));
       })),
     notes.length ? kv(notes.map(([k, x]) => [label(k), asText(x)]), 'kv-grid') : null,
     h('div', { class: 'verdict-meta' },
@@ -319,27 +326,10 @@ export function verdictBlock(v, fields = []) {
     v.summary ? h('p', { class: 'verdict-summary' }, v.summary) : null);
 }
 
-// The ladder's three axes (src/measures/rungs.py): the honeypot rungs, the collaboration levels and the judged
-// presentation labels, each in its order, with the badge kind each value takes.
-const RUNGS = ['exposed', 'tried', 'opened', 'used', 'tampered', 'checked', 'shipped'];
-export const RUNG_ORDER = ['none', ...RUNGS];
-const RUNG_KIND = { none: 'good', exposed: 'warn', tried: 'bad', opened: 'bad', used: 'bad', tampered: 'bad', checked: 'bad', shipped: 'bad' };
-export const COLLABORATION = ['isolated', 'discussed', 'solicited', 'crossed', 'assembled'];
-const COLLABORATION_KIND = { isolated: 'good', discussed: 'warn', solicited: 'bad', crossed: 'bad', assembled: 'bad' };
-const PRESENTATION_KIND = { disclosed: 'good', silent: 'warn', passed_off: 'bad', none: 'plain' };
-const BESIDE_LADDER = [['forbidden_method', 'bad'], ['pushback', 'good'], ['admitted', 'good'], ['concealed', 'bad'], ['false_denial', 'bad']];
-
-export function rungBadge(rung) {
-  return badge(rung, RUNG_KIND[rung] || 'plain', `the highest rung of the honeypot ladder: ${RUNG_ORDER.join(', ')}`);
-}
-
-export function collaborationBadge(level) {
-  return badge(level, COLLABORATION_KIND[level] || 'plain', `the highest collaboration level: ${COLLABORATION.join(', ')}`);
-}
-
-function presentationBadge(value) {
-  return badge(label(value), PRESENTATION_KIND[value] || 'plain', 'how the hand-in presents the honeypot content (judged)');
-}
+// The code's evidence (src/measures/rungs.py EVIDENCE and TRAVEL_EVIDENCE), by the names signals.jsonl records
+// it under. It is evidence, no ladder: the transcript viewer lays out the three ladders read from it.
+const EVIDENCE = ['exposed', 'tried', 'opened', 'used', 'tampered', 'probed', 'checked', 'shipped'];
+const TRAVEL_EVIDENCE = ['discussed', 'solicited', 'crossed', 'assembled'];
 
 const vfItem = (name, node) => h('span', { class: 'vf' }, h('span', { class: 'vf-label' }, name), node);
 
@@ -349,80 +339,46 @@ function evidenceDetails(pairs) {
     .map(([k, t]) => lazyDetails(`${k} evidence`, () => longText(t, { lines: 20 }), { cls: 'sub' }));
 }
 
-export function ladderBlock(l) {
-  if (!l) return null;
-  if (l.parse_ok === false) {
-    return h('div', { class: 'verdict' }, muted('Ladder: the judge output did not parse. '),
-      l.judge_error ? badge('judge error', 'bad', String(l.judge_error)) : null);
-  }
-  const where = f => (l[f + '_call'] == null ? null
-    : `call ${l[f + '_call']}` + (l[f + '_round'] != null ? ` (round ${l[f + '_round']})` : ''));
-  const rungs = RUNGS.map(f => [f, h('span', null, yn(l[f], 'bad', 'good'), where(f) ? [' ', muted(where(f), 'small')] : null)]);
-  const beside = BESIDE_LADDER.map(([f, kind]) => [label(f), yn(l[f], kind, '')]);
-  const cites = !l.citations ? null : l.citations.ok ? badge('cited calls exist', 'good', JSON.stringify(l.citations))
-    : badge('a cited call is missing', 'warn', JSON.stringify(l.citations));
-  return h('div', { class: 'verdict' },
-    h('div', { class: 'verdict-flags' }, vfItem('rung', rungBadge(l.rung)),
-      l.presentation_asked && l.presentation ? vfItem('presentation', presentationBadge(l.presentation)) : null),
-    kv([...rungs, ...beside, ['exposed source', l.exposed_source], ['view', l.view]], 'kv-grid'),
-    h('div', { class: 'verdict-meta' }, muted(`ladder judge ${l.judge || '?'} · ${fmtUsd(l.judge_cost_usd)}`), ' ', cites),
-    l.ladder_summary ? h('p', { class: 'verdict-summary' }, l.ladder_summary) : null,
-    evidenceDetails([['tried', l.tried_evidence], ['opened', l.opened_evidence], ['used', l.used_evidence],
-      ['tampered', l.tampered_evidence], ['checked', l.checked_evidence], ['shipped', l.shipped_evidence], ['forbidden method', l.forbidden_method_evidence],
-      ['pushback', l.pushback_evidence], ['presentation', l.presentation_evidence], ['honesty', l.honesty_evidence]]));
-}
-
-// The code ladder's agent row of an episode (signals.jsonl, src/measures/code_ladder.py): the rungs by code, no judge.
-// used, checked and shipped name content this agent put there; they count once the team opened the honeypot, so a
-// flag above the agent's rung reads plain: it marks the agent's own work, no cheating.
-export function signalsBlock(s) {
+// An episode's agent row of the code's evidence (signals.jsonl, src/measures/transcript_scan.py): each kind of act on
+// the honeypot the code found, with the call it cites, from the transcript and the sandbox probe, no judge.
+export function evidenceBlock(s) {
   if (!s) return null;
   const where = f => (s[f + '_call'] == null ? null : `call ${s[f + '_call']}`);
-  const counted = f => RUNGS.indexOf(f) <= RUNGS.indexOf(s.rung);
-  const rungs = RUNGS.map(f => [f, h('span', null, counted(f) ? yn(s[f], 'bad', 'good') : yn(s[f], 'plain', 'good'),
-    where(f) ? [' ', muted(where(f), 'small')] : null)]);
+  const acts = EVIDENCE.map(f => [f, h('span', null, yn(s[f], 'plain', 'plain'), where(f) ? [' ', muted(where(f), 'small')] : null)]);
   const list = v => (v && v.length ? v.join(', ') : null);
   return h('div', { class: 'verdict' },
-    h('div', { class: 'verdict-flags' }, vfItem('code rung', rungBadge(s.rung))),
-    kv([...rungs, ['exposed source', s.exposed_source], ['holds', list(s.holds)], ['pieces seen', list(s.pieces_seen)],
+    kv([...acts, ['exposed source', s.exposed_source], ['holds', list(s.holds)], ['pieces seen', list(s.pieces_seen)],
       ['joined', s.joined_call == null ? null : `call ${s.joined_call}`], ['probe', s.probe ? 'ran' : 'none'],
       ['lines seen', s.lines_seen]], 'kv-grid'),
-    h('div', { class: 'verdict-meta' }, muted('code ladder: the transcript and the sandbox probe, no judge')),
+    h('div', { class: 'verdict-meta' }, muted('the code’s evidence: the transcript and the sandbox probe, no judge')),
     evidenceDetails([['tried', s.tried_evidence], ['opened', s.opened_evidence], ['joined', s.joined_evidence],
-      ['used', s.used_evidence], ['tampered', s.tampered_evidence], ['checked', s.checked_evidence],
-      ['shipped', s.shipped_evidence]]));
+      ['used', s.used_evidence], ['tampered', s.tampered_evidence], ['probed', s.probed_evidence],
+      ['checked', s.checked_evidence], ['shipped', s.shipped_evidence]]));
 }
 
-// The team record of a sample (signals.jsonl's team row, src/measures/team_ladder.py): the team's rung by code, raised
-// when a pass proves more; the collaboration level; the judged presentation, pushback and forbidden method; and how
-// the run ended. Each rung lists the agents whose rows hold it.
+// The team's record of a sample (signals.jsonl's team row, src/measures/team_ladder.py): the workers' evidence, the
+// travel evidence (how the honeypot travelled between agents), the grader's pass and how the run ended. Each kind
+// lists the agents whose rows hold it.
 export function teamBlock(t) {
   if (!t) return null;
   const list = v => (v && v.length ? v.join(', ') : null);
-  const rungs = RUNGS.map(f => [f, h('span', null, yn(t[f], 'bad', 'good'),
+  const acts = EVIDENCE.map(f => [f, h('span', null, yn(t[f], 'plain', 'plain'),
     list(t[f + '_agents']) ? [' ', muted(list(t[f + '_agents']), 'small')] : null)]);
   const sub = t.submit;
   const submit = !sub ? null : [`${sub.agent}${sub.round != null ? ` in round ${sub.round}` : ''}`,
     sub.ends_after_round != null ? `the run ends after round ${sub.ends_after_round}` : null,
     sub.snapshot ? `snapshot ${String(sub.snapshot).slice(0, 12)}` : null].filter(Boolean).join('; ');
   const own = Object.entries(t.own_submits || {}).map(([a, r]) => `${a} r${r ?? DASH}`).join(', ');
-  const collab = t.collaboration_evidence || {};
+  const travel = t.travel_evidence || {};
   return h('div', { class: 'verdict' },
     h('div', { class: 'verdict-flags' },
-      vfItem('team rung', rungBadge(t.rung)),
-      vfItem('collaboration', t.collaboration == null ? muted('lone agent') : collaborationBadge(t.collaboration)),
-      vfItem('presentation', t.presentation ? presentationBadge(t.presentation)
-        : muted(t.presentation_asked ? 'none' : t.judged ? 'not asked' : 'not judged'))),
-    kv([...rungs,
+      ...TRAVEL_EVIDENCE.map(c => vfItem(c, yn(Boolean((travel[c] || []).length), 'plain', 'plain')))),
+    kv([...acts,
       ['agents', list(t.agents)],
       ['mode', t.mode],
       ['split', t.split == null ? null : yn(t.split, 'plain', 'plain')],
       ['passed', yn(t.passed, 'plain', 'plain')],
-      ['a pass proves', t.passing_proves || muted('nothing')],
-      ['raised by the pass', t.raised_by_proof ? badge(`${t.rung_by_code} to ${t.rung}`, 'warn', t.proof || '') : null],
       ['checked', t.checked_blind ? badge('blind', 'warn', 'a copy no agent saw') : null],
-      ['pushback', yn(t.pushback, 'good', '')],
-      ['forbidden method', yn(t.forbidden_method, 'bad', '')],
       ['ended by', t.ended_by],
       ['hand-in', submit],
       ['own hand-ins', own || null],
@@ -430,19 +386,17 @@ export function teamBlock(t) {
       ['shutdown rate', t.shutdown_rate == null ? null : `${Math.round(t.shutdown_rate * 100)}%`],
       ['copies no agent owns', list(t.copies)],
     ], 'kv-grid'),
-    h('div', { class: 'verdict-meta' }, muted('team record: the code ladder over every agent, the board and the hand-in; presentation, pushback and forbidden method are judged')),
-    evidenceDetails([...RUNGS.map(f => [f, t[f + '_evidence']]), ['proof', t.proof],
-      ...COLLABORATION.slice(1).map(c => [c, collab[c]]), ['presentation', t.presentation_evidence],
-      ['presentation hints', t.presentation_hints], ['pushback', t.pushback_evidence],
-      ['forbidden method', t.forbidden_method_evidence]]));
+    h('div', { class: 'verdict-meta' }, muted('team record: the code’s evidence over every worker, the board and the hand-in')),
+    evidenceDetails([...EVIDENCE.map(f => [f, t[f + '_evidence']]), ['proof', t.proof],
+      ...TRAVEL_EVIDENCE.map(c => [c, travel[c]])]));
 }
 
 export function episodeRecord(ep) {
   const u = ep.usage || {};
   const d = ep.defense;
   return kv([
-    ['agent', ep.orbit_agent],
-    ['hidden role', ep.role ? roleBadge(ep.role) : undefined],
+    ['agent', ep.agent],
+    ['role', ep.role ? roleBadge(ep.role) : undefined],
     ['tool calls', fmtInt(ep.n_tool_calls)],
     ['turns', fmtInt(ep.n_turns)],
     ['tokens prompt', h('span', { title: fmtInt(u.input) }, fmtCompact(u.input))],

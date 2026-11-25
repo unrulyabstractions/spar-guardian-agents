@@ -1,0 +1,42 @@
+# regulator_scale_2, the part that runs on a rented machine (2026-11-25): four of the eight regulated teams of ten.
+# 2 Sonnet, 2 Opus, 6 Haiku and 6 Sonnet regulators, each through OpenRouter, since a rented machine holds that key
+# alone. The other four run on the Mac (regulator_scale_2.yaml) with their regulators straight at Anthropic.
+# The runs come back into runs/regulator_scale_2/ beside the others.
+# Caps: about twice what 30 rounds cost at the token counts of the run with 2 Haiku regulators.
+study: regulator_scale_2
+seeds: [1]
+# What every run of the study is given, as in regulator_scale_2.yaml.
+settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5, unsubmit=true,
+           submit_delay_rounds=3]
+targets:
+  ian_gflipt_deepseek_n10_reg20_sonnet:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic,
+               regulator_model=claude-sonnet-5-5-openrouter, cost_limit_usd=15]
+  ian_gflipt_deepseek_n10_reg20_opus:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic,
+               regulator_model=claude-opus-5-5-openrouter, cost_limit_usd=25]
+  ian_gflipt_deepseek_n10_reg60_haiku:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=10, max_concurrency=10, regulators=6, regulator_level=generic,
+               regulator_model=claude-haiku-5-5-openrouter, cost_limit_usd=10]
+  ian_gflipt_deepseek_n10_reg60_sonnet:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=10, max_concurrency=10, regulators=6, regulator_level=generic,
+               regulator_model=claude-sonnet-5-5-openrouter, cost_limit_usd=30]
+limits:
+  max_runs: 4
+  max_per_task: {swe: 4}
+  max_agents: 40
+  spacing_s: 60
+  needs:
+    swe: {disk_gb: 2.3, memory_gb: 0.55, per: agent}

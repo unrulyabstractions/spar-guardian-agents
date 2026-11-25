@@ -18,27 +18,31 @@ from src import run as run_module
 from src import tasks
 from src.configuration import settings
 from src.configuration.presets import build_config
-from src.domains.openmath import OpenMath
+from src.domains.protein import ProteinDesign
 from src.export.eval_sample_view import roster
 from src.export.export_episodes import episode_id
 from src.export.run_export import write_run
+from src.judging import verdict_files
 from src.measures.run_directory import RunDir
 from src.run import agent_generate_config
-from src.utils.json_files import read_jsonl
+from tests.support.run_files import write_text
 from tests.support.turn_rules_harness import (
     do,
     pull,
     run,
 )
 
+VERDICTS = verdict_files.path(Path(), "cheatbench", "gpt-6-luna")
+"""A judge pass's verdict file, relative to its run folder."""
+
 
 def test_batch_reaches_the_agents_model(tmp_path):
     """run.py passes batch=True to the eval with batch_agents; the agents' calls carry it. The mock ignores it."""
-    config = pull(steps_per_agent=1, batch_agents=True)
+    config = pull(rounds=1, batch_agents=True)
     scripts = {a: [do(a)] for a in config.names}
     _, rec = run(config, scripts, tmp_path, **run_module.agent_generate_config(config))
     assert rec and all(r["batch"] is True for r in rec)
-    _, rec = run(pull(steps_per_agent=1), scripts, tmp_path, **run_module.agent_generate_config(pull()))
+    _, rec = run(pull(rounds=1), scripts, tmp_path, **run_module.agent_generate_config(pull()))
     assert rec and all(not r["batch"] for r in rec)
 
 
@@ -47,8 +51,8 @@ def test_a_config_without_a_judge_binds_no_judge_model():
     assert pull().judge == settings.JUDGE_MODEL == "gpt-6-luna"
     assert build_config("default", "small", ["judge=none"]).judge is None
     assert run_module.judge_role_model(pull(judge=None)) is None
-    with_judge = tasks.scorers(OpenMath(), pull())
-    without = tasks.scorers(OpenMath(), pull(judge=None))
+    with_judge = tasks.scorers(ProteinDesign(), pull())
+    without = tasks.scorers(ProteinDesign(), pull(judge=None))
     assert len(with_judge) == len(without) + 1
     assert "cheatbench_judge" in str(with_judge) and "cheatbench_judge" not in str(without)
 
@@ -62,8 +66,8 @@ def test_the_judge_role_model_batches(monkeypatch):
 
 def test_the_agents_call_bounds_reach_the_generate_config():
     default = build_config("default", "small")
-    assert (default.reasoning_effort, default.tool_output_bytes) == (None, None)
-    assert agent_generate_config(default) == {}
+    assert (default.reasoning_effort, default.tool_output_bytes) == (None, 65536)
+    assert agent_generate_config(default) == {"max_tool_output": 65536}
     bounded = build_config("default", "small", ["reasoning_effort=low", "tool_output_bytes=8192"])
     assert agent_generate_config(bounded) == {"reasoning_effort": "low", "max_tool_output": 8192}
     assert agent_generate_config(bounded.replace(batch_agents=True))["batch"] is True
@@ -75,7 +79,7 @@ def test_a_run_pulled_from_a_box_finds_its_log_in_this_checkout(tmp_path, monkey
     monkeypatch.setattr(settings, "LOGS", tmp_path / "logs")
     run_dir = tmp_path / "runs" / "game_solo_luna1"
     run_dir.mkdir(parents=True)
-    (run_dir / "run.json").write_text(json.dumps({"eval_log": "/root/work/logs/game_solo_luna1/x.eval"}))
+    write_text(run_dir / "processed/run.json", json.dumps({"eval_log": "/root/work/logs/game_solo_luna1/x.eval"}))
     assert RunDir(run_dir).eval_log is None
     log = tmp_path / "logs" / "game_solo_luna1" / "x.eval"
     log.parent.mkdir(parents=True)
@@ -88,7 +92,7 @@ def test_a_run_finds_its_log_in_the_study_its_folder_sits_in(tmp_path, monkeypat
     monkeypatch.setattr(settings, "ROOT", tmp_path)
     run_dir = tmp_path / "runs" / "study_old" / "game_solo"
     run_dir.mkdir(parents=True)
-    (run_dir / "run.json").write_text(json.dumps({"eval_log": "/moved/logs/game_solo/a.eval"}))
+    write_text(run_dir / "processed/run.json", json.dumps({"eval_log": "/moved/logs/game_solo/a.eval"}))
     assert RunDir(run_dir).eval_log is None
     log = tmp_path / "logs" / "study_old" / "game_solo" / "a.eval"
     log.parent.mkdir(parents=True)
@@ -105,7 +109,7 @@ def test_a_run_in_a_group_finds_its_log_at_the_same_place_under_logs(tmp_path, m
     run_dir = tmp_path / "runs" / place
     run_dir.mkdir(parents=True)
     recorded = "/root/work/logs/smoke_access/20261031T061858Z/drawn_swe/a.eval"
-    (run_dir / "run.json").write_text(json.dumps({"eval_log": recorded}))
+    write_text(run_dir / "processed/run.json", json.dumps({"eval_log": recorded}))
     assert RunDir(run_dir).eval_log is None
     log = tmp_path / "logs" / place / "a.eval"
     log.parent.mkdir(parents=True)
@@ -129,20 +133,20 @@ class View(str):
 
 
 def test_rejudge_holds_the_runs_on_one_client_and_a_refusal_stops_that_run_alone(tmp_path, monkeypatch, capsys):
-    """One run's log fails the judge's check and another's holds another eval than its folder: both are refused before
-    the judge, and the rest are judged together. A refused run gets no ladder."""
+    """One run's log fails the judge's check, another's holds another eval than its folder and a third's log is gone:
+    all three are refused before the judge, and the rest are judged together."""
     monkeypatch.setattr(settings, "LOGS", tmp_path / "logs")
     dirs = []
     for name in ("good1", "good2", "bad", "gone", "other"):
         run_dir = tmp_path / "runs" / name
         run_dir.mkdir(parents=True)
-        (run_dir / "run.json").write_text(json.dumps({"eval_log": f"/root/work/logs/{name}/x.eval",
+        write_text(run_dir / "processed/run.json", json.dumps({"eval_log": f"/root/work/logs/{name}/x.eval",
                                                       "eval_id": f"eval-{name}" if name != "other" else "eval-x"}))
         dirs.append(run_dir)
         if name != "gone":
             (tmp_path / "logs" / name).mkdir(parents=True)
             (tmp_path / "logs" / name / "x.eval").write_text("")
-    clients, written, ladders, judged_runs = [], [], [], []
+    clients, written, judged_runs = [], [], []
 
     def views_of(eval_log, judge_errors):
         if eval_log.parent.name == "bad":
@@ -159,13 +163,12 @@ def test_rejudge_holds_the_runs_on_one_client_and_a_refusal_stops_that_run_alone
     monkeypatch.setattr(run_module, "_write_verdicts",
                         lambda log, folder, verdicts, **kwargs: written.append((folder, verdicts, kwargs)))
     monkeypatch.setattr(run_module.judging.Judge, "of", lambda name, batch: clients.append(batch) or "client")
-    monkeypatch.setattr(run_module, "ladder_runs", lambda paths, *a, **k: ladders.extend(p.name for p in paths) or 0)
     assert run_module.rejudge(dirs, "gpt-6-luna") == 5
     assert clients == [True] and judged_runs == ["good1", "good2"]
     assert written == [(dirs[0], {"good1": "client"}, {"remedy": run_module.LOG_REMEDY}),
                        (dirs[1], {"good2": "client"}, {"remedy": run_module.LOG_REMEDY})]
-    assert ladders == ["good1", "good2", "gone"]
     refusal = capsys.readouterr().err
+    assert f"{dirs[3]}: no eval log on disk, so nothing to re-export" in refusal
     assert f"{dirs[4]} holds the run of eval eval-x. Writing eval eval-other there" in refusal
     assert "python -m src judge <log> <name>" in refusal and "--replace sets the earlier run aside" in refusal
 
@@ -176,7 +179,7 @@ def test_a_run_refuses_a_folder_that_holds_a_run_before_the_eval(tmp_path, monke
     use runs."""
     monkeypatch.setattr(settings, "RUNS", tmp_path / "runs")
     monkeypatch.setattr(settings, "LOGS", tmp_path / "logs")
-    held = tmp_path / "runs" / "riemann_minimal" / "run.json"
+    held = tmp_path / "runs" / "riemann_minimal" / "processed/run.json"
     held.parent.mkdir(parents=True)
     held.write_text(json.dumps({"eval_id": "EarlierEval"}))
     started = []
@@ -195,18 +198,19 @@ def test_a_run_refuses_a_folder_that_holds_a_run_before_the_eval(tmp_path, monke
     config = build_config("default", "small", ["judge=none"])
 
     def start(name: str, **kwargs) -> int:
-        return run_module.run(name, OpenMath(), config, "mockllm/model", None, task=object(), **kwargs)
+        return run_module.run(name, ProteinDesign(), config, "mockllm/model", None, task=object(), **kwargs)
 
     assert start("riemann_minimal") == 2
     refusal = capsys.readouterr().err
-    assert str(held.parent) in refusal and "EarlierEval" in refusal and refusal.strip().endswith(run_module.RUN_REMEDY)
+    assert str(held.parent.parent) in refusal and "EarlierEval" in refusal
+    assert refusal.strip().endswith(run_module.RUN_REMEDY)
     assert not started and not (tmp_path / "logs").exists()
     assert json.loads(held.read_text()) == {"eval_id": "EarlierEval"}
     for name, kwargs in (("riemann_minimal", {"replace": True}), ("riemann_later", {})):
         with pytest.raises(Started):
             start(name, **kwargs)
     assert started == ["riemann_minimal", "riemann_later"]
-    attempt = tmp_path / "runs" / "attempts" / "riemann_minimal.1" / "run.json"
+    attempt = tmp_path / "runs" / "attempts" / "riemann_minimal.1" / "processed/run.json"
     assert json.loads(attempt.read_text()) == {"eval_id": "EarlierEval"} and not held.exists()
 
 
@@ -219,7 +223,7 @@ def test_judge_refuses_a_folder_that_holds_another_evals_run_before_judging(tmp_
     log.write_text("")
     folder = tmp_path / "runs" / "riemann_minimal"
     folder.mkdir(parents=True)
-    (folder / "run.json").write_text(json.dumps({"eval_id": "EarlierEval"}))
+    write_text(folder / "processed/run.json", json.dumps({"eval_id": "EarlierEval"}))
     judged, written = [], []
 
     async def judge_all(views, judge_name, batch):
@@ -238,20 +242,57 @@ def test_judge_refuses_a_folder_that_holds_another_evals_run_before_judging(tmp_
     assert not judged and not written
     assert run_module.judge(log, "riemann_minimal", "gpt-6-luna", replace=True) == 0
     assert written == [(folder, True)] and not folder.exists()
-    attempt = tmp_path / "runs" / "attempts" / "riemann_minimal.1" / "run.json"
+    attempt = tmp_path / "runs" / "attempts" / "riemann_minimal.1" / "processed/run.json"
     assert json.loads(attempt.read_text()) == {"eval_id": "EarlierEval"}
     grouped = tmp_path / "runs" / "invalid" / "riemann_minimal"
     grouped.mkdir(parents=True)
-    (grouped / "run.json").write_text(json.dumps({"eval_id": "NewEval"}))
+    write_text(grouped / "processed/run.json", json.dumps({"eval_id": "NewEval"}))
     assert run_module.judge(log, "riemann_minimal", "gpt-6-luna") == 0
     assert written[-1] == (grouped, False) and len(judged) == 2
 
 
 def harness_log(folder: Path, item: str) -> Path:
     """A finished eval log of two agents on the mock provider (the turn rules' harness), written in folder."""
-    config = pull(n_agents=2, steps_per_agent=1)
+    config = pull(n_agents=2, rounds=1)
     _, _, log = run(config, {agent: [do(item)] for agent in config.names}, folder, with_log=True)
     return Path(log.location)
+
+
+def test_an_export_writes_relative_links_bare_agent_ids_model_keys_and_no_dead_fields(tmp_path):
+    """run.json names its log from the checkout and drops task_root, variant, agent and source; each episode names its
+    agent by the bare ID (no orbit_agent, no variant), its model with the registry entry, and its transcript from the
+    run's folder; the transcript's header says the same; no judge.jsonl is written."""
+    made = harness_log(tmp_path / "made", "work")
+    log = tmp_path / "logs" / "study_x" / "pair" / made.name
+    log.parent.mkdir(parents=True)
+    made.rename(log)
+    folder = tmp_path / "runs" / "study_x" / "pair"
+    write_run(log, folder)
+    run = RunDir(folder).run_json
+    assert run["eval_log"] == f"logs/study_x/pair/{log.name}" and RunDir(folder).eval_log == log
+    assert not {"task_root", "variant", "agent", "source"} & set(run) and run["model_key"] is None
+    for episode in RunDir(folder).episodes():
+        assert episode["agent"] in run["agents"] and not {"orbit_agent", "variant"} & set(episode)
+        assert episode["model"] == "mockllm/model" and episode["model_key"] is None
+        assert episode["transcript_path"] == f"trajectories/{episode['episode']}/transcript.json"
+        transcript = RunDir(folder).transcript(episode["episode"])
+        assert (transcript["agent"], transcript["model"]) == (episode["agent"], episode["model"])
+        assert transcript["trajectory"]["agent"]["name"] == episode["agent"]
+    assert not (folder / "analysis/judge.jsonl").exists()
+
+
+def test_the_evals_verdicts_fill_the_judges_file_and_never_undo_a_pass(tmp_path):
+    """From the log, a verdict only fills an episode the judge's file lacks; verdicts just made replace their rows."""
+    from src.export import run_export
+    row = {"unit": "s#1@a01", "episode": "s#1@a01", "judge": "luna", "cheated": True}
+    verdict_files.write(tmp_path, "cheatbench", "luna", [{**dict.fromkeys(verdict_files.ROW_KEYS), **row}])
+    fresh = [{**dict.fromkeys(verdict_files.ROW_KEYS), **row, "cheated": False},
+             {**dict.fromkeys(verdict_files.ROW_KEYS), **row, "unit": "s#1@a02", "episode": "s#1@a02"}]
+    assert run_export.write_verdicts(tmp_path, fresh, replace=False) == 1
+    stored = verdict_files.cheatbench(tmp_path)["luna"]
+    assert (stored["s#1@a01"]["cheated"], sorted(stored)) == (True, ["s#1@a01", "s#1@a02"])
+    assert run_export.write_verdicts(tmp_path, fresh, replace=True) == 2
+    assert verdict_files.cheatbench(tmp_path)["luna"]["s#1@a01"]["cheated"] is False
 
 
 def test_an_export_over_another_evals_run_is_a_refusal_with_exit_code_2(tmp_path, capsys):
@@ -260,15 +301,15 @@ def test_an_export_over_another_evals_run_is_a_refusal_with_exit_code_2(tmp_path
     log = harness_log(tmp_path / "made", "work")
     folder = tmp_path / "runs" / "pair"
     folder.mkdir(parents=True)
-    (folder / "run.json").write_text(json.dumps({"eval_id": "EarlierEval"}))
+    write_text(folder / "processed/run.json", json.dumps({"eval_id": "EarlierEval"}))
     with pytest.raises(run_module.Refusal) as refused:
         run_module.export(log, folder)
     assert refused.value.code == 2 and "EarlierEval" in str(refused.value)
     assert str(refused.value).endswith(run_module.RUN_REMEDY) and "replace=True" not in str(refused.value)
-    assert json.loads((folder / "run.json").read_text()) == {"eval_id": "EarlierEval"}
+    assert json.loads((folder / "processed/run.json").read_text()) == {"eval_id": "EarlierEval"}
     run_module.export(log, folder, replace=True)
     assert RunDir(folder).run_json["eval_id"] != "EarlierEval" and RunDir(folder).episodes()
-    assert json.loads((tmp_path / "runs" / "attempts" / "pair.1" / "run.json").read_text()) == {
+    assert json.loads((tmp_path / "runs" / "attempts" / "pair.1" / "processed/run.json").read_text()) == {
         "eval_id": "EarlierEval"}
 
 
@@ -281,16 +322,16 @@ def runs_in(tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
 
 
 def earlier_run(tmp_path: Path, runs: Path, logs: Path) -> tuple[Path, str]:
-    """runs/study_x/pair exported from one eval, with its log under logs/, its figures under out/ and the judged
-    ladder's file that an export never clears; (the folder, its eval_id)."""
+    """runs/study_x/pair exported from one eval, with its log under logs/, its figures under out/ and a judge pass's
+    verdict file, which an export never clears; (the folder, its eval_id)."""
     made = harness_log(tmp_path / "made_a", "work")
     folder = runs / "pair"
     (logs / "pair").mkdir(parents=True)
     log = made.rename(logs / "pair" / made.name)
     write_run(log, folder)
-    (folder / "ladder.jsonl").write_text(json.dumps({"row": "team", "sample": "earlier"}) + "\n")
-    (tmp_path / "out" / "study_x" / "pair").mkdir(parents=True)
-    (tmp_path / "out" / "study_x" / "pair" / "timeline.png").write_text("earlier")
+    (folder / VERDICTS).parent.mkdir(parents=True)
+    (folder / VERDICTS).write_text(json.dumps({"unit": "earlier"}) + "\n")
+    write_text(folder / "analysis/figures/timeline.png", "earlier")
     return folder, RunDir(folder).run_json["eval_id"]
 
 
@@ -315,28 +356,28 @@ def test_run_with_replace_sets_the_earlier_run_aside_and_exports_into_empty_fold
     monkeypatch.setattr(run_module.summary, "summary_lines", lambda run_dir: [])
     monkeypatch.setattr(run_module.signals, "run_report", lambda run_dir: "")
     config = build_config("default", "small", ["judge=none"])
-    assert run_module.run("pair", OpenMath(), config, "mockllm/model", None, task=object(), replace=True) == 0
+    assert run_module.run("pair", ProteinDesign(), config, "mockllm/model", None, task=object(), replace=True) == 0
     assert seen == [[]]
     attempt = runs / "attempts" / "pair.1"
     assert (RunDir(attempt).run_json["eval_id"], RunDir(attempt).run_json["run_id"]) == (earlier_id, "pair")
-    assert (attempt / "ladder.jsonl").is_file() and len(list((logs / "attempts" / "pair.1").glob("*.eval"))) == 1
-    assert (tmp_path / "out" / "study_x" / "attempts" / "pair.1" / "timeline.png").read_text() == "earlier"
-    assert RunDir(folder).run_json["eval_id"] not in (None, earlier_id) and not (folder / "ladder.jsonl").exists()
+    assert (attempt / VERDICTS).is_file() and len(list((logs / "attempts" / "pair.1").glob("*.eval"))) == 1
+    assert (attempt / "analysis/figures/timeline.png").read_text() == "earlier"
+    assert RunDir(folder).run_json["eval_id"] not in (None, earlier_id) and not (folder / "analysis/judges").exists()
     assert RunDir(folder).eval_log == logs / "pair" / later.name
 
 
-def test_regenerate_draws_a_runs_figures_into_the_folder_that_mirrors_it(tmp_path, monkeypatch):
-    """Two runs named pair in two groups get two figure folders: out/study_x/<group>/pair/."""
+def test_regenerate_draws_a_runs_figures_into_its_own_folder(tmp_path, monkeypatch):
+    """Two runs named pair in two groups get two figure folders, each its run's analysis/figures/."""
     drawn = []
     monkeypatch.setattr(run_module.run_figures, "plot_run", lambda run_dir, out_dir: drawn.append(out_dir) or [])
     dirs = []
     for group in ("mock", "set_aside"):
         run_dir = tmp_path / "runs" / "study_x" / group / "pair"
         run_dir.mkdir(parents=True)
-        (run_dir / "run.json").write_text("{}")
+        write_text(run_dir / "processed/run.json", "{}")
         dirs.append(run_dir)
     assert run_module.regenerate(dirs, export_log=False, measures=False) == 0
-    assert drawn == [tmp_path / "out" / "study_x" / group / "pair" for group in ("mock", "set_aside")]
+    assert drawn == [run_dir / "analysis/figures" for run_dir in dirs]
 
 
 def test_judge_with_replace_exports_the_new_eval_and_keeps_the_earlier_in_attempts(tmp_path, monkeypatch):
@@ -348,7 +389,7 @@ def test_judge_with_replace_exports_the_new_eval_and_keeps_the_earlier_in_attemp
     later = made.rename(logs / "pair" / made.name)                 # a later eval of the same name, not exported
 
     async def judge_all(views, judge_name, batch):
-        return {name: {episode_id(view, agent): {"parse_ok": True, "cheated": False}
+        return {name: {episode_id(view, agent): {"judge": judge_name, "parse_ok": True, "cheated": False}
                        for view in run_views for agent in roster(view)} for name, run_views in views.items()}
 
     monkeypatch.setattr(run_module, "require_judge_key", lambda name, code: None)
@@ -359,8 +400,9 @@ def test_judge_with_replace_exports_the_new_eval_and_keeps_the_earlier_in_attemp
     assert run_module.judge(later, "pair", "gpt-6-luna", replace=True) == 0
     assert RunDir(runs / "attempts" / "pair.1").run_json["eval_id"] == earlier_id
     assert [path.name for path in (logs / "pair").iterdir()] == [later.name]
-    assert RunDir(folder).run_json["eval_id"] not in (None, earlier_id) and RunDir(folder).verdicts()
-    assert not (folder / "ladder.jsonl").exists() and RunDir(folder).eval_log == later
+    assert RunDir(folder).run_json["eval_id"] not in (None, earlier_id) and verdict_files.episode_verdicts(folder)
+    assert [p.name for p in (folder / "analysis/judges").iterdir()] == ["cheatbench.gpt-6-luna.jsonl"]
+    assert RunDir(folder).eval_log == later
 
 
 def test_rejudge_writes_each_run_back_into_its_own_folder_wherever_it_lives(tmp_path, monkeypatch):
@@ -386,17 +428,18 @@ def test_rejudge_writes_each_run_back_into_its_own_folder_wherever_it_lives(tmp_
 
     async def stand_in(views, judge):
         judged.append(views[0].eval_id)
-        return {episode: {"parse_ok": True, "cheated": False, "judged_eval": views[0].eval_id} for episode in episodes}
+        return {episode: {"judge": "gpt-6-luna", "parse_ok": True, "cheated": False, "judged_eval": views[0].eval_id}
+                for episode in episodes}
 
     monkeypatch.setattr(run_module, "require_judge_key", lambda name, code: None)
     monkeypatch.setattr(run_module.judging.Judge, "of", lambda name, batch: "client")
     monkeypatch.setattr(run_module, "_judge_views", stand_in)
     monkeypatch.setattr(run_module.signals, "run_report", lambda run_dir: "")
-    assert run_module.rejudge([dirs[0], dirs[1], dirs[0]], "gpt-6-luna", with_ladder=False) == 0
+    assert run_module.rejudge([dirs[0], dirs[1], dirs[0]], "gpt-6-luna") == 0
     own = [RunDir(run_dir).run_json["eval_id"] for run_dir in dirs]
     assert own[0] != own[1] and sorted(judged) == sorted(own)
     for run_dir, eval_id, log in zip(dirs, own, logs):
-        rows = read_jsonl(run_dir / "judge.jsonl")
+        rows = verdict_files.rows(run_dir, "cheatbench", "gpt-6-luna")
         assert len(rows) == len(episodes) and {row["judged_eval"] for row in rows} == {eval_id}
-        assert RunDir(run_dir).run_json["eval_log"] == str(log.resolve())
+        assert RunDir(run_dir).run_json["eval_log"] == log.relative_to(tmp_path).as_posix()
     assert not (tmp_path / "runs" / "study_x" / "pair").exists()

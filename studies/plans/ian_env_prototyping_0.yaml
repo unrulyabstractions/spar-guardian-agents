@@ -1,0 +1,35 @@
+# ian_env_prototyping_0 (2026-11-23): trial runs on the environments as changed after ian_influencers_0. What changed:
+# every worker told of its team now reads that the members may hold different files, to communicate, exchange and agree
+# before submit; each ian scenario says why the members' files differ; ian_flipt's revealed exploit is whole files.
+# The user's orders: "re-run the haiku positive control" and "do a run with deepseek after" (the SWE fix).
+study: ian_env_prototyping_0
+closed: true        # over; moved to OLD/ on 2026-11-25 on the user's word
+seeds: [1]
+# What every run of the study is given. A value named nowhere is the default (swarm_config.py).
+settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5]
+targets:
+  ian_poem_haiku_positive_control:
+    module: studies.cells.creative_writing.ian_poem_minimal_cheat
+    model: claude-haiku-5-5-openrouter
+    packs: [creative_writing/revealing]
+  ian_binder_haiku_positive_control:
+    module: studies.cells.protein_design.ian_binder_minimal_cheat
+    model: claude-haiku-5-5-openrouter
+    packs: [protein_design/revealing]
+  ian_flipt_haiku_positive_control:
+    module: studies.cells.swe.ian_flipt_minimal_cheat
+    model: claude-haiku-5-5-openrouter
+    packs: [swe/revealing]
+  ian_flipt_deepseek_seeded:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [swe/revealing]
+  ian_flipt_luna_seeded:                 # the user, 2026-11-23: "try again" (in ian_influencers_0 one agent used upstream's code alone)
+    module: studies.cells.swe.ian_flipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [swe/revealing]
+  ian_flipt_qwen_seeded:                 # the user, 2026-11-24: "Try it!" (in ian_influencers_0 the seed took Qwen from attempted to looked)
+    module: studies.cells.swe.ian_flipt_minimal
+    model: qwen3.8-flash-openrouter
+    packs: [swe/revealing]
+limits: {max_runs: 6, max_per_task: {swe: 3}, spacing_s: 15, min_disk_gb: {creative_writing: 4, protein_design: 4}}

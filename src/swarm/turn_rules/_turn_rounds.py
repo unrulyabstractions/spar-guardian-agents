@@ -1,0 +1,345 @@
+"""Rounds of calls: each agent's round under way, the line that opens it, the gate on its calls and where it ends.
+
+An agent's round is one ORBIT activation under the completion quantum: model calls one after another, each seeing the
+results before it. A reply asking for several calls runs them as one batch. The round ends at the first of these, the
+end reason its timeline entry keeps:
+
+    end_round     a batch held end_round (or a domain tool that closes the round, close_round)
+    calls         the round made N calls (TurnState.calls_per_round), a soft cap: no call is refused for it, so a
+                  reply that starts below N runs whole; or the agent has made all C of its calls (TurnState.call_budget)
+    ending        a call ended the agent's turns (submit or stop_working went through), or its submit
+                  handed in the run's work (a lone agent's)
+    time          the agents' time limit has passed (TurnState.time_limit_s from the first round's start)
+    round_time    the round's own time has passed (TurnState.round_time_s, T, from the round's start before its first
+                  model call): a batch that ends past T ends the round. A model call under way is never cut, so the
+                  round can run over by one model call and the batch after it; a command still running at T is kept
+                  as a job (src/sandbox/command_jobs.py), so its call returns by T
+    no_tool_call  a reply with no tool call
+    context       a reply cut at the context limit
+
+ends decides at each boundary of the activation (ORBIT ScheduleConfig.end_activation, turn_activation.ends_round).
+counted, a tool wrapper on every agent's tools, counts every call against the agent's budget of C calls (charge,
+TurnState.calls_used; a reply with no tool call counts one too) and refuses (Refused, prompts.yaml `round`) a call past
+C, a call after wait in the same batch and a call after the agent's turns ended, marks refused a call its tool refuses
+by our rules, and times every call. A command tool reads its round's deadline (round_deadline) and names the job its
+call became (mark_job), which the call's timeline entry keeps as `job`, and names each machine it ran a command on
+(mark_machine): after such a call the AFTER_CALL hooks run (the /tmp capture, src/sandbox/live_tmp_capture.py), and
+_settle names the call's snapshots by its call id (TMP_CALLS_STORE). SWAPS holds the tools that counted replaces before
+it wraps them: ORBIT's built-in bash and python of a lone agent, which ORBIT binds under names a binding may not use,
+run through the sandbox's command jobs (src/sandbox/agent_tools.py registers them).
+
+The round under way lives in memory (TurnState's Live.rounds), never in the store: after_activation turns it into the
+round's timeline entry. open_round starts it before the round's first model call and gives the round's line, the
+first part of the one message the agent gets at the round's boundary (_turn_messages): "Tool calls left: 287." No
+agent is told of rounds: the line gives the calls it has left of its budget C (round_line).
+
+    record = round_record("k7q2m")
+    record["made"], record["closed"], record["end"]       # 3, False, None
+"""
+from __future__ import annotations
+
+import asyncio
+import sys
+import time
+from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
+
+from inspect_ai.agent import AgentState
+from inspect_ai.log import transcript
+from inspect_ai.model import ChatMessageAssistant, ChatMessageUser
+from inspect_ai.tool import ToolDef
+from inspect_ai.util import store, store_as
+
+from src.configuration.settings import load_prompts
+from src.swarm.turn_rules._turn_messages import Part, message_round
+from src.swarm.turn_rules._turn_state import (
+    END_ROUND,
+    JOBS_STORE,
+    ROUND_TAG,
+    TMP_CALLS_STORE,
+    Refused,
+    TeamSubmission,
+    TurnState,
+    bump,
+    calls_left,
+    current_round,
+    live_record,
+    out_of_calls,
+    record_entry,
+    unsubmit_record,
+)
+
+END_REASONS = ("end_round", "calls", "ending", "time", "round_time", "no_tool_call", "context")
+RUN: ContextVar[dict | None] = ContextVar("swarm_round_run", default=None)
+"""The run record of the tool call under way (counted), which mark_job writes."""
+SWAPS: dict[str, Callable[[str, ToolDef], ToolDef]] = {}
+"""Tool name -> make(agent, definition): the tool counted wraps in place of the one ORBIT built."""
+AFTER_CALL: list[Callable[[str, dict], Awaitable[None]]] = []
+"""hook(agent, run record) after every call the gate let through that ran a command on a machine (mark_machine), once
+its end time is kept, the call's answer waiting on it: the /tmp capture registers itself. A hook never raises; one that
+does is skipped."""
+
+
+def now() -> float:
+    """UTC seconds: the clock of rounds and calls."""
+    return time.time()
+
+
+def round_record(agent: str, round_number: int | None = None) -> dict:
+    """The agent's round under way, made when missing or when the round of the step under way (current_round) is
+    another: {round, t0, t1, made, closed, end, runs, times, seen}. made counts the calls toward N, runs the calls
+    the wrapper started in the batch under way, times each settled call's (t0, t1, refused) by call id."""
+    rounds = live_record().rounds
+    round_number = round_number if round_number is not None else current_round() or 0
+    record = rounds.get(agent)
+    if record is None or record["round"] != round_number:
+        record = {"round": round_number, "t0": now(), "t1": None,
+                  "made": 0, "closed": False, "end": None, "runs": [], "times": {}, "seen": None}
+        rounds[agent] = record
+    return record
+
+
+def take_round(agent: str) -> dict | None:
+    """The agent's round record, removed from memory: after_activation's, once the round is over."""
+    return live_record().rounds.pop(agent, None)
+
+
+def close_round(agent: str) -> None:
+    """End the agent's round after the batch under way: end_round, and a domain tool that ends the round."""
+    round_record(agent)["closed"] = True
+
+
+def round_deadline(agent: str) -> float | None:
+    """When the agent's round under way runs out of time (UTC seconds): its start plus T (TurnState.round_time_s).
+    None outside a round, or with no round clock."""
+    record = live_record().rounds.get(agent)
+    if record is None:
+        return None
+    limit = store_as(TurnState).round_time_s
+    return record["t0"] + limit if limit else None
+
+
+def mark_job(job: str) -> None:
+    """Name the job the tool call under way became; its timeline entry keeps it as `job`. Outside counted, nothing."""
+    run = RUN.get()
+    if run is not None:
+        run["job"] = job
+
+
+def mark_machine(service: str | None, box) -> None:
+    """Name a machine the tool call under way ran a command on (its service, None for the sample's default, and its
+    sandbox environment); AFTER_CALL reads them. Outside counted, nothing."""
+    run = RUN.get()
+    if run is not None:
+        run.setdefault("machines", {})[service] = box
+
+
+async def after_call(agent: str, run: dict) -> None:
+    """The AFTER_CALL hooks for a call that ran a command on a machine."""
+    if not run.get("machines"):
+        return
+    for hook in AFTER_CALL:
+        try:
+            await hook(agent, run)
+        except Exception:  # noqa: BLE001 - a hook's failure never reaches the agent's call
+            continue
+
+
+def name_snapshot_call(seqs: list[int], call_id: str) -> None:
+    """Write the id of the tool call that took these /tmp snapshots into TMP_CALLS_STORE, once its batch is settled."""
+    st = store()
+    named = dict(st.get(TMP_CALLS_STORE) or {})
+    named.update({str(seq): call_id for seq in seqs})
+    st.set(TMP_CALLS_STORE, named)
+
+
+def name_job_call(job: str, call_id: str) -> None:
+    """Write the id of the tool call a job started from into its record (JOBS_STORE), once the round is settled."""
+    st = store()
+    jobs = dict(st.get(JOBS_STORE) or {})
+    if job in jobs and jobs[job].get("call_id") != call_id:
+        jobs[job] = {**jobs[job], "call_id": call_id}
+        st.set(JOBS_STORE, jobs)
+
+
+def round_line(left: int) -> str:
+    """The line that opens a round's message (prompts.yaml round.line): the tool calls the agent has left of C."""
+    return load_prompts()["round"]["line"].format(left=left)
+
+
+def open_round(agent: str, state: AgentState) -> Part | None:
+    """Start the agent's round and give its line (round_line, the calls it has left) as the round's message's first
+    part (ROUND_TAG metadata: round, of (the plan's rounds), left (calls left), calls (N) and budget (C); before
+    2026-11-22 left counted rounds), once per round: a boundary edit ORBIT rejects is given again at the next, and a
+    conversation that holds this round's line gets none. Notes the first round's start (TurnState.started_at). The
+    part's record writes the line's info event. None outside a planned step and when the line is there."""
+    round_number = current_round()
+    if round_number is None:
+        return None
+    st = store_as(TurnState)
+    if st.started_at is None:
+        st.started_at = now()
+    round_record(agent, round_number)
+    record_entry(agent)
+    if any((message_round(m.metadata) or {}).get("round") == round_number for m in state.messages
+           if isinstance(m, ChatMessageUser)):
+        return None
+    left = calls_left(st, agent)
+    left = left if left is not None else 0
+    tag = {"round": round_number, "of": st.round_budget, "left": left, "calls": st.calls_per_round,
+           "budget": st.call_budget}
+    text = round_line(left)
+    info = {ROUND_TAG: {"agent": agent, **tag, "content": text}}
+    return Part(ROUND_TAG, tag, text, lambda _message: transcript().info(info))
+
+
+# ------------------------------------------------------------------------------------------------ the gate on calls
+
+def turns_over(st: TurnState, agent: str) -> bool:
+    """Whether the agent's turns have ended (TurnState.ended), or its submit handed in the run's work: a lone agent's
+    hand-in ends the run after its round. A team's submitter keeps its turns under unsubmit (an Unsubmits record), and
+    has ended otherwise."""
+    return agent in st.ended or (store_as(TeamSubmission).agent == agent and unsubmit_record() is None)
+
+
+def charge(agent: str) -> None:
+    """Count one tool call against the agent's budget C (TurnState.calls_used), never past C: a call the gate lets
+    through, wait and a call after it included, a call whose arguments did not parse, and a reply with no tool call."""
+    st = store_as(TurnState)
+    if not out_of_calls(st, agent):
+        st.calls_used = bump(st.calls_used, agent)
+
+
+def _begin(agent: str, tool: str) -> dict:
+    """Start one call of the agent's round: its run record, or Refused when the call is refused (prompts.yaml
+    `round`): after the agent's turns ended, past its budget of C calls (spent; after_activation then ends its turns),
+    or after wait in the same reply. Every call past the first two checks counts one of C (charge). N is a soft cap:
+    no call is refused for it, and the round ends after the batch that reaches it (ends)."""
+    record = round_record(agent)
+    run = {"tool": tool, "t0": now(), "t1": None, "refused": None}
+    record["runs"].append(run)
+    st, texts = store_as(TurnState), load_prompts()["round"]
+    if turns_over(st, agent):
+        refused = texts["ended"]
+    elif out_of_calls(st, agent):
+        refused = texts["spent"]
+    else:
+        charge(agent)
+        run["charged"] = True
+        if tool == END_ROUND:
+            record["closed"] = True
+            return run
+        if not record["closed"]:
+            record["made"] += 1
+            return run
+        refused = texts["closed"]
+    run["refused"], run["t1"] = refused, run["t0"]
+    raise Refused(refused)
+
+
+def counted(agent: str):
+    """A tool wrapper for the agent's tools: each call goes through _begin, and its end time is kept. A call the
+    tool itself refuses by our rules (Refused) is marked refused, as the gate's are."""
+
+    def wrap(tool):
+        definition = tool if isinstance(tool, ToolDef) else ToolDef(tool)
+        if definition.name in SWAPS:
+            definition = SWAPS[definition.name](agent, definition)
+
+        async def execute(**kwargs):
+            run = _begin(agent, definition.name)
+            token = RUN.set(run)
+            try:
+                return await definition.tool(**kwargs)
+            except Refused as refusal:
+                run["refused"] = refusal.message
+                raise
+            finally:
+                run["t1"] = now()
+                RUN.reset(token)
+                if not isinstance(sys.exc_info()[1], (asyncio.CancelledError, Refused)):
+                    await after_call(agent, run)
+
+        wrapped = ToolDef(execute, name=definition.name, description=definition.description,
+                          parameters=definition.parameters, parallel=definition.parallel, viewer=definition.viewer,
+                          model_input=definition.model_input, max_output=definition.max_output,
+                          options=definition.options)
+        return wrapped if isinstance(tool, ToolDef) else wrapped.as_tool()
+
+    return wrap
+
+
+# ------------------------------------------------------------------------------------------------ where a round ends
+
+def _settle(record: dict, messages: list, agent: str | None = None) -> None:
+    """After a batch: pair each call of the last reply with the run the wrapper started for it (by tool, in the
+    reply's order), keep its times by call id and the job it became (record["jobs"]), and count the batch's calls
+    toward N, end_round left out. A call that never reached the wrapper (its arguments did not parse) counts too,
+    without times."""
+    last = next((m for m in reversed(messages) if isinstance(m, ChatMessageAssistant)), None)
+    if last is None or not last.tool_calls or last.id == record["seen"]:
+        return
+    record["seen"] = last.id
+    runs, asked = list(record["runs"]), 0
+    for call in last.tool_calls:
+        at = next((i for i, run in enumerate(runs) if run["tool"] == call.function), None)
+        if at is None and agent is not None:
+            charge(agent)                 # its arguments did not parse: it never reached the wrapper, and counts
+        run = runs.pop(at) if at is not None else {"t0": None, "t1": None, "refused": None}
+        record["times"][call.id] = (run["t0"], run["t1"], run["refused"])
+        if run.get("job"):
+            record.setdefault("jobs", {})[call.id] = run["job"]
+        if run.get("tmp"):
+            name_snapshot_call(run["tmp"], call.id)
+        if call.function == END_ROUND:
+            record["closed"] = True
+        else:
+            asked += 1
+    record["runs"] = []
+    record["asked"] = record.get("asked", 0) + asked
+    record["made"] = max(record["made"], record["asked"])
+
+
+def charge_reply(agent: str, record: dict, messages: list) -> None:
+    """Count a reply with no tool call as one call, once per reply (record["replied"], the reply's id)."""
+    last = next((m for m in reversed(messages) if isinstance(m, ChatMessageAssistant)), None)
+    key = last.id if last is not None else None
+    if record.get("replied", False) is not False and record.get("replied") == key:
+        return
+    record["replied"] = key
+    charge(agent)
+
+
+def past_deadline(st: TurnState) -> bool:
+    return bool(st.time_limit_s) and st.started_at is not None and now() >= st.started_at + st.time_limit_s
+
+
+def past_round_time(st: TurnState, record: dict) -> bool:
+    """Whether the round has run T or longer (TurnState.round_time_s, 0 or None: never)."""
+    return bool(st.round_time_s) and now() >= record["t0"] + st.round_time_s
+
+
+def ends(agent: str, boundary) -> str | None:
+    """Why the agent's round ends at this boundary (END_REASONS), or None to go on; the reason and the time are kept
+    in the round record."""
+    record = round_record(agent)
+    st = store_as(TurnState)
+    reason = None
+    if boundary.after == "reply":
+        reason = "context" if boundary.output.stop_reason == "model_length" else "no_tool_call"
+        charge_reply(agent, record, boundary.messages)
+    elif boundary.after == "tools":
+        _settle(record, boundary.messages, agent)
+        if turns_over(st, agent):
+            reason = "ending"
+        elif record["closed"]:
+            reason = "end_round"
+        elif record["made"] >= st.calls_per_round > 0 or out_of_calls(st, agent):
+            reason = "calls"
+        elif past_deadline(st):
+            reason = "time"
+        elif past_round_time(st, record):
+            reason = "round_time"
+    if reason is not None:
+        record["end"], record["t1"] = reason, now()
+    return reason

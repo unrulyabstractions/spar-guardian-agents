@@ -42,7 +42,7 @@ class MessageOrigin:
 
 
 def episode_of(run: Run, agent: str) -> str:
-    """The agent's episode id, such as "riemann#1@t4x9n"; the run name and agent when episodes.jsonl lacks it."""
+    """The agent's episode id, such as "alfalfa_chi#1@t4x9n"; the run name and agent when episodes.jsonl lacks it."""
     return (run.episodes.get(agent) or {}).get("episode") or f"{run.name}@{agent}"
 
 
@@ -105,7 +105,6 @@ def agent_transcript(run: Run, agent: str) -> Transcript:
         "role": run.roles.get(agent, "worker"),
         "domain": run.domain,
         "task": run.task,
-        "cheated": run.cheated.get(agent),
         "holds": ", ".join(str(item) for item in run.exploit.get("holds", {}).get(agent, [])),
         **judge_metadata(judge),
     }

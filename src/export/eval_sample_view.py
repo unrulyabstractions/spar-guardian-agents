@@ -36,8 +36,17 @@ PROVIDER_ERROR_WORDS = (
 )
 
 
-def agent_version() -> str:
-    return f"orbit-{orbit.__version__}+inspect-ai-{inspect_ai.__version__}"
+def agent_version(view: SampleView | None = None) -> str:
+    """The ORBIT and Inspect that ran the sample, "orbit-<version>+inspect-ai-<version>": the view's (a re-export
+    keeps the versions of the run, not the exporter's), else the running ones."""
+    orbit_version = view.orbit_version if view is not None else orbit.__version__
+    inspect_version = view.inspect_version if view is not None else inspect_ai.__version__
+    return f"orbit-{orbit_version}+inspect-ai-{inspect_version}"
+
+
+def logged_inspect_version(log: EvalLog) -> str:
+    """The Inspect version that wrote the eval log (EvalSpec.packages), else the running one."""
+    return (log.eval.packages or {}).get("inspect_ai") or inspect_ai.__version__
 
 
 # --------------------------------------------------------------------------
@@ -61,8 +70,9 @@ class SampleView:
     error: Any
     total_time: float | None
     model_usage: dict | None = None
-    eval_log: str | None = None
     eval_id: str | None = None
+    orbit_version: str = orbit.__version__
+    inspect_version: str = inspect_ai.__version__
 
     @classmethod
     def from_state(cls, state: TaskState, events: Sequence) -> "SampleView":
@@ -77,14 +87,17 @@ class SampleView:
                    limit=limit, error=None, total_time=None, model_usage=_live_model_usage())
 
     @classmethod
-    def from_eval_sample(cls, sample: EvalSample, log: EvalLog) -> "SampleView":
-        """A finished sample read from an eval log (read it with resolve_attachments=True)."""
+    def from_eval_sample(cls, sample: EvalSample, log: EvalLog, *, orbit_version: str | None = None) -> "SampleView":
+        """A finished sample read from an eval log (read it with resolve_attachments=True). The Inspect version is the
+        log's own; the log does not record ORBIT's, so orbit_version names it (the version an earlier export of the
+        same eval recorded), else the running ORBIT's."""
         store = sample.store or {}
         return cls(id=sample.id, epoch=sample.epoch, messages=list(sample.messages), metadata=sample.metadata or {},
                    events=list(sample.events), store_get=store.get, model=log.eval.model, input=sample.input,
                    output=sample.output, scores=sample.scores, limit=sample.limit, error=sample.error,
-                   total_time=sample.total_time, model_usage=sample.model_usage, eval_log=log.location,
-                   eval_id=log.eval.eval_id)
+                   total_time=sample.total_time, model_usage=sample.model_usage,
+                   eval_id=log.eval.eval_id, orbit_version=orbit_version or orbit.__version__,
+                   inspect_version=logged_inspect_version(log))
 
 
 def _live_model_usage() -> dict | None:
@@ -114,7 +127,7 @@ def held_orbit_submit(view: SampleView) -> bool:
 
 
 def topology(view: SampleView) -> str:
-    """single (no board), board (a board, no hidden roles) or swarm (a board with hidden roles)."""
+    """single (no board), board (a board, no influencers) or swarm (a board with influencers)."""
     meta = view.metadata or {}
     if not (meta.get("experiment", {}).get("communication") or {}).get("channels"):
         return "single"

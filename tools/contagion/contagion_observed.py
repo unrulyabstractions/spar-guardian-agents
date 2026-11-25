@@ -12,8 +12,9 @@ from tools.scout.scout_scanners import CHEATING_SIGNALS, HONEST_SIGNALS
 
 BEHAVIOURS = ("dishonest", "honest")
 READ_KIND = "read"
-# Each task's flag for telling the others, from CheatBench's judge schemas. Knowledge work and SWE have none.
-DISCLOSURE_FLAGS = ("disclosed_access", "disclosed", "disclosed_to_arbiter", "final_source_disclosure")
+# Each task's flag for telling the others, from CheatBench's judge schemas: protein design's and creative writing's.
+# SWE has none.
+DISCLOSURE_FLAGS = ("disclosed_access", "disclosed")
 
 
 @dataclass(frozen=True)
@@ -92,7 +93,7 @@ def judge_disclosures(run: Run, onsets: dict[str, dict[str, int | None]], rounds
 
 def onsets_from_judge(run: Run, rounds: int) -> dict[str, dict[str, int | None]]:
     """Cheated and disclosing agents count as adopted at the last round, since the judge gives no round."""
-    dishonest = {agent: rounds if run.cheated.get(agent) else None for agent in run.agents}
+    dishonest = {agent: rounds if run.judge_cheated.get(agent) else None for agent in run.agents}
     honest = {agent: rounds if disclosed(run, agent) else None for agent in run.agents}
     return {"dishonest": dishonest, "honest": honest}
 
@@ -101,12 +102,12 @@ def judge_disagreements(run: Run, dishonest: dict[str, int | None]) -> list[str]
     """Where scout's cheating onset and the judge's verdict disagree; the curve follows scout."""
     notes = []
     for agent in run.agents:
-        verdict = run.cheated.get(agent)
+        verdict = run.judge_cheated.get(agent)
         if dishonest.get(agent) is not None and verdict is False:
             notes.append(f"scout gives {agent} a cheating onset at round {dishonest[agent]}; the judge says it did "
                          f"not cheat")
         if dishonest.get(agent) is None and verdict is True:
-            notes.append(f"the judge says {agent} cheated; scout gives it no onset")
+            notes.append(f"CheatBench's judge says {agent} cheated; scout gives it no onset")
     return notes
 
 

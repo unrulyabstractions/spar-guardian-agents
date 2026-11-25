@@ -1,18 +1,19 @@
 """The shared reader of an exported run: every tool loads its runs through `load_runs` and writes through
 `write_summary`.
 
-    [run] = load_runs(["riemann_minimal"], "graph")  # a name under runs/<study>/; None when one is missing
-    [run] = load_runs(["runs/study_smoke/smoke_openmath/<stamp>/complete"], "graph")  # or a run's path
-    run.cheated  # {"k7q2m": False, "t4x9n": True, "p8s3z": True}
+    [run] = load_runs(["binder_minimal"], "graph")  # a name under runs/<study>/; None when one is missing
+    [run] = load_runs(["runs/study_smoke/smoke_protein/<stamp>/complete"], "graph")  # or a run's path
+    run.judge_cheated  # CheatBench's judge's own cheated: {"k7q2m": False, "t4x9n": True, "p8s3z": True}
     run.agent_steps("k7q2m")[0].round  # 1
     run.reads("k7q2m")[0].posts  # [("p8s3z", 1)]
-    write_summary(run, "graphs", {"nodes": 3})  # runs/<study>/riemann_minimal/tools/graphs/summary.json
+    write_summary(run, "graphs", {"nodes": 3})  # runs/<study>/binder_minimal/tools/graphs/summary.json
 
-A run directory holds run.json, episodes.jsonl, judge.jsonl, trajectories/<episode>/transcript.json and
-communication/<sample>.json, read through src/measures/run_directory.py RunDir. The turn rules' timeline is run.json
-rules.timeline. The eval log named by run.json holds every board_read result as the agent saw it. They are cached in
-runs/<study>/<name>/tools/board_reads.json the first time a run is loaded, so later tools need not reopen the log. A run
-whose log is gone reads the cache when there is one, else the transcripts answer.
+A run directory holds processed/ (run.json, episodes.jsonl, trajectories/<episode>/transcript.json,
+communication/<sample>.json) and analysis/ (judges/), read through src/measures/run_directory.py RunDir. The turn
+rules' timeline is run.json rules.timeline. The eval log named by run.json holds every board_read result as the agent
+saw it. They are cached in runs/<study>/<name>/processed/board_reads.json the first time a run is loaded, so later
+tools need not reopen the log. A run whose log is gone reads the cache when there is one, else the transcripts
+answer.
 
 Rounds come from the timeline. The k-th agent step of an agent's ATIF transcript is the k-th activation of that agent
 in the timeline, and the round is the integer after "r" in the activation's step id ("r3", "r3-free1", "r12-v4").
@@ -31,6 +32,7 @@ from typing import Protocol
 from inspect_ai.log import read_eval_log
 
 from src.configuration import settings, task_names
+from src.judging import verdict_files
 from src.measures.run_directory import RunDir, find_run
 from src.utils.json_files import read_json
 
@@ -53,7 +55,6 @@ class Post:
     content: str
     turn: int | None  # the timeline's turn counter when it was posted
     round: int | None  # the round of the sender's activation at that turn; None without a timeline
-    sample: str  # the communication file's sample, such as "riemann#1"
 
 
 @dataclass(frozen=True)
@@ -115,18 +116,18 @@ class TraceEntry:
 class Run:
     """One exported run directory, read once."""
 
-    name: str  # the path under runs/<study>/, such as "riemann_minimal" or "smoke_openmath/<stamp>/complete"
+    name: str  # the path under runs/<study>/, such as "binder_minimal" or "smoke_protein/<stamp>/complete"
     directory: Path
     run_json: dict
-    task: str  # run.json task: CheatBench's task name, such as openmath_agent
-    domain: str  # its registry key, such as openmath
+    task: str  # run.json task: CheatBench's task name, such as protein_design
+    domain: str  # its registry key, such as protein_design
     model: str  # the agents' Inspect model string
     agents: list[str]
     roles: dict[str, str]  # agent -> worker, regulator or disregulator
     config: dict  # run.json config (the SwarmConfig dump)
     eval_log: Path | None  # the .eval file; None when run.json names none or it is gone
-    judge: dict[str, dict]  # agent -> judge.jsonl row
-    cheated: dict[str, bool | None]  # agent -> the judge's verdict; None when the judge gave none
+    judge: dict[str, dict]  # agent -> CheatBench verdict row (judges/cheatbench.<judge>.jsonl)
+    judge_cheated: dict[str, bool | None]  # agent -> CheatBench's judge's own cheated; None when it gave none
     episodes: dict[str, dict]  # agent -> episodes.jsonl record
     board: list[Post]  # every board post, by sample then board number
     transcripts: dict[str, dict]  # agent -> the transcript.json document
@@ -209,17 +210,18 @@ def load_runs(names: list[str | Path], tool: str) -> list[Run] | None:
 
 
 def load_run(name_or_path: str | Path) -> Run:
-    """Read one run from a name of the study or a path to its directory. Its eval log is the path run.json records,
-    else the same file at the run's own place under logs/ (RunDir.eval_log)."""
+    """Read one run from a name of the study or a path to its directory. Its eval log is the file run.json names, from
+    the checkout the run sits in, at the run's own place under logs/ or in its eval/ folder (RunDir.eval_log)."""
     directory = run_directory(name_or_path)
     stored = RunDir(directory)
     run_json = stored.run_json
     agents = list(run_json["agents"])
     episode_rows = stored.episodes()
     lone = lone_agent(agents, episode_rows)
+    roles = stored.roles()
     episodes = {agent_of(row["episode"], lone): row for row in episode_rows}
-    judge = {agent_of(episode, lone): row for episode, row in stored.verdicts().items()}
-    eval_log = eval_log_path(run_json.get("eval_log")) or stored.eval_log
+    judge = {agent_of(episode, lone): row for episode, row in verdict_files.episode_verdicts(directory).items()}
+    eval_log = stored.eval_log
     timeline = list((run_json.get("rules") or {}).get("timeline") or [])
     board_reads = board_read_results(directory, eval_log)
     task = run_json["task"]
@@ -232,13 +234,13 @@ def load_run(name_or_path: str | Path) -> Run:
         domain=domain,
         model=run_json.get("model", ""),
         agents=agents,
-        roles=roles_of(agents, run_json, episodes),
+        roles={agent: roles.get(agent) or "worker" for agent in agents},
         config=run_json["config"],
         eval_log=eval_log,
         judge=judge,
-        cheated={agent: row.get("cheated") for agent, row in judge.items()},
+        judge_cheated={agent: row.get("cheated") for agent, row in judge.items()},
         episodes=episodes,
-        board=read_board(directory, timeline),
+        board=read_board(stored, timeline),
         transcripts=read_transcripts(directory, lone),
         rounds=int((run_json.get("rules") or {}).get("rounds") or 0),
         timeline=timeline,
@@ -248,14 +250,14 @@ def load_run(name_or_path: str | Path) -> Run:
 
 
 def tools_dir(run: RunPlace, tool: str) -> Path:
-    """runs/<study>/<name>/tools/<tool>/, created when missing."""
-    directory = run.directory / "tools" / tool
+    """runs/<study>/<name>/analysis/tools/<tool>/, created when missing."""
+    directory = RunDir(run.directory).file("tools") / tool
     directory.mkdir(parents=True, exist_ok=True)
     return directory
 
 
 def write_summary(run: RunPlace, tool: str, payload: dict) -> Path:
-    """Write runs/<study>/<name>/tools/<tool>/summary.json as {tool, run, written_at, **payload}."""
+    """Write runs/<study>/<name>/analysis/tools/<tool>/summary.json as {tool, run, written_at, **payload}."""
     reserved = {"tool", "run", "written_at"} & set(payload)
     if reserved:
         raise ValueError(f"the payload may not set {sorted(reserved)}")
@@ -268,7 +270,7 @@ def write_summary(run: RunPlace, tool: str, payload: dict) -> Path:
 
 def read_summary(run: Run, tool: str) -> dict | None:
     """The tool's summary.json for the run, or None when the tool has not written one."""
-    return read_json(run.directory / "tools" / tool / "summary.json")
+    return read_json(RunDir(run.directory).file("tools") / tool / "summary.json")
 
 
 def merged_trace(run: Run) -> list[TraceEntry]:
@@ -339,13 +341,13 @@ def run_directory(name_or_path: str | Path) -> Path:
     top level or in the one group that holds it (run_directory.find_run, which raises ValueError for two folders), else
     runs/<study>/<path>, such as smoke/complete."""
     path = Path(name_or_path)
-    if (path / "run.json").is_file():
+    if RunDir(path).is_run():
         return path.resolve()
     found = find_run(settings.RUNS, str(name_or_path)) if settings.RUNS.is_dir() else None
     for candidate in filter(None, (found, settings.RUNS / str(name_or_path))):
-        if (candidate / "run.json").is_file():
+        if RunDir(candidate).is_run():
             return candidate.resolve()
-    raise FileNotFoundError(f"no run.json in {name_or_path} or {settings.RUNS / str(name_or_path)}")
+    raise FileNotFoundError(f"no run in {name_or_path} or {settings.RUNS / str(name_or_path)}")
 
 
 def run_name(directory: Path) -> str:
@@ -361,7 +363,7 @@ def lone_agent(agents: list[str], episode_rows: list[dict]) -> str | None:
     """The agent of a run with one agent, whose episode carries no "@agent" suffix."""
     if len(agents) != 1:
         return None
-    named = [row.get("orbit_agent") for row in episode_rows if row.get("orbit_agent")]
+    named = [row.get("agent") for row in episode_rows if row.get("agent")]
     return named[0] if named else agents[0]
 
 
@@ -372,24 +374,10 @@ def agent_of(episode: str, lone: str | None) -> str:
     return lone or episode
 
 
-def roles_of(agents: list[str], run_json: dict, episodes: dict[str, dict]) -> dict[str, str]:
-    """Each agent's hidden role: run.json swarm.roles, else the episode's role, else worker."""
-    swarm_roles = (run_json.get("swarm") or {}).get("roles") or {}
-    return {agent: swarm_roles.get(agent) or (episodes.get(agent) or {}).get("role") or "worker" for agent in agents}
-
-
-def eval_log_path(value: str | None) -> Path | None:
-    """The .eval file run.json names, relative to the repository root unless absolute; None when it is gone."""
-    if not value:
-        return None
-    path = Path(value) if Path(value).is_absolute() else settings.ROOT / value
-    return path if path.is_file() else None
-
-
 def board_read_results(directory: Path, eval_log: Path | None) -> dict[str, str]:
     """The board_read results by tool call id, from the cache when it is as new as the eval log, else from the log
     (then cached); the cache alone when the log is gone, else {}."""
-    cache = directory / "tools" / "board_reads.json"
+    cache = RunDir(directory).file("board_reads.json")
     if eval_log is None:
         return read_json(cache) if cache.is_file() else {}
     if cache.is_file() and cache.stat().st_mtime >= eval_log.stat().st_mtime:
@@ -415,26 +403,25 @@ def read_log(eval_log: Path) -> dict[str, str]:
     return {call_id: text for call_id, text in results.items() if seen[call_id] == 1}
 
 
-def read_board(directory: Path, timeline: list[dict]) -> list[Post]:
-    """Every post on the board channel of every communication/<sample>.json, numbered by board position."""
+def read_board(stored: RunDir, timeline: list[dict]) -> list[Post]:
+    """Every post on the board channel of each sample's board (RunDir.boards), numbered by board position."""
     turns = {(entry.get("agent"), entry.get("turn")): entry.get("step") for entry in timeline}
     posts = []
-    for path in sorted((directory / "communication").glob("*.json")):
-        messages = read_json(path).get("messages") or []
+    for record in stored.boards():
+        messages = record.get("messages") or []
         board = [message for message in messages if message.get("channel_id", BOARD_ID) == BOARD_ID]
         for number, message in enumerate(sorted(board, key=lambda m: m.get("sequence", 0)), 1):
             turn = message.get("turn")
             posts.append(Post(number=number, sequence=message.get("sequence", 0), sender=message.get("sender", ""),
                               recipients=list(message.get("recipients") or []), content=message.get("content", ""),
-                              turn=turn, round=round_of(turns.get((message.get("sender"), turn))),
-                              sample=path.stem))
+                              turn=turn, round=round_of(turns.get((message.get("sender"), turn)))))
     return posts
 
 
 def read_transcripts(directory: Path, lone: str | None) -> dict[str, dict]:
     """Each agent's transcript.json, keyed by the agent of its episode directory."""
     transcripts = {}
-    for path in sorted((directory / "trajectories").glob("*/transcript.json")):
+    for path in sorted(RunDir(directory).file("trajectories").glob("*/transcript.json")):
         transcripts[agent_of(path.parent.name, lone)] = read_json(path)
     return transcripts
 

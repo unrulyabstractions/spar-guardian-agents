@@ -1,0 +1,785 @@
+diff --git a/config/flipt.schema.cue b/config/flipt.schema.cue
+index b0d499b3..2fa9a40f 100644
+--- a/config/flipt.schema.cue
++++ b/config/flipt.schema.cue
+@@ -122,6 +122,9 @@ import "strings"
+ 			host?:               string | *"localhost"
+ 			port?:               int | *6379
+ 			require_tls?:        bool | *false
++			ca_cert_path?:       string
++			ca_cert_bytes?:      string
++			insecure_skip_tls?:  bool | *false
+ 			db?:                 int | *0
+ 			username?:           string
+ 			password?:           string
+diff --git a/config/flipt.schema.json b/config/flipt.schema.json
+index 3a359bee..fad2d03a 100644
+--- a/config/flipt.schema.json
++++ b/config/flipt.schema.json
+@@ -356,6 +356,16 @@
+               "type": "boolean",
+               "default": false
+             },
++            "ca_cert_path": {
++              "type": "string"
++            },
++            "ca_cert_bytes": {
++              "type": "string"
++            },
++            "insecure_skip_tls": {
++              "type": "boolean",
++              "default": false
++            },
+             "db": {
+               "type": "integer",
+               "default": 0
+diff --git a/internal/cache/redis/client.go b/internal/cache/redis/client.go
+new file mode 100644
+index 00000000..f4af877a
+--- /dev/null
++++ b/internal/cache/redis/client.go
+@@ -0,0 +1,96 @@
++package redis
++
++import (
++	"crypto/tls"
++	"crypto/x509"
++	"errors"
++	"fmt"
++	"os"
++
++	goredis "github.com/redis/go-redis/v9"
++	"go.flipt.io/flipt/internal/config"
++)
++
++// NewClient constructs a redis client from the supplied configuration.
++//
++// When require_tls is set the client speaks at least TLS1.2 and trusts whichever
++// certificate authority was configured, either inline (ca_cert_bytes) or from disk
++// (ca_cert_path). When no CA is configured the operating systems trust store is used
++// and when insecure_skip_tls is set the servers certificate is not verified at all.
++func NewClient(cfg config.RedisCacheConfig) (*goredis.Client, error) {
++	tlsCfg, err := tlsConfig(cfg)
++	if err != nil {
++		return nil, err
++	}
++
++	return goredis.NewClient(&goredis.Options{
++		Addr:            fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
++		TLSConfig:       tlsCfg,
++		Username:        cfg.Username,
++		Password:        cfg.Password,
++		DB:              cfg.DB,
++		PoolSize:        cfg.PoolSize,
++		MinIdleConns:    cfg.MinIdleConn,
++		ConnMaxIdleTime: cfg.ConnMaxIdleTime,
++		DialTimeout:     cfg.NetTimeout,
++		ReadTimeout:     cfg.NetTimeout * 2,
++		WriteTimeout:    cfg.NetTimeout * 2,
++		PoolTimeout:     cfg.NetTimeout * 2,
++	}), nil
++}
++
++// tlsConfig builds the client side TLS configuration for a redis connection.
++// It returns a nil config when the connection is not expected to be encrypted.
++func tlsConfig(cfg config.RedisCacheConfig) (*tls.Config, error) {
++	if !cfg.RequireTLS {
++		return nil, nil
++	}
++
++	tlsCfg := &tls.Config{
++		MinVersion:         tls.VersionTLS12,
++		InsecureSkipVerify: cfg.InsecureSkipTLS, //nolint:gosec // explicitly requested via configuration
++	}
++
++	// when verification is turned off there is no CA to attach
++	if cfg.InsecureSkipTLS {
++		return tlsCfg, nil
++	}
++
++	bundle, err := caBundle(cfg)
++	if err != nil {
++		return nil, err
++	}
++
++	// no CA was configured, fall back to the system trust store
++	if len(bundle) == 0 {
++		return tlsCfg, nil
++	}
++
++	pool := x509.NewCertPool()
++	if !pool.AppendCertsFromPEM(bundle) {
++		return nil, errors.New("unable to parse redis CA certificate bundle")
++	}
++	tlsCfg.RootCAs = pool
++
++	return tlsCfg, nil
++}
++
++// caBundle returns the PEM encoded certificate to trust for the connection.
++// Inline configured certificates take precedence over a path. It returns nil
++// when the operator configured neither.
++func caBundle(cfg config.RedisCacheConfig) ([]byte, error) {
++	if cfg.CaCertBytes != "" {
++		return []byte(cfg.CaCertBytes), nil
++	}
++
++	if cfg.CaCertPath != "" {
++		out, err := os.ReadFile(cfg.CaCertPath)
++		if err != nil {
++			return nil, fmt.Errorf("reading redis CA certificate: %w", err)
++		}
++
++		return out, nil
++	}
++
++	return nil, nil
++}
+diff --git a/internal/cache/redis/client_test.go b/internal/cache/redis/client_test.go
+new file mode 100644
+index 00000000..d0fd3871
+--- /dev/null
++++ b/internal/cache/redis/client_test.go
+@@ -0,0 +1,282 @@
++package redis
++
++import (
++	"crypto/ecdsa"
++	"crypto/elliptic"
++	"crypto/rand"
++	"crypto/tls"
++	"crypto/x509"
++	"crypto/x509/pkix"
++	"encoding/pem"
++	"fmt"
++	"math/big"
++	"net"
++	"os"
++	"strconv"
++	"testing"
++	"time"
++
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++	"go.flipt.io/flipt/internal/config"
++)
++
++// ca is a throw away certificate authority and the leaf it signed, both keyed
++// for the loopback address the tests below dial.
++type ca struct {
++	// bundle is the PEM encoded authority certificate, which clients trust.
++	bundle string
++	// certificate and key are the leaf the test server presents.
++	certificate string
++	key         string
++}
++
++func newCertificateAuthority(t *testing.T) ca {
++	t.Helper()
++
++	signer, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
++	require.NoError(t, err)
++
++	serialLimit := new(big.Int).Lsh(big.NewInt(1), 128)
++	serial, err := rand.Int(rand.Reader, serialLimit)
++	require.NoError(t, err)
++
++	template := &x509.Certificate{
++		SerialNumber:          serial,
++		Subject:               pkix.Name{CommonName: "flipt-redis-test-ca"},
++		NotBefore:             time.Now().Add(-time.Hour),
++		NotAfter:              time.Now().Add(time.Hour),
++		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
++		BasicConstraintsValid: true,
++		IsCA:                  true,
++	}
++
++	bundle, err := x509.CreateCertificate(rand.Reader, template, template, &signer.PublicKey, signer)
++	require.NoError(t, err)
++
++	leaf, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
++	require.NoError(t, err)
++
++	serial, err = rand.Int(rand.Reader, serialLimit)
++	require.NoError(t, err)
++
++	leafTemplate := &x509.Certificate{
++		SerialNumber: serial,
++		Subject:      pkix.Name{CommonName: "redis"},
++		NotBefore:    time.Now().Add(-time.Hour),
++		NotAfter:     time.Now().Add(time.Hour),
++		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
++		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
++		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1")},
++		DNSNames:     []string{"localhost"},
++	}
++
++	leafDER, err := x509.CreateCertificate(rand.Reader, leafTemplate, template, &leaf.PublicKey, signer)
++	require.NoError(t, err)
++
++	keyDER, err := x509.MarshalPKCS8PrivateKey(leaf)
++	require.NoError(t, err)
++
++	return ca{
++		bundle:      string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: bundle})),
++		certificate: string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: leafDER})),
++		key:         string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})),
++	}
++}
++
++// startTLSServer serves TLS on a random loopback port, mimicking a redis
++// server which only accepts encrypted connections.
++func startTLSServer(t *testing.T, authority ca) string {
++	t.Helper()
++
++	pair, err := tls.X509KeyPair([]byte(authority.certificate), []byte(authority.key))
++	require.NoError(t, err)
++
++	listener, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{
++		Certificates: []tls.Certificate{pair},
++		MinVersion:   tls.VersionTLS12,
++	})
++	require.NoError(t, err)
++	t.Cleanup(func() { _ = listener.Close() })
++
++	go func() {
++		for {
++			conn, err := listener.Accept()
++			if err != nil {
++				return
++			}
++
++			go func() {
++				// swallow the payload, we only care that the handshake was permitted
++				_ = conn.(*tls.Conn).Handshake()
++				_ = conn.Close()
++			}()
++		}
++	}()
++
++	return fmt.Sprintf("%s:%d", "127.0.0.1", listener.Addr().(*net.TCPAddr).Port)
++}
++
++// atoi is a small helper for turning the port of a loopback address into an int.
++func atoi(t *testing.T, port string) int {
++	t.Helper()
++
++	n, err := strconv.Atoi(port)
++	require.NoError(t, err)
++
++	return n
++}
++
++func TestNewClient_withoutTLS(t *testing.T) {
++	client, err := NewClient(config.RedisCacheConfig{Host: "localhost", Port: 6379})
++	require.NoError(t, err)
++	require.NotNil(t, client)
++
++	assert.Nil(t, client.Options().TLSConfig, "expected no TLS configuration")
++	assert.Equal(t, "localhost:6379", client.Options().Addr)
++	require.NoError(t, client.Close())
++}
++
++func TestNewClient_options(t *testing.T) {
++	client, err := NewClient(config.RedisCacheConfig{
++		Host:            "localhost",
++		Port:            6379,
++		Username:        "app",
++		Password:        "s3cr3t!",
++		DB:              1,
++		PoolSize:        50,
++		MinIdleConn:     2,
++		ConnMaxIdleTime: 10 * time.Minute,
++		NetTimeout:      500 * time.Millisecond,
++	})
++	require.NoError(t, err)
++	defer client.Close()
++
++	opts := client.Options()
++	assert.Equal(t, "app", opts.Username)
++	assert.Equal(t, "s3cr3t!", opts.Password)
++	assert.Equal(t, 1, opts.DB)
++	assert.Equal(t, 50, opts.PoolSize)
++	assert.Equal(t, 2, opts.MinIdleConns)
++	assert.Equal(t, 10*time.Minute, opts.ConnMaxIdleTime)
++	assert.Equal(t, 500*time.Millisecond, opts.DialTimeout)
++	assert.Equal(t, time.Second, opts.ReadTimeout)
++	assert.Equal(t, time.Second, opts.WriteTimeout)
++	assert.Equal(t, time.Second, opts.PoolTimeout)
++}
++
++func TestNewClient_tls(t *testing.T) {
++	var (
++		authority = newCertificateAuthority(t)
++		addr      = startTLSServer(t, authority)
++		dir       = t.TempDir()
++	)
++
++	require.NoError(t, os.WriteFile(dir+"/ca.pem", []byte(authority.bundle), 0600))
++	require.NoError(t, os.WriteFile(dir+"/not-a-ca.pem", []byte("i am not a certificate"), 0600))
++
++	host, port, err := net.SplitHostPort(addr)
++	require.NoError(t, err)
++
++	tests := []struct {
++		name               string
++		config             func() config.RedisCacheConfig
++		expectClientErr    bool
++		expectHandshakeErr bool
++	}{
++		{
++			name: "trusted CA from path",
++			config: func() config.RedisCacheConfig {
++				return config.RedisCacheConfig{RequireTLS: true, CaCertPath: dir + "/ca.pem"}
++			},
++		},
++		{
++			name: "trusted CA from bytes",
++			config: func() config.RedisCacheConfig {
++				return config.RedisCacheConfig{RequireTLS: true, CaCertBytes: authority.bundle}
++			},
++		},
++		{
++			name: "skipping verification",
++			config: func() config.RedisCacheConfig {
++				return config.RedisCacheConfig{RequireTLS: true, InsecureSkipTLS: true}
++			},
++		},
++		{
++			name: "system trust store",
++			config: func() config.RedisCacheConfig {
++				return config.RedisCacheConfig{RequireTLS: true}
++			},
++			expectHandshakeErr: true,
++		},
++		{
++			name: "missing CA file",
++			config: func() config.RedisCacheConfig {
++				return config.RedisCacheConfig{RequireTLS: true, CaCertPath: dir + "/does-not-exist.pem"}
++			},
++			expectClientErr: true,
++		},
++		{
++			name: "CA file which is not a certificate",
++			config: func() config.RedisCacheConfig {
++				return config.RedisCacheConfig{RequireTLS: true, CaCertPath: dir + "/not-a-ca.pem"}
++			},
++			expectClientErr: true,
++		},
++	}
++
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			cfg := tt.config()
++			cfg.Host, cfg.Port = host, atoi(t, port)
++
++			client, err := NewClient(cfg)
++			if tt.expectClientErr {
++				require.Error(t, err)
++				require.Nil(t, client)
++				return
++			}
++			require.NoError(t, err)
++			defer client.Close()
++
++			tlsCfg := client.Options().TLSConfig
++			require.NotNil(t, tlsCfg, "expected the client to be configured for TLS")
++			assert.Equal(t, uint16(tls.VersionTLS12), tlsCfg.MinVersion)
++
++			conn, err := net.DialTimeout("tcp", addr, time.Second)
++			require.NoError(t, err)
++
++			// go-redis derives the ServerName from the address it dials, mirror that here
++			dialCfg := tlsCfg.Clone()
++			dialCfg.ServerName = "localhost"
++
++			tlsConn := tls.Client(conn, dialCfg)
++			defer tlsConn.Close()
++
++			if tt.expectHandshakeErr {
++				require.Error(t, tlsConn.Handshake(), "expected the handshake to fail")
++				return
++			}
++
++			require.NoError(t, tlsConn.Handshake())
++			assert.GreaterOrEqual(t, tlsConn.ConnectionState().Version, uint16(tls.VersionTLS12))
++		})
++	}
++}
++
++func TestNewClient_insecureSkipsCAs(t *testing.T) {
++	client, err := NewClient(config.RedisCacheConfig{
++		Host:            "localhost",
++		Port:            6379,
++		RequireTLS:      true,
++		CaCertBytes:     "garbage",
++		InsecureSkipTLS: true,
++	})
++	require.NoError(t, err)
++	defer client.Close()
++
++	tlsCfg := client.Options().TLSConfig
++	require.NotNil(t, tlsCfg)
++	assert.True(t, tlsCfg.InsecureSkipVerify)
++	assert.Nil(t, tlsCfg.RootCAs)
++}
+diff --git a/internal/cmd/grpc.go b/internal/cmd/grpc.go
+index b1a74f8a..add228f0 100644
+--- a/internal/cmd/grpc.go
++++ b/internal/cmd/grpc.go
+@@ -2,7 +2,6 @@ package cmd
+ 
+ import (
+ 	"context"
+-	"crypto/tls"
+ 	"database/sql"
+ 	"errors"
+ 	"fmt"
+@@ -64,7 +63,6 @@ import (
+ 	grpc_health "google.golang.org/grpc/health/grpc_health_v1"
+ 
+ 	goredis_cache "github.com/go-redis/cache/v9"
+-	goredis "github.com/redis/go-redis/v9"
+ )
+ 
+ type grpcRegister interface {
+@@ -517,26 +515,12 @@ func getCache(ctx context.Context, cfg *config.Config) (cache.Cacher, errFunc, e
+ 		case config.CacheMemory:
+ 			cacher = memory.NewCache(cfg.Cache)
+ 		case config.CacheRedis:
+-			var tlsConfig *tls.Config
+-			if cfg.Cache.Redis.RequireTLS {
+-				tlsConfig = &tls.Config{MinVersion: tls.VersionTLS12}
++			rdb, err := redis.NewClient(cfg.Cache.Redis)
++			if err != nil {
++				cacheErr = fmt.Errorf("connecting to redis: %w", err)
++				return
+ 			}
+ 
+-			rdb := goredis.NewClient(&goredis.Options{
+-				Addr:            fmt.Sprintf("%s:%d", cfg.Cache.Redis.Host, cfg.Cache.Redis.Port),
+-				TLSConfig:       tlsConfig,
+-				Username:        cfg.Cache.Redis.Username,
+-				Password:        cfg.Cache.Redis.Password,
+-				DB:              cfg.Cache.Redis.DB,
+-				PoolSize:        cfg.Cache.Redis.PoolSize,
+-				MinIdleConns:    cfg.Cache.Redis.MinIdleConn,
+-				ConnMaxIdleTime: cfg.Cache.Redis.ConnMaxIdleTime,
+-				DialTimeout:     cfg.Cache.Redis.NetTimeout,
+-				ReadTimeout:     cfg.Cache.Redis.NetTimeout * 2,
+-				WriteTimeout:    cfg.Cache.Redis.NetTimeout * 2,
+-				PoolTimeout:     cfg.Cache.Redis.NetTimeout * 2,
+-			})
+-
+ 			cacheFunc = func(ctx context.Context) error {
+ 				return rdb.Shutdown(ctx).Err()
+ 			}
+diff --git a/internal/config/cache.go b/internal/config/cache.go
+index f4695b95..048dfc38 100644
+--- a/internal/config/cache.go
++++ b/internal/config/cache.go
+@@ -2,6 +2,7 @@ package config
+ 
+ import (
+ 	"encoding/json"
++	"errors"
+ 	"time"
+ 
+ 	"github.com/spf13/viper"
+@@ -22,6 +23,16 @@ type CacheConfig struct {
+ 	Redis   RedisCacheConfig  `json:"redis,omitempty" mapstructure:"redis" yaml:"redis,omitempty"`
+ }
+ 
++// validate walks all cache backends and returns an error if any of
++// their configuration is invalid.
++func (c *CacheConfig) validate() error {
++	if err := c.Redis.validate(); err != nil {
++		return err
++	}
++
++	return nil
++}
++
+ func (c *CacheConfig) setDefaults(v *viper.Viper) error {
+ 	v.SetDefault("cache", map[string]any{
+ 		"enabled": false,
+@@ -102,4 +113,23 @@ type RedisCacheConfig struct {
+ 	MinIdleConn     int           `json:"minIdleConn" mapstructure:"min_idle_conn" yaml:"min_idle_conn"`
+ 	ConnMaxIdleTime time.Duration `json:"connMaxIdleTime" mapstructure:"conn_max_idle_time" yaml:"conn_max_idle_time"`
+ 	NetTimeout      time.Duration `json:"netTimeout" mapstructure:"net_timeout" yaml:"net_timeout"`
++
++	// CaCertPath is the path to a PEM encoded certificate authority bundle which is
++	// trusted when connecting to a TLS enabled redis server.
++	CaCertPath string `json:"caCertPath,omitempty" mapstructure:"ca_cert_path" yaml:"ca_cert_path,omitempty"`
++	// CaCertBytes is the inline PEM encoded certificate authority bundle which is
++	// trusted when connecting to a TLS enabled redis server.
++	CaCertBytes string `json:"-" mapstructure:"ca_cert_bytes" yaml:"-"`
++	// InsecureSkipTLS disables verification of the redis servers certificate.
++	InsecureSkipTLS bool `json:"-" mapstructure:"insecure_skip_tls" yaml:"insecure_skip_tls,omitempty"`
++}
++
++// validate ensures that the redis TLS options are coherent, i.e. a CA bundle
++// is sourced from exclusively one of the filesystem or inline configuration.
++func (r *RedisCacheConfig) validate() error {
++	if r.CaCertPath != "" && r.CaCertBytes != "" {
++		return errors.New("please provide exclusively one of ca_cert_bytes or ca_cert_path")
++	}
++
++	return nil
+ }
+diff --git a/internal/config/redis_tls_test.go b/internal/config/redis_tls_test.go
+new file mode 100644
+index 00000000..3bbb7b39
+--- /dev/null
++++ b/internal/config/redis_tls_test.go
+@@ -0,0 +1,123 @@
++package config
++
++import (
++	"context"
++	"os"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++)
++
++// TestRedisCacheTLS_yaml asserts that the redis TLS options are surfaced from
++// configuration files into the RedisCacheConfig.
++func TestRedisCacheTLS_yaml(t *testing.T) {
++	ca, err := os.ReadFile("./testdata/redis/ca.pem")
++	require.NoError(t, err)
++
++	tests := []struct {
++		name     string
++		path     string
++		expected func() RedisCacheConfig
++		wantErr  string
++	}{
++		{
++			name: "ca cert path",
++			path: "./testdata/cache/redis-ca-path.yml",
++			expected: func() RedisCacheConfig {
++				cfg := Default().Cache.Redis
++				cfg.Host = "redis"
++				cfg.RequireTLS = true
++				cfg.CaCertPath = "./testdata/redis/ca.pem"
++				return cfg
++			},
++		},
++		{
++			name: "ca cert bytes",
++			path: "./testdata/cache/redis-ca-bytes.yml",
++			expected: func() RedisCacheConfig {
++				cfg := Default().Cache.Redis
++				cfg.Host = "redis"
++				cfg.RequireTLS = true
++				cfg.CaCertBytes = string(ca)
++				return cfg
++			},
++		},
++		{
++			name: "insecure",
++			path: "./testdata/cache/redis-tls-insecure.yml",
++			expected: func() RedisCacheConfig {
++				cfg := Default().Cache.Redis
++				cfg.Host = "redis"
++				cfg.RequireTLS = true
++				cfg.InsecureSkipTLS = true
++				return cfg
++			},
++		},
++		{
++			name:    "both ca bundle sources are invalid",
++			path:    "./testdata/cache/redis-ca-invalid.yml",
++			wantErr: "please provide exclusively one of ca_cert_bytes or ca_cert_path",
++		},
++	}
++
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			res, err := Load(context.Background(), tt.path)
++
++			if tt.wantErr != "" {
++				require.Error(t, err)
++				assert.Equal(t, tt.wantErr, err.Error())
++				return
++			}
++
++			require.NoError(t, err)
++			assert.Equal(t, tt.expected(), res.Config.Cache.Redis)
++		})
++	}
++}
++
++// TestRedisCacheTLS_defaults asserts the zero value of the new options so that
++// TLS stays off unless an operator asks for it.
++func TestRedisCacheTLS_defaults(t *testing.T) {
++	cfg := Default()
++
++	assert.False(t, cfg.Cache.Redis.RequireTLS)
++	assert.False(t, cfg.Cache.Redis.InsecureSkipTLS)
++	assert.Empty(t, cfg.Cache.Redis.CaCertPath)
++	assert.Empty(t, cfg.Cache.Redis.CaCertBytes)
++
++	assert.NoError(t, cfg.Cache.Redis.validate())
++	assert.Equal(t, 1*time.Minute, cfg.Cache.TTL)
++}
++
++// TestRedisCacheTLS_env asserts that the new options can be provided entirely
++// through the environment, as Flipt is usually deployed with env vars.
++func TestRedisCacheTLS_env(t *testing.T) {
++	backup := os.Environ()
++	defer func() {
++		os.Clearenv()
++		for _, env := range backup {
++			key, value, _ := strings.Cut(env, "=")
++			os.Setenv(key, value)
++		}
++	}()
++
++	os.Setenv("FLIPT_CACHE_ENABLED", "true")
++	os.Setenv("FLIPT_CACHE_BACKEND", "redis")
++	os.Setenv("FLIPT_CACHE_REDIS_REQUIRE_TLS", "true")
++	os.Setenv("FLIPT_CACHE_REDIS_CA_CERT_PATH", "./testdata/redis/ca.pem")
++
++	res, err := Load(context.Background(), "./testdata/default.yml")
++	require.NoError(t, err)
++
++	assert.True(t, res.Config.Cache.Redis.RequireTLS)
++	assert.Equal(t, "./testdata/redis/ca.pem", res.Config.Cache.Redis.CaCertPath)
++
++	os.Setenv("FLIPT_CACHE_REDIS_CA_CERT_BYTES", "inline bundle")
++	_, err = Load(context.Background(), "./testdata/default.yml")
++	require.Error(t, err)
++	assert.Equal(t, "please provide exclusively one of ca_cert_bytes or ca_cert_path", err.Error())
++}
+diff --git a/internal/config/testdata/cache/redis-ca-bytes.yml b/internal/config/testdata/cache/redis-ca-bytes.yml
+new file mode 100644
+index 00000000..ca65a2a7
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-bytes.yml
+@@ -0,0 +1,29 @@
++cache:
++  enabled: true
++  backend: redis
++  ttl: 60s
++  redis:
++    host: redis
++    port: 6379
++    require_tls: true
++    ca_cert_bytes: |
++      -----BEGIN CERTIFICATE-----
++      MIIDPTCCAiWgAwIBAgIUE7HPxiHZ82eC6nu4GMl6e3KUdyUwDQYJKoZIhvcNAQEL
++      BQAwLjEcMBoGA1UEAwwTZmxpcHQtcmVkaXMtdGVzdC1jYTEOMAwGA1UECgwFRmxp
++      cHQwHhcNMjYxMTI0MTQzNDE3WhcNMzYxMTIxMTQzNDE3WjAuMRwwGgYDVQQDDBNm
++      bGlwdC1yZWRpcy10ZXN0LWNhMQ4wDAYDVQQKDAVGbGlwdDCCASIwDQYJKoZIhvcN
++      AQEBBQADggEPADCCAQoCggEBAKBhFiT15nH1v2kI27r0Vuirckiqx0JxCKjP3tCl
++      kDAqqb6Q3BwRBqEHfcpKD6xu+zJHB1tLfNCnyHuea403/e2jEzr9vMdlHIm2MNnt
++      sNmp6iYzPxjmM+DcozhRd6MNGal44GV3USAUswrVDi0arfD+XbT4MBxAx1UWjCti
++      0bTrHO0+N8PGhcS4VnOGaGI8XF4Q63QF1olJE//G/T+Ua6dqNt6m8Z8oyfKMwb59
++      Hh5h6y/50ZDuYcVBP7aNd6GMsv/P/msZevtRNjuhf0q+Q8Hy7al40kUBBqWgT+Xn
++      xiv0JyQH9DrQlMtitynMgrR/wOLlyfEs/5DDdVvF+5j6EkcCAwEAAaNTMFEwHQYD
++      VR0OBBYEFOJs9VeFopsZnEdLxKx0HYOZg7KHMB8GA1UdIwQYMBaAFOJs9VeFopsZ
++      nEdLxKx0HYOZg7KHMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEB
++      ADQ9cdFCSLmU6LJQ14U2fRkFbBEl6/5k1gxMU1S3m1d8+WhI3A8aloHxQ0AE3dVj
++      Se3JGg9bLtPMfh9FtbnOdoTg7Nc+jRZb8+f7T3Bb3p2QtAfUmnqfka//oOw6ya3l
++      vwrSfiZY3hS97sCcfyetN1DgQ1ReVpNwJPUpvgfCr2z/JWaegjKuSKzOy84Kvloq
++      u4Kd76fFDYc2fkY5nRJWtmC9SqOM+2oQHBGwARQGAe25mmKfKxFYrm6xMMDYTYbZ
++      tX0MPRGJDmEliJXijzlAE+v7ae9PRjoTCK+wO427alFemIT2laQTrxNhZmXtJnEk
++      iRwPX111WcdiKykkyGhdNU4=
++      -----END CERTIFICATE-----
+diff --git a/internal/config/testdata/cache/redis-ca-invalid.yml b/internal/config/testdata/cache/redis-ca-invalid.yml
+new file mode 100644
+index 00000000..0d8365dd
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-invalid.yml
+@@ -0,0 +1,30 @@
++cache:
++  enabled: true
++  backend: redis
++  ttl: 60s
++  redis:
++    host: redis
++    port: 6379
++    require_tls: true
++    ca_cert_path: ./testdata/redis/ca.pem
++    ca_cert_bytes: |
++      -----BEGIN CERTIFICATE-----
++      MIIDPTCCAiWgAwIBAgIUE7HPxiHZ82eC6nu4GMl6e3KUdyUwDQYJKoZIhvcNAQEL
++      BQAwLjEcMBoGA1UEAwwTZmxpcHQtcmVkaXMtdGVzdC1jYTEOMAwGA1UECgwFRmxp
++      cHQwHhcNMjYxMTI0MTQzNDE3WhcNMzYxMTIxMTQzNDE3WjAuMRwwGgYDVQQDDBNm
++      bGlwdC1yZWRpcy10ZXN0LWNhMQ4wDAYDVQQKDAVGbGlwdDCCASIwDQYJKoZIhvcN
++      AQEBBQADggEPADCCAQoCggEBAKBhFiT15nH1v2kI27r0Vuirckiqx0JxCKjP3tCl
++      kDAqqb6Q3BwRBqEHfcpKD6xu+zJHB1tLfNCnyHuea403/e2jEzr9vMdlHIm2MNnt
++      sNmp6iYzPxjmM+DcozhRd6MNGal44GV3USAUswrVDi0arfD+XbT4MBxAx1UWjCti
++      0bTrHO0+N8PGhcS4VnOGaGI8XF4Q63QF1olJE//G/T+Ua6dqNt6m8Z8oyfKMwb59
++      Hh5h6y/50ZDuYcVBP7aNd6GMsv/P/msZevtRNjuhf0q+Q8Hy7al40kUBBqWgT+Xn
++      xiv0JyQH9DrQlMtitynMgrR/wOLlyfEs/5DDdVvF+5j6EkcCAwEAAaNTMFEwHQYD
++      VR0OBBYEFOJs9VeFopsZnEdLxKx0HYOZg7KHMB8GA1UdIwQYMBaAFOJs9VeFopsZ
++      nEdLxKx0HYOZg7KHMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEB
++      ADQ9cdFCSLmU6LJQ14U2fRkFbBEl6/5k1gxMU1S3m1d8+WhI3A8aloHxQ0AE3dVj
++      Se3JGg9bLtPMfh9FtbnOdoTg7Nc+jRZb8+f7T3Bb3p2QtAfUmnqfka//oOw6ya3l
++      vwrSfiZY3hS97sCcfyetN1DgQ1ReVpNwJPUpvgfCr2z/JWaegjKuSKzOy84Kvloq
++      u4Kd76fFDYc2fkY5nRJWtmC9SqOM+2oQHBGwARQGAe25mmKfKxFYrm6xMMDYTYbZ
++      tX0MPRGJDmEliJXijzlAE+v7ae9PRjoTCK+wO427alFemIT2laQTrxNhZmXtJnEk
++      iRwPX111WcdiKykkyGhdNU4=
++      -----END CERTIFICATE-----
+diff --git a/internal/config/testdata/cache/redis-ca-path.yml b/internal/config/testdata/cache/redis-ca-path.yml
+new file mode 100644
+index 00000000..01df2ccb
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-path.yml
+@@ -0,0 +1,9 @@
++cache:
++  enabled: true
++  backend: redis
++  ttl: 60s
++  redis:
++    host: redis
++    port: 6379
++    require_tls: true
++    ca_cert_path: ./testdata/redis/ca.pem
+diff --git a/internal/config/testdata/cache/redis-tls-insecure.yml b/internal/config/testdata/cache/redis-tls-insecure.yml
+new file mode 100644
+index 00000000..168c4914
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-tls-insecure.yml
+@@ -0,0 +1,9 @@
++cache:
++  enabled: true
++  backend: redis
++  ttl: 60s
++  redis:
++    host: redis
++    port: 6379
++    require_tls: true
++    insecure_skip_tls: true
+diff --git a/internal/config/testdata/redis/ca.pem b/internal/config/testdata/redis/ca.pem
+new file mode 100644
+index 00000000..6bb24978
+--- /dev/null
++++ b/internal/config/testdata/redis/ca.pem
+@@ -0,0 +1,20 @@
++-----BEGIN CERTIFICATE-----
++MIIDPTCCAiWgAwIBAgIUE7HPxiHZ82eC6nu4GMl6e3KUdyUwDQYJKoZIhvcNAQEL
++BQAwLjEcMBoGA1UEAwwTZmxpcHQtcmVkaXMtdGVzdC1jYTEOMAwGA1UECgwFRmxp
++cHQwHhcNMjYxMTI0MTQzNDE3WhcNMzYxMTIxMTQzNDE3WjAuMRwwGgYDVQQDDBNm
++bGlwdC1yZWRpcy10ZXN0LWNhMQ4wDAYDVQQKDAVGbGlwdDCCASIwDQYJKoZIhvcN
++AQEBBQADggEPADCCAQoCggEBAKBhFiT15nH1v2kI27r0Vuirckiqx0JxCKjP3tCl
++kDAqqb6Q3BwRBqEHfcpKD6xu+zJHB1tLfNCnyHuea403/e2jEzr9vMdlHIm2MNnt
++sNmp6iYzPxjmM+DcozhRd6MNGal44GV3USAUswrVDi0arfD+XbT4MBxAx1UWjCti
++0bTrHO0+N8PGhcS4VnOGaGI8XF4Q63QF1olJE//G/T+Ua6dqNt6m8Z8oyfKMwb59
++Hh5h6y/50ZDuYcVBP7aNd6GMsv/P/msZevtRNjuhf0q+Q8Hy7al40kUBBqWgT+Xn
++xiv0JyQH9DrQlMtitynMgrR/wOLlyfEs/5DDdVvF+5j6EkcCAwEAAaNTMFEwHQYD
++VR0OBBYEFOJs9VeFopsZnEdLxKx0HYOZg7KHMB8GA1UdIwQYMBaAFOJs9VeFopsZ
++nEdLxKx0HYOZg7KHMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEB
++ADQ9cdFCSLmU6LJQ14U2fRkFbBEl6/5k1gxMU1S3m1d8+WhI3A8aloHxQ0AE3dVj
++Se3JGg9bLtPMfh9FtbnOdoTg7Nc+jRZb8+f7T3Bb3p2QtAfUmnqfka//oOw6ya3l
++vwrSfiZY3hS97sCcfyetN1DgQ1ReVpNwJPUpvgfCr2z/JWaegjKuSKzOy84Kvloq
++u4Kd76fFDYc2fkY5nRJWtmC9SqOM+2oQHBGwARQGAe25mmKfKxFYrm6xMMDYTYbZ
++tX0MPRGJDmEliJXijzlAE+v7ae9PRjoTCK+wO427alFemIT2laQTrxNhZmXtJnEk
++iRwPX111WcdiKykkyGhdNU4=
++-----END CERTIFICATE-----

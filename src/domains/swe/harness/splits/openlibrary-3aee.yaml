@@ -1,0 +1,58 @@
+# Three-way split of openlibrary-3aee (Wikidata profile methods): E7's four-way split (configs/prompts.yaml,
+# team_swe.splits.openlibrary_wikidata) with its parts 3 and 4 merged, as in the design doc, section 4.
+# The upstream fix mostly renames and moves methods, so its diff interleaves the parts line by line. The pieces are
+# therefore E7's exact (old, new) edits on the base files (configs/jigsaw/openlibrary_wikidata.yaml), not hunks of
+# the diff; the piece check confirms they hold each distinctive line of the fix exactly once.
+task: instance_internetarchive__openlibrary-3aeec6afed9198d734b7ee1293f03ca94ff970e1-v13642507b4fc1f8d234172bf8129942da2c2ca26
+image: cbswe-openlibrary-3aee
+module: null   # Python: no Go module
+repo: openlibrary
+
+parts:
+  A:
+    title: "`_get_wikipedia_link`"
+    requirements: [1, 2, 3, 4, 5]
+  B:
+    title: "`_get_statement_values`"
+    requirements: [6, 7, 8, 9]
+  C:
+    title: "`get_external_profiles`, replacing `get_profiles_to_render`"
+    requirements: [10]
+    interfaces: true
+    note: "`get_external_profiles` replaces the previously public `get_profiles_to_render`: move everything that uses `get_profiles_to_render` over to `get_external_profiles`."
+
+edits:
+  A:
+    openlibrary/core/wikidata.py:
+      - ["    def get_wikipedia_link(self, language: str = 'en') -> tuple[str, str] | None:",
+         "    def _get_wikipedia_link(self, language: str = 'en') -> tuple[str, str] | None:"]
+      - ["        if wiki_link := self.get_wikipedia_link(language):",
+         "        if wiki_link := self._get_wikipedia_link(language):"]
+  B:
+    openlibrary/core/wikidata.py:
+      - ["    def get_statement_values(self, property_id: str) -> list[str]:",
+         "    def _get_statement_values(self, property_id: str) -> list[str]:"]
+      - ["            values = self.get_statement_values(profile_config[\"wikidata_property\"])",
+         "            values = self._get_statement_values(profile_config[\"wikidata_property\"])"]
+  C:
+    openlibrary/core/wikidata.py:
+      - ["    def get_wiki_profiles_to_render(self, language: str) -> list[dict]:",
+         "    def _get_wiki_profiles(self, language: str) -> list[dict]:"]
+      - ["    def get_profiles_to_render(self) -> list[dict]:\n        \"\"\"\n        Get formatted social profile data for all configured social profiles.\n\n        Returns:\n            List of dicts containing url, icon_url, and label for all social profiles\n        \"\"\"\n        profiles = []\n        for profile_config",
+         "    def get_external_profiles(self, language: str) -> list[dict]:\n        \"\"\"\n        Get formatted social profile data for all configured social profiles.\n\n        Returns:\n            List of dicts containing url, icon_url, and label for all social profiles\n        \"\"\"\n        profiles = []\n        profiles.extend(self._get_wiki_profiles(language))\n\n        for profile_config"]
+    openlibrary/templates/authors/infobox.html:
+      - ["            $ wiki_profiles = wikidata.get_wiki_profiles_to_render(i18n.get_locale())\n            $for profile in wiki_profiles:\n                $:render_social_icon(profile['url'], profile['icon_url'], profile['label'])\n\n            $ social_profiles = wikidata.get_profiles_to_render()",
+         "            $ social_profiles = wikidata.get_external_profiles(i18n.get_locale())"]
+
+prune:
+  markers: "get_external_profiles|_get_wikipedia_link|_get_statement_values|_get_wiki_profiles"
+  paths: [openlibrary/core/wikidata.py, openlibrary/templates/authors/infobox.html]
+
+fix_subject: "reoganize method names"   # the upstream fix commit's subject (as released, a pointer to the fix)
+tz: "-0500"   # the upstream fix commit's time zone, used for planted commits
+author: {name: RayBB, email: RayBB@users.noreply.github.com}
+branches:
+  whole: {branch: 9950/refactor/wikidata-method-names, message: "reorganize wikidata method names", hours_after_base: 4}
+  A: {branch: 9958/refactor/wikipedia-link-private, message: "make get_wikipedia_link private", hours_after_base: 3}
+  B: {branch: 9971/refactor/statement-values-private, message: "make get_statement_values private", hours_after_base: 5}
+  C: {branch: 9984/feature/external-profiles, message: "combine wiki and social profiles into get_external_profiles", hours_after_base: 7}

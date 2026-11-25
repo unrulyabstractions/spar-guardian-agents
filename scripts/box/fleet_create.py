@@ -1,19 +1,23 @@
-"""fleet.py create: rent the boxes of one stage and register each.
+"""fleet.py create: rent the boxes of a plan's assignment (fleet_plan.py) and register each.
 
-A person names the stage, and create rents that stage's boxes alone, or those of them --only names. It refuses a task
-without every cell or with a cell stem another task has, a model that needs a key a box does not hold, a count that does
-not match the boxes asked for, and a box the account holds already.
+A person names the plan, its gated spec when it has one, and the boxes; create rents the assignment's boxes, or those
+of them --only names. It pins the launch first, and reads the assignment, the caps and the keys from the plan and spec
+as the pinned commit holds them, which is what the boxes clone. It refuses a plan or spec whose file here differs from
+that commit's, a box whose runs call a model that needs a key a box does not hold, a run of which this checkout holds a
+trace (fleet_plan.traces_here: the box would make it again beside it, and its capture would refuse it), a launcher of
+the study live on this machine (it would run the boxes' targets too), a target another open box of the study runs, and
+a box the account holds already.
 
-It pins the launch before the first rent, and it rents one offer per box in the same step as the search, since offer ids
-expire within minutes. It takes no offer above --max-dph and stops before the fleet's $/h (the registered boxes not
-destroyed, and this launch) would pass --max-fleet-dph. Each instance enters the registry the moment vast.ai returns its
-id. A rejected offer moves on to the next one. Any other outcome (an error, a reply it cannot read, an interrupt) stops
-the launch, since the instance may exist.
+It rents one offer per box in the same step as the search, since offer ids expire within minutes. It takes no offer
+above --max-dph and stops before the fleet's $/h (the registered boxes not destroyed, and this launch) would pass
+--max-fleet-dph. Each instance enters the registry the moment vast.ai returns its
+id, with what it runs (fleet_registry.box_entry). A rejected offer moves on to the next one. Any other outcome (an
+error, a reply it cannot read, an interrupt) stops the launch, since the instance may exist.
 
 However the launch ends, once a rent was sent an audit of the account runs. An instance with this launch's label that
 the registry lacks is registered then. Any other spar-screen instance outside the registry fails the launch and stays
 unregistered. --dry-run does the search and prints every request it would send, and sends none: its client refuses
-anything but a read.
+anything but a read, and it needs no guard daemon.
 """
 from __future__ import annotations
 
@@ -24,21 +28,13 @@ import urllib.error
 from dataclasses import dataclass
 from pathlib import Path
 
-from scripts.box import fleet_registry
-from scripts.box.fleet_layout import (
-    LABEL_PREFIX,
-    ROOT,
-    box_label,
-    floor_of,
-    is_fleet_label,
-    label_base,
-    layout_problems,
-    new_launch,
-)
+from scripts.box import fleet_layout, fleet_plan, fleet_registry
+from scripts.box.fleet_layout import LABEL_PREFIX, ROOT, box_label, from_root, is_fleet_label, label_base, new_launch
+from scripts.box.fleet_plan import Assignment, BoxPlan
 from scripts.box.fleet_registry import box_entry, load_registry, open_dph, register, write_launch
-from scripts.box.study_table import Box, box_jobs, key_problems, stage_boxes
 from scripts.box.vast_api import Call, Vast, credit, list_instances
 from scripts.box.vast_offers import candidates, create_call, offer_row, rejections, search_call
+from scripts.study import run_study
 
 MAX_FLEET_DPH = 15.00
 """What the fleet may bill per hour in all (its boxes not destroyed), unless --max-fleet-dph says otherwise."""
@@ -66,7 +62,9 @@ class Rental:
     """One launch's rents: what it asks for, its limits and how many it has sent."""
 
     launch: str
-    asked: dict[str, Box]
+    assignment: Assignment
+    asked: dict[str, BoxPlan]
+    commit: str
     held: float
     max_dph: float
     max_fleet_dph: float
@@ -98,9 +96,10 @@ def try_create(vast: Vast, call: Call) -> tuple[str, int | None, str]:
     return "unknown", None, f"a reply without an instance id (keys {sorted(reply)})"
 
 
-def audit(vast: Vast, asked: dict[str, Box]) -> int:
+def audit(vast: Vast, rental: Rental) -> int:
     """After a launch: register any instance with one of this launch's labels that the registry lacks, then fail on
     any other spar-screen instance outside the registry, which stays unregistered (another launch's, or a stranger)."""
+    asked = rental.asked
     live = list_instances(vast)
     known = {box["id"] for box in load_registry()["boxes"]}
     failures = 0
@@ -109,7 +108,8 @@ def audit(vast: Vast, asked: dict[str, Box]) -> int:
             continue
         if row["label"] in asked:
             launch = row["label"].rsplit("-", 1)[1]
-            entry = box_entry(row["id"], row["label"], asked[row["label"]], None, launch)
+            entry = box_entry(row["id"], row["label"], rental.assignment, asked[row["label"]], None, launch,
+                              rental.commit)
             if register(entry | {"dph": row.get("dph_total"), "note": "registered by the audit"}, exist_ok=True):
                 print(f"   registered {row['id']} {row['label']}: the launch asked for it and did not hear back")
         else:
@@ -128,7 +128,7 @@ def rent(vast: Vast, rental: Rental, offers: list[dict]) -> int:
     remaining, rejected, spent, placed = list(offers), 0, 0.0, []
     for label, box in rental.asked.items():
         over_cap = False
-        for offer in [o for o in remaining if not rejections(o, rental.max_dph, floor_of(box.task))]:
+        for offer in [o for o in remaining if not rejections(o, rental.max_dph, box.floor)]:
             if rental.held + spent + offer["dph_total"] > rental.max_fleet_dph:
                 over_cap = True
                 print(f"== stopped: offer {offer['id']} at ${offer['dph_total']:.3f}/h takes the fleet to "
@@ -145,7 +145,7 @@ def rent(vast: Vast, rental: Rental, offers: list[dict]) -> int:
             rental.sent += 1
             outcome, instance_id, why = try_create(vast, call)
             if outcome == "created":
-                register(box_entry(instance_id, label, box, offer, rental.launch))
+                register(box_entry(instance_id, label, rental.assignment, box, offer, rental.launch, rental.commit))
                 print(f"   created {instance_id} {label} on offer {offer['id']} ${offer['dph_total']:.3f}/h")
                 placed.append(label)
                 spent += offer["dph_total"]
@@ -167,40 +167,66 @@ def rent(vast: Vast, rental: Rental, offers: list[dict]) -> int:
     return 1 if unfilled else 0
 
 
-def chosen_boxes(stage: str, only: list[str] | None) -> list[Box]:
-    """The stage's boxes, or those of them named, the heaviest floor first."""
-    boxes = stage_boxes(stage)
-    unknown = sorted(set(only or []) - {box.name for box in boxes})
+def chosen_boxes(assignment: Assignment, only: list[str] | None) -> list[BoxPlan]:
+    """The assignment's boxes, or those of them named."""
+    unknown = sorted(set(only or []) - {box.name for box in assignment.boxes})
     if unknown:
-        raise ValueError(f"not boxes of {stage}: {', '.join(unknown)}")
-    return sorted([box for box in boxes if not only or box.name in only], key=lambda box: floor_of(box.task),
-                  reverse=True)
+        raise ValueError(f"not boxes of the assignment: {', '.join(unknown)}")
+    return [box for box in assignment.boxes if not only or box.name in only]
 
 
-def box_problems(boxes: list[Box]) -> list[str]:
-    """Why these boxes could not run their jobs: a task's cells, or a model's key."""
-    problems = layout_problems(sorted({box.task for box in boxes}))
-    return problems or key_problems([job for box in boxes for job in box_jobs(box)])
+def drift_problems(paths: list[Path | None], commit: str) -> list[str]:
+    """The plan or spec whose file here differs from the commit's: the boxes would run what create did not read."""
+    return [f"{from_root(path)} here differs from commit {commit[:12]}, which the boxes run: commit and push it, or "
+            f"restore it with git checkout {commit[:12]} -- {from_root(path)}"
+            for path in paths if path is not None and Path(path).read_text() != fleet_layout.committed(commit, path)]
+
+
+def launcher_problems(study: str) -> list[str]:
+    """A launcher of the study live on this machine, which would run the boxes' targets too."""
+    return [f"a launcher of {study} is live on this machine ({line}): stop it first; one started later leaves out "
+            f"the targets an open box runs" for line in run_study.live_launchers(study)[:1]]
+
+
+def box_problems(assignment: Assignment, boxes: list[BoxPlan]) -> list[str]:
+    """Why these boxes could not run their plan's runs: a model's key, a run this checkout holds a trace of, a launcher
+    of the study here, a target another open box of the study runs (a box vast.ai cannot start runs nothing, so its
+    replacement may take its targets)."""
+    problems = [problem for box in boxes for problem in fleet_plan.key_problems(box)]
+    problems += [fleet_plan.trace_problem(name, traces) for box in boxes
+                 for name, traces in fleet_plan.held_here(assignment.study, box).items()]
+    problems += launcher_problems(assignment.study)
+    targets = {target for box in boxes for target in box.targets}
+    for entry in load_registry()["boxes"]:
+        shared = sorted(targets & set(entry.get("targets") or []))
+        if not entry["destroyed"] and not entry.get("start_error") and entry.get("study") == assignment.study \
+                and shared:
+            problems.append(f"box {entry['id']} of {assignment.study} runs {', '.join(shared)} already")
+    return problems
 
 
 def cmd_create(args: argparse.Namespace) -> int:
-    try:
-        boxes = chosen_boxes(args.stage, args.only)
-    except ValueError as error:
-        print(f"refused: {error}")
-        return 2
-    if len(boxes) != args.count:
-        print(f"--count {args.count} but {args.stage} rents {len(boxes)} boxes: say the count you mean")
-        return 2
     if not args.label_prefix.startswith(LABEL_PREFIX):
         print(f"--label-prefix must start with {LABEL_PREFIX}: destroy acts on nothing else")
         return 2
+    try:
+        pin = fleet_registry.fleet_pin(args.commit)
+    except (RuntimeError, OSError) as error:
+        print(f"refused: {error}")
+        return 1
+    try:
+        assignment = fleet_plan.assign(args.plan, args.gates, args.boxes, args.max_agents, pin["commit"])
+        boxes = chosen_boxes(assignment, args.only)
+    except (OSError, ValueError) as error:
+        print(f"refused: {error}")
+        return 2
+    print("\n".join(fleet_plan.lines(assignment)))
     refused = False
-    for problem in box_problems(boxes):
+    for problem in drift_problems([args.plan, args.gates], pin["commit"]) + box_problems(assignment, boxes):
         print(f"!! {problem}")
         refused = True
     if refused and not args.dry_run:
-        print("refused: a box rented for these jobs could not run them")
+        print("refused: a box rented for these runs could not run them")
         return 1
     if not args.dry_run and not guard_alive():
         print("refused: no cloud box guard daemon runs for this repository. Start it first:\n"
@@ -210,31 +236,27 @@ def cmd_create(args: argparse.Namespace) -> int:
     vast = Vast(writes=not args.dry_run)
     launch = new_launch()
     asked = {box_label(args.label_prefix, box.name, launch): box for box in boxes}
+    count = len(boxes)
     bases = {label_base(label) for label in asked}
     clash = [row for row in list_instances(vast) if label_base(row.get("label") or "") in bases]
     if clash:
         print("refused: the account holds these boxes already: "
               + ", ".join(f"{row['id']} {row['label']}" for row in clash))
         return 1
-    try:
-        pin = fleet_registry.fleet_pin(args.commit)
-    except (RuntimeError, OSError) as error:
-        print(f"refused: {error}")
-        return 1
     print(f"== launch {launch}: commit {pin['commit']}, package list sha256 {pin['requirements_sha256'][:16]}, "
           f"Python {pin['python_version']}, uv {pin['uv_version']}")
-    print(f"== credit ${credit(vast) or 0:.2f}; {args.count} boxes; search: {search_call().show()}")
+    print(f"== credit ${credit(vast) or 0:.2f}; {count} boxes; search: {search_call().show()}")
     registry = load_registry()
     dead = {box["machine_id"] for box in registry["boxes"] if box.get("start_error")} | set(args.skip_machine)
     offers = [offer for offer in candidates(vast.send(search_call())["offers"], args.max_dph)
               if offer.get("machine_id") not in dead]
     held = open_dph(registry)
-    planned = sum(offer["dph_total"] for offer in offers[:args.count])
+    planned = sum(offer["dph_total"] for offer in offers[:count])
     print(f"== {len(offers)} offers can hold a box at ${args.max_dph:.2f}/h or less; the cheapest "
-          f"{min(args.count, len(offers))} bill ${planned:.3f}/h, the fleet with them ${held + planned:.3f}/h "
+          f"{min(count, len(offers))} bill ${planned:.3f}/h, the fleet with them ${held + planned:.3f}/h "
           f"(cap ${args.max_fleet_dph:.2f}/h)")
-    if len(offers) < args.count:
-        print(f"{'refused' if not args.dry_run else '!!'}: {len(offers)} offers for {args.count} boxes")
+    if len(offers) < count:
+        print(f"{'refused' if not args.dry_run else '!!'}: {len(offers)} offers for {count} boxes")
         refused = True
     if held + planned > args.max_fleet_dph:
         print(f"{'refused' if not args.dry_run else '!!'}: the fleet would bill ${held + planned:.3f}/h, past its cap "
@@ -244,13 +266,13 @@ def cmd_create(args: argparse.Namespace) -> int:
         return 1
     if not args.dry_run:
         print(f"== pinned in {write_launch(launch, pin)}")
-    rental = Rental(launch, asked, held, args.max_dph, args.max_fleet_dph, args.dry_run)
+    rental = Rental(launch, assignment, asked, pin["commit"], held, args.max_dph, args.max_fleet_dph, args.dry_run)
     audit_code = 0
     try:
         code = rent(vast, rental, offers)
     finally:
         if rental.sent:
-            audit_code = audit(vast, asked)
+            audit_code = audit(vast, rental)
     if args.dry_run:
         return 1 if code or refused else 0
     return code or audit_code

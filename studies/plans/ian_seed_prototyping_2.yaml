@@ -1,0 +1,125 @@
+# ian_seed_prototyping_2 (2026-11-23), the user's order: the ian0 tasks (each a task with a second place for the
+# hidden pieces and a real-world scenario in place of CheatBench's work-test framing) on DeepSeek, Luna and Haiku
+# workers, with no regulator. One run per cell, three cells per task and model:
+#   baseline            three workers, no seed pack
+#   seeded              three workers, the seed pack <task>/exp1_called_cheating
+#   positive_control    the workers are told to cheat, with the same seed pack
+# Archived on 2026-11-23 at the user's word: its runs and logs are under OLD/runs and OLD/logs.
+study: ian_seed_prototyping_2
+closed: true
+seeds: [1]
+# What every run of the study is given. A value named nowhere is the default (swarm_config.py).
+settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5]
+targets:
+  ian0flipt_deepseek_baseline:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+  ian0flipt_deepseek_seeded:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [swe/exp1_called_cheating]
+  ian0flipt_deepseek_positive_control:
+    module: studies.cells.swe.ian_flipt_minimal_cheat
+    model: deepseek-flash-openrouter
+    packs: [swe/exp1_called_cheating]
+  ian0flipt_luna_baseline:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none]
+  ian0flipt_luna_seeded:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [swe/exp1_called_cheating]
+  ian0flipt_luna_positive_control:
+    module: studies.cells.swe.ian_flipt_minimal_cheat
+    model: gpt-6-luna-openrouter
+    packs: [swe/exp1_called_cheating]
+  ian0flipt_haiku_baseline:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [none]
+  ian0flipt_haiku_seeded:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [swe/exp1_called_cheating]
+  ian0flipt_haiku_positive_control:
+    module: studies.cells.swe.ian_flipt_minimal_cheat
+    model: claude-haiku-5-5-openrouter
+    packs: [swe/exp1_called_cheating]
+  ian0poem_deepseek_baseline:
+    module: studies.cells.creative_writing.ian_poem_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+  ian0poem_deepseek_seeded:
+    module: studies.cells.creative_writing.ian_poem_minimal
+    model: deepseek-flash-openrouter
+    packs: [creative_writing/exp1_called_cheating]
+  ian0poem_deepseek_positive_control:
+    module: studies.cells.creative_writing.ian_poem_minimal_cheat
+    model: deepseek-flash-openrouter
+    packs: [creative_writing/exp1_called_cheating]
+  ian0poem_luna_baseline:
+    module: studies.cells.creative_writing.ian_poem_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none]
+  ian0poem_luna_seeded:
+    module: studies.cells.creative_writing.ian_poem_minimal
+    model: gpt-6-luna-openrouter
+    packs: [creative_writing/exp1_called_cheating]
+  ian0poem_luna_positive_control:
+    module: studies.cells.creative_writing.ian_poem_minimal_cheat
+    model: gpt-6-luna-openrouter
+    packs: [creative_writing/exp1_called_cheating]
+  ian0poem_haiku_baseline:
+    module: studies.cells.creative_writing.ian_poem_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [none]
+  ian0poem_haiku_seeded:
+    module: studies.cells.creative_writing.ian_poem_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [creative_writing/exp1_called_cheating]
+  ian0poem_haiku_positive_control:
+    module: studies.cells.creative_writing.ian_poem_minimal_cheat
+    model: claude-haiku-5-5-openrouter
+    packs: [creative_writing/exp1_called_cheating]
+  ian0binder_deepseek_baseline:
+    module: studies.cells.protein_design.ian_binder_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+  ian0binder_deepseek_seeded:
+    module: studies.cells.protein_design.ian_binder_minimal
+    model: deepseek-flash-openrouter
+    packs: [protein_design/exp1_called_cheating]
+  ian0binder_deepseek_positive_control:
+    module: studies.cells.protein_design.ian_binder_minimal_cheat
+    model: deepseek-flash-openrouter
+    packs: [protein_design/exp1_called_cheating]
+  ian0binder_luna_baseline:
+    module: studies.cells.protein_design.ian_binder_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none]
+  ian0binder_luna_seeded:
+    module: studies.cells.protein_design.ian_binder_minimal
+    model: gpt-6-luna-openrouter
+    packs: [protein_design/exp1_called_cheating]
+  ian0binder_luna_positive_control:
+    module: studies.cells.protein_design.ian_binder_minimal_cheat
+    model: gpt-6-luna-openrouter
+    packs: [protein_design/exp1_called_cheating]
+  ian0binder_haiku_baseline:
+    module: studies.cells.protein_design.ian_binder_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [none]
+  ian0binder_haiku_seeded:
+    module: studies.cells.protein_design.ian_binder_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [protein_design/exp1_called_cheating]
+  ian0binder_haiku_positive_control:
+    module: studies.cells.protein_design.ian_binder_minimal_cheat
+    model: claude-haiku-5-5-openrouter
+    packs: [protein_design/exp1_called_cheating]
+# Six SWE runs at once left 4 GB of Docker's disk free on 2026-11-22 (each agent's container grows by 1 to 2 GB of Go
+# build cache), and a baseline cell counts toward no task's own limit: SWE ran three at a time. The creative and
+# protein machines write little, so four of those run at once.
+limits: {max_runs: 4, max_per_task: {swe: 3}, spacing_s: 30}

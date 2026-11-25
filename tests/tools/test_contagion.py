@@ -47,10 +47,9 @@ def test_a_scout_without_cheating_scanners_gives_no_onsets():
 
 
 def test_every_tasks_disclosure_flag_counts_as_honest_at_the_last_round():
-    verdicts = {"a01": {"disclosed_access": True}, "a02": {"disclosed": True}, "a03": {"disclosed_to_arbiter": True},
-                "a04": {"final_source_disclosure": True}, "a05": {"disclosed": False}, "a06": {}}
-    run = SimpleNamespace(agents=list(verdicts), judge=verdicts, cheated={})
-    assert onsets_from_judge(run, 9)["honest"] == {"a01": 9, "a02": 9, "a03": 9, "a04": 9, "a05": None, "a06": None}
+    verdicts = {"a01": {"disclosed_access": True}, "a02": {"disclosed": True}, "a05": {"disclosed": False}, "a06": {}}
+    run = SimpleNamespace(agents=list(verdicts), judge=verdicts, judge_cheated={})
+    assert onsets_from_judge(run, 9)["honest"] == {"a01": 9, "a02": 9, "a05": None, "a06": None}
 
 
 def test_si_fit_recovers_a_planted_beta_on_a_complete_graph_of_50():
@@ -94,6 +93,6 @@ def test_unknown_model_or_run_is_refused(tmp_path):
     def args(runs: list[str], models: str = "si") -> argparse.Namespace:
         return argparse.Namespace(runs=runs, models=models, synthetic=None, seed=0, simulations=1)
 
-    assert command.run(args(["riemann_minimal"], "si,bogus")) == 2
+    assert command.run(args(["binder_minimal"], "si,bogus")) == 2
     assert command.run(args([])) == 2
     assert command.run(args([str(tmp_path / "missing")])) == 2

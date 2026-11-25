@@ -5,15 +5,19 @@
     uv run python -m scripts.box.box_capture baseline <instance-id>
 
 check sends box_sweep.py to the box over ssh (logs/boxes/<id>/ssh_config) and holds each line of its sweep against
-this machine. A box file under the clone's runs/, logs/ or out/ must be at the same path in this repository, where
-watch.sh brings it, or under logs/boxes/<id>/conflicts/ when this machine's copy is newer and differs; any other box
-file must be at logs/boxes/<id>/files/<its absolute path>. A file is captured when its size and sha256 match, a link
+this machine. A box file under the clone's runs/ or logs/ must be at the same path in this repository, where
+watch.sh brings it, or under logs/boxes/<id>/conflicts/ when this machine's copy is newer and differs. The launcher's
+output (/root/launcher.log) and the box's copy of its plan, which the launcher rewrites as gates open, go to
+logs/<study>/boxes/<id>/ (the study and plan of the box's registry entry). Any other box file must be at
+logs/boxes/<id>/files/<its absolute path>. A file is captured when its size and sha256 match, a link
 when the local link has the same target. A file outside the clone that the host image held at first contact (the same
 path and bytes, in logs/boxes/<id>/baseline.jsonl) is counted and not required; the baseline never covers the clone.
 The check fails on a file missing or different, a path the sweep could not read, a process still producing, a link to
 something outside the swept roots, Docker holding containers or volumes (unless --accept-docker gives the reason they
 may go), Docker's state unknown, a box whose box_id file names another instance, the clone at a commit origin/main
-lacks, a submodule away from the commit the repository records, a sweep cut short, or a sweep that found nothing. It
+lacks, a submodule away from the commit the repository records, a sweep cut short, a sweep that found nothing, or a
+run of a name this machine holds with other bytes (foreign_runs: an eval log under logs/<study>/<name>/ here, or the
+one a run.json here names, that the box does not hold byte for byte), which it finds before it pulls anything. It
 deletes the old marker and manifest first. When it passes it writes logs/boxes/<id>/manifest.jsonl (every swept file:
 its box path, size, sha256 and local copy) and then logs/boxes/<id>/capture.json; fleet.py destroy requires that
 marker, fresh, and makes a verified read-only snapshot of the manifest's local copies before it destroys.
@@ -23,8 +27,7 @@ the same ssh config, comparing checksums: the outputs into this repository with 
 local file is never overwritten, then the outputs still different into logs/boxes/<id>/conflicts/; the rest into
 logs/boxes/<id>/files/. It then sweeps the box again and holds the new sweep to the same rules. Files under a box run's
 folder that the box does not have are listed as local only; they do not fail the check. A run's folder is
-runs/<study>/[<group>/]<name>/, and its figures sit at the same path under out/, or at out/<name>/ from before out/
-mirrored runs/.
+runs/<study>/[<group>/]<name>/, its figures in its analysis/figures/.
 
 baseline records the sweep of the box's home and /tmp before box_setup.sh changes anything. It runs once per box: a
 later call keeps the first, and a box that already holds the clone or the setup's logs is refused (exit 3), since its
@@ -46,14 +49,14 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from scripts.box.fleet_layout import BOXES, REMOTE_REPO, ROOT, now_iso
-from src.measures.run_directory import GROUPS
+from scripts.box.fleet_layout import BOXES, LAUNCHER_LOG, REGISTRY, REMOTE_REPO, ROOT, now_iso
+from src.measures.run_directory import GROUPS, RunDir
 
 SWEEP = Path(__file__).with_name("box_sweep.py")
-OUTPUT_DIRS = ("runs", "logs", "out")
+OUTPUT_DIRS = ("runs", "logs")
 HOME, TMP = "/root", "/tmp"
 """The box's home and /tmp, swept with the clone at REMOTE_REPO."""
-SETUP_FILES = ("setup.log", "setup.pid", "setup.exit", "screen.log", "screen.pid")
+SETUP_FILES = ("setup.log", "setup.pid", "setup.exit", "launcher.log", "launcher.pid")
 """What box_setup.sh and box_run.sh write in the box's home: a baseline that holds one is not of first contact."""
 SWEEP_TIMEOUT_S = 3600
 SNAPSHOT_MARGIN_BYTES = 5 * 10**9
@@ -104,7 +107,7 @@ def under_repo(box_path: str) -> bool:
 
 
 def output_rel(box_path: str) -> str | None:
-    """The path under the clone of a box file in runs/, logs/ or out/; None for any other file."""
+    """The path under the clone of a box file in runs/ or logs/; None for any other file."""
     if not under_repo(box_path):
         return None
     rel = os.path.relpath(box_path, REMOTE_REPO)
@@ -112,18 +115,63 @@ def output_rel(box_path: str) -> str | None:
     return rel if top in OUTPUT_DIRS and rest else None
 
 
-def local_path(box_path: str, folder: Path) -> Path:
-    """Where this machine keeps a box file: the same path in this repository for an output, else
-    <folder>/files/<its absolute path>."""
+def box_places(instance_id: int) -> dict[str, Path]:
+    """{box path: local path} of the box's launcher output and plan copy, under logs/<study>/boxes/<id>/, from the
+    box's registry entry; {} for a box the registry does not give a study."""
+    boxes = json.loads(REGISTRY.read_text())["boxes"] if REGISTRY.is_file() else []
+    entry = next((box for box in boxes if box["id"] == instance_id), {})
+    if not entry.get("study"):
+        return {}
+    place = ROOT / "logs" / entry["study"] / "boxes" / str(instance_id)
+    return {f"{HOME}/{Path(LAUNCHER_LOG).name}": place / Path(LAUNCHER_LOG).name,
+            f"{REMOTE_REPO}/{entry['plan']}": place / Path(entry["plan"]).name}
+
+
+def local_path(box_path: str, folder: Path, places: dict[str, Path] | None = None) -> Path:
+    """Where this machine keeps a box file: its place (box_places), the same path in this repository for an output,
+    else <folder>/files/<its absolute path>."""
+    if places and box_path in places:
+        return places[box_path]
     rel = output_rel(box_path)
     return ROOT / rel if rel else folder / "files" / box_path.lstrip("/")
 
 
-def local_paths(box_path: str, folder: Path) -> list[Path]:
+def local_paths(box_path: str, folder: Path, places: dict[str, Path] | None = None) -> list[Path]:
     """The local copies that capture a box file: local_path, then for an output its copy under <folder>/conflicts/,
     where --pull puts the box's bytes when this machine's file is newer and differs."""
     rel = output_rel(box_path)
-    return [local_path(box_path, folder), *([folder / "conflicts" / rel] if rel else [])]
+    return [local_path(box_path, folder, places), *([folder / "conflicts" / rel] if rel else [])]
+
+
+def box_evals(lines: list[dict]) -> dict[tuple[str, str], dict[str, str]]:
+    """{(study, run): {eval log's name: sha256}} of each run the box holds at a study's top level, by its folder under
+    runs/ or logs/; a run without an eval log maps to {}."""
+    runs: dict[tuple[str, str], dict[str, str]] = {}
+    for line in lines:
+        parts = (output_rel(line.get("file") or "") or "").split("/")
+        if len(parts) >= 4 and parts[2] not in GROUPS:
+            held = runs.setdefault((parts[1], parts[2]), {})
+            if parts[0] == "logs" and len(parts) == 4 and parts[3].endswith(".eval"):
+                held[parts[3]] = line["sha256"]
+    return runs
+
+
+def foreign_runs(lines: list[dict]) -> list[str]:
+    """The runs of the box whose name this machine holds from another run: an eval log under logs/<study>/<name>/ here
+    that the box does not hold with the same bytes, or a run.json here that names an eval log the box lacks."""
+    problems = []
+    for (study, name), evals in sorted(box_evals(lines).items()):
+        here = ROOT / "logs" / study / name
+        for log in sorted(here.glob("*.eval")) if here.is_dir() else []:
+            if evals.get(log.name) != sha256(log):
+                problems.append(f"logs/{study}/{name}/{log.name} here is not the box's: this machine holds another "
+                                f"run of {name}")
+        run = RunDir(ROOT / "runs" / study / name)
+        recorded = Path(run.run_json.get("eval_log") or "").name if run.is_run() else ""
+        if recorded and recorded not in evals:
+            problems.append(f"runs/{study}/{name} here names the eval log {recorded}, which the box does not hold: "
+                            f"this machine holds another run of {name}")
+    return problems
 
 
 def sha256(path: Path) -> str:
@@ -275,18 +323,15 @@ def compare(lines: list[dict], locals_for: Callable[[str], list[Path]], baseline
 
 
 def run_folder(parts: list[str]) -> tuple[str, ...] | None:
-    """The folder of the box run a file under the clone's runs/ or out/ belongs to, as path parts: runs/<study>/<name>
-    or runs/<study>/<group>/<name>, the same under out/, and out/<name> for figures from before out/ mirrored runs/
-    (a file right under out/<name>/). None for any other file."""
-    if parts[0] == "out" and len(parts) == 3:
-        return tuple(parts[:2])
-    if parts[0] in ("runs", "out") and len(parts) >= 4:
+    """The folder of the box run a file under the clone's runs/ belongs to, as path parts: runs/<study>/<name> or
+    runs/<study>/<group>/<name>. None for any other file."""
+    if parts[0] == "runs" and len(parts) >= 4:
         return tuple(parts[:4] if parts[2] in GROUPS and len(parts) >= 5 else parts[:3])
     return None
 
 
 def local_only(lines: list[dict]) -> list[str]:
-    """Files under a box run's folder here (runs/<study>/[<group>/]<name>/ and its figures, run_folder) that the box
+    """Files under a box run's folder here (runs/<study>/[<group>/]<name>/, run_folder) that the box
     does not have: an earlier export's leftovers, or what this machine added (a judge, a figure)."""
     on_box = {line.get("file") or line.get("link") or line.get("outside_link") for line in lines}
     folders = set(filter(None, (run_folder((output_rel(path) or "").split("/")) for path in filter(None, on_box))))
@@ -347,10 +392,13 @@ def rsync(config: Path, names: list[str], source: str, target: Path, extra: list
         print(f"!! rsync into {target} exited {code}; the sweep after it shows what is still missing")
 
 
-def fetch(config: Path, box_paths: list[str], folder: Path) -> None:
-    """rsync these box files down: outputs into this repository with --update, the rest under folder/files/."""
-    outputs = [rel for rel in map(output_rel, box_paths) if rel]
-    others = [path.lstrip("/") for path in box_paths if not output_rel(path)]
+def fetch(config: Path, box_paths: list[str], folder: Path, places: dict[str, Path]) -> None:
+    """rsync these box files down: each placed one to its place, outputs into this repository with --update, the rest
+    under folder/files/."""
+    for path in [path for path in box_paths if path in places]:
+        rsync(config, [Path(path).name], f"box:{Path(path).parent}/", places[path].parent, [])
+    outputs = [rel for path in box_paths if path not in places for rel in [output_rel(path)] if rel]
+    others = [path.lstrip("/") for path in box_paths if path not in places and not output_rel(path)]
     rsync(config, outputs, f"box:{REMOTE_REPO}/", ROOT, ["--update"])
     rsync(config, others, "box:/", folder / "files", [])
 
@@ -368,17 +416,23 @@ def run_check(instance_id: int, pull: bool, accept_docker: str | None = None) ->
     config = ssh_config(instance_id)
     folder = box_dir(instance_id)
     baseline = read_baseline(instance_id)
+    places = box_places(instance_id)
 
     def sweep_and_compare() -> tuple[list[dict], Report]:
         lines = remote_sweep(config, "sweep", REMOTE_REPO, HOME, TMP)
-        return lines, compare(lines, lambda path: local_paths(path, folder), baseline, on_origin, instance_id,
-                              accept_docker)
+        report = compare(lines, lambda path: local_paths(path, folder, places), baseline, on_origin, instance_id,
+                         accept_docker)
+        report.problems += foreign_runs(lines)
+        return lines, report
 
     lines, report = sweep_and_compare()
-    if pull and report.lost:
+    foreign = any("this machine holds another run" in problem for problem in report.problems)
+    if foreign:
+        print("== nothing pulled: a run of the box has a name this machine holds from another run")
+    if pull and report.lost and not foreign:
         paths = [path for path, _ in report.missing + report.differ]
         print(f"== pulling {len(paths)} files")
-        fetch(config, paths, folder)
+        fetch(config, paths, folder, places)
         lines, report = sweep_and_compare()
         newer = [path for path, _ in report.differ if output_rel(path)]
         if newer:
@@ -393,7 +447,8 @@ def run_check(instance_id: int, pull: bool, accept_docker: str | None = None) ->
     if max(len(report.missing), len(report.differ)) > 50:
         print("   (the first 50 of each)")
     for path, copy in report.conflicts:
-        print(f"!! CONFLICT {path}: this machine's {local_path(path, folder)} differs; the box's bytes are at {copy}")
+        print(f"!! CONFLICT {path}: this machine's {local_path(path, folder, places)} differs; the box's bytes are at "
+              f"{copy}")
     for problem in report.problems:
         print(f"!! {problem}")
     for reason, n in report.excluded.items():

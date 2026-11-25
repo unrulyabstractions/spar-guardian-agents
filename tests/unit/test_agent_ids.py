@@ -16,22 +16,23 @@ import yaml
 from pydantic import ValidationError
 
 from examples.example_arguments import parse_example_arguments
-from scripts import screen
+from scripts.study import screen
 from src import cli, run
 from src.configuration import settings
 from src.configuration.presets import build_config
 from src.configuration.scales import SCALES
 from src.configuration.swarm_config import ID_POOL, SwarmConfig
 from src.domains import DOMAINS
-from src.domains.openmath import OpenMath
+from src.domains.creative import CreativeWriting, creative_sandbox
+from src.domains.protein import ProteinDesign
 from src.domains.swe import swe_sandbox
 from src.measures import code_ladder
 from src.measures import team_ladder as team
 from src.measures.run_directory import RunDir
 from src.run import access_line
-from src.swarm.hidden_roles import assign_roles
-from src.swarm.turn_rules._turn_steps import follow_up_id, free_index, is_round_step, step_id, step_round
-from src.tasks import hidden_roles, swarm_task
+from src.swarm.influencers import assign_roles
+from src.swarm.turn_rules._turn_steps import step_id, step_round
+from src.tasks import agent_roles, swarm_task
 from tests.support.ordered_ids import DRAWN, drawn_ids, ordered_ids
 from tests.support.stub_ladder import OPENS, SHARDS, make_run
 
@@ -85,13 +86,13 @@ def test_each_run_of_one_seed_gets_its_own_ids_and_keeps_the_seats_of_the_seed(d
     assert first.seats != second.seats
     assert not set(first.seats) & set(second.seats)
     assert build_config("default", "small", [*pairs, "id_salt=poem_minimal_luna3"]).seats == first.seats
-    roles = [{config.seats.index(agent): role for agent, role in hidden_roles(config).items()}
+    roles = [{config.seats.index(agent): role for agent, role in agent_roles(config).items()}
              for config in (first, second)]
     assert roles[0] == roles[1] and "regulator" in roles[0].values()
 
 
 def test_the_run_name_is_the_salt_of_a_run_from_either_entry_point(drawn, monkeypatch):
-    args = parse_example_arguments(Path("examples/knowledge_work/binder_minimal.py"), None,
+    args = parse_example_arguments(Path("examples/protein_design/binder_minimal.py"), None,
                                    ["--name", "binder_minimal_luna1", "--set", "seed=1"])
     assert build_config(args.preset, args.scale, args.settings).id_salt == "binder_minimal_luna1"
     built = {}
@@ -133,7 +134,7 @@ def test_every_id_is_a_valid_user_git_author_directory_and_episode_part():
 
 def test_a_lone_agent_draws_an_id_too(drawn):
     config = build_config("default", "small", ["seed=4"]).replace(n_agents=1)
-    [spec] = swarm_task(OpenMath(), config).dataset[0].metadata["experiment"]["setup"]["agents"]
+    [spec] = swarm_task(ProteinDesign(), config).dataset[0].metadata["experiment"]["setup"]["agents"]
     assert config.names == DRAWN(1, 4) and spec["name"] == config.names[0]
     assert spec["system_prompt"].startswith(f"You are {config.names[0]}.")
 
@@ -151,7 +152,7 @@ def test_an_ids_place_in_the_roster_tells_no_role(drawn):
     configs = [build_config("default", "small", ["n_agents=4", "regulators=1", f"seed={seed}"]) for seed in range(400)]
     places = Counter()
     for config in configs:
-        roles = hidden_roles(config)
+        roles = agent_roles(config)
         assert list(roles) == config.names
         places[config.names.index(next(a for a, role in roles.items() if role == "regulator"))] += 1
     assert set(places) == {0, 1, 2, 3} and min(places.values()) > 70, places
@@ -160,7 +161,8 @@ def test_an_ids_place_in_the_roster_tells_no_role(drawn):
 @pytest.mark.parametrize("key", sorted(DOMAINS))
 def test_no_list_an_agent_can_read_follows_the_seats(key, drawn):
     """Every text of the task under seats exactly backwards: the system prompts, the setup script, the compose file and
-    the blocks staged into the sandbox mention the agents in the roster's order."""
+    the blocks staged into the sandbox mention the agents in the roster's order. No system prompt names a peer: peers
+    are announced as they enter (turn_rules presence)."""
     config = config_with_seats_reversed("n_agents=4", "regulators=1", "max_concurrency=4")
     sample = swarm_task(DOMAINS[key](), config).dataset[0]
     specs = sample.metadata["experiment"]["setup"]["agents"]
@@ -169,11 +171,11 @@ def test_no_list_an_agent_can_read_follows_the_seats(key, drawn):
     for spec in specs:
         others = [name for name in config.names if name != spec["name"]]
         prompt = spec.get("system_prompt") or ""
-        for text in (prompt, *prompt.split("\n")):             # the whole prompt, then each sentence's own list
+        for text in prompt.split("\n"):                        # each sentence's own list
             shown = first_seen(text, others)
             mentioned += len(shown)
             assert shown == [name for name in others if name in shown], text
-    assert mentioned > 0
+    assert mentioned == 0, (key, mentioned)
     cheatbench = sample.metadata["cheatbench"]
     assert list(cheatbench["roles"]) == config.names and list(cheatbench["access"]["agents"]) == config.names
     compose = Path(sample.sandbox.config).read_text() if sample.sandbox else ""
@@ -182,21 +184,20 @@ def test_no_list_an_agent_can_read_follows_the_seats(key, drawn):
         assert shown == [name for name in config.names if name in shown], text[:400]
 
 
-def test_openmath_makes_its_users_in_roster_order(drawn):
+def test_creative_writing_makes_its_users_in_roster_order(drawn):
     config = config_with_seats_reversed()
-    script = swarm_task(OpenMath(), config).dataset[0].setup
-    assert first_seen(script, config.names) == config.names
-    agents = OpenMath().stage(OpenMath().plan(config), OpenMath().row_of("riemann")).block["agents"]
-    assert [agents[name]["uid"] for name in config.names] == sorted(seat["uid"] for seat in agents.values())
+    seats = creative_sandbox.seats(CreativeWriting().plan(config))
+    assert list(seats) == config.names
+    assert [seats[name].uid for name in config.names] == sorted(seat.uid for seat in seats.values())
 
 
 # ---------------------------------------------------------------- the seats
 def test_the_deal_follows_the_seats_and_not_the_roster(drawn):
     config = config_with_seats_reversed()
-    holds = OpenMath().plan(config).holds
-    assert [holds[name] for name in config.seats] == [["slice1"], ["slice2"], ["slice3"]]
+    holds = ProteinDesign().plan(config).holds
+    assert [holds[name] for name in config.seats] == [["segment1"], ["segment2"], ["segment3"]]
     assert list(holds) == config.names
-    assert access_line(swarm_task(OpenMath(), config)).endswith(
+    assert access_line(swarm_task(ProteinDesign(), config)).endswith(
         ", ".join(f"{name} {holds[name][0]}" for name in config.names))
 
 
@@ -204,16 +205,16 @@ def test_the_roles_follow_the_seats_and_not_the_roster(drawn):
     for seed in range(20):
         config = build_config("default", "small", ["n_agents=5", "regulators=1", "disregulators=1", f"seed={seed}"])
         ordered = assign_roles(ordered_ids(5), 1, 1, seed)
-        assert [hidden_roles(config)[name] for name in config.seats] == list(ordered.values())
+        assert [agent_roles(config)[name] for name in config.seats] == list(ordered.values())
 
 
 def test_a_map_names_seats_and_lands_on_the_drawn_ids(drawn):
-    config = config_with_seats_reversed("access=seat1:slice1+slice2,seat2:slice3,seat3:")
-    plan = OpenMath().plan(config)
+    config = config_with_seats_reversed("access=seat1:segment1+segment2,seat2:segment3,seat3:")
+    plan = ProteinDesign().plan(config)
     first, second, third = config.seats
-    assert plan.holds == {first: ["slice1", "slice2"], second: ["slice3"], third: []}
+    assert plan.holds == {first: ["segment1", "segment2"], second: ["segment3"], third: []}
     assert list(plan.holds) == config.names and plan.pieces == {first: [1, 2], second: [3], third: []}
-    cheatbench = swarm_task(OpenMath(), config).dataset[0].metadata["cheatbench"]
+    cheatbench = swarm_task(ProteinDesign(), config).dataset[0].metadata["cheatbench"]
     assert cheatbench["access"]["policy"] == "explicit" and cheatbench["access"]["agents"] == plan.holds
 
 
@@ -233,9 +234,8 @@ def test_a_map_written_with_ids_is_refused(drawn):
 def test_step_ids_carry_a_drawn_id():
     for name in DRAWN(100, 1):
         assert step_id(3, name) == f"r3-{name}" and step_round(step_id(12, name)) == 12
-        assert is_round_step(step_id(3, name)) and is_round_step(step_id(9, name, revision=4))
-        follow_up = follow_up_id(step_id(9, name, revision=4), 2)
-        assert (step_round(follow_up), free_index(follow_up), is_round_step(follow_up)) == (9, 2, False)
+        # a run before 2026-11-21 holds follow-up and pooled ids, which still give their round
+        assert step_round(f"r9-{name}-v4-free2") == 9 and step_round(f"r9-{name}-v4") == 9
 
 
 def test_the_ladders_roster_matching_reads_a_drawn_id():
@@ -259,8 +259,8 @@ def test_the_ladder_reads_a_run_of_drawn_ids(tmp_path, key_task):
     [record] = RunDir(folder).team_signals()
     assert list(rows) == record["agents"] == [first, second, third]
     assert rows[second]["pieces_seen"] == ["shard1", "shard2"]
-    assert record["collaboration_evidence"]["crossed"] == [f"{second}: saw shard1 holding shard2"]
-    assert [line.split(":")[0] for line in record["collaboration_evidence"]["solicited"]] == [f"post 1 by {first}"]
+    assert record["travel_evidence"]["crossed"] == [f"{second}: saw shard1 holding shard2"]
+    assert [line.split(":")[0] for line in record["travel_evidence"]["solicited"]] == [f"post 1 by {first}"]
 
 
 def test_each_roster_gets_a_compose_file_of_its_own(monkeypatch, tmp_path):
@@ -290,7 +290,7 @@ def test_a_real_process_can_only_draw():
 
 
 def test_nothing_a_real_run_imports_reaches_the_ordered_names():
-    for root in ("src", "examples", "elicitation", "scripts", "tools"):
+    for root in ("src", "examples", "studies", "scripts", "tools"):
         for path in (settings.ROOT / root).rglob("*.py"):
             if ".venv" not in path.parts:
                 assert not re.search(r"^\s*(?:from|import)\s+tests\b", path.read_text(), re.M), path
@@ -300,8 +300,9 @@ def test_a_screens_samples_draw_their_own_ids(monkeypatch):
     launched = []
     monkeypatch.setattr(screen, "launch", lambda cell, name, flags: launched.append((name, flags)) or (name, 0, 0.0))
     monkeypatch.setattr(screen, "done", lambda name: False)
-    assert screen.main(["--cells", "openmath.riemann_minimal", "--samples", "3", "--suffix", "t", "--jobs", "1"]) == 0
-    assert [name for name, _ in launched] == ["riemann_minimal_t1", "riemann_minimal_t2", "riemann_minimal_t3"]
+    cells = ["--cells", "protein_design.binder_minimal"]
+    assert screen.main([*cells, "--samples", "3", "--suffix", "t", "--jobs", "1"]) == 0
+    assert [name for name, _ in launched] == ["binder_minimal_t1", "binder_minimal_t2", "binder_minimal_t3"]
     assert [flags[-2:] for _, flags in launched] == [["--set", f"seed={k}"] for k in (1, 2, 3)]
 
 
@@ -310,5 +311,5 @@ def test_a_screen_refuses_a_seed_of_the_users(monkeypatch):
     monkeypatch.setattr(screen, "launch", lambda cell, name, flags: launched.append(flags) or (name, 0, 0.0))
     monkeypatch.setattr(screen, "done", lambda name: False)
     with pytest.raises(SystemExit) as refused:
-        screen.main(["--cells", "openmath.riemann_minimal", "--suffix", "t", "--set", "seed=9"])
+        screen.main(["--cells", "protein_design.binder_minimal", "--suffix", "t", "--set", "seed=9"])
     assert refused.value.code == 2 and launched == []

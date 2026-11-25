@@ -15,7 +15,6 @@ seat orders, or when a text spills its box. No network, no model calls.
 """
 from __future__ import annotations
 
-import sys
 from collections import Counter
 
 import matplotlib.pyplot as plt
@@ -42,6 +41,7 @@ from src.domains import DOMAINS
 from src.domains.creative import creative_sandbox
 from src.domains.swe import swe_sandbox
 from src.sandbox.machines import agent_machines
+from src.utils import progress
 from src.utils.figure_style import HONEY, INK, INK_SECONDARY, MUTED, PLANE, PRINT_DPI, SURFACE
 
 OUT = ROOT / "tmp" / "figures" / "paper" / "fig3_jigsaw.png"
@@ -160,9 +160,9 @@ def draw() -> None:
     OUT.parent.mkdir(parents=True, exist_ok=True)
     c.fig.savefig(OUT, dpi=PRINT_DPI, facecolor=SURFACE)
     plt.close(c.fig)
-    print(f"team {config.n_agents} ({config.mode}, access {config.access}); pieces {n}; workers hold {holds}; "
-          f"layouts {({k: d[2] for k, d in deals.items()})}")
-    print(OUT)
+    progress.verbose(f"team {config.n_agents} ({config.mode}, access {config.access}); pieces {n}; "
+                     f"workers hold {holds}; layouts {({k: d[2] for k, d in deals.items()})}")
+    progress.wrote(OUT)
 
 
 def main() -> int:
@@ -170,7 +170,7 @@ def main() -> int:
     try:
         draw()
     except ValueError as error:
-        print(error, file=sys.stderr)
+        progress.detail(error, err=True)
         return 1
     return 0
 

@@ -1,5 +1,5 @@
 """tools/hawk: the scan config writer, the hawk command line, the shim's registration and the command without --run.
-The run-based tests read a copy of the generated riemann_minimal."""
+The run-based tests read a copy of the generated binder_minimal."""
 from __future__ import annotations
 
 import importlib.util
@@ -48,7 +48,7 @@ def test_run_bound_scanners_get_the_run(tmp_path):
 
 
 def test_scan_config_points_hawk_at_a_local_directory(tmp_path):
-    source = TranscriptSource("scout_db", tmp_path / "tools" / "scout", "transcripts")
+    source = TranscriptSource("scout_db", tmp_path / "analysis/tools" / "scout", "transcripts")
     config = scan_config("demo-scan", source, ["honeypot_seen", "tool_call_count"], tmp_path, "openai/gpt-6-luna",
                          "tools.scout.scout_scanners", SCANNER_PACKAGE_DIR, ROOT)
     assert config["scanners"][0]["package"] == str(SCANNER_PACKAGE_DIR)
@@ -56,7 +56,7 @@ def test_scan_config_points_hawk_at_a_local_directory(tmp_path):
     assert [item["name"] for item in config["scanners"][0]["items"]] == ["honeypot_seen", "tool_call_count"]
     assert config["transcripts"] == {"sources": [{"eval_set_id": "transcripts"}]}
     environment = config["runner"]["environment"]
-    assert environment["HAWK_RUNNER_EVALS_S3_URI"] == str(tmp_path / "tools" / "scout")
+    assert environment["HAWK_RUNNER_EVALS_S3_URI"] == str(tmp_path / "analysis/tools" / "scout")
     assert environment["SPAR_GUARDIAN_ROOT"] == str(ROOT)
     assert environment["SPAR_GUARDIAN_SCANNERS"] == "tools.scout.scout_scanners"
     path = write_scan_config(tmp_path / "out" / "scan.yaml", config)
@@ -75,7 +75,7 @@ def test_shim_entry_point_matches_the_package_name():
     assert pyproject["project"]["entry-points"]["inspect_ai"] == {SCANNER_PACKAGE_NAME: SCANNER_PACKAGE_NAME}
 
 
-def test_shim_registers_run_bound_scanners(monkeypatch, riemann_copy):
+def test_shim_registers_run_bound_scanners(monkeypatch, binder_copy):
     monkeypatch.setenv("SPAR_GUARDIAN_ROOT", str(ROOT))
     monkeypatch.setenv("SPAR_GUARDIAN_SCANNERS", "tools.scout.scout_scanners")
     shim = SCANNER_PACKAGE_DIR / f"{SCANNER_PACKAGE_NAME}.py"
@@ -86,40 +86,40 @@ def test_shim_registers_run_bound_scanners(monkeypatch, riemann_copy):
         assert f"{SCANNER_PACKAGE_NAME}/{name}" in module.REGISTERED
     factory = registry_lookup("scanner", f"{SCANNER_PACKAGE_NAME}/{GREP_NAME}")
     assert callable(factory)
-    assert callable(factory(run=str(riemann_copy)))
+    assert callable(factory(run=str(binder_copy)))
 
 
-def test_transcript_sources_of_a_run(riemann_copy):
-    run = load_run(riemann_copy)
+def test_transcript_sources_of_a_run(binder_copy):
+    run = load_run(binder_copy)
     from_log = transcript_source(run, "eval_log")
     assert from_log.kind == "eval_log"
     assert from_log.path == run.eval_log.parent
     built = transcript_source(run, "scout")
     assert built.kind == "hawk_db"
-    assert built.path == riemann_copy / "tools" / "hawk" / "transcripts"
+    assert built.path == binder_copy / "analysis/tools" / "hawk" / "transcripts"
     assert built.path.is_dir()
 
 
-def test_command_writes_config_and_summary_without_running(riemann_copy, capsys):
-    assert main(["hawk", str(riemann_copy), "--source", "eval_log"]) == 0
+def test_command_writes_config_and_summary_without_running(binder_copy, capsys):
+    assert main(["hawk", str(binder_copy), "--source", "eval_log"]) == 0
     assert "hawk local scan" in capsys.readouterr().out
-    run = load_run(riemann_copy)
+    run = load_run(binder_copy)
     summary = read_summary(run, "hawk")
     assert summary["ran"] is False and summary["returncode"] is None and summary["needs_server"] is False
     assert summary["source"]["kind"] == "eval_log"
-    config = yaml.safe_load((riemann_copy / "tools" / "hawk" / "scan.yaml").read_text())
+    config = yaml.safe_load((binder_copy / "analysis/tools" / "hawk" / "scan.yaml").read_text())
     assert [item["name"] for item in config["scanners"][0]["items"]] == list(RUN_BOUND_SCANNERS)
-    assert config["scanners"][0]["items"][0]["args"] == {"run": str(riemann_copy)}
+    assert config["scanners"][0]["items"][0]["args"] == {"run": str(binder_copy)}
     assert config["models"][0]["items"] == [{"name": "gpt-6-luna"}]
 
 
 def test_command_refuses_an_unknown_source():
-    assert main(["hawk", "riemann_minimal", "--source", "nowhere"]) == 2
+    assert main(["hawk", "binder_minimal", "--source", "nowhere"]) == 2
 
 
 def test_command_refuses_an_unknown_run_or_model(tmp_path):
     assert main(["hawk", str(tmp_path / "no_such_run")]) == 2
-    assert main(["hawk", "riemann_minimal", "--model", "no-such-entry"]) == 2
+    assert main(["hawk", "binder_minimal", "--model", "no-such-entry"]) == 2
 
 
 def test_scan_status_reads_completion_and_errors(tmp_path):

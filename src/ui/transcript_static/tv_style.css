@@ -1,148 +1,312 @@
 /* The transcript viewer's own rules, copied from collusion-hermaneutics' viewer (viewer/static/style.css, its
-   "viewer's own rules" from line 407 on). The page loads the results browser's src/ui/static/style.css first, which
+   "viewer's own rules" from line 407 on). The page loads the shared src/ui/static/style.css first, which
    the source copied its other rules from. */
 .page.wide { max-width: none; }
-.about { margin: 0 0 10px; }
-.about-body { max-width: 120ch; font-size: 13.5px; }
-.about-body p { margin: 6px 0; }
-.idx-filters .field select { max-width: 260px; }
-.summary-line { margin: 6px 0; }
-.pager { display: flex; align-items: center; gap: 8px; margin: 6px 0 8px; }
+/* Every cell of a viewer table's row on the row's middle; a table that needs another alignment says so below. */
+table.data th, table.data td { vertical-align: middle; }
+/* The runs page's Collections control (tv_view_index.js): a small button that opens a compact table under the head. */
+.idx-about { position: relative; }
+.idx-about > summary { list-style: none; cursor: pointer; }
+.idx-about > summary::-webkit-details-marker { display: none; }
+.idx-about[open] > summary { border-color: var(--accent); color: var(--accent); }
+.idx-about-box { position: absolute; z-index: 6; top: 34px; left: 0; width: max-content; max-width: 760px; padding: 8px 10px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0, 0, 0, .18); }
+.idx-about-box p { margin: 6px 0 0; }
+.idx-about-box table.data td, .idx-about-box table.data th { vertical-align: middle; }
+.idx-about-box th.center, .idx-about-box td.center { text-align: center; }
+/* The runs page's head (tv_view_index.js): the heading with its count and the pager on one line, then the filters in
+   three labelled groups, each group's fields on one grid of equal columns, so the groups' fields line up; a label
+   above its control, every control the same height, a set filter's control outlined in the accent colour. */
+.idx-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 16px; margin-bottom: 10px; }
+.idx-title { display: flex; align-items: center; gap: 12px; }
+.pager { display: flex; align-items: center; gap: 8px; }
+.pager select { height: 28px; min-height: 28px; padding: 3px 6px; font-size: 12.5px; }
 .pager .btn[disabled] { opacity: .45; cursor: default; }
+.pager .btn { height: 28px; min-height: 28px; box-sizing: border-box; display: inline-flex; align-items: center; }
+.idx-filters { display: flex; flex-direction: column; gap: 6px; margin: 0 0 10px; padding: 8px 10px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--panel); width: fit-content; max-width: 100%; box-sizing: border-box; }
+.idx-fgroup { display: flex; gap: 10px; }
+.idx-fgroup + .idx-fgroup { border-top: 1px solid var(--border); padding-top: 6px; }
+.idx-fgroup-name { flex: none; width: 6.5em; padding-top: 2px; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--muted); }
+.idx-fgroup-fields { flex: 1; display: grid; grid-template-columns: repeat(auto-fill, 158px); gap: 6px 10px; align-items: end; }
+/* The panel hugs its fields: each group's fields in a row of equal 158 px fields that wraps at one pitch, so the
+   groups' fields still line up. */
+.idx-filters .idx-fgroup-fields { display: flex; flex-wrap: wrap; align-items: flex-end; }
+.idx-filters .idx-fgroup-fields > * { flex: none; width: 158px; box-sizing: border-box; }
+.idx-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.idx-field .field-label { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.idx-field select, .idx-field input { box-sizing: border-box; width: 100%; height: 28px; min-height: 28px; padding: 3px 6px;
+  border-radius: 6px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-size: 12.5px; }
+.idx-field.is-set .field-label { color: var(--accent); font-weight: 600; }
+.idx-field.is-set select, .idx-field.is-set input { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.idx-reset { height: 28px; justify-content: center; }
 .idx-wrap { overflow: auto; max-height: calc(100vh - var(--header-h) - 120px); }
-table.idx-table { font-size: 12.5px; }
-table.idx-table th { white-space: normal; vertical-align: bottom; min-width: 70px; position: sticky; top: 0; z-index: 2; }
+/* separate borders, as table.sum-table: the sticky header then carries its own rules and nothing shows between them */
+table.idx-table { font-size: 12.5px; border-collapse: separate; border-spacing: 0; }
+table.idx-table thead { position: sticky; top: 0; z-index: 2; }
+table.idx-table th, table.idx-table td { padding: 5px 8px; }
+table.idx-table thead th { background: var(--panel-2); }
+table.idx-table th.center { min-width: 72px; }
+/* the six ladder columns of the two bands one width, so the bands mirror each other */
+table.idx-table th.lv { width: 118px; min-width: 118px; }
+table.idx-table th { white-space: normal; vertical-align: bottom; min-width: 50px; }
 table.idx-table td { white-space: nowrap; vertical-align: middle; }
-table.idx-table td.wrap { white-space: normal; min-width: 13ch; max-width: 24ch; }
-table.idx-table td.lv { white-space: normal; min-width: 15ch; max-width: 22ch; }
-table.idx-table td.lv .heat { white-space: normal; }
+table.idx-table td.wrap { white-space: normal; min-width: 8ch; max-width: 18ch; }
+table.idx-table td.lv { white-space: normal; }
+/* So the table fits a 1700 px window: cheated stands under the Cheating chip, "read the excerpt" under the score. */
+table.idx-table .cheat-says .lv-cheated { display: block; }
+/* The band over the runs table's columns (tv_view_index.js GROUPS) and a rule at the left of each group. */
+table.idx-table tr.idx-band th { text-align: center; font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--muted); border-bottom: 0; box-shadow: inset 0 -2px 0 var(--border); padding: 3px 6px; }
+table.idx-table tr.idx-band th.idx-band-team { background: var(--panel-2); }
+table.idx-table tr.idx-band th.idx-band-influencers { background: var(--panel-2); }
+table.idx-table .idx-group-start { border-left: 2px solid var(--border); }
+/* The Workers and Influencers cells (tv_view_index.js workersCell, influencersCell): a model's name with its
+   conditioning as chips. Worker conditioning: baseline calm grey, told to cheat the warning amber, a rule teal and a
+   rule naming the exploit solid teal. An influencer's role: the app's role colours, the regulator blue and the
+   disregulator orange, solid with an upper-case word; its level an outline in the same colour. None of these is a
+   ladder's colour, and each chip carries its own text colour, so both themes read. */
+.idx-who { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.idx-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 4px; white-space: nowrap; }
+.idx-model { font-weight: 600; white-space: nowrap; }
+/* With two influencers, each one's block is three lines high (its chips may wrap under its model), as each of its
+   levels' rows in the Influencers band (.lv-influencers.is-pair), so a level stands level with its influencer. */
+.idx-influencer { display: flex; flex-direction: column; justify-content: center; gap: 1px; }
+.idx-who.is-pair .idx-influencer { height: 57px; }
+.idx-influencer .idx-model { font-weight: 400; font-size: 12px; }
+.cond-chip, .level-chip { display: inline-block; padding: 0 6px; border-radius: 3px; border: 1px solid; font-size: 11px;
+  line-height: 1.55; white-space: nowrap; }
+.cond-none { background: var(--panel-2); color: var(--muted); border-color: var(--border); }
+.cond-cheat { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); font-weight: 600; }
+.cond-rule { background: var(--new-bg); color: var(--new); border-color: var(--new); }
+.cond-seed { background: #eef3df; color: #5f7a1f; border-color: #5f7a1f; border-style: dashed; }
+@media (prefers-color-scheme: dark) { .cond-seed { background: #263018; color: #a9c46a; border-color: #a9c46a; } }
+.cond-rule-strong { background: var(--new); color: var(--panel); border-color: var(--new); font-weight: 600; }
+.role-chip { display: inline-block; padding: 0 5px; border-radius: 3px; font-size: 10px; font-weight: 700;
+  letter-spacing: .05em; text-transform: uppercase; line-height: 1.7; white-space: nowrap; }
+.role-chip-regulator { background: var(--role-regulator); color: #ffffff; }
+.role-chip-disregulator { background: var(--role-disregulator); color: #1c1c1a; }
+.level-chip { background: transparent; color: var(--text); }
+.level-chip-regulator { border-color: var(--role-regulator); }
+.level-chip-disregulator { border-color: var(--role-disregulator); }
 table.idx-table td.lv .lv-glyph, table.idx-table td.lv .lv-rank { flex: none; white-space: nowrap; }
 table.idx-table tbody tr:hover td { background: var(--hover); }
-table.idx-table tr.row-disagree td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
-.jcell { white-space: nowrap; }
+.idx-legend { margin-top: 16px; width: fit-content; max-width: 100%; }
+table.idx-legend-table { font-size: 12.5px; border-collapse: collapse; }
+table.idx-legend-table th { text-align: left; padding: 4px 12px 4px 0; white-space: nowrap; font-weight: 600; width: 7em; }
+.idx-legend-levels { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 0; }
+table.idx-table tr.row-alarm td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
+table.idx-table tr.is-last td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+table.idx-table tr.is-last td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .labels-table td:first-child { white-space: nowrap; }
-.labels-table td:last-child { max-width: 70ch; color: var(--muted); }
-.ladder-table td { vertical-align: top; }
-.ladder-table td:last-child { min-width: 320px; }
 .ev-list { margin: 0; padding-left: 16px; font-size: 12.5px; }
 .ev-list li { margin: 2px 0; overflow-wrap: anywhere; }
 .ev-text { overflow-wrap: anywhere; }
 .ev-link { font-family: var(--mono); font-size: 12px; }
-.jump-links { margin-top: 8px; font-size: 13px; }
 .judge-block { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 8px 0; background: var(--panel); }
 .jb-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 4px; }
 .judge-block h4 { margin: 10px 0 4px; }
-.board-msg.bm-system { background: var(--notice-bg); border-style: dashed; border-color: var(--notice); }
-.board-msg.bm-regulator { border-left: 4px solid var(--role-regulator); }
-.board-msg.flash, .toolcall.flash, .card.flash { animation: flash 1.2s ease-out; }
+.toolcall.flash, .card.flash { animation: flash 1.2s ease-out; }
 .agent-card.role-regulator { border-left: 4px solid var(--role-regulator); }
 .agent-h { margin: 0; }
 .role-tag { display: inline-flex; align-items: center; gap: 2px; }
+.disreg-chip { margin-left: 4px; border: 1px solid var(--role-disregulator); color: var(--text); background: none; }
+.disreg-chip.disreg-carried_out { background: var(--role-disregulator); color: #1c1c1a; }
+.disreg-chip.disreg-unknown { border-style: dashed; color: var(--muted); }
 .tr-holder { margin-top: 10px; }
-.tr-head { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
-.tr-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 8px 10px; margin-bottom: 10px;
-  background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
-  position: sticky; top: calc(var(--header-h) + env(safe-area-inset-top, 0px)); z-index: 5; }
-.call-no { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
-.toolcall.is-cited { border-color: var(--border-strong); box-shadow: inset 3px 0 0 var(--exposed); }
-.step.is-cited { border-left-color: var(--exposed); }
-.call-marks { margin: 4px 0; display: flex; flex-direction: column; gap: 3px; }
-.call-mark { display: flex; gap: 6px; align-items: baseline; font-size: 12.5px; }
-.cm-text { overflow-wrap: anywhere; color: var(--text); }
-.reasoning-hidden { font-style: italic; }
-/* six ladders: colours from the theme tokens, so light and dark both read */
+/* the ladders: colours from the theme tokens, so light and dark both read */
 .lv-table { border-collapse: collapse; width: 100%; font-size: 13px; }
 .lv-table th { font-size: 12px; color: var(--muted); font-weight: 600; }
-.lv-table th, .lv-table td { border-bottom: 1px solid var(--border); padding: 5px 8px; text-align: left; vertical-align: top; }
+.lv-table th, .lv-table td { border-bottom: 1px solid var(--border); padding: 5px 8px; text-align: left; vertical-align: middle; }
+/* the ladder columns' chips on their column's middle; the agent column as narrow as its ids; the labels' excerpts left */
+.lv-table th.lv-cell, .lv-table td.lv-cell { text-align: center; }
+.lv-table .lv-agent { width: 1%; white-space: nowrap; }
+.lv-table td.lv-cell .cheat-cell { display: inline-flex; flex-direction: column; align-items: center; }
 .lv-team td { background: var(--panel-2); }
-.lv-glyph { display: inline-flex; gap: 1px; margin-right: 5px; vertical-align: middle; }
-.lv-seg { width: 5px; height: 11px; background: var(--border); border-radius: 1px; }
-.lv-seg.on { background: var(--bad); }
-.lv-name { color: var(--text); }
-.lv-hit .lv-name { font-weight: 600; }
+/* The judge score columns centred as the ladders' columns: each score line, its excerpt under it, and the Team row's
+   chip on the column's middle, a mislead mark hanging at its right out of the flow. */
+.lv-table th.lv-label-cell, .lv-table td.lv-label-cell { text-align: center; }
+.lv-table td.lv-label-cell .sc-line { justify-content: center; }
+.lv-table td.lv-label-cell .sc-excerpt-short { margin: 0 auto; }
+.lv-table tr.lv-team .sc-team { position: relative; }
+.lv-table tr.lv-team .sc-team .sc-mislead { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); margin-left: 3px; }
+/* A level chip (tv_levels.js levelChip): the ladder's colour at the level, the text colour that reads on it, and bars
+   in that text colour, filled up to the level, with a gap at the ladder's line. */
+.lv-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 4px; white-space: nowrap;
+  font-size: 12px; line-height: 1.5; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+.lv-chip b { font-weight: 600; }
+.lv-chip .lv-rank { color: inherit; opacity: .8; }
+.lv-glyph { display: inline-flex; gap: 1px; vertical-align: middle; }
+.lv-seg { width: 4px; height: 10px; background: currentColor; opacity: .25; border-radius: 1px; }
+.lv-seg.on { opacity: 1; }
+.lv-seg.at-line { margin-left: 3px; }
 .lv-rank { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.lv-proxy { margin-left: 4px; font-size: 10.5px; color: var(--muted); border: 1px solid var(--border-strong); border-radius: 3px; padding: 0 4px; }
-.lv-strip { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0 0 8px; padding: 6px 0 8px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); }
-.lv-chip { display: inline-flex; align-items: center; gap: 4px; }
-.lv-chip-name b { color: var(--text); font-weight: 600; }
-.lv-chip.lv-new .lv-chip-name b { color: var(--accent); }
-.lv-star { display: inline-block; padding: 0 6px; border-radius: 3px; border: 1px solid var(--accent); color: var(--accent); font-size: 11px; font-weight: 500; }
-.lv-board { color: var(--accent); }
-.lv-loose { margin: 6px 0 10px; padding: 8px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; color: var(--muted); }
+.lv-cheated { font-size: 12px; white-space: nowrap; }
+.lv-cheated.yes { color: var(--bad); font-weight: 700; }
+.lv-cheated.no { color: var(--muted); }
+/* A level chip seen before this call: an outline in the level's colour (--lv). A label the call carries itself: the
+   filled chip with a small dot in front. */
+.lv-chip.lv-carried { background: transparent; color: var(--text); box-shadow: inset 0 0 0 1px var(--border-strong);
+  border-left: 6px solid var(--lv); border-radius: 3px; }
+.lv-own-mark { flex: none; width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 1.5px rgba(255,255,255,.6); }
+.has-pop { cursor: help; }
+.has-pop:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* A level chip's popover (tv_levels.js levelPopover): the ladder and the level, its one line, its evidence as a tiny
+   table of name and value, the link to the ladder's rule. Fixed to the window, never wider than 360 px. */
+.lv-pop { position: fixed; z-index: 50; max-width: 360px; min-width: 180px; padding: 7px 10px 6px; border-radius: 7px;
+  background: var(--panel); color: var(--text); border: 1px solid var(--border-strong); box-shadow: 0 8px 24px rgba(0, 0, 0, .22);
+  font: 12px/1.45 var(--sans); }
+.lv-pop[hidden] { display: none; }
+.lv-pop-head { font-size: 11.5px; color: var(--muted); }
+.lv-pop-head b { color: var(--text); }
+.lv-pop-gloss { margin: 2px 0 4px; }
+.lv-pop-facts { border-collapse: collapse; width: 100%; font-size: 11.5px; }
+.lv-pop-facts th, .lv-pop-facts td { padding: 2px 0; border-top: 1px solid var(--border); vertical-align: top; text-align: left; }
+.lv-pop-facts th { padding-right: 10px; color: var(--muted); font-weight: 500; white-space: nowrap; }
+.lv-pop-facts td { font-family: var(--mono); font-size: 11px; overflow-wrap: anywhere; }
+.lv-pop-more { color: var(--muted); font-size: 11px; }
+.lv-pop-link { display: inline-block; margin-top: 4px; font-size: 11px; }
+/* A ladder's line: the mark between its two sides in the legends and the row between them in the Ladders tables. */
+.lv-line-mark { display: inline-block; width: 3px; height: 1.6em; margin: 0 6px; vertical-align: middle; border-radius: 1px;
+  background: var(--text); }
+.lv-ladder-table tr.lv-line-row td { border-top: 3px solid var(--text) !important; background: var(--panel-2); font-size: 11.5px; color: var(--muted); max-width: none; white-space: normal; }
+.jl-list li { white-space: normal; }
+.jl-agree { color: var(--good); font-size: 12px; }
+.lv-judge-yes { color: var(--bad); font-weight: 600; }
+.lv-reliability td.num { text-align: center; vertical-align: middle; font-variant-numeric: tabular-nums; }
+.lv-reliability tr.lv-measure-start td { border-top: 2px solid var(--border-strong); }
+.lv-reliability tr.lv-older-pass td { color: var(--muted); }
+.lv-reliability td.lv-current-pass { font-weight: 600; }
+/* What a score can show: the mislead kind, which no reader may count without reading the excerpt, stands out. */
+.lv-warn-block td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+/* A judge label's score: a chip from pale to strong with the number on it, its excerpt, its reason and its place. */
+.sc-chip { display: inline-block; min-width: 2.4em; padding: 1px 6px; border-radius: 9px; font-size: 11.5px; font-weight: 700;
+  text-align: center; font-variant-numeric: tabular-nums; border: 1px solid rgba(0, 0, 0, .08); }
+/* The runs table's Interest: the class's rank as a plain chip, its words in the tooltip. */
+.interest-chip { background: var(--panel-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--border-strong); }
+.sc-entry { min-width: 12ch; }
+.sc-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; }
+.sc-excerpt-short { color: var(--muted); font-style: italic; max-width: 34ch; white-space: normal; overflow-wrap: anywhere; }
+.sc-excerpt { margin: 4px 0; padding: 3px 8px; border-left: 3px solid var(--border-strong); font-size: 12px; white-space: pre-wrap;
+  overflow-wrap: anywhere; max-width: 64ch; }
+.sc-full { max-width: 70ch; }
+.sc-lost { font-style: italic; }
+/* Beside a mislead score: the link to what an independent reading found of that kind. */
+.sc-mislead { color: var(--warn); font-weight: 600; }
+.sc-open { font-size: 12px; }
+.sc-pair { display: grid; gap: 8px; }
+.sc-table td { vertical-align: middle; white-space: normal; }
+mark.xl-mark { background: #ffe58a; color: #16191a; border-radius: 2px; padding: 0 1px; box-shadow: 0 0 0 2px #e0b400; }
+mark.xl-mark.flash { animation: flash 1.6s ease-out; }
+.table-wrap:has(> .lv-ladder-table) { width: fit-content; }
 .lv-ladder-table { border-collapse: collapse; font-size: 12px; }
-.lv-ladder-table th, .lv-ladder-table td { border: 1px solid var(--border); padding: 4px 6px; vertical-align: top; max-width: 260px; }
+.lv-ladder-table th, .lv-ladder-table td { border: 1px solid var(--border); padding: 4px 6px; vertical-align: middle; max-width: 260px; }
+/* a chip column: the chip on its cell's middle both ways; a level column with a gloss, on its row's middle */
+.lv-ladder-table td.chip { vertical-align: middle; text-align: center; }
+.lv-ladder-table td.mid { vertical-align: middle; }
+.lv-ladder-table th.center, .lv-ladder-table td.center { text-align: center; vertical-align: middle; }
 .lv-ladder-table .lv-hl { background: var(--warn-bg); }
-.lv-def ol { margin: 4px 0; }
-
-/* transcript in the case-study viewer's style (arena-capstone script/visualize_case.html): white cards with a
-   thin line, a small muted head line, labelled blocks, monospace text at a loose line height */
-.transcript { --sans2: "IBM Plex Sans", system-ui, -apple-system, sans-serif; --mono2: "IBM Plex Mono", ui-monospace, Menlo, monospace;
-  font-family: var(--sans2); font-size: 14px; line-height: 1.45; }
-.transcript .steps { gap: 10px; }
-.transcript .step { background: var(--panel); border: 1px solid var(--border); border-left: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; box-shadow: none; }
-.transcript .step.src-system, .transcript .step.src-user { background: var(--panel-2); }
-.transcript .step.is-cited { border-left: 1px solid var(--border); outline: 1px solid var(--accent); }
-.transcript .step-head { font-size: 12px; color: var(--muted); gap: 8px; margin-bottom: 6px; }
-.transcript .step-id { font-family: var(--sans2); font-weight: 600; color: var(--text); }
-.transcript .step-src { font-size: 12px; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--muted); }
-.transcript .pre.msg-text { font-family: var(--mono2); font-size: 12.3px; line-height: 1.75; }
-.transcript .toolcall { background: transparent; border: none; border-radius: 0; padding: 0; margin: 8px 0 0; }
-.transcript .toolcall.is-cited { box-shadow: none; }
-.transcript .tc-head, .transcript .res-head { font-size: 12px; gap: 8px; margin-bottom: 2px; }
-.transcript .tc-label, .transcript .res-label { font-family: var(--sans2); font-size: 12px; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--muted); }
-.transcript .tc-label::first-letter, .transcript .res-label::first-letter { text-transform: uppercase; }
-.transcript .tc-fn { font-family: var(--mono2); font-weight: 600; font-size: 12px; }
-.transcript .call-no { font-family: var(--sans2); font-weight: 600; color: var(--text); font-size: 12px; }
-.transcript .tc-id { font-size: 10.5px; }
-.transcript .pre { font-family: var(--mono2); font-size: 12.3px; line-height: 1.75; background: transparent; border: none; padding: 0; }
-.transcript .result { border-top: none; padding-top: 0; margin-top: 6px; }
-.transcript .result .pre { font-size: 11.5px; color: var(--muted); }
-.transcript .call-marks { margin: 2px 0 4px; }
-.transcript .call-mark .badge { background: transparent; border: 1px solid var(--accent); color: var(--accent); border-radius: 3px; font-size: 11.5px; font-weight: 500; padding: 0 7px; }
-.transcript .call-mark.cm-code .badge { border-color: var(--bad); color: var(--bad); }
-.transcript .cm-text { font-size: 12px; color: var(--muted); }
+.lv-level-table td:last-child { max-width: 90ch; }
+.card > .table-wrap + .table-wrap { margin-top: 10px; }
 .lv-about { margin: 0 0 8px; max-width: 120ch; }
+/* A heading's small link (the Details tab's "by task", "reliability"). */
+.h-link { font-weight: 400; margin-left: 6px; }
 
 /* ---- case-study layout, copied from arena-capstone script/visualize_case.html (lines 10-65), scoped to .case.
-   Its tokens and dark palette, its .main grid, sticky .left, .call blocks, .ch head line, .blk/.lab/.txt sections,
-   folded inputs and .ev badges. The cs-* rules are ours (lanes, strip chips, board line). */
-.case{--ground:#eef0ed;--surface:#fff;--surface-2:#f6f7f5;--ink:#16191a;--ink-2:#3d4744;--muted:#6b7773;--line:#d7dcd8;
+   Its tokens and dark palette, its .main grid, sticky .left, .blk/.lab/.txt sections, folded inputs and .ev badges.
+   Ours: the cs-* rules (lanes, level chips, a step's labels) and the step blocks, which the source drew as plain
+   cards: each step is a card with a banded head line and a coloured left edge, so one step ends where the next begins. */
+.case{--ground:#eef0ed;--surface:#fff;--surface-2:#f6f7f5;--ink:#16191a;--ink-2:#3d4744;--muted:#6b7773;--line:#d7dcd8;--line-2:#a9b3ae;--head:#e9ece9;
   --accent:#12706b;--bad:#a63d29;--mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;--sans:"IBM Plex Sans",system-ui,sans-serif;
   background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.45;padding:12px;border-radius:8px}
-@media (prefers-color-scheme:dark){.case{--ground:#101314;--surface:#171b1c;--surface-2:#1d2223;--ink:#e4e8e5;--ink-2:#b6c0bc;--muted:#8b9591;--line:#2b3233;
+@media (prefers-color-scheme:dark){.case{--ground:#101314;--surface:#171b1c;--surface-2:#1d2223;--ink:#e4e8e5;--ink-2:#b6c0bc;--muted:#8b9591;--line:#2b3233;--line-2:#4a5654;--head:#242b2c;
   --accent:#4fb3ac;--bad:#e0785e}}
 .case .sub{font-size:12px;color:var(--muted);font-weight:400}
 .case .main{display:grid;grid-template-columns:330px 1fr;gap:16px;align-items:start}
 .case .left{position:sticky;top:56px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px;max-height:calc(100vh - 70px);overflow:auto}
 .case .left h2{margin:0 0 8px;font-size:14px;font-weight:600}
-.case .right{display:flex;flex-direction:column;gap:10px;min-width:0}
-.case .call{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 14px;scroll-margin-top:60px}
+.case .right{display:flex;flex-direction:column;gap:20px;min-width:0}
+.case .call{--step:var(--line-2);background:var(--surface);border:1px solid var(--line-2);box-shadow:inset 5px 0 0 var(--step);border-radius:8px;scroll-margin-top:60px}
 .case .call.here{outline:2px solid var(--accent)}
-.case .call.msg{background:var(--surface-2)}
-.case .ch{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12px;color:var(--muted);margin-bottom:6px}
-.case .ch .cn{font-weight:600;color:var(--ink-2)}
+.case .call.cs-msg{--step:var(--muted);background:var(--surface-2)}
+.case .ch{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;font-size:12px;color:var(--muted);padding:7px 14px 7px 18px;
+  background:var(--head);border-bottom:1px solid var(--line-2);border-radius:7px 7px 0 0;box-shadow:inset 5px 0 0 var(--step)}
+.case .ch .cn{font-size:14px;font-weight:700;color:var(--ink)}
+.case .cb{padding:4px 14px 12px 18px}
 .case .ev{display:inline-block;padding:0 7px;border-radius:3px;border:1px solid var(--accent);color:var(--accent);font-size:11.5px;font-weight:500}
-.case .mz{margin-left:auto;font-variant-numeric:tabular-nums;font-family:var(--mono)}
-.case .blk{margin:6px 0 0}
-.case .blk .lab{font-family:var(--sans);font-size:12px;color:var(--muted);margin-bottom:2px}
+.case .mz{margin-left:auto;font-family:var(--mono);color:var(--ink-2)}
+.case .blk{margin:8px 0 0}
+.case .lab{font-family:var(--sans);font-size:12px;color:var(--muted);margin-bottom:2px}
 .case .txt{font-family:var(--mono);font-size:12.3px;line-height:1.75;white-space:pre-wrap;word-break:break-word}
-.case .txt span{border-radius:2px;padding:1px 0;box-decoration-break:clone;-webkit-box-decoration-break:clone}
 .case .inp .txt{font-size:11.5px;color:var(--ink-2)}
 .case .inp.fold .txt{max-height:4.4em;overflow:hidden;-webkit-mask-image:linear-gradient(#000 55%,transparent);mask-image:linear-gradient(#000 55%,transparent);cursor:pointer}
+/* A step's three parts (tv_case_view.js section), each its own section under a header strip that folds it: the
+   reasoning as prose on a warm rule, the tool call as a command on a code tint, the tool result as output, inset and a
+   shade darker. A long part starts clipped. The bar's toggles (tv_view_run.js) fold a part on every step; Board calls
+   only hides the calls without a board label. */
+.case{--rs-rule:#b9852a;--rs-bg:#fdf9f1;--rs-head:#f5ecd8;--tc-rule:#3d5f86;--tc-bg:#eef3f8;--tc-head:#dce6f1;
+  --tr-rule:#7d8884;--tr-bg:#e6e9e7;--tr-head:#d6dbd8}
+@media (prefers-color-scheme:dark){.case{--rs-rule:#d1a34f;--rs-bg:#1f1b14;--rs-head:#2b2519;--tc-rule:#7fa6d4;--tc-bg:#162029;
+  --tc-head:#1f2c3a;--tr-rule:#76817d;--tr-bg:#111415;--tr-head:#1c2122}}
+.case .sec{margin:10px 0 0;border:1px solid var(--line);border-left:4px solid var(--sec-rule);border-radius:6px;background:var(--sec-bg);overflow:hidden}
+.case .sec + .sec{margin-top:12px}
+.case .sec-reasoning{--sec-rule:var(--rs-rule);--sec-bg:var(--rs-bg);--sec-head:var(--rs-head)}
+.case .sec-call{--sec-rule:var(--tc-rule);--sec-bg:var(--tc-bg);--sec-head:var(--tc-head)}
+.case .sec-prompt,.case .sec-tooldef{--sec-rule:var(--line-2);--sec-bg:var(--surface);--sec-head:var(--head)}
+.case .sec-result{--sec-rule:var(--tr-rule);--sec-bg:var(--tr-bg);--sec-head:var(--tr-head);margin-left:24px;box-shadow:inset 0 2px 5px rgba(0,0,0,.09)}
+.case .sec-h{display:flex;align-items:center;gap:8px;width:100%;padding:4px 10px;border:0;background:var(--sec-head);color:var(--ink-2);
+  font:600 11px var(--sans);letter-spacing:.05em;text-transform:uppercase;text-align:left;cursor:pointer}
+.case .sec-h:hover{color:var(--ink)}
+.case .sec-h:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.case .sec-chev{flex:none;width:6px;height:6px;margin:0 2px 3px 1px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg);transition:transform .12s}
+.case .sec.folded .sec-chev{margin:0 3px 0 0;transform:rotate(-45deg)}
+.case .sec-tool{font:600 12px var(--mono);letter-spacing:0;text-transform:none;color:var(--tc-rule)}
+.case .sec-size{margin-left:auto;font-weight:400;letter-spacing:0;text-transform:none;color:var(--muted)}
+.case .sec-b{padding:6px 12px 8px}
+.case .sec.folded .sec-b{display:none}
+.case .sec-reasoning .txt{font-family:var(--sans);font-size:13.5px;line-height:1.6}
+.case .sec-call .txt{font-size:12.3px;line-height:1.6}
+.case .sec-result .txt{font-size:11.8px;line-height:1.55;color:var(--ink-2)}
+.case .sec.clipped .txt{max-height:12lh;overflow:hidden;-webkit-mask-image:linear-gradient(#000 70%,transparent);mask-image:linear-gradient(#000 70%,transparent)}
+.case .sec-more{margin-top:4px;padding:1px 8px;border:1px solid var(--line-2);border-radius:4px;background:var(--surface);color:var(--accent);font:500 11.5px var(--sans);cursor:pointer}
+.case .sec:not(.clipped) .sec-more{display:none}
+.rp-togs { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
+.rp-tog { font: 500 12px var(--sans); padding: 3px 9px; border: 1px solid var(--border); border-radius: 5px; background: var(--panel); color: var(--muted); cursor: pointer; }
+.rp-tog[aria-pressed=true] { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+/* the check mark in a fixed slot, so a toggle keeps its width when pressed */
+.rp-tog::before { content: "\2713"; display: inline-block; width: 1em; visibility: hidden; }
+.rp-tog[aria-pressed=true]::before { visibility: visible; }
+.rp-togs[hidden] { display: none; }
+.rp-tog:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .case .note{font-size:11.5px;color:var(--ink-2);margin:8px 0 0}
-@media (max-width:980px){.case .main{grid-template-columns:1fr}.case .left{position:static}}
+@media not all and (min-width:1000px) and (min-height:560px){.case .main{grid-template-columns:1fr}.case .left{position:static;max-height:none}}
 .case .cs-svg{display:block;cursor:pointer}
-.case .cs-lane-h{font-size:9px;fill:var(--muted)}
+.case .cs-lane-g{font-size:10px;font-weight:600;fill:var(--ink-2)}
 .case .cs-mile{font:600 10.5px var(--sans);cursor:pointer}
 .case .cs-tick{font:10.5px var(--sans);fill:var(--muted);cursor:pointer}
-.case .cs-legend{display:flex;flex-wrap:wrap;gap:2px 10px;font-size:11px;color:var(--muted);margin-top:6px}
-.case .cs-legend b{color:var(--ink-2)}
-.case .cs-strip{display:flex;flex-wrap:wrap;gap:3px 12px;font-size:11.5px;color:var(--muted);padding:0 0 6px;border-bottom:1px solid var(--line)}
-.case .cs-chip{display:inline-flex;align-items:center;gap:4px}
-.case .cs-chip i{display:inline-block;width:10px;height:10px;border-radius:2px;border:1px solid var(--line)}
-.case .cs-chip b{color:var(--ink-2);font-weight:600}
-.case .cs-chip.cs-new b{color:var(--accent)}
-.case .cs-board{font-size:12px;color:var(--accent);margin-top:6px}
+.case .cs-lane-h{font-size:10.5px;font-weight:700}
+/* A step's head line: its level chips in the ladders' order, and the regulator's mark. */
+.case .cs-chips{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px}
+.case .cs-chips .lv-chip{font-size:11.5px;padding:0 6px}
+.case .cs-chips .lv-chip.lv-carried{color:var(--ink-2)}
+.case .cs-reg-chip{display:inline-flex;align-items:center;gap:4px;padding:0 6px;border-radius:4px;background:var(--bad);color:#fff;font-size:11.5px;font-weight:600;line-height:1.5}
+.case .cs-labels{margin:8px 0 2px;padding:6px 10px;border:1px solid var(--line-2);border-radius:6px;background:var(--surface-2)}
+.case .cs-label{display:flex;align-items:baseline;gap:6px;font-size:12.5px;line-height:1.6;color:var(--ink-2);min-width:0}
+.case .cs-label b{color:var(--ink);font-weight:600;white-space:nowrap}
+.case .cs-why{flex:1;min-width:0;color:var(--muted);font-size:12px}
+/* The strip's legend (tv_case_view.js stripLegend): a row per ladder, its levels' swatches in aligned cells, a rule at
+   the line. */
+.case .cs-legend{border-collapse:collapse;margin:10px 0 0;font-size:10px;color:var(--ink-2);table-layout:fixed;width:388px}
+.case .cs-legend col.csl-name-col{width:88px}
+.case .cs-legend th{text-align:left;font-weight:600;font-size:10.5px;white-space:nowrap;padding:3px 4px 3px 0;color:var(--ink);vertical-align:middle}
+.case .cs-legend td{padding:3px 2px;vertical-align:middle;white-space:nowrap;text-align:center;line-height:1.2}
+.case .cs-legend td.csl-line{border-left:2px solid var(--ink)}
+.case .cs-legend i{display:block;width:100%;min-width:14px;height:9px;margin:0 0 2px;border-radius:2px;border:1px solid var(--line-2);box-sizing:border-box}
+.case .csl-mark{display:inline-block;width:18px;font-weight:700}
+.case .csl-mark.csl-reg{width:4px;height:10px;margin:0 14px 0 0;background:var(--bad);vertical-align:-1px}
+.case .cs-legend i.csl-reg-swatch{width:4px;min-width:4px;background:var(--bad);border:0}
+.case .cs-legend tr:last-child td.csl-level:only-of-type{text-align:left}
 
 /* run page opened like the case-study artifact: one thin bar, then strip and transcript */
 .page.rp-page { max-width: none; }
@@ -155,41 +319,390 @@ table.idx-table tr.row-disagree td:first-child { box-shadow: inset 3px 0 0 var(-
 .rp-tab { font: 500 12px var(--sans); padding: 3px 9px; border: 1px solid var(--border); border-radius: 5px; background: var(--panel); color: var(--text); cursor: pointer; }
 .rp-tab.on { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
 .rp-role { color: var(--muted); font-weight: 400; }
-.rp-show { color: var(--muted); font-size: 12px; margin-left: auto; }
-.rp-show select { font-size: 12px; padding: 2px 6px; }
 .rp-dbtn { font: 500 12px var(--sans); padding: 3px 9px; border: 1px solid var(--border); border-radius: 5px; background: var(--panel); color: var(--muted); cursor: pointer; }
-.rp-details { margin-top: 18px; }
-.rp-details > summary { cursor: pointer; color: var(--muted); font-size: 13px; padding: 6px 0; }
+.rp-dbtn[aria-pressed=true] { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
 .rp-team .card { margin-bottom: 10px; }
 .rp-stage .case { padding: 0; background: transparent; }
-/* 322 px, not the source's 280, so the strip's wider label margin (tv_case_view.js LB) fits beside the raster. */
-.rp-stage .case .main { grid-template-columns: 322px 1fr; gap: 12px; }
-.rp-stage .case .left { top: calc(var(--header-h) + 44px); max-height: calc(100vh - var(--header-h) - 56px); padding: 10px; }
-.rp-stage .case .call { scroll-margin-top: calc(var(--header-h) + 50px); }
-.case .cs-six { font-size: 11.5px; color: var(--muted); line-height: 1.6; margin: 0 0 8px; }
-.case .cs-six i, .case .cs-mini i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 3px; vertical-align: baseline; }
-.case .cs-six b { color: var(--ink-2); font-weight: 600; }
-.case .cs-mini { display: inline-flex; gap: 2px; vertical-align: middle; }
-.case .cs-mini i { margin: 0; width: 7px; height: 11px; }
-.case .ev-w { color: var(--accent); }
-.rp-stage[data-show=reasoning] .k-tool, .rp-stage[data-show=reasoning] .k-input, .rp-stage[data-show=reasoning] .cs-board,
-.rp-stage[data-show=reasoning] .case .call:not(:has(.k-reasoning)) { display: none; }
-.rp-stage[data-show=tools] .k-reasoning, .rp-stage[data-show=tools] .k-input, .rp-stage[data-show=tools] .case .call.msg { display: none; }
-.rp-stage[data-show=board] .case .right .call:not(:has(.cs-board)) { display: none; }
-.case{--neg:33,102,172;--pos:178,24,43}
-@media (prefers-color-scheme:dark){.case{--neg:90,150,230;--pos:225,80,90}}
-.case .scale{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);margin-top:8px}
-.case .scale .grad{flex:1;height:10px;border-radius:2px;background:linear-gradient(90deg,rgb(var(--neg)),var(--surface),rgb(var(--pos)))}
-.case .cs-lz{color:var(--ink-2)}
-.rp-lens { margin-left: 8px; padding-left: 8px; border-left: 1px solid var(--border); }
-.heat { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
-.heat.heat-strong, .heat.heat-strong .lv-rank { color: #fff; }
-.heat .lv-glyph .lv-seg { outline: 1px solid rgba(127,127,127,.35); }
-.cs-full-legend { font-size: 12px; color: var(--muted, #888); margin: 8px 0; display: flex; flex-direction: column; gap: 3px; }
-.cs-full-legend .cfl-row { line-height: 1.5; }
-.cs-full-legend b { color: var(--ink-2, var(--text)); font-weight: 600; margin-right: 4px; }
-.cs-full-legend .cfl-item { display: inline-flex; align-items: center; gap: 3px; margin-right: 8px; white-space: nowrap; }
-.cs-full-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; border: 1px solid rgba(127,127,127,.4); }
-.case .cs-six-row { line-height: 1.55; }
-.heat.heat-light, .heat.heat-light .lv-rank { color: #16191a; }
+/* A small or zoomed-in window (under 1000 x 560 CSS px) has one column and the page scrolls under the run bar. --under-bar is the bar's real
+   bottom edge, set by tv_case_view.js: the bar wraps there. */
+.rp-stage .case { --under: var(--under-bar, calc(var(--header-h) + 44px)); }
+.rp-stage .case .left { padding: 10px; top: var(--under); max-height: calc(100vh - var(--under) - 12px); }
+@media (min-width:1000px) and (min-height:560px) { .rp-stage .case .main { grid-template-columns: 410px minmax(0, 1fr); gap: 12px; } }
+.rp-stage .case .call, .rp-stage .case .step-box { scroll-margin-top: var(--under); }
+/* The run page scrolls as one document (no fixed panes): pinch-zoom and Cmd zoom then behave as on any page. The
+   strip's panel stays sticky beside the steps. */
+
+/* The strip's slider (tv_case_view.js): a track the strip's height, a row per call, and a handle at the call at the top
+   of the steps. */
+.case .cs-strip { position: relative; }
+.case .cs-slider { position: absolute; width: 18px; cursor: pointer; touch-action: none; outline: none; }
+.case .cs-track { position: absolute; left: 7px; top: -2px; bottom: -2px; width: 4px; border-radius: 2px; background: var(--line-2); }
+.case .cs-thumb { position: absolute; left: 0; top: 0; width: 18px; height: 12px; margin-top: -6px; box-sizing: border-box;
+  border-radius: 6px; background: var(--accent); border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--accent), 0 1px 3px rgba(0, 0, 0, .25);
+  cursor: grab; }
+.case .cs-slider:hover .cs-track { background: var(--muted); }
+.case .cs-slider.dragging .cs-thumb { cursor: grabbing; transform: scale(1.12); }
+.case .cs-slider:focus-visible .cs-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
+.case .cs-ladders { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 18px; }
+.case .cs-ladders .lv-chip { font-size: 11.5px; }
 .case .cs-mile { font-size: 10px; }
+/* The three ladders: the runs table's influencer columns, the Details tab's panels, the Ladders page's level tables;
+   the Cheating cell, with the code's word over CheatBench's judge's, each marked by who says it. */
+.lv-influencer-row { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; margin: 2px 0; }
+.cheat-cell { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.cheat-says { white-space: nowrap; margin-bottom: 3px; }
+.cheat-says:last-child { margin-bottom: 0; }
+.lv-who { font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); white-space: nowrap;
+  border-bottom: 1px dotted var(--border-strong, var(--border)); line-height: 1.3; }
+/* A Details panel's summary (tv_levels.js summary): a label column and a value column. */
+.lv-summary { border-collapse: collapse; margin: 4px 0 10px; font-size: 13px; }
+.lv-summary th { text-align: left; padding: 3px 14px 3px 0; color: var(--muted); font-weight: 600; vertical-align: middle; white-space: nowrap; }
+.lv-summary td { padding: 3px 0; vertical-align: middle; }
+.coord-table tr.coord-influencer td { background: var(--surface-2, rgba(127,127,127,.06)); }
+.coord-table td.num, .coord-pairs td.num { font-variant-numeric: tabular-nums; }
+/* The Details tables: the Agent and Role cells on their row's middle; each chip and short value centred in its
+   column; the lists (clauses, evidence, takes, labels) left, on the row's middle. */
+.coord-table td:nth-child(-n+2) { vertical-align: middle; }
+.coord-agents th:nth-child(n+3), .coord-agents td:nth-child(n+3), .coll-agents th:nth-child(n+3), .coll-agents td:nth-child(n+3),
+.coord-pairs th:last-child, .coord-pairs td:last-child { text-align: center; vertical-align: middle; }
+table.coord-pairs { margin-top: 0; width: auto; min-width: 280px; max-width: 520px; }
+.table-wrap:has(> .coord-pairs) { width: fit-content; margin-top: 8px; }
+.cheat-table th:nth-child(3), table.cheat-table td:nth-child(3) { text-align: center; vertical-align: middle; }
+.cheat-table td:nth-child(3) .cheat-cell { align-items: center; }
+.collusion-pairs th:nth-child(2), .collusion-pairs th:nth-child(4), .collusion-pairs th:nth-child(6) { text-align: center; }
+table.collusion-pairs td:nth-child(1), table.collusion-pairs td:nth-child(2), table.collusion-pairs td:nth-child(4),
+table.collusion-pairs td:nth-child(6) { vertical-align: middle; }
+table.collusion-pairs td:nth-child(2), table.collusion-pairs td:nth-child(4), table.collusion-pairs td:nth-child(6) { text-align: center; }
+.lv-chip-pair { display: inline-flex; flex-wrap: wrap; justify-content: center; gap: 3px; }
+table.sc-table td:nth-child(-n+2) { vertical-align: middle; }
+.lv-level-table td:first-child { white-space: nowrap; }
+.collusion-pairs td { vertical-align: middle; }
+.collusion-pairs td:nth-child(3), .collusion-pairs td:nth-child(5) { min-width: 260px; max-width: 520px; }
+.collusion-pairs td:nth-child(6), .collusion-pairs td:nth-child(7) { min-width: 240px; max-width: 440px; }
+.cheat-table td { vertical-align: middle; }
+.cheat-table td:nth-child(5) { min-width: 320px; max-width: 640px; }
+.cb-cell { display: inline-flex; flex-direction: column; gap: 1px; white-space: nowrap; }
+.nowrap { white-space: nowrap; }
+/* The Summary page (tv_view_summary.js): a row per workers' model and task, a column per condition under a band of
+   groups, a rule at the left of each group, an influencer column's header three lines (role, level, model); a cell
+   holds its runs (a link), three k of n lines with a thin bar each and the three ladders' level counts as chips in
+   the ladders' colours. */
+.sum-wrap { overflow: auto; max-height: calc(100vh - var(--header-h) - 90px); }
+table.sum-table { font-size: 12px; border-collapse: separate; border-spacing: 0; }
+table.sum-table thead { position: sticky; top: 0; z-index: 2; }
+table.sum-table th, table.sum-table td { padding: 5px 6px; vertical-align: top; }
+table.sum-table th.sum-col { min-width: 140px; white-space: normal; vertical-align: bottom; }
+table.sum-table tr.sum-band-row th { text-align: center; font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--muted); border-bottom: 2px solid var(--border); padding: 3px 6px; }
+table.sum-table tr.sum-band-row th.sum-col { text-align: left; font-size: 12px; letter-spacing: normal; text-transform: none;
+  border-bottom: 1px solid var(--border); padding: 5px 6px; }
+table.sum-table .sum-group-start { border-left: 2px solid var(--border); }
+table.sum-table td.sum-empty { text-align: center; vertical-align: middle; }
+table.sum-table tr.sum-total > * { border-top: 2px solid var(--border-strong); background: var(--panel-2); }
+table.sum-table tr.sum-total .sum-bar, table.sum-table tr.sum-total .sum-chip-na { background: var(--border); }
+.sum-n { display: inline-block; font-weight: 700; font-size: 12.5px; margin-bottom: 3px; }
+.sum-share { display: grid; grid-template-columns: 4.6em 4.8em 1fr; align-items: center; gap: 4px; line-height: 1.35; }
+.sum-share-label { color: var(--muted); font-size: 11px; }
+.sum-share-k { font-variant-numeric: tabular-nums; color: var(--muted); }
+.sum-share-k.is-some { color: var(--text); font-weight: 600; }
+.sum-bar { display: block; height: 5px; min-width: 34px; background: var(--panel-2); border-radius: 2px; overflow: hidden; }
+.sum-bar > span { display: block; height: 100%; }
+.sum-lad { display: flex; align-items: flex-start; gap: 4px; margin-top: 3px; }
+.sum-lad-name { flex: none; width: 1.6em; font-size: 10px; font-weight: 700; color: var(--muted); padding-top: 1px; }
+.sum-chips { display: flex; flex-wrap: wrap; gap: 2px; }
+.sum-chip { display: inline-block; padding: 0 4px; border-radius: 3px; font-size: 10.5px; line-height: 1.5; white-space: nowrap;
+  font-variant-numeric: tabular-nums; }
+.sum-chip-na { background: var(--panel-2); color: var(--muted); }
+.sum-col-line { white-space: nowrap; line-height: 1.6; }
+.sum-col-model { font-weight: 600; }
+/* CheatBench's judge beside the code's Cheating chip: a small outlined chip, red when a worker cheated by its word. */
+.cb-chip { display: inline-block; padding: 0 5px; border-radius: 4px; font-size: 11px; font-weight: 600; white-space: nowrap;
+  color: var(--muted); box-shadow: inset 0 0 0 1px var(--border-strong); vertical-align: middle; }
+.cb-chip.cb-yes { color: var(--bad); box-shadow: inset 0 0 0 1px var(--bad); }
+.cb-chip + .cb-chip { margin-left: 3px; }
+.cheat-cell { white-space: nowrap; }
+/* A mislead score's mark: a small warning sign linking to why the score is untrustworthy. */
+.sc-mislead { text-decoration: none; color: var(--warn); font-size: 13px; vertical-align: middle; }
+.sc-team { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+/* The runs table's centred columns: the counts, ladders, scores and interest, their chips on the cell's middle. */
+table.idx-table th.center, table.idx-table td.center { text-align: center; }
+table.idx-table td.center .cheat-cell, table.idx-table td.center .lv-influencer-row {
+  align-items: center; justify-content: center; }
+/* The episode strip's grid: a faint line every few calls, its number small at the right. */
+.case .cs-grid { stroke: var(--text); stroke-opacity: .12; stroke-width: 1; pointer-events: none; }
+.case .cs-tick { font-size: 9px; }
+/* The run page's bar: who ran as chips. */
+.rp-who { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; }
+.rp-who-part { display: inline-flex; align-items: center; gap: 4px; }
+/* The Summary's cells, centred both ways: the cheated share over its bar, each ladder's chips, the runs last. */
+table.sum-table td.sum-cell { vertical-align: middle; text-align: center; }
+.sum-stack { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.sum-stack .sum-share { display: flex; justify-content: center; align-items: center; gap: 6px; width: 100%; max-width: 150px; }
+.sum-stack .sum-share-label { text-align: right; }
+.sum-stack .sum-bar { flex: 1; max-width: 70px; }
+.sum-stack .sum-lad { justify-content: center; margin-top: 0; }
+.sum-stack .sum-chips { justify-content: center; }
+.sum-stack .sum-n { margin: 2px 0 0; }
+table.sum-table th.sum-col, table.sum-table tr.sum-band-row th.sum-col { text-align: center; vertical-align: bottom; }
+/* The Summary's rates: the ladder's letter in its colour, the rate, a short bar; row headers centred like the cells. */
+.sum-stack .sum-share { display: grid; grid-template-columns: 1.2em 3em 64px; justify-content: center; gap: 6px; }
+.sum-lad-cheating { color: #cf3a27; } .sum-lad-coordination { color: #6f4fc0; } .sum-lad-collusion { color: #c2185b; }
+/* An influencer's alerts to humans: the Summary's row A and its chips, and the runs page's Alerts cell. */
+.sum-lad-alerts { color: var(--bad); } .sum-bar > span.sum-bar-alerts { background: var(--bad); }
+.sum-chip-alert { background: var(--bad-bg); color: var(--bad); } .sum-chip-alert.is-zero { background: var(--panel-2); color: var(--muted); }
+.idx-alerts { display: inline-block; text-align: center; line-height: 1.5; }
+.sum-stack .sum-lad-name { width: auto; font-size: 11px; }
+/* The lead columns: centred, as narrow as their longest word (each breaks only at its spaces), a rule between them. */
+table.sum-table th.sum-model, table.sum-table td.sum-task, table.sum-table td.sum-agents,
+table.sum-table td.sum-workers, table.sum-table td.sum-seed { vertical-align: middle; }
+table.sum-table .sum-model, table.sum-table .sum-task, table.sum-table .sum-agents, table.sum-table .sum-workers,
+table.sum-table .sum-seed { text-align: center; white-space: normal; width: 1px; }
+table.sum-table .sum-task, table.sum-table .sum-agents, table.sum-table .sum-workers, table.sum-table .sum-seed {
+  border-left: 1px solid var(--border); }
+.sum-word { white-space: nowrap; }
+/* The detailed Summary: each ladder's letter in a fixed column, its chips wrapping beside it. */
+.sum-stack .sum-lad { display: grid; grid-template-columns: 1.2em minmax(0, auto); align-items: center; column-gap: 4px; }
+.sum-stack .sum-lad .sum-chips { justify-content: flex-start; }
+table.sum-table td.sum-cell { min-width: 130px; }
+/* ---- polish, 2026-11-19 ---- */
+/* The runs table's team score: the chip on its column's middle, a mislead mark hanging at its right out of the flow. */
+table.idx-table .sc-team { position: relative; }
+table.idx-table .sc-team .sc-mislead { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); margin-left: 3px; }
+/* The Influencers band: one line per role and level, with the role's mark and, where several influencers share a
+   level, their number. */
+.lv-influencers { display: inline-flex; flex-direction: column; gap: 3px; vertical-align: middle; }
+.lv-influencers .lv-influencer-row { flex-direction: row; align-items: center; justify-content: center; gap: 4px; margin: 0; }
+/* With several influencers the lines stand in a grid: the R and D marks in one column, the numbers in the next, each
+   chip from one left edge beside them, the block on the cell's middle. */
+.lv-influencers.is-many { display: inline-grid; grid-template-columns: auto auto; column-gap: 4px; row-gap: 3px;
+  align-items: center; justify-items: start; }
+.lv-influencers.is-many.has-count { grid-template-columns: auto auto auto; }
+.lv-influencers.is-many .lv-influencer-row { display: contents; }
+.lv-influencers .lv-count { justify-self: end; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* One line per influencer block of the Influencers cell (.idx-influencer): as high as the block, the same gap apart. */
+.lv-influencers.is-pair { grid-auto-rows: 57px; }
+.role-chip.role-mark { padding: 0 4px; letter-spacing: 0; }
+/* The Run column: wide enough that a name breaks at an underscore at most once or twice; on one line in a wide window. */
+table.idx-table td.wrap:first-child { min-width: 20ch; max-width: 34ch; }
+table.idx-table td.lv, table.idx-table th.lv { padding-left: 6px; padding-right: 6px; }
+@media (min-width: 2000px) {
+  table.idx-table td.wrap:first-child, table.idx-table td.wrap { white-space: nowrap; max-width: none; }
+}
+/* The Details tab's Ladders card: the Team row's score chip has its mark beside it on the row's middle. */
+/* The run page's bar: the who chips one height and one font, centred on the line. */
+.rp-who .role-chip, .rp-who .level-chip, .rp-who .cond-chip { display: inline-flex; align-items: center; box-sizing: border-box;
+  height: 19px; padding: 0 6px; font-size: 11px; line-height: 1; letter-spacing: 0; text-transform: none; align-self: center; }
+.rp-right { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 8px; margin-left: auto; }
+.rp-right .rp-togs { margin-left: 0; }
+/* The run record's key-value grids in columns: each label on its value's baseline, a long value across the row. */
+.rp-details .kv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 6px 24px; }
+.rp-details .kv-grid .kv-item { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.rp-details .kv-grid .kv-item > dt { flex: none; white-space: nowrap; }
+.rp-details .kv-grid .kv-item.kv-wide { grid-column: 1 / -1; }
+.rp-details .kv-grid .kv-item.kv-mid { grid-column: span 2; }
+.rp-details .kv-grid .kv-item:not(.kv-wide) > dd { white-space: nowrap; }
+/* The grid measures itself: where it holds one column, a middle pair spans that one column too, so no implicit column
+   opens and a long pair's 1 / -1 is the whole width. */
+.rp-details .kv-grid { container-type: inline-size; }
+.rp-details .kv-grid .kv-item > dd { min-width: 0; }
+.rp-details .kv-grid .kv-item.kv-wide > dd { overflow-wrap: anywhere; }
+@container (max-width: 503px) {
+  .rp-details .kv-grid .kv-item.kv-mid { grid-column: 1 / -1; }
+  .rp-details .kv-grid .kv-item.kv-mid > dd { white-space: normal; overflow-wrap: anywhere; }
+}
+/* The Team labels card: as wide as its chips, each value centred in its column. */
+.rp-details table.labels-table { width: auto; min-width: 420px; }
+.rp-details .table-wrap:has(> .labels-table) { width: fit-content; }
+.labels-table th:nth-child(2), .labels-table td:nth-child(2) { text-align: center; }
+/* An agent's record: Cheating, its judge labels and CheatBench's judge side by side where the card is wide. */
+.agent-card > .cb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 12px 24px; align-items: start; }
+.sc-pair-row { display: flex; align-items: baseline; gap: 8px; }
+.sc-pair-row > .field-label { flex: none; min-width: 7em; }
+.jb-head h4 { margin: 0; }
+/* The Team labels card: each value's chips on one line, on the label's middle. */
+.labels-table td { vertical-align: middle; }
+.labels-table .cheat-cell { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; }
+/* The strip's end-of-run chips, each behind its lane's mark. */
+.case .cs-ladder { display: inline-flex; align-items: center; gap: 3px; }
+.case .cs-ladder-mark { font-size: 10.5px; font-weight: 700; }
+/* The Summary: the lead headers on the condition headers' baseline, centred; All on its row's middle, left; the
+   lead columns stuck at the left (tv_view_summary.js sets each one's left) on an opaque ground. */
+table.sum-table th.sum-lead, table.sum-table tr.sum-band-row th.sum-lead { vertical-align: bottom; text-align: center; font-size: 12px;
+  letter-spacing: normal; text-transform: none; border-bottom: 1px solid var(--border); padding: 5px 6px; }
+table.sum-table tr.sum-total > th { vertical-align: middle; text-align: left; }
+table.sum-table .sum-stick { position: sticky; z-index: 1; background: var(--panel); }
+table.sum-table thead .sum-stick { z-index: 3; background: var(--panel-2); }
+table.sum-table tr.sum-total > .sum-stick { background: var(--panel-2); }
+/* Two influencers in one column's header: a block each, role, level and model centred over one another. */
+.sum-col-pair { display: inline-grid; grid-auto-flow: column; gap: 6px; justify-items: center; }
+.sum-col-one { display: flex; flex-direction: column; align-items: center; }
+/* The Summary's cells tighter, so the columns fit a wide window; each rate right-aligned against its bar. */
+table.sum-table td.sum-cell, table.sum-table th.sum-col { min-width: 118px; }
+/* the table as wide as its columns, so a few columns never stretch the lead ones */
+table.sum-table { width: auto; }
+.sum-wrap { width: fit-content; max-width: 100%; }
+.sum-stack .sum-share { grid-template-columns: 1.2em 3em 48px; }
+.sum-stack .sum-share-k { text-align: right; }
+/* The detailed Summary: one block per cell, centred, as wide as its widest ladder row; the ladders' letters in one
+   column at its left and their chips from one left edge, wrapping inside the cell; every condition column one width. */
+.sum-stack.is-detailed { display: flex; flex-direction: column; align-items: stretch; gap: 3px; width: fit-content;
+  max-width: 100%; margin: 0 auto; }
+.sum-stack.is-detailed .sum-lad { display: flex; align-items: flex-start; gap: 4px; }
+.sum-stack.is-detailed .sum-lad-name { flex: none; width: 1.2em; padding-top: 2px; }
+.sum-stack.is-detailed .sum-chips { min-width: 0; justify-content: flex-start; }
+.sum-stack.is-detailed .sum-n { align-self: center; }
+table.sum-table.is-detailed td.sum-cell, table.sum-table.is-detailed th.sum-col { width: 190px; min-width: 190px; max-width: 190px; }
+/* The detailed Summary cell: the three ladders in one grid, letters in one column, chips left-aligned beside them,
+   the block centred in the cell. */
+.sum-stack .sum-lads { display: grid; grid-template-columns: auto fit-content(190px); column-gap: 6px; row-gap: 3px;
+  align-items: start; justify-content: center; }
+.sum-stack .sum-lads .sum-lad { display: contents; }
+.sum-stack .sum-lads .sum-lad-name { text-align: right; padding-top: 2px; }
+.sum-stack .sum-lads .sum-chips { justify-content: flex-start; }
+.sum-stack .sum-lads .sum-chips { flex-wrap: wrap; width: max-content; max-width: 190px; }
+/* Detailed cells are wide enough for a row of chips beside each letter. */
+table.sum-table.is-detailed td.sum-cell { min-width: 220px; }
+/* A step encloses its calls; a step and a call fold to their header with the chevron at the left. */
+.case .step-box { border-left: 2px solid var(--line-2); padding-left: 10px; margin: 0 0 12px; }
+/* Room above each step after the first, so the steps read as separate blocks. */
+.case .step-box + .step-box { margin-top: 22px; }
+.case .step-h { display: flex; align-items: center; gap: 6px; font: 600 12px var(--sans); color: var(--muted); margin: 0 0 6px; }
+.case .step-b { display: flex; flex-direction: column; gap: 12px; }
+.case .step-box.folded > .step-b { display: none; }
+.case .call.folded > .cb { display: none; }
+.case .box-fold { border: 0; background: none; padding: 0 2px; cursor: pointer; color: var(--muted); display: inline-flex; align-items: center; }
+.case .box-fold[aria-expanded=false] .sec-chev { transform: rotate(-45deg); }
+.case .step-box.folded > .step-h .sec-chev, .case .call.folded > .ch .sec-chev { transform: rotate(-45deg); }
+/* The transcript always fits its pane: no box grows past it, any long unbroken string wraps, and the page never shifts
+   sideways. */
+.case .right, .case .step-box, .case .step-b, .case .call, .case .cb, .case .sec, .case .sec-b { min-width: 0; max-width: 100%; }
+.case .txt { overflow-wrap: anywhere; word-break: break-word; max-width: 100%; }
+.rp-stage .case .right { overflow-x: clip; }
+.rp-zoom { display: inline-flex; gap: 2px; }
+/* The strip's legend: room between its rows and above it. */
+.case .cs-legend { margin-top: 18px; }
+.case .cs-legend th, .case .cs-legend td { padding-top: 6px; padding-bottom: 6px; }
+/* The strip's step boundaries: a fainter line than the numbered grid, dashed. */
+.case .cs-stepline { stroke: var(--text); stroke-opacity: .16; stroke-width: 1; stroke-dasharray: 2 2; pointer-events: none; }
+/* The run bar: room around it and between its groups. */
+.rp-bar { padding: 12px 18px; gap: 10px 18px; margin-bottom: 14px; }
+.rp-bar .rp-tabs { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.rp-who { gap: 12px; }
+/* The step buttons beside the slider's handle: one step back, one forward. */
+.case .cs-stepbtns { position: absolute; display: flex; flex-direction: column; gap: 4px; }
+.case .cs-stepbtn { width: 22px; height: 20px; padding: 0; border: 1px solid var(--border); border-radius: 4px; background: var(--panel);
+  color: var(--text); font-size: 10px; line-height: 1; cursor: pointer; }
+.case .cs-stepbtn:hover { border-color: var(--accent); color: var(--accent); }
+/* The strip's panel: the ladder chips, the strip and the legend, each 32 px from the next. */
+@media (min-width:1000px) and (min-height:560px) {
+  .rp-stage .case .left { display: flex; flex-direction: column; gap: 32px; padding: 20px 18px; box-sizing: border-box; }
+  .rp-stage .case .left > .cs-ladders { margin: 0; }
+  .rp-stage .case .left > .cs-strip { flex: none; }
+  .rp-stage .case .left > .cs-legend { margin-top: 0; }
+}
+/* The ladder chips: each letter close to its chip, clear room between the three pairs. */
+.case .cs-ladders { gap: 10px 22px; }
+.case .cs-ladder { display: inline-flex; align-items: center; gap: 5px; }
+.case .cs-ladder-mark { font-weight: 700; font-size: 11px; }
+/* Generous spacing on the run page (the user, 2026-11-20: "what is preventing you making spacing 3-4x"). */
+.rp-bar { padding: 22px 24px; gap: 14px 24px; margin-bottom: 28px; }
+@media (min-width:1000px) and (min-height:560px) {
+  .rp-stage .case .left { gap: 56px; padding: 28px 24px; }
+}
+.case .cs-ladders { flex-wrap: nowrap; gap: 14px; }
+.case .cs-ladders .lv-chip { font-size: 11px; white-space: nowrap; }
+.case .cs-legend th, .case .cs-legend td { padding-top: 14px; padding-bottom: 14px; }
+.case .cs-legend { margin-top: 0; }
+@media (min-width:1000px) and (min-height:560px) {
+  .rp-stage .case .main { grid-template-columns: 440px minmax(0, 1fr); gap: 20px; }
+  .rp-stage .case .left { padding: 28px 20px; }
+}
+/* A tool's name as the model received it: no capitals added. */
+.case .sec-tooldef .sec-name { text-transform: none; letter-spacing: 0; font-family: var(--mono, ui-monospace, monospace); }
+/* The tools under the System box's text: each tool a folded section of its own. */
+.case .sec-tools .tool-list { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; }
+/* The step's button that folds all its calls; the turn's reasoning above its calls. */
+.case .step-hidden { border: 1px dashed var(--line-2); border-radius: 4px; padding: 0 6px; font: 500 11px var(--sans); color: var(--muted); }
+.case .step-calls { margin-left: 10px; border: 1px solid var(--line-2); border-radius: 999px; background: none; color: var(--muted);
+  font: 600 11px var(--sans); padding: 2px 10px 2px 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.case .step-calls:hover { color: var(--text, inherit); border-color: var(--muted); }
+.case .step-calls[aria-expanded=false] .sec-chev { transform: rotate(-45deg); }
+.case .step-think { display: flex; flex-direction: column; gap: 8px; }
+.case .step-think:empty { display: none; }
+/* The bar's who: a group per model, its name over its chips, the groups side by side. */
+.rp-who { align-items: flex-start; gap: 22px; }
+.rp-who-part { flex-direction: column; align-items: flex-start; gap: 6px; }
+.rp-who-model { font-size: 13px; white-space: nowrap; }
+.rp-who-chips { display: inline-flex; align-items: center; gap: 4px; }
+/* Board and Details are views of the whole run, not agents: set apart by a rule and a filled, accented look. */
+.rp-tab-view { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.rp-tab:not(.rp-tab-view) + .rp-tab-view { margin-left: 14px; position: relative; }
+.rp-tab:not(.rp-tab-view) + .rp-tab-view::before { content: ""; position: absolute; left: -11px; top: 15%; bottom: 15%;
+  border-left: 1px solid var(--border-strong, var(--border)); }
+.rp-tab-view.on { background: var(--accent); color: var(--panel); }
+/* The bar's two rows: the run and who ran it, then the tabs with the toggles at the right. */
+.rp-bar { flex-direction: column; align-items: stretch; flex-wrap: nowrap; }
+.rp-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; }
+.rp-row .rp-right { margin-left: auto; }
+/* Board and Details: the top row's right corner, with no rule before them there. */
+.rp-row .rp-view-tabs { margin-left: auto; }
+.rp-view-tabs .rp-tab-view::before { content: none; }
+.rp-view-tabs .rp-tab-view { margin-left: 0; }
+/* The agents' two selects, Workers and Influencers, a rule between them; the one holding the agent shown is accented. */
+.rp-picks { display: inline-flex; align-items: center; gap: 14px; }
+.rp-pick { font: 500 12px var(--sans); padding: 4px 8px; border: 1px solid var(--border); border-radius: 5px;
+  background: var(--panel); color: var(--text); cursor: pointer; max-width: 320px; }
+.rp-pick.on { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+.rp-pick:not(.on) { color: var(--muted); }
+.rp-sep { align-self: stretch; border-left: 1px solid var(--border-strong, var(--border)); margin: 2px 0; }
+/* The run record at the bottom of Details, under its own heading. */
+.rp-record-in { margin-top: 28px; }
+.rp-record-h { font-size: 15px; margin: 0 0 12px; }
+/* Summary: the column toggles, a rule, then Detailed in the corner, drawn as a view switch apart from the toggles. */
+.sum-corner { display: inline-flex; align-items: center; gap: 14px; margin-left: auto; }
+.sum-detail { font: 600 12px var(--sans); padding: 5px 14px; border-radius: 999px; border: 1px solid var(--accent);
+  background: none; color: var(--accent); cursor: pointer; }
+.sum-detail[aria-pressed=true] { background: var(--accent); color: var(--panel); }
+/* Summary: within a group, a soft rule where the instruction level changes and a faint shade on every other level. */
+table.sum-table .sum-level-start { border-left: 1px dashed var(--border); }
+table.sum-table .sum-level-alt { background: color-mix(in srgb, var(--text) 3%, transparent); }
+/* A round encloses its steps (tv_case_view.js roundBox): a heavier rule than a step's, its header a line of chips. */
+.case .round-box { border-left: 3px solid var(--accent); padding-left: 12px; margin: 0 0 22px; }
+.rp-stage .case .round-box { scroll-margin-top: var(--under); }
+.case .round-h { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; font: 600 13px var(--sans); }
+.case .round-n { color: var(--ink); }
+.case .round-of, .case .round-calls, .case .round-time { font: 500 11px var(--sans); color: var(--muted); }
+.case .round-b { display: flex; flex-direction: column; }
+.case .round-box.folded > .round-b { display: none; }
+.case .round-box.folded > .round-h .sec-chev { transform: rotate(-45deg); }
+.case .round-chip { border: 1px solid var(--line-2); border-radius: 999px; padding: 0 8px; font: 600 11px var(--sans); color: var(--muted); }
+.case .round-end[data-end=calls], .case .round-end[data-end=time], .case .round-end[data-end=context] { color: var(--warn); border-color: currentColor; }
+.case .round-end[data-end=ending] { color: var(--accent); border-color: currentColor; }
+.case .round-board { border-style: dashed; }
+.case .round-pos { font: 600 11px var(--mono, ui-monospace, monospace); color: var(--muted); border: 1px solid var(--line-2); border-radius: 4px; padding: 0 5px; }
+.case .round-pos.is-refused { color: var(--bad); border-color: currentColor; }
+.case .job-chip { font: 600 11px var(--mono, ui-monospace, monospace); color: var(--accent, #6b5bd6); border: 1px solid currentColor; border-radius: 4px; padding: 0 5px; background: none; }
+.case button.job-link { cursor: pointer; }
+.case button.job-link:disabled { cursor: default; opacity: .6; }
+.case .right, .case .round-box, .case .round-b { min-width: 0; max-width: 100%; }
+/* The strip's round boundaries: solid, above the step lines. */
+.case .cs-roundline { stroke: var(--accent); stroke-opacity: .55; stroke-width: 1.5; }
+/* The header's Settings: a box under its button, a checkbox per task. */
+.tv-settings { display: inline-block; }
+.tv-settings .tv-settings-box { position: absolute; z-index: 6; top: 34px; right: 0; width: max-content; padding: 8px 10px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0, 0, 0, .18);
+  display: flex; flex-direction: column; gap: 4px; }
+.tv-settings-head { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.tv-settings-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; cursor: pointer; }
+.tv-settings-row .muted { margin-left: auto; padding-left: 12px; }
+
+/* The runs table's Rounds and Finish cells: the longest agent's line over the shortest's, level across both. */
+.span-lines { display: inline-flex; flex-direction: column; gap: 2px; line-height: 1.35; white-space: nowrap; }
+/* A worker's beliefs (tv_case_view.js beliefCard): a row per question, its label and number, the reason under them. */
+.case .cs-beliefs { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.case .cs-beliefs-h { margin: 0; font-size: 13px; font-weight: 600; }
+.case .cs-belief { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: baseline; font-size: 12px; cursor: default; }
+.case .cs-belief-label { color: var(--ink); font-weight: 500; }
+.case .cs-belief-n { justify-self: end; min-width: 28px; text-align: center; border-radius: 4px; padding: 0 6px; font-weight: 600;
+  background: var(--line); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.case .cs-belief-why { grid-column: 1 / -1; color: var(--muted); font-size: 11px; line-height: 1.4; }

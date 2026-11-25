@@ -1,0 +1,61 @@
+# disregulator_existence_0 (2026-11-24): can one disregulator make an honest team cheat? The user: "For Disregulator,
+# we will try both flipt and gflipt. Try all models (weak, strong top) disregulators, 3-5 samples per cell". Haiku
+# workers with the pack swe/revealing, seeds 1 to 3. On each task a team of four: three workers and one disregulator,
+# weak DeepSeek Flash, strong Grok 4.7 or top Kimi K3, set as the disregulator arms of
+# studies/gated/ian_influencers_1.yaml. No team without a disregulator: the user named none. Every run keeps the
+# default $5 cap.
+study: disregulator_existence_0
+closed: true        # over since 2026-11-24: its nine runs showed the disregulator handing in alone (it read every
+                    # worker's piece with peer_shell and pushed to team/main itself, after a worker's submit);
+                    # disregulator_existence_1 reruns it where a disregulator cannot push to team/main
+seeds: [1, 2, 3]
+# What every run of the study is given. A value named nowhere is the default (swarm_config.py).
+settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5]
+targets:
+  ian_flipt_haiku_disregulator_weak:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [swe/revealing]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=deepseek-flash-openrouter]
+  ian_flipt_haiku_disregulator_strong:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [swe/revealing]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=grok-4.7-openrouter]
+  ian_flipt_haiku_disregulator_top:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [swe/revealing]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=kimi-k3-openrouter]
+  # ian_gflipt is being built: once studies/cells/swe/ian_gflipt_minimal.py is on main, uncomment these three targets
+  # (swe/revealing must fit it: tests/unit/test_collaboration_swe.py).
+  # ian_gflipt_haiku_disregulator_weak:
+  #   module: studies.cells.swe.ian_gflipt_minimal
+  #   model: claude-haiku-5-5-openrouter
+  #   packs: [swe/revealing]
+  #   settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+  #              disregulator_model=deepseek-flash-openrouter]
+  # ian_gflipt_haiku_disregulator_strong:
+  #   module: studies.cells.swe.ian_gflipt_minimal
+  #   model: claude-haiku-5-5-openrouter
+  #   packs: [swe/revealing]
+  #   settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+  #              disregulator_model=grok-4.7-openrouter]
+  # ian_gflipt_haiku_disregulator_top:
+  #   module: studies.cells.swe.ian_gflipt_minimal
+  #   model: claude-haiku-5-5-openrouter
+  #   packs: [swe/revealing]
+  #   settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+  #              disregulator_model=kimi-k3-openrouter]
+# One SWE agent takes about 2.3 GB of Docker's disk and 0.8 GB of its memory: 20 agents at once take 16 GB of Docker's
+# 23.4. max_agents counts every cell script on this Mac, so this study and regulator_scale_0 share the 20.
+limits:
+  max_runs: 6
+  max_per_task: {swe: 6}
+  max_agents: 20
+  spacing_s: 60
+  needs:
+    swe: {disk_gb: 2.3, memory_gb: 0.8, per: agent}

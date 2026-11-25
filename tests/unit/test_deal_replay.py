@@ -20,7 +20,7 @@ def recorded(task: str, *pairs: str) -> dict:
     """run.json as a run of today's code records it: the config, the roster and each agent's holdings."""
     block, row = ROWS[task]
     config = build_config("default", "small", list(pairs))
-    plan = BY_TASK[task](row.get("row_id") or row["issue"]).plan(config, tasks.hidden_roles(config))
+    plan = BY_TASK[task](row.get("row_id") or row["issue"]).plan(config, tasks.agent_roles(config))
     return {"task": task, block: row, "config": config.model_dump(mode="json"), "agents": plan.agents,
             "access": {"policy": plan.access, "agents": {a: {"holds": items} for a, items in plan.holds.items()}}}
 
@@ -80,8 +80,8 @@ def test_the_replay_deals_with_the_options_the_block_records():
     the honeypot the swe block records."""
     config = build_config("default", "small", ["seed=1"])
     swe = BY_TASK["software_engineering"]
-    plan = swe("flipt-02e2", honeypot="own_piece").plan(config, tasks.hidden_roles(config))
-    assert swe("flipt-02e2").plan(config, tasks.hidden_roles(config)).holds != plan.holds
+    plan = swe("flipt-02e2", honeypot="own_piece").plan(config, tasks.agent_roles(config))
+    assert swe("flipt-02e2").plan(config, tasks.agent_roles(config)).holds != plan.holds
     run = {"task": "software_engineering", "swe": {"issue": "flipt-02e2", "honeypot": "own_piece"},
            "config": config.model_dump(mode="json"), "agents": plan.agents,
            "access": {"policy": plan.access, "agents": {a: {"holds": items} for a, items in plan.holds.items()}}}
@@ -89,4 +89,4 @@ def test_the_replay_deals_with_the_options_the_block_records():
 
 
 def test_a_task_the_replay_does_not_cover_gives_none():
-    assert replay({"task": "chess", "config": {}}) is None
+    assert replay({"task": "bowling", "config": {}}) is None

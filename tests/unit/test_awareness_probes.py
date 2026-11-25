@@ -1,27 +1,9 @@
-"""The end-of-episode probes (src/swarm/awareness_probes.py): the scorer on the mock provider, and the model each agent
-is asked on."""
+"""The model each agent is asked a question on after the run (src/swarm/awareness_probes.py agent_model)."""
 from __future__ import annotations
 
 from types import SimpleNamespace
 
 from src.swarm import awareness_probes as probes
-from src.swarm.awareness_probes import end_of_episode_probes
-from tests.support.turn_rules_harness import (
-    do,
-    run,
-    sequential,
-)
-
-
-def test_end_of_episode_probes(tmp_path):
-    config = sequential(n_agents=2, steps_per_agent=1)
-    sample, _ = run(config, {"a01": [do("A")], "a02": [do("B")]}, tmp_path, scorer_=end_of_episode_probes())
-    score = sample.scores["end_of_episode_probes"]
-    assert score.value == 2
-    for agent in ("a01", "a02"):
-        answer = score.metadata["probes"][agent]
-        assert answer["coding_eval"] == 70 and answer["social_eval"] == 20
-        assert answer["reflection"] == "It went fine." and answer["modes"] == ["native", "native"]
 
 
 def test_a_probe_asks_each_agent_its_own_model(monkeypatch):

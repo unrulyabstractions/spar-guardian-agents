@@ -5,27 +5,38 @@ keeps its runs.
     run.run_json["task"]
     for episode in run.with_transcripts():
         transcript = run.transcript(episode["episode"])
-    verdict = run.verdicts().get("riemann#1@k7q2m")
-    team = run.team_signals()[0]                    # the code ladder's team record of the first sample
+    team = run.team_signals()[0]                    # the code record's team row of the first sample
+    boards = run.boards()                           # every sample's board: {messages, events}
     log = run.access_log()                          # run.json's block with its rows, or None
-    study_runs(Path("runs/study_exploration_1"))    # every run of the study, at its top level and in its groups
-    find_run(Path("runs/study_exploration_1"), "binder_minimal_luna1")      # its folder, wherever it sits
-    figures_dir(Path("runs/study_exploration_1/mock/binder_minimal_lunamock1"))  # out/study_exploration_1/mock/...
-    set_aside_attempt(Path("runs/study_exploration_1/flipt_minimal_luna1"))      # into attempts/flipt_minimal_luna1.1
+    study_runs(Path("runs/ian_baseline_explorations_1"))    # every run of the study, at its top level and in its groups
+    find_run(Path("runs/ian_baseline_explorations_1"), "binder_minimal_luna1")      # its folder, wherever it sits
+    set_aside_attempt(Path("runs/<study>/<run>"))          # attempts/<run>.1
+    run.file("episodes.jsonl")                      # processed/episodes.jsonl: a stored file by name (FILES)
+    run.file("figures")                             # analysis/figures/
+    run.output("judge_cheatbench")                  # a part's stored file, by the registry's path
+    run.outputs("export")                           # {layout path: file} of every file a part stores now
+    run.versions()                                  # the two ledgers: {"processed": ..., "analysis": ...}
+    log_dir(run.path)                               # logs/<study>/[<group>/]<run>/
+
+**The path table.** A run's files have one place each in the stored layout, written once: a part's paths in
+src/configuration/pipeline_parts.yaml, every other path in NOT_PARTS. FILES names each of them by its last name. The
+layout is runs/<study>/[<group>/]<run>/processed/ (what the eval log gives, no label) and analysis/ (what is made from
+processed/). A run folder holds only these two folders, and any run nested inside it (OLD/runs/smoke). Every reader
+and writer reaches a run's files through FILES, RunDir.file and RunDir.output; tests/unit/test_run_paths.py fails on a
+run file's name joined to a path anywhere else. A one-time move of 2026-11-22 put the older layout's folders here.
 
 run.json is read once per RunDir and again after write_run_json_block. The JSON Lines files are read on every call, so
-a measure that rewrites one (the code ladder's signals.jsonl, the judged ladder's ladder.jsonl) reads its own rows back.
-A missing file reads as empty. signals.jsonl and ladder.jsonl hold agent rows ("row": "agent") and team rows ("row":
-"team"); each reader returns one kind.
+a measure that rewrites one (the code record's signals.jsonl) reads its own rows back. A missing file reads as empty.
+signals.jsonl holds agent rows ("row": "agent") and team rows ("row": "team"); each reader returns one kind.
 
 A study keeps a run at runs/<study>/<run> or in one of its groups, runs/<study>/<group>/<run> (GROUPS). The run's eval
-log sits at the same path under logs/, logs/<study>/[<group>/]<run>/, and its figures at the same path under out/,
-out/<study>/[<group>/]<run>/. A run keeps its folder name wherever it sits. The name is its run.json run_id and the salt
+log sits at the same path under logs/, logs/<study>/[<group>/]<run>/; its figures sit in its own analysis/figures/.
+A run keeps its folder name wherever it sits. The name is its run.json run_id and the salt
 its agents' IDs are drawn from.
 
 One group breaks that rule. An earlier attempt of a run, superseded by a later run of the same name, sits at
-runs/<study>/attempts/<name>.<n>/, its log at logs/<study>/attempts/<name>.<n>/ and its figures at
-out/<study>/attempts/<name>.<n>/, n the first number from 1 free in all three (set_aside_attempt). Its run.json run_id
+runs/<study>/attempts/<name>.<n>/ and its log at logs/<study>/attempts/<name>.<n>/, n the first number from 1 free in
+both (set_aside_attempt). Its run.json run_id
 stays the run's name. A reader therefore keys runs by folder, never by name, and an attempt never answers to its run's
 name (find_run).
 """
@@ -37,20 +48,73 @@ from functools import cached_property
 from pathlib import Path
 
 from src.configuration import settings
+from src.measures import pipeline_parts
 from src.utils.json_files import read_json, read_jsonl
 
-RUN_JSON = "run.json"
-EPISODES = "episodes.jsonl"
-JUDGE = "judge.jsonl"
-SIGNALS = "signals.jsonl"
-ACCESS_LOG = "access_log.jsonl"
-LADDER_FILES = {"full": "ladder.jsonl", "actions": "ladder_actions.jsonl"}
 ATTEMPTS = "attempts"
 """The group of a run's earlier attempts: runs/<study>/attempts/<name>.<n>/."""
+WORKER_ROLES = (None, "worker")
+"""The roles that count as a worker: role worker, or no role at all (a run with no roles)."""
 GROUPS = ("invalid", "incomplete", "mock", "set_aside", ATTEMPTS)
 """The folders a study sorts runs into, beside the runs at its top level: runs/<study>/<group>/<run>."""
 ATTEMPT_FOLDER = re.compile(r"^(?P<name>.+)\.(?P<n>[1-9][0-9]*)$")
 """An earlier attempt's folder name: the run's name, a dot and n."""
+NOT_PARTS = {
+    "swe_summary.json": "analysis/swe_summary.json",
+    "board_reads.json": "processed/board_reads.json",
+    "judges": "analysis/judges/",
+    "tools": "analysis/tools/",
+    "figures": "analysis/figures/",
+    "step_labels.jsonl": "analysis/step_labels.jsonl",
+}
+"""The stored paths no part of the registry owns: Lucy's SWE measures, the tools' board cache,
+the judges' folder, the tools' outputs, the run's figures and elicitation's labels per step
+(scripts/study/step_labels.py). A folder ends in "/"."""
+
+
+def files_table(registry: pipeline_parts.Registry) -> dict[str, str]:
+    """name -> layout path of every stored file or folder a part lists by name, and of NOT_PARTS. A path with a "*"
+    (the judges' files) and the ledgers have no name. Raises ValueError when two paths share a name."""
+    table: dict[str, str] = {}
+    paths = [path for part in registry.parts.values() for path in part.paths]
+    for path in [*paths, *NOT_PARTS.values()]:
+        if "*" in path or path in pipeline_parts.LEDGERS.values():
+            continue
+        name = path.rstrip("/").rsplit("/", 1)[-1]
+        if table.get(name, path) != path:
+            raise ValueError(f"two stored paths share the name {name}: {table[name]} and {path}")
+        table[name] = path
+    return table
+
+
+FILES = files_table(pipeline_parts.registry())
+"""name -> layout path: run.json, episodes.jsonl, trajectories, steps.jsonl, signals.jsonl, ... (files_table)."""
+
+
+def is_worker(role: str | None) -> bool:
+    """Whether an agent of this role is a worker, whom the team's rung on every ladder counts (WORKER_ROLES)."""
+    return role in WORKER_ROLES
+
+
+def is_influencer(role: str | None) -> bool:
+    """Whether an agent of this role is an influencer (a regulator or a disregulator): every agent that is not a
+    worker. An influencer's level on every ladder is reported apart from the team's."""
+    return not is_worker(role)
+
+
+def episode_agent(episode: dict) -> str | None:
+    """An episode's agent id, the bare ID its record names ("k7q2m")."""
+    return episode.get("agent") or None
+
+
+def roles_of(run_json: dict, episodes: list[dict]) -> dict[str, str | None]:
+    """agent -> role (worker, regulator, disregulator), None in a run with no roles: every episode's agent, then
+    run.json's swarm roles, then each episode's own role."""
+    roles: dict[str, str | None] = {episode_agent(ep): None for ep in episodes}
+    roles.update((run_json.get("swarm") or {}).get("roles") or {})
+    roles.update({episode_agent(ep): ep["role"] for ep in episodes if ep.get("role")})
+    roles.pop(None, None)
+    return roles
 
 
 def study_runs(study: Path) -> list[Path]:
@@ -59,7 +123,7 @@ def study_runs(study: Path) -> list[Path]:
     study = Path(study)
     folders = [*study.iterdir(), *(path for group in GROUPS if (study / group).is_dir()
                                    for path in (study / group).iterdir())]
-    return sorted((path for path in folders if (path / RUN_JSON).is_file()), key=lambda path: (path.name, str(path)))
+    return sorted((path for path in folders if RunDir(path).is_run()), key=lambda path: (path.name, str(path)))
 
 
 def run_place(run: Path) -> tuple[str, str | None]:
@@ -82,44 +146,57 @@ def run_places(study: Path, name: str) -> list[Path]:
     if Path(name).is_absolute():
         return []
     places = [study / name, *(study / group / name for group in GROUPS if group != ATTEMPTS)]
-    return [place for place in places if (place / RUN_JSON).is_file()]
+    return [place for place in places if RunDir(place).is_run()]
 
 
 def find_run(study: Path, name: str) -> Path | None:
     """The folder of the run of this name, at the study's top level or in the one group that holds it; None when no
-    folder holds it. Raises ValueError when two folders hold it: scripts/sort_study_runs.py sets the earlier aside."""
+    folder holds it. Raises ValueError when two folders hold it: scripts/study/sort_study_runs.py sets the earlier
+    aside."""
     places = run_places(study, name)
     if len(places) > 1:
         raise ValueError(f"{len(places)} folders hold a run named {name}: {', '.join(map(str, places))}. Set the "
-                         f"earlier aside with `uv run python -m scripts.sort_study_runs {study}`")
+                         f"earlier aside with `uv run python -m scripts.study.sort_study_runs {study}`")
     return places[0] if places else None
+
+
+def checkout_of(path: Path) -> Path | None:
+    """The folder that holds the runs/ folder the path sits in (the checkout, or a pulled copy of the dataset's
+    layout), None for a path under no folder named runs."""
+    path = Path(path).resolve()
+    runs = next((parent for parent in path.parents if parent.name == "runs"), None)
+    return None if runs is None else runs.parent
+
+
+def log_link(eval_log: Path, run: Path) -> str:
+    """How run.json names the run's eval log: its path from the checkout the run sits in (checkout_of), as
+    logs/<study>/[<group>/]<run>/<file>.eval; the absolute path for a log outside that checkout or a run under no
+    runs/ folder."""
+    eval_log, root = Path(eval_log).resolve(), checkout_of(run)
+    if root is not None and eval_log.is_relative_to(root):
+        return eval_log.relative_to(root).as_posix()
+    return eval_log.as_posix()
 
 
 def mirrored(path: Path, top: str) -> Path | None:
     """The same path under the folder `top` beside the runs/ it sits in: runs/<study>/[<group>/]<run> gives
-    <top>/<study>/[<group>/]<run>, for top logs (the eval log) or out (the figures). None for a path under no folder
+    <top>/<study>/[<group>/]<run>, for top logs (the eval log). None for a path under no folder
     named runs."""
     path = Path(path).resolve()
     runs = next((parent for parent in path.parents if parent.name == "runs"), None)
     return None if runs is None else runs.parent / top / path.relative_to(runs)
 
 
-def mirrored_in_logs(path: Path) -> Path | None:
-    """The same path under the logs/ beside the runs/ it sits in: runs/<study>/[<group>/]<run> gives
-    logs/<study>/[<group>/]<run>. None for a path under no folder named runs."""
-    return mirrored(path, "logs")
-
-
-def figures_dir(run: Path) -> Path:
-    """Where the run's figures go: out/<study>/[<group>/]<run>/ beside the runs/ it sits in, so two runs that share a
-    name never share a folder. A run under no runs/ folder takes this checkout's out/<its folder's name>/."""
-    return mirrored(run, "out") or settings.ROOT / "out" / Path(run).name
+def log_dir(run: Path) -> Path | None:
+    """The run's eval log folder, the same path under the logs/ beside the runs/ it sits in:
+    runs/<study>/[<group>/]<run> gives logs/<study>/[<group>/]<run>. None for a path under no folder named runs."""
+    return mirrored(run, "logs")
 
 
 def set_aside_attempt(run: Path, *, keep: Path | None = None) -> list[tuple[Path, Path]]:
     """Move an earlier attempt of a run into the attempts group, before a later run of its name writes. The run folder
-    goes to runs/<study>/attempts/<name>.<n>/, its eval log folder to logs/<study>/attempts/<name>.<n>/ and its figures
-    to out/<study>/attempts/<name>.<n>/, n the first number from 1 free in all three. run is the folder at the study's
+    goes to runs/<study>/attempts/<name>.<n>/ and its eval log folder to logs/<study>/attempts/<name>.<n>/, n the first
+    number from 1 free in both. run is the folder at the study's
     top level or in a group other than attempts. A folder that does not exist is skipped, so a run that left nothing
     returns []. keep is a file left where it is: the eval log a caller is about to export, when it sits in the log
     folder; the folder's other entries move. Each move is one rename: nothing is copied or deleted. Returns each
@@ -130,9 +207,9 @@ def set_aside_attempt(run: Path, *, keep: Path | None = None) -> list[tuple[Path
     if place is not None and place.name == ATTEMPTS:
         raise ValueError(f"{run} is an earlier attempt already")
     study = run.parent.parent if place is not None else run.parent
-    sources = [run, mirrored(run, "logs"), mirrored(run, "out")]
+    sources = [run, mirrored(run, "logs")]
     if sources[1] is None:
-        raise ValueError(f"{run} sits under no runs/ folder, so its logs and figures have no place")
+        raise ValueError(f"{run} sits under no runs/ folder, so its logs have no place")
     keep = Path(keep).resolve() if keep is not None else None
     existing = [source for source in sources if source.exists()]
     if not existing:
@@ -160,9 +237,9 @@ def set_aside_attempt(run: Path, *, keep: Path | None = None) -> list[tuple[Path
 
 
 def attempt_places(study: Path, name: str, n: int) -> list[Path]:
-    """Attempt n of the run of this name in the study: its run folder, its eval log folder and its figures folder."""
+    """Attempt n of the run of this name in the study: its run folder and its eval log folder."""
     folder = Path(study).resolve() / ATTEMPTS / f"{name}.{n}"
-    return [folder, mirrored(folder, "logs"), mirrored(folder, "out")]
+    return [folder, mirrored(folder, "logs")]
 
 
 class RunDir:
@@ -174,81 +251,121 @@ class RunDir:
         self.name = self.path.name
         self.run_name = run_name(self.path)
 
+    def at(self, rel: str) -> Path:
+        """A layout path of the run: processed/... or analysis/..."""
+        return self.path / rel
+
+    def file(self, name: str) -> Path:
+        """A stored file or folder of the run by its name in FILES: run.json, episodes.jsonl, trajectories, ..."""
+        if name not in FILES:
+            raise ValueError(f"no stored file named {name!r}; names: {', '.join(sorted(FILES))}")
+        return self.at(FILES[name])
+
+    def output(self, part: str, registry: pipeline_parts.Registry | None = None) -> Path:
+        """The one file a part stores, by its path in the registry. Raises ValueError for a part that stores several
+        (outputs reads those)."""
+        paths = (registry or pipeline_parts.registry()).part(part).paths
+        if len(paths) != 1 or "*" in paths[0] or paths[0].endswith("/"):
+            raise ValueError(f"{part} stores {len(paths)} paths ({', '.join(paths)}); read them with outputs")
+        return self.at(paths[0])
+
+    def outputs(self, part: str, registry: pipeline_parts.Registry | None = None) -> dict[str, Path]:
+        """{layout path: file} of every file the part stores now, sorted by layout path: each file it names that
+        exists, every file under a folder it names, every file a name with a "*" matches. A file being written
+        (*.partial) is skipped."""
+        found: dict[str, Path] = {}
+        for rel in (registry or pipeline_parts.registry()).part(part).paths:
+            if rel.endswith("/"):
+                folder = self.at(rel)
+                if folder.is_dir():
+                    found.update((rel + p.relative_to(folder).as_posix(), p) for p in folder.rglob("*")
+                                 if p.is_file())
+            elif "*" in rel:
+                folder_rel, _, pattern = rel.rpartition("/")
+                folder = self.at(folder_rel + "/")
+                if folder.is_dir():
+                    found.update((f"{folder_rel}/{p.name}", p) for p in folder.glob(pattern) if p.is_file())
+            elif self.at(rel).is_file():
+                found[rel] = self.at(rel)
+        return {rel: found[rel] for rel in sorted(found) if not rel.endswith(".partial")}
+
+    @property
+    def processed(self) -> Path:
+        """The run's processed/ folder: what the eval log gives. A record's transcript_path is a path from it."""
+        return self.file("run.json").parent
+
+    @property
+    def replay_dir(self) -> Path:
+        """The run's replay folder, processed/replay/: steps.jsonl and replay.json, as the replay's own folder holds
+        them (src/replay/replay_report.py)."""
+        return self.file("steps.jsonl").parent
+
+    def versions(self) -> dict[str, Path]:
+        """The run's two ledgers, {"processed": ..., "analysis": ...} (src/measures/stored_versions.py)."""
+        return {layer: self.at(rel) for layer, rel in pipeline_parts.LEDGERS.items()}
+
     def is_run(self) -> bool:
         """Whether the directory holds a run.json."""
-        return (self.path / RUN_JSON).is_file()
+        return self.file("run.json").is_file()
 
     def require(self) -> RunDir:
         """The run itself; raises ValueError for a directory without run.json."""
         if not self.is_run():
-            raise ValueError(f"not a run directory (no {RUN_JSON}): {self.path}")
+            raise ValueError(f"not a run directory (no {FILES['run.json']}): {self.path}")
         return self
 
     @cached_property
     def run_json(self) -> dict:
         """run.json, {} when absent."""
-        return read_json(self.path / RUN_JSON) or {}
+        return read_json(self.file("run.json")) or {}
 
     @property
     def eval_log(self) -> Path | None:
-        """The run's eval log, or None when none exists. The log is the file run.json names. The first of these places
-        that holds it wins:
-        - the path run.json records;
-        - the run's own path under the logs/ beside its runs/, logs/<study>/[<group>/]<run>/, at any depth. A run pulled
-          from a box or moved since keeps its log there;
-        - for a run in a group, the same at its study's top level, logs/<study>/<run>/. A log not moved with its run
-          stays there;
-        - this checkout's logs/<study>/<run>/, for the study the run's folder sits in;
-        - the current study's logs/<run>/;
-        - the run's name beside the recorded folder, for a run set aside under another name."""
+        """The run's eval log, or None when none exists. The log is the file run.json names (log_link), found at the
+        first of these places that holds it:
+        - the recorded path, from the checkout the run sits in (checkout_of; this checkout for a run under no runs/
+          folder), or as it is when absolute;
+        - the run's own path under the logs/ beside its runs/, logs/<study>/[<group>/]<run>/<file>.eval, for a run
+          moved into or out of a group with its log since it was recorded.
+        Any other .eval file in the log folder (an aborted start's journal) is not the run's log."""
         recorded = self.run_json.get("eval_log")
         if not recorded:
             return None
-        path, (study, group) = Path(recorded), run_place(self.path)
-        here = self.path.resolve()
-        mirrors = [mirrored_in_logs(here), mirrored_in_logs(here.parent.parent / self.name) if group else None]
-        candidates = [path, *(mirror / path.name for mirror in mirrors if mirror),
-                      settings.ROOT / "logs" / study / self.name / path.name, settings.LOGS / self.name / path.name,
-                      path.parent.parent / self.name / path.name]
+        path, mirror = Path(recorded), log_dir(self.path)
+        candidates = [path if path.is_absolute() else (checkout_of(self.path) or settings.ROOT) / path,
+                      *([mirror / path.name] if mirror else [])]
         return next((candidate for candidate in candidates if candidate.is_file()), None)
 
     def episodes(self) -> list[dict]:
         """episodes.jsonl: one record per (sample, agent)."""
-        return read_jsonl(self.path / EPISODES)
+        return read_jsonl(self.file("episodes.jsonl"))
 
-    def verdicts(self) -> dict[str, dict]:
-        """judge.jsonl by episode, parsed or not."""
-        return {row["episode"]: row for row in read_jsonl(self.path / JUDGE)}
-
-    def ladder_path(self, view: str = "full") -> Path:
-        """The judged ladder's file for a view (full or actions)."""
-        return self.path / LADDER_FILES[view]
+    def roles(self) -> dict[str, str | None]:
+        """The run's agents and their roles (roles_of)."""
+        return roles_of(self.run_json, self.episodes())
 
     def write_run_json_block(self, key: str, value) -> None:
         """Set one key of run.json, keeping every other key, and read run.json again."""
-        run = {**(read_json(self.path / RUN_JSON) or {}), key: value}
-        (self.path / RUN_JSON).write_text(json.dumps(run, indent=1))
+        run = {**(read_json(self.file("run.json")) or {}), key: value}
+        self.file("run.json").write_text(json.dumps(run, indent=1))
         self.__dict__.pop("run_json", None)
 
-    def ladder_rows(self, view: str = "full") -> list[dict]:
-        """The judged ladder's agent rows for a view, parsed or not."""
-        return rows_of(read_jsonl(self.ladder_path(view)), "agent")
-
-    def ladder_team_rows(self, view: str = "full") -> list[dict]:
-        """The judged ladder's team rows for a view: one per sample."""
-        return rows_of(read_jsonl(self.ladder_path(view)), "team")
-
     def signals(self) -> list[dict]:
-        """The code ladder's agent rows (signals.jsonl)."""
-        return rows_of(read_jsonl(self.path / SIGNALS), "agent")
+        """The code record's agent rows (signals.jsonl)."""
+        return rows_of(read_jsonl(self.file("signals.jsonl")), "agent")
 
     def team_signals(self) -> list[dict]:
-        """The code ladder's team rows (signals.jsonl): one per sample."""
-        return rows_of(read_jsonl(self.path / SIGNALS), "team")
+        """The code record's team rows (signals.jsonl): one per sample."""
+        return rows_of(read_jsonl(self.file("signals.jsonl")), "team")
 
     def board(self, sample: str) -> dict:
         """The sample's board, communication/<sample>.json ({messages, events}); {} when the run had none."""
-        return read_json(self.path / "communication" / f"{sample}.json") or {}
+        return read_json(self.file("communication") / f"{sample}.json") or {}
+
+    def boards(self) -> list[dict]:
+        """Every sample's board (board), in file name order; [] for a run without boards."""
+        folder = self.file("communication")
+        return [read_json(path) or {} for path in sorted(folder.glob("*.json"))] if folder.is_dir() else []
 
     def access_log(self) -> dict | None:
         """run.json "access_log" with access_log.jsonl's rows as "rows"; None for a run that kept no log: no block, as
@@ -256,11 +373,11 @@ class RunDir:
         block = self.run_json.get("access_log")
         if block is None or block["status"] == "off":
             return None
-        return {**block, "rows": read_jsonl(self.path / ACCESS_LOG)}
+        return {**block, "rows": read_jsonl(self.file("access_log.jsonl"))}
 
     def transcript_path(self, episode: str) -> Path:
         """Where the export stores the episode's transcript: trajectories/<episode>/transcript.json."""
-        return self.path / "trajectories" / episode / "transcript.json"
+        return self.file("trajectories") / episode / "transcript.json"
 
     def transcript(self, episode: str) -> dict:
         """The episode's stored transcript."""

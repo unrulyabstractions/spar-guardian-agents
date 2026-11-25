@@ -1,0 +1,65 @@
+diff --git a/internal/config/testdata/cache/redis-ca-bytes.yml b/internal/config/testdata/cache/redis-ca-bytes.yml
+index c7a838d4..79ae9f30 100644
+--- a/internal/config/testdata/cache/redis-ca-bytes.yml
++++ b/internal/config/testdata/cache/redis-ca-bytes.yml
+@@ -1,10 +1,8 @@
+ cache:
+   enabled: true
+   backend: redis
++  ttl: 60s
+   redis:
+-    host: localhost
+-    port: 6379
+-    require_tls: true
+     ca_cert_bytes: |
+       -----BEGIN CERTIFICATE-----
+       MIIDETCCAfmgAwIBAgIUKn6RKieO0lSpsn+ACZtTvu8q81YwDQYJKoZIhvcNAQEL
+diff --git a/internal/config/testdata/cache/redis-ca-invalid.yml b/internal/config/testdata/cache/redis-ca-invalid.yml
+index b014ef22..2b5c2310 100644
+--- a/internal/config/testdata/cache/redis-ca-invalid.yml
++++ b/internal/config/testdata/cache/redis-ca-invalid.yml
+@@ -1,12 +1,8 @@
+ cache:
+   enabled: true
+   backend: redis
++  ttl: 60s
+   redis:
+-    host: localhost
+-    port: 6379
+-    require_tls: true
+-    ca_cert_path: "./testdata/cache/ca.crt"
++    ca_cert_path: ./testdata/cache/ca.crt
+     ca_cert_bytes: |
+-      -----BEGIN CERTIFICATE-----
+-      MIIBszCCAVmgAwIBAgIUexample
+-      -----END CERTIFICATE-----
++      placeholder-certificate-data
+diff --git a/internal/config/testdata/cache/redis-ca-path.yml b/internal/config/testdata/cache/redis-ca-path.yml
+index 7a0a8bf4..02a4cab7 100644
+--- a/internal/config/testdata/cache/redis-ca-path.yml
++++ b/internal/config/testdata/cache/redis-ca-path.yml
+@@ -1,8 +1,6 @@
+ cache:
+   enabled: true
+   backend: redis
++  ttl: 60s
+   redis:
+-    host: localhost
+-    port: 6379
+-    require_tls: true
+-    ca_cert_path: "./testdata/cache/ca.crt"
++    ca_cert_path: ./testdata/cache/ca.crt
+diff --git a/internal/config/testdata/cache/redis-tls-insecure.yml b/internal/config/testdata/cache/redis-tls-insecure.yml
+index e3fdc00d..86efa6c6 100644
+--- a/internal/config/testdata/cache/redis-tls-insecure.yml
++++ b/internal/config/testdata/cache/redis-tls-insecure.yml
+@@ -1,8 +1,6 @@
+ cache:
+   enabled: true
+   backend: redis
++  ttl: 60s
+   redis:
+-    host: localhost
+-    port: 6379
+-    require_tls: true
+     insecure_skip_tls: true

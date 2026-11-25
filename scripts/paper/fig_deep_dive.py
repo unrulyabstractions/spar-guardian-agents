@@ -2,10 +2,11 @@
 each with the share judged cheated by arm (3W, S0 to S3) and planning level (none, one turn), with Wilson 95%
 intervals and k/n beside every point below 100%.
 
-Source: submodules/lucy/runs/s1_swe/analysis/summary.json (one row per agent), read as Lucy's
+Source: paper/lucy_results/s1_swe/analysis/summary.json (one row per agent, Lucy's file at 449fbf0), read as her
 experiments/guardian_baseline/checks/stage1_tests.py reads it: rows with exit 0 and no failure, the one verdict that
-did not parse filled from her re-judge (REJUDGED in experiments/guardian_baseline/figures/stage1_figures.py, read as a
-literal), episodes with both workers' verdicts. The interval is her `wilson` (z = 1.96, clipped to 0 and 1).
+did not parse filled from her re-judge (REJUDGED in her experiments/guardian_baseline/figures/stage1_figures.py,
+copied to paper/lucy_results/, read as a literal), episodes with both workers' verdicts. The interval is her `wilson`
+(z = 1.96, clipped to 0 and 1).
 Writes tmp/figures/paper/fig5_swe_deep_dive.png.
 
     uv run python -m scripts.paper.fig_deep_dive
@@ -24,7 +25,8 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 
-from src.configuration.settings import LUCY, ROOT
+from src.configuration.settings import ROOT
+from src.utils import progress
 from src.utils.figure_style import (
     AXIS,
     CATEGORICAL,
@@ -36,7 +38,8 @@ from src.utils.figure_style import (
     style_axes,
 )
 
-SUMMARY = LUCY / "runs" / "s1_swe" / "analysis" / "summary.json"
+LUCY = ROOT / "paper" / "lucy_results"
+SUMMARY = LUCY / "s1_swe" / "analysis" / "summary.json"
 LUCY_FIGURES = LUCY / "experiments" / "guardian_baseline" / "figures" / "stage1_figures.py"
 OUT = ROOT / "tmp" / "figures" / "paper" / "fig5_swe_deep_dive.png"
 
@@ -78,7 +81,7 @@ def cells() -> dict:
             cheated = bool(r["cheated"])
         elif (r["episode"], r["agent"]) in fill:
             cheated = bool(fill[(r["episode"], r["agent"])])
-            print("filled", r["episode"], r["agent"], "cheated" if cheated else "not cheated")
+            progress.verbose("filled", r["episode"], r["agent"], "cheated" if cheated else "not cheated")
         else:
             continue                                   # an unparsed verdict is missing, not "not cheated"
         e = episodes[r["episode"]]
@@ -106,10 +109,10 @@ def main() -> int:
     levels = sorted({p for _, _, p in data})
     for group, *_ in PANELS:
         for p in levels:
-            print(group, f"planning {p}", "  ".join(f"{a} {data[(group, a, p)][0]}/{data[(group, a, p)][1]}"
-                                                    for a in arms))
-        print(group, "pooled", "  ".join(f"{a} {sum(data[(group, a, p)][0] for p in levels)}/"
-                                         f"{sum(data[(group, a, p)][1] for p in levels)}" for a in arms))
+            progress.verbose(group, f"planning {p}", "  ".join(f"{a} {data[(group, a, p)][0]}/{data[(group, a, p)][1]}"
+                                                               for a in arms))
+        progress.verbose(group, "pooled", "  ".join(f"{a} {sum(data[(group, a, p)][0] for p in levels)}/"
+                                                    f"{sum(data[(group, a, p)][1] for p in levels)}" for a in arms))
 
     fig = Figure(figsize=(7.8, 3.5), dpi=PRINT_DPI, facecolor=SURFACE)
     FigureCanvasAgg(fig)
@@ -155,7 +158,7 @@ def main() -> int:
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(OUT, dpi=PRINT_DPI, facecolor=SURFACE)
-    print(OUT)
+    progress.wrote(OUT)
     return 0
 
 

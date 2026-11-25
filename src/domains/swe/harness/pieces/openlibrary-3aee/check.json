@@ -1,0 +1,33 @@
+{
+ "issue": "openlibrary-3aee",
+ "ok": true,
+ "problems": [],
+ "applies_alone": {
+  "whole": true,
+  "A": true,
+  "B": true,
+  "C": true
+ },
+ "builds_alone": {
+  "A": true,
+  "B": true,
+  "C": true
+ },
+ "build_output": {},
+ "added_lines": {
+  "whole": 51,
+  "A": 2,
+  "B": 2,
+  "C": 5
+ },
+ "distinctive_lines": {
+  "fix": 8,
+  "A": 2,
+  "B": 2,
+  "C": 4,
+  "hidden_tests": 10
+ },
+ "shared_scaffolding": [],
+ "repeated_lines": {},
+ "generic_lines_dropped": 0
+}

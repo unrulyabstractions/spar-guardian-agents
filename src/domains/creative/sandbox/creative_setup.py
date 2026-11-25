@@ -8,7 +8,9 @@ setup writes instruction.txt and grading/ (grade.pyc compiled here with the name
 build_pyc compiles it; grade_config.json; the compiled scorer under its interpreter's extension name; .review with the
 endpoint's URL and the workspace's token, as CheatBench's host writes it), then gives the workspace its owner and
 modes. It plants the reference and the holders' segments under /tmp/grading/ref, gives a planted file's readers their
-POSIX access ACL (grant), and waits until the review endpoint answers. Three layouts:
+POSIX access ACL (grant), and waits until the review endpoint answers. Agents kept out of the shared writing.md
+(layout.json keep_out, by uid) read the shared workspace and write nothing in it (keep_out). A variant plants each
+held file again in its side folder, with the same readers. Three layouts:
 
   lone    CheatBench's: the user `user` owns the workspace and the planted reference (dirs 755, files 644)
   shared  a team: one Linux user per agent in the group `team`, which owns the one workspace (setgid, group-writable,
@@ -31,10 +33,11 @@ from pathlib import Path
 
 # linux/posix_acl_xattr.h: the version, then one (tag, permissions, id) entry per tag in tag order, little-endian
 ACL_XATTR = "system.posix_acl_access"
+DEFAULT_XATTR = "system.posix_acl_default"
 ACL_VERSION = 2
 NO_ID = 0xFFFFFFFF
 USER_OBJ, USER, GROUP_OBJ, MASK, OTHER = 0x01, 0x02, 0x04, 0x10, 0x20
-READ, WRITE = 4, 2
+READ, WRITE, SEARCH = 4, 2, 1
 
 
 def run(*cmd):
@@ -70,7 +73,34 @@ def grant(path, uids):
     setfacl. The file keeps its owner, its group and rw-r-----, so `ls -l` names no reader."""
     entries = [(USER_OBJ, READ | WRITE, NO_ID), *((USER, READ, uid) for uid in sorted(uids)),
                (GROUP_OBJ, 0, NO_ID), (MASK, READ, NO_ID), (OTHER, 0, NO_ID)]
-    os.setxattr(path, ACL_XATTR, struct.pack("<I", ACL_VERSION) + b"".join(struct.pack("<HHI", *e) for e in entries))
+    os.setxattr(path, ACL_XATTR, acl(entries))
+
+
+def acl(entries):
+    """The xattr value of these (tag, permissions, id) entries, in tag order."""
+    return struct.pack("<I", ACL_VERSION) + b"".join(struct.pack("<HHI", *e) for e in entries)
+
+
+def keep_out(top, uids):
+    """Give these users read and no write on everything under top, and on all it will hold: a named entry in each
+    file's and directory's access ACL (read, and search on a directory), and in each group-writable directory's
+    default ACL, which every new file and directory there inherits. The modes stay as they were: the mask is the
+    group's bits. The default's other entries keep the team's umask 002. Neither entry can be changed by these users,
+    who own nothing there, so none of them can create, replace, rename, remove or write a file of the workspace."""
+    for root, dirs, files in os.walk(top):
+        for path in [root, *(os.path.join(root, name) for name in files)]:
+            st = os.lstat(path)
+            if not (os.path.isdir(path) or os.path.isfile(path)) or os.path.islink(path):
+                continue
+            mode, folder = st.st_mode, os.path.isdir(path)
+            owner, group, other = (mode >> 6) & 7, (mode >> 3) & 7, mode & 7
+            named = [(USER, READ | (SEARCH if folder else 0), uid) for uid in sorted(uids)]
+            os.setxattr(path, ACL_XATTR, acl([(USER_OBJ, owner, NO_ID), *named, (GROUP_OBJ, group, NO_ID),
+                                              (MASK, group, NO_ID), (OTHER, other, NO_ID)]))
+            if folder and group & WRITE:
+                inherited = [(USER, READ | SEARCH, uid) for uid in sorted(uids)]
+                os.setxattr(path, DEFAULT_XATTR, acl([(USER_OBJ, 7, NO_ID), *inherited, (GROUP_OBJ, 7, NO_ID),
+                                                      (MASK, 7, NO_ID), (OTHER, READ | SEARCH, NO_ID)]))
 
 
 def stage_workspace(stage, workdir, entry, layout, so_name):
@@ -123,6 +153,8 @@ def main(stage):
     so_name = "_score" + sysconfig.get_config_var("EXT_SUFFIX")
     for workdir, entry in layout["workspaces"].items():
         stage_workspace(stage, workdir, entry, layout, so_name)
+    for workdir, uids in (layout.get("keep_out") or {}).items():
+        keep_out(workdir, uids)
     for entry in layout["plant_dirs"]:
         os.makedirs(entry["path"], exist_ok=True)
         place(entry["path"], entry["owner"], entry["group"], entry["mode"])

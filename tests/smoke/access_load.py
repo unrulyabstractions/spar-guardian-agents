@@ -2,13 +2,14 @@
 
     uv run python -m tests.smoke.access_load [--samples 15] [--agents 1]
 
-Each run is one subset_sum sample under the mock model. A barrier holds every sample at its first turn until all have
-reached it, so the runs truly overlap. Then the odd samples read the key in a loop and the even ones wait. It passes
-when every log is valid with nothing dropped, every row sits on a machine of its own run, each reader holds exactly its
-reads and each idle sample none but its controls, the calls overlap, and no container of the run is left. Results go to
-runs/study_smoke/smoke_load/<stamp>/: the barrier, and a run sample_<n>/ and a result_<n>.json per sample. Logs go to
-logs/study_smoke/smoke_load/<stamp>/: each sample's eval log under sample_<n>/ and its process output in
-sample_<n>.log. Every sample writes under the launch's stamp. A sample that dies releases the barrier for the others.
+Each run is one protein_design sample under the mock model. A barrier holds every sample at its first turn until all
+have reached it, so the runs truly overlap. Then the odd samples read the colleague's candidates in a loop and the even
+ones wait. It passes when every log is valid with nothing dropped, every row sits on a machine of its own run, each
+reader holds exactly its reads and each idle sample none but its controls, the calls overlap, and no container of the
+run is left. Results go to runs/study_smoke/smoke_load/<stamp>/: the barrier, and a run sample_<n>/ and a
+result_<n>.json per sample. Logs go to logs/study_smoke/smoke_load/<stamp>/: each sample's eval log under sample_<n>/
+and its process output in sample_<n>.log. Every sample writes under the launch's stamp. A sample that dies releases the
+barrier for the others.
 
 Each sidecar holds one fanotify group, so fs.fanotify.max_user_groups caps the runs at once, 128 on Colima. A run past
 that dies at setup with `fanotify_init: EMFILE`, before any model call, and reads absent. Memory can cap them sooner:
@@ -30,11 +31,11 @@ import psutil
 from inspect_ai.model import ModelOutput
 
 from src.configuration import settings
-from src.domains.interview import SubsetSum
-from src.domains.interview._interview_settings import SUBSET
+from src.domains.protein import ProteinDesign
 from src.judging.cheatbench_judge import judge_spec
-from src.measures.run_directory import ACCESS_LOG, RunDir
+from src.measures.run_directory import RunDir
 from src.tasks import swarm_task
+from src.utils import progress
 from src.utils.json_files import read_jsonl
 from tests.smoke import STAMP_VARIABLE
 from tests.smoke.common import Suite, small
@@ -49,6 +50,8 @@ WAIT = "sleep 14; echo waited"
 BARRIER_S = 900                 # every sample reaches its first turn within this
 LIMIT_S = 1800                  # every run ends within this
 POLL_S = 5
+KEY = ProteinDesign.row_of(ProteinDesign().row)["payload_file"]
+"""The colleague's candidates, the honeypot file every agent's machine holds."""
 PROJECT = "load"                # the task's name, which starts each compose project's
 RUN_MEMORY_B = 360_000_000      # one run's process on the host, at import alone
 SPARE_B = 8 * 2**30             # what the host keeps for everything else
@@ -67,12 +70,12 @@ async def at_barrier(barrier: Path, sample: int, samples: int, then: ModelOutput
 
 def run_sample(sample: int, samples: int, agents: int, barrier: Path) -> dict:
     """One run: what its log says, for the parent to judge."""
-    benchmark = SubsetSum()
+    benchmark = ProteinDesign()
     suite = Suite(NAME, judge_spec(benchmark.task_dir, benchmark.name))
-    pairs = ("judge=none", "steps_per_agent=2", f"n_agents={agents}", "concurrent_rounds=false")
+    pairs = ("judge=none", "rounds=2", f"n_agents={agents}", "concurrent_rounds=false")
     config = small(*pairs)
     reader = sample % 2 == 1
-    command = READ_LOOP.format(reads=READS, key=SUBSET.cache) if reader else WAIT
+    command = READ_LOOP.format(reads=READS, key=KEY) if reader else WAIT
     first, *others = config.names
     tool = "bash" if agents == 1 else "shell"
 
@@ -86,7 +89,7 @@ def run_sample(sample: int, samples: int, agents: int, barrier: Path) -> dict:
     log, _, _ = suite.run(name, swarm_task(benchmark, config, name=f"{PROJECT}_{sample}"), scripted(script))
     run = RunDir(suite.runs / name)
     block = run.run_json["access_log"]
-    opens = [row for row in read_jsonl(run.path / ACCESS_LOG) if row["origin"] != "control"]
+    opens = [row for row in read_jsonl(run.path / "processed/access_log.jsonl") if row["origin"] != "control"]
     tool_call = next(event for event in log.samples[0].events if event.event == "tool" and event.id == "c1")
     return {"sample": sample, "reader": reader, "status": block["status"], "dropped": block["dropped"],
             "opens": len(opens), "homeless": sum(row["machine"] is None for row in opens),
@@ -135,15 +138,19 @@ def too_many_runs(samples: int, available_b: int) -> str | None:
 def launch(samples: int, agents: int) -> int:
     """Every sample as a process, at once. 1 on any failure, on a count the host's memory cannot hold, and on a stamp
     whose folder exists, which only a SMOKE_STAMP set by hand gives."""
+    progress.step(f"Load smoke: {samples} runs of {agents} agent(s) at once on one Docker")
     refused = too_many_runs(samples, psutil.virtual_memory().available)
     if refused:
-        print(f"REFUSED: {refused}")
+        progress.failed(f"refused: {refused}")
         return 1
     suite = Suite(NAME)
     taken = [str(folder) for folder in (suite.runs, suite.logs) if folder.exists()]
     if taken:
-        print(f"REFUSED: {', '.join(taken)} exists already: {STAMP_VARIABLE}={suite.stamp} was set by hand; unset it")
+        progress.failed(f"refused: {', '.join(taken)} exists already: {STAMP_VARIABLE}={suite.stamp} was set by "
+                        f"hand; unset it")
         return 1
+    progress.detail("runs", progress.short(suite.runs))
+    progress.detail("logs", progress.short(suite.logs))
     root = suite.runs
     barrier = root / "barrier"
     barrier.mkdir(parents=True)
@@ -158,10 +165,17 @@ def launch(samples: int, agents: int) -> int:
             children[sample] = subprocess.Popen([*command, "--sample", str(sample)], stdout=out,
                                                 stderr=subprocess.STDOUT, cwd=settings.ROOT, env=env)
     peak = 0
-    while any(child.poll() is None for child in children.values()) and time.monotonic() - started < LIMIT_S:
-        peak = max(peak, len(containers()))
-        release_failed(children, barrier)
-        time.sleep(POLL_S)
+    with progress.Counter(samples, "finished", "runs") as count:
+        while any(child.poll() is None for child in children.values()) and time.monotonic() - started < LIMIT_S:
+            peak = max(peak, len(containers()))
+            release_failed(children, barrier)
+            ended = sum(child.poll() is not None for child in children.values())
+            if ended > count.n:
+                count.tick(ended - count.n)
+            time.sleep(POLL_S)
+        ended = sum(child.poll() is not None for child in children.values())
+        if ended > count.n:
+            count.tick(ended - count.n)
     failed = [sample for sample, child in children.items() if child.poll() != 0]
     for sample in failed:
         if children[sample].poll() is None:
@@ -171,12 +185,18 @@ def launch(samples: int, agents: int) -> int:
     left = containers("-a", "--filter", f"name=inspect-{PROJECT}_")
     overlap = overlap_s(results) if results else 0.0
     ok = not failed and not found and not left and len(results) == samples and overlap > 0
-    print(f"{'PASS' if ok else 'FAIL'}: {len(results)} of {samples} runs of {agents} agent(s) at once, overlap "
-          f"{overlap:.1f} s, peak {peak} containers, {time.monotonic() - started:.0f} s, under {root}")
+    progress.detail("results", f"{len(results)} of {samples}")
+    progress.detail("overlap", f"{overlap:.1f} s")
+    progress.detail("peak", f"{peak} containers")
     for label, value in (("failed", failed), ("problems", found), ("left", left)):
         if value:
-            print(f"{label}: {value}")
-    return 0 if ok else 1
+            progress.detail(label, value, err=True)
+    what = f"{len(results)} of {samples} runs of {agents} agent(s) at once, overlap {overlap:.1f} s"
+    if not ok:
+        progress.failed(what, started)
+        return 1
+    progress.done(what, out=progress.short(root), started=started)
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

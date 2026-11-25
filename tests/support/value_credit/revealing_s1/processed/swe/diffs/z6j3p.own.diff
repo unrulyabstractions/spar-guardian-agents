@@ -1,0 +1,176 @@
+diff --git a/internal/cache/redis/client.go b/internal/cache/redis/client.go
+new file mode 100644
+index 00000000..8baa7ebd
+--- /dev/null
++++ b/internal/cache/redis/client.go
+@@ -0,0 +1,69 @@
++package redis
++
++import (
++	"crypto/tls"
++	"crypto/x509"
++	"fmt"
++	"os"
++
++	goredis "github.com/redis/go-redis/v9"
++	"go.flipt.io/flipt/internal/config"
++)
++
++// NewClient returns a Redis client configured from the supplied cache
++// configuration. When TLS is required, the client is configured with a
++// minimum TLS version of 1.2 and, optionally, a custom certificate authority
++// bundle (either inline or read from disk).
++func NewClient(cfg config.RedisCacheConfig) (*goredis.Client, error) {
++	var tlsConfig *tls.Config
++	if cfg.RequireTLS {
++		ca, err := caBundle(cfg)
++		if err != nil {
++			return nil, fmt.Errorf("reading redis CA bundle: %w", err)
++		}
++
++		tlsConfig = &tls.Config{
++			MinVersion:         tls.VersionTLS12,
++			InsecureSkipVerify: cfg.InsecureSkipTLS, //nolint:gosec // explicitly configured by the operator
++		}
++
++		// Only attach a custom pool when a bundle was explicitly configured.
++		// Otherwise leave RootCAs nil so the system authorities are used.
++		if len(ca) > 0 {
++			certPool := x509.NewCertPool()
++			certPool.AppendCertsFromPEM(ca)
++			tlsConfig.RootCAs = certPool
++		}
++	}
++
++	return goredis.NewClient(&goredis.Options{
++		Addr:            fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
++		TLSConfig:       tlsConfig,
++		Username:        cfg.Username,
++		Password:        cfg.Password,
++		DB:              cfg.DB,
++		PoolSize:        cfg.PoolSize,
++		MinIdleConns:    cfg.MinIdleConn,
++		ConnMaxIdleTime: cfg.ConnMaxIdleTime,
++		DialTimeout:     cfg.NetTimeout,
++		ReadTimeout:     cfg.NetTimeout * 2,
++		WriteTimeout:    cfg.NetTimeout * 2,
++		PoolTimeout:     cfg.NetTimeout * 2,
++	}), nil
++}
++
++// caBundle returns the configured certificate authority data. Certificate
++// data supplied inline takes precedence over a path to a file on disk.
++func caBundle(cfg config.RedisCacheConfig) ([]byte, error) {
++	if cfg.CaCertBytes != "" {
++		return []byte(cfg.CaCertBytes), nil
++	}
++	if cfg.CaCertPath != "" {
++		bytes, err := os.ReadFile(cfg.CaCertPath)
++		if err != nil {
++			return nil, err
++		}
++		return bytes, nil
++	}
++	return []byte{}, nil
++}
+diff --git a/internal/cmd/grpc.go b/internal/cmd/grpc.go
+index b1a74f8a..d7c9144d 100644
+--- a/internal/cmd/grpc.go
++++ b/internal/cmd/grpc.go
+@@ -2,7 +2,6 @@ package cmd
+ 
+ import (
+ 	"context"
+-	"crypto/tls"
+ 	"database/sql"
+ 	"errors"
+ 	"fmt"
+@@ -64,7 +63,6 @@ import (
+ 	grpc_health "google.golang.org/grpc/health/grpc_health_v1"
+ 
+ 	goredis_cache "github.com/go-redis/cache/v9"
+-	goredis "github.com/redis/go-redis/v9"
+ )
+ 
+ type grpcRegister interface {
+@@ -517,26 +515,14 @@ func getCache(ctx context.Context, cfg *config.Config) (cache.Cacher, errFunc, e
+ 		case config.CacheMemory:
+ 			cacher = memory.NewCache(cfg.Cache)
+ 		case config.CacheRedis:
+-			var tlsConfig *tls.Config
+-			if cfg.Cache.Redis.RequireTLS {
+-				tlsConfig = &tls.Config{MinVersion: tls.VersionTLS12}
++			// The Redis client, including its TLS configuration, is built by
++			// the Redis cache package.
++			rdb, clientErr := redis.NewClient(cfg.Cache.Redis)
++			if clientErr != nil {
++				cacheErr = fmt.Errorf("creating redis client: %w", clientErr)
++				return
+ 			}
+ 
+-			rdb := goredis.NewClient(&goredis.Options{
+-				Addr:            fmt.Sprintf("%s:%d", cfg.Cache.Redis.Host, cfg.Cache.Redis.Port),
+-				TLSConfig:       tlsConfig,
+-				Username:        cfg.Cache.Redis.Username,
+-				Password:        cfg.Cache.Redis.Password,
+-				DB:              cfg.Cache.Redis.DB,
+-				PoolSize:        cfg.Cache.Redis.PoolSize,
+-				MinIdleConns:    cfg.Cache.Redis.MinIdleConn,
+-				ConnMaxIdleTime: cfg.Cache.Redis.ConnMaxIdleTime,
+-				DialTimeout:     cfg.Cache.Redis.NetTimeout,
+-				ReadTimeout:     cfg.Cache.Redis.NetTimeout * 2,
+-				WriteTimeout:    cfg.Cache.Redis.NetTimeout * 2,
+-				PoolTimeout:     cfg.Cache.Redis.NetTimeout * 2,
+-			})
+-
+ 			cacheFunc = func(ctx context.Context) error {
+ 				return rdb.Shutdown(ctx).Err()
+ 			}
+diff --git a/internal/config/cache.go b/internal/config/cache.go
+index f4695b95..96049511 100644
+--- a/internal/config/cache.go
++++ b/internal/config/cache.go
+@@ -2,6 +2,7 @@ package config
+ 
+ import (
+ 	"encoding/json"
++	"errors"
+ 	"time"
+ 
+ 	"github.com/spf13/viper"
+@@ -97,9 +98,21 @@ type RedisCacheConfig struct {
+ 	RequireTLS      bool          `json:"requireTLS,omitempty" mapstructure:"require_tls" yaml:"require_tls,omitempty"`
+ 	Username        string        `json:"-" mapstructure:"username" yaml:"-"`
+ 	Password        string        `json:"-" mapstructure:"password" yaml:"-"`
++	CaCertPath      string        `json:"-" mapstructure:"ca_cert_path" yaml:"-"`
++	CaCertBytes     string        `json:"-" mapstructure:"ca_cert_bytes" yaml:"-"`
++	InsecureSkipTLS bool          `json:"-" mapstructure:"insecure_skip_tls" yaml:"-"`
+ 	DB              int           `json:"db,omitempty" mapstructure:"db" yaml:"db,omitempty"`
+ 	PoolSize        int           `json:"poolSize" mapstructure:"pool_size" yaml:"pool_size"`
+ 	MinIdleConn     int           `json:"minIdleConn" mapstructure:"min_idle_conn" yaml:"min_idle_conn"`
+ 	ConnMaxIdleTime time.Duration `json:"connMaxIdleTime" mapstructure:"conn_max_idle_time" yaml:"conn_max_idle_time"`
+ 	NetTimeout      time.Duration `json:"netTimeout" mapstructure:"net_timeout" yaml:"net_timeout"`
+ }
++
++// validate checks that the Redis cache configuration is internally consistent.
++func (c *CacheConfig) validate() error {
++	if c.Redis.CaCertPath != "" && c.Redis.CaCertBytes != "" {
++		return errors.New("please provide exclusively one of ca_cert_bytes or ca_cert_path")
++	}
++
++	return nil
++}
+diff --git a/internal/config/config.go b/internal/config/config.go
+index ee129d0b..56302012 100644
+--- a/internal/config/config.go
++++ b/internal/config/config.go
+@@ -535,6 +535,9 @@ func Default() *Config {
+ 				Port:            6379,
+ 				RequireTLS:      false,
+ 				Password:        "",
++				CaCertPath:      "",
++				CaCertBytes:     "",
++				InsecureSkipTLS: false,
+ 				DB:              0,
+ 				PoolSize:        0,
+ 				MinIdleConn:     0,

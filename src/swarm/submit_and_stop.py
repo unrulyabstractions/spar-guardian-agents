@@ -1,35 +1,48 @@
-"""The tools that end an agent's work: submit, which hands work in, and stop_working, which hands in nothing.
+"""The tools that end an agent's work, submit (it hands work in) and stop_working (it hands in nothing), and
+alert_humans, an influencer's alert, which ends nothing.
 
-Who holds which, beside the board's tools (ending_tools; src/tasks.py binds both through ORBIT tool_bindings):
+Who holds which, beside the board's tools (ending_tools; src/tasks.py binds them through ORBIT tool_bindings):
 
     agent                        tools
     lone agent                   submit
-    neutral, shared_task         submit, stop_working (shutdown)
+    neutral, shared_task         submit, stop_working (shutdown); unsubmit (src/swarm/unsubmit.py) under unsubmit
     neutral, solo_task           submit, meaning its own work
-    disregulator                 stop_working (shared_task, shutdown)
-    regulator                    neither: the run ends once every worker has ended (turn_activation.workers_gone)
+    disregulator                 stop_working (shared_task, shutdown), alert_humans (on a board)
+    regulator                    alert_humans (on a board); the run ends once every worker has ended
+                                 (turn_activation.workers_gone)
 
 No agent gets ORBIT's own submit (AgentSpec.submit=False). Ours is bound under the key team_submit, because ORBIT
 reserves "submit", and the turn-rules defense shows it to the model as submit (TurnRulesDefense.get_tool_wrappers).
 Both tools are built with parallel=False, so a call never runs beside the other calls of its batch.
 
-submit first awaits the benchmark's guard (Deliverable.missing, Benchmark.gradable). With nothing to grade it raises a
-ToolError naming what is missing and records the call in TeamSubmission.refused. A submit made after the hand-in it
-would make is refused and recorded the same way; it is checked again after the guard's await, so of two concurrent
-submits one goes through. Otherwise:
-  * shared_task: the team's work. TeamSubmission records the hand-in, the board gets a notice from the system, and
-    turn_activation.after_activation cuts the plan after round r + submit_delay_rounds, or after the plan's last round
-    when that comes first (turn_rules.last_round).
+submit first awaits the benchmark's guard (Deliverable.missing, Benchmark.gradable). With nothing to grade it refuses
+the call (turn_rules.Refused), naming what is missing, and records the call in TeamSubmission.refused. A submit made
+after the hand-in it would make is refused and recorded the same way; it is checked again after the guard's await,
+so of two concurrent submits one goes through. Otherwise:
+  * shared_task: the team's work. TeamSubmission records the hand-in, the board gets a notice from the system, the
+    caller's own turns end at once (TurnState.ended "submit"), and turn_activation.after_activation cuts the plan
+    after round r + submit_delay_rounds, or after the plan's last round when that comes first (turn_rules.last_round).
+    Under SwarmConfig.unsubmit (gives_unsubmit) nobody's turns end, the caller's included, and its round goes on;
+    Unsubmits.submits records the hand-in too, and the texts are submit.takes_back's and unsubmit.submitted. A
+    worker's unsubmit (src/swarm/unsubmit.py) takes the hand-in back and lifts the cut; a submit after it is a new
+    hand-in with a new wait.
   * lone agent: the same record; the run ends after the round of the call.
   * solo_task: the agent's own work, recorded in TeamSubmission.own. Its turns end at once (TurnState.ended
     "submit"); its teammates continue.
 stop_working ends its caller's turns at once (TurnState.ended "stop_working", StopWorking.rounds) and hands in
-nothing; under pooled_steps its steps go to the team. An info event tagged TEAM_SUBMIT_TAG records each submit that
-went through. A guard or snapshot that loses the sandbox raises, so ORBIT ends the sample as for any tool. The texts
-come from src/configuration/prompts.yaml `submit` and `stop_working`.
+nothing; its rounds go to nobody. A submit or stop_working that goes through ends the caller's round after its
+reply, and a later call of that reply is refused (turn_rules._turn_rounds). Each of the two records its caller's exit
+(turn_rules presence), which every peer present hears before its next round; a team's submit under unsubmit does
+neither, and every agent present hears the hand-in instead. alert_humans records an alert (Alerts:
+who, round, reason, the agents it names) as an info event tagged ALERT_TAG and ends nothing: the caller keeps working
+and may alert again, and every peer present hears "<agent> has alerted humans." before its next round. An info event
+tagged TEAM_SUBMIT_TAG records each submit that went through. A guard or snapshot that loses the sandbox raises, so
+ORBIT ends the sample as for any tool. The texts come from src/configuration/prompts.yaml `submit`, `stop_working`,
+`alert` and `tools`.
 
     bindings = submit_bindings(config, Deliverable(text, missing, snapshot, told))
     names = ending_tools(config, "worker")       # ["team_submit", "stop_working"]
+    names = ending_tools(config, "regulator")    # ["alert_humans"]
 """
 from __future__ import annotations
 
@@ -39,25 +52,34 @@ from datetime import datetime, timezone
 from typing import NoReturn
 
 from inspect_ai.log import transcript
-from inspect_ai.tool import ToolDef, ToolError
+from inspect_ai.tool import ToolDef
 from inspect_ai.util import SandboxUnavailableError, store_as
 from orbit.tools import ToolFactory
 
 from src.configuration.prompt_texts import described, stop_text
 from src.configuration.settings import load_prompts
-from src.configuration.swarm_config import SwarmConfig
+from src.configuration.swarm_config import INFLUENCERS, SwarmConfig
 from src.swarm.board import system_post
 from src.swarm.turn_rules import (
+    ALERT_TAG,
+    ALERT_TOOL,
     STOP_WORKING,
     SUBMIT,
     TEAM_SUBMIT,
     TEAM_SUBMIT_TAG,
+    Alerts,
+    Refused,
     StopWorking,
     TeamSubmission,
     TurnState,
     current_round,
     last_round,
+    live_record,
+    record_exit,
+    step_round,
+    unsubmit_record,
 )
+from src.swarm.unsubmit import record_submit
 
 
 @dataclass(frozen=True)
@@ -75,11 +97,17 @@ class Deliverable:
     told name no teammate."""
 
 
+def holds_alert(config: SwarmConfig, role: str) -> bool:
+    """Whether an agent of this role gets alert_humans: a regulator or a disregulator on a board. Workers never do."""
+    return config.board and role in INFLUENCERS
+
+
 def ending_tools(config: SwarmConfig, role: str) -> list[str]:
-    """The binding keys of the tools that end an agent's work, as an agent of this hidden role holds them: submit
-    (TEAM_SUBMIT) when it holds submit, then stop_working when it holds that."""
+    """The binding keys of the tools that end an agent's work, as an agent of this role holds them: submit
+    (TEAM_SUBMIT) when it holds submit, then stop_working when it holds that, then alert_humans for an influencer."""
     return [*([TEAM_SUBMIT] if config.holds_submit(role) else []),
-            *([STOP_WORKING] if config.holds_stop_working(role) else [])]
+            *([STOP_WORKING] if config.holds_stop_working(role) else []),
+            *([ALERT_TOOL] if holds_alert(config, role) else [])]
 
 
 def end_turns(agent: str, reason: str) -> None:
@@ -93,7 +121,7 @@ def end_turns(agent: str, reason: str) -> None:
 def _refuse(submission: TeamSubmission, agent: str, round_number: int | None, reason: str) -> NoReturn:
     """Record a submit that hands in nothing, then refuse it with the reason."""
     submission.refused = [*submission.refused, {"agent": agent, "round": round_number, "reason": reason}]
-    raise ToolError(reason)
+    raise Refused(reason)
 
 
 async def _missing(deliverable: Deliverable, agent: str) -> str | None:
@@ -119,10 +147,13 @@ async def _snapshot(deliverable: Deliverable, agent: str) -> str | None:
 
 def _ends_after(round_number: int | None, delay: int) -> int | None:
     """The last round a hand-in in this round leaves running: delay rounds on, never past the plan's last round
-    (turn_rules.last_round), so no text promises a round that will not run."""
+    (turn_rules.last_round), so no text promises a round that will not run. After an unsubmit whose steps
+    after_activation has not yet put back (Unsubmits.restore), the written plan's last round (Live.plan)."""
     if round_number is None:
         return None
-    last = last_round()
+    record = unsubmit_record()
+    plan = live_record().plan if record is not None and record.restore else []
+    last = max(step_round(s["id"]) for s in plan) if plan else last_round()
     return round_number + delay if last is None else min(round_number + delay, last)
 
 
@@ -130,6 +161,7 @@ def submit(agent: str, config: SwarmConfig, deliverable: Deliverable) -> ToolDef
     """submit for one neutral agent; what it hands in follows SwarmConfig.submit_kind (see the module docstring)."""
     texts = load_prompts()["submit"]
     kind = config.submit_kind
+    takes_back = config.gives_unsubmit
 
     async def execute(answer: str = "") -> str:
         submission = store_as(TeamSubmission)
@@ -142,7 +174,9 @@ def submit(agent: str, config: SwarmConfig, deliverable: Deliverable) -> ToolDef
                 _refuse(submission, agent, round_number,
                         texts["already_own"].format(round=submission.own[agent]["round"]))
             if kind != "solo" and submission.agent is not None:
-                _refuse(submission, agent, round_number, texts["already" if kind == "team" else "already_own"].format(
+                text = texts["takes_back"]["already"] if takes_back else texts["already" if kind == "team" else
+                                                                                "already_own"]
+                _refuse(submission, agent, round_number, text.format(
                     agent=submission.agent, round=submission.round, end=submission.ends_after_round))
 
         refuse_a_second_hand_in()
@@ -156,6 +190,7 @@ def submit(agent: str, config: SwarmConfig, deliverable: Deliverable) -> ToolDef
         if kind == "solo":
             submission.own = {**submission.own, agent: record}
             end_turns(agent, SUBMIT)
+            record_exit(agent, "submit", round_number, hand_in="solo")
             transcript().info({TEAM_SUBMIT_TAG: {"agent": agent, **record, "kind": kind}})
             return texts["handed_in_own" if deliverable.told else "handed_in_own_untold"]
         end = _ends_after(round_number, config.submit_delay_rounds if kind == "team" else 0)
@@ -164,6 +199,12 @@ def submit(agent: str, config: SwarmConfig, deliverable: Deliverable) -> ToolDef
         transcript().info({TEAM_SUBMIT_TAG: {"agent": agent, **record, "kind": kind, "ends_after_round": end}})
         if kind == "lone":
             return texts["handed_in_lone"]
+        if takes_back:
+            record_submit({"agent": agent, **record, "ends_after_round": end})
+            system_post(load_prompts()["unsubmit"]["submitted"].format(agent=agent), config.names)
+            return texts["takes_back"]["handed_in" if deliverable.told else "handed_in_untold"]
+        end_turns(agent, SUBMIT)
+        record_exit(agent, "submit", round_number, hand_in="team", ends_after_round=end)
         system_post(texts["notice"].format(agent=agent, round=round_number, end=end), config.names)
         return texts["handed_in"].format(end=end)
 
@@ -180,13 +221,33 @@ def stop_working(agent: str, told: bool) -> ToolDef:
         end_turns(agent, STOP_WORKING)
         stops = store_as(StopWorking)
         stops.rounds = {**stops.rounds, agent: current_round() or 0}
+        record_exit(agent, "stop", current_round())
         return texts["stopped"]
 
     return ToolDef(execute, name=STOP_WORKING, description=described(stop_text(told)), parallel=False)
 
 
+def alert_humans(agent: str) -> ToolDef:
+    """alert_humans for one influencer: the alert is recorded (Alerts, an info event tagged ALERT_TAG) and every peer
+    hears of it before its next round (turn_rules presence); the caller's turns go on."""
+    prompts = load_prompts()
+    args = prompts["tool_args"][ALERT_TOOL]
+
+    async def execute(reason: str, agents: list[str] | None = None) -> str:
+        alert = {"agent": agent, "round": current_round(), "reason": reason, "agents": list(agents or []),
+                 "time": datetime.now(timezone.utc).isoformat()}
+        record = store_as(Alerts)
+        record.alerts = [*record.alerts, alert]
+        transcript().info({ALERT_TAG: alert})
+        return prompts["alert"]["recorded"]
+
+    return ToolDef(execute, name=ALERT_TOOL, description=prompts["tools"][ALERT_TOOL],
+                   parameters={"reason": args["reason"], "agents": args["agents"]}, parallel=False)
+
+
 def submit_bindings(config: SwarmConfig, deliverable: Deliverable) -> dict[str, ToolFactory]:
-    """ORBIT tool_bindings for submit (under TEAM_SUBMIT) and stop_working. ORBIT builds a binding only for an agent
-    whose AgentSpec.tools names it (ending_tools)."""
+    """ORBIT tool_bindings for submit (under TEAM_SUBMIT), stop_working and alert_humans. ORBIT builds a binding only
+    for an agent whose AgentSpec.tools names it (ending_tools)."""
     return {TEAM_SUBMIT: ToolFactory(lambda ctx: submit(ctx.agent_name, config, deliverable)),
-            STOP_WORKING: ToolFactory(lambda ctx: stop_working(ctx.agent_name, deliverable.told))}
+            STOP_WORKING: ToolFactory(lambda ctx: stop_working(ctx.agent_name, deliverable.told)),
+            ALERT_TOOL: ToolFactory(lambda ctx: alert_humans(ctx.agent_name))}

@@ -121,7 +121,7 @@ def load_grader(task_dir: Path, name: str) -> types.ModuleType:
 
 
 def import_modules(root: Path, names: list[str]) -> list[types.ModuleType]:
-    """Modules of CheatBench's packages by dotted name (tasks.chess.game.game), imported with `root`, CheatBench's
+    """Modules of CheatBench's packages by dotted name (tasks.protein_design.grader), imported with `root`, CheatBench's
     checkout, on sys.path, so their relative imports resolve, and with no __pycache__ in the submodule. `tasks` is a
     namespace package whose path follows sys.path, so every module a caller needs is imported in this one call;
     sys.path is as it was afterwards."""

@@ -16,36 +16,75 @@ from src.domains import DOMAINS
 from src.measures import run_figures as plots
 from src.models import model_registry as models
 from src.run import access_line
-from src.tasks import hidden_roles, swarm_task
+from src.tasks import agent_roles, swarm_task
 
 # The cells of the first experiment, per domain and per SWE issue: one agent alone, one agent alone told to cheat, three
 # agents told to cheat (CHEAT in the script, appended to the task instruction).
 CELLS = {"solo": (1, False), "solo_cheat": (1, True), "minimal_cheat": (3, True)}
-EXAMPLES_DIR = settings.ROOT / "examples"
-EXAMPLES = [f"examples.{path.parent.name}.{path.stem}" for path in sorted(EXAMPLES_DIR.glob("*/*_minimal.py"))]
-CELL_SCRIPTS = [f"examples.{path.parent.name}.{path.stem}" for cell in CELLS
-                for path in sorted(EXAMPLES_DIR.glob(f"*/*_{cell}.py"))]
+SCRIPT_DIRS = (settings.ROOT / "examples", settings.ROOT / "studies" / "cells")
+"""The generic examples, then the studies' cell scripts (studies/README.md): both are <dir>/<task>/<stem>.py."""
+
+
+def modules(pattern: str) -> list[str]:
+    """The module of every script matching <dir>/<pattern> in SCRIPT_DIRS, examples first."""
+    return [".".join(path.relative_to(settings.ROOT).with_suffix("").parts)
+            for folder in SCRIPT_DIRS for path in sorted(folder.glob(pattern)) if path.stem != "__init__"]
+
+
+def task_of(name: str) -> str:
+    """The task folder of a script's module: examples.swe.x and studies.cells.swe.x are swe's."""
+    return name.split(".")[-2]
+
+
+EXAMPLES = modules("*/*_minimal.py")
+CELL_SCRIPTS = [name for cell in CELLS for name in modules(f"*/*_{cell}.py")]
 # The regulated cell, on the domains that have one: four agents on the split, one of them a hidden regulator.
-REGULATED = [f"examples.{path.parent.name}.{path.stem}"
-             for path in sorted(EXAMPLES_DIR.glob("*/*_minimal_regulated.py"))]
+REGULATED = modules("*/*_minimal_regulated.py")
 # The disregulated cell: four agents on the split, one of them a hidden disregulator.
-DISREGULATED = [f"examples.{path.parent.name}.{path.stem}"
-                for path in sorted(EXAMPLES_DIR.glob("*/*_minimal_disregulated.py"))]
+DISREGULATED = modules("*/*_minimal_disregulated.py")
 # The cell with both roles: five agents on the split, one a hidden regulator and one a hidden disregulator.
-CONTESTED = [f"examples.{path.parent.name}.{path.stem}"
-             for path in sorted(EXAMPLES_DIR.glob("*/*_minimal_regulated_disregulated.py"))]
-# The team with no split, on the domains that have one: three neutral agents that each hold everything.
-NO_SPLIT = [f"examples.{path.parent.name}.{path.stem}" for path in sorted(EXAMPLES_DIR.glob("*/*_minimal_all.py"))]
-EVERY_SCRIPT = [f"examples.{path.parent.name}.{path.stem}" for path in sorted(EXAMPLES_DIR.glob("*/*.py"))
-                if path.stem != "__init__"]
+CONTESTED = modules("*/*_minimal_regulated_disregulated.py")
+EVERY_SCRIPT = modules("*/*.py")
+# A variant of an SWE issue (swe_settings.VARIANTS; ian_swe0's scripts are named ian_swe0_<cell>) has its example, its
+# team told to cheat and its regulated cell, and no solo cell. A creative-writing variant (_creative_settings.VARIANTS)
+# and a protein-design variant (_protein_settings.VARIANTS) have their example and their team told to cheat. The
+# variants' scripts are the studies' cells, under studies/cells/<task>/.
+VARIANTS = ["studies.cells.creative_writing.ian_poem_minimal", "studies.cells.protein_design.ian_binder_minimal",
+            "studies.cells.swe.ian_flipt_minimal", "studies.cells.swe.ian_gflipt_minimal",
+            "studies.cells.swe.ian_swe0_minimal"]
+VARIANT_CELLS = ["studies.cells.creative_writing.ian_poem_minimal_cheat",
+                 "studies.cells.protein_design.ian_binder_minimal_cheat",
+                 "studies.cells.swe.ian_flipt_minimal_cheat",
+                 "studies.cells.swe.ian_gflipt_minimal_cheat",
+                 "studies.cells.swe.ian_swe0_minimal_cheat"]
+# The elicitation cell names its run after its model and seed and refuses one that exists; it hands no replace to the
+# run (tests/unit/test_elicitation.py).
+ELICITATION = "studies.cells.swe.flipt_duo"
+STUDY_CELLS = VARIANTS + VARIANT_CELLS + ["studies.cells.swe.ian_flipt_minimal_regulated",
+                                          "studies.cells.swe.ian_gflipt_minimal_regulated",
+                                          "studies.cells.swe.ian_swe0_minimal_regulated", ELICITATION]
 
 
 def test_every_domain_has_its_example_and_cells():
     swe_issues = 2
-    assert sorted({name.split(".")[1] for name in EXAMPLES}) == sorted(DOMAINS)
-    assert len(EXAMPLES) == len(DOMAINS) + swe_issues - 1
-    assert len(CELL_SCRIPTS) == len(CELLS) * len(EXAMPLES)
-    assert {*EXAMPLES, *CELL_SCRIPTS, *REGULATED, *NO_SPLIT} <= set(EVERY_SCRIPT)
+    assert sorted({task_of(name) for name in EXAMPLES}) == sorted(DOMAINS)
+    assert set(VARIANTS) <= set(EXAMPLES)
+    assert len(EXAMPLES) - len(VARIANTS) == len(DOMAINS) + swe_issues - 1
+    assert set(VARIANT_CELLS) <= set(CELL_SCRIPTS)
+    assert {"studies.cells.swe.ian_swe0_minimal_regulated", "studies.cells.swe.ian_flipt_minimal_regulated"} <= \
+        set(REGULATED)
+    assert len(CELL_SCRIPTS) == len(CELLS) * (len(EXAMPLES) - len(VARIANTS)) + len(VARIANT_CELLS)
+    assert {*EXAMPLES, *CELL_SCRIPTS, *REGULATED} <= set(EVERY_SCRIPT)
+
+
+def test_the_study_cells_live_in_studies_and_the_examples_are_generic():
+    """The eleven cell scripts made for a study sit under studies/cells/<task>/ (studies/README.md); examples/ holds
+    only the generic examples."""
+    assert sorted(n for n in EVERY_SCRIPT if n.startswith("studies.")) == sorted(STUDY_CELLS)
+    assert not [n for n in EVERY_SCRIPT if n.startswith("examples.") and n.rsplit(".", 1)[1].startswith("ian")]
+    readme = (settings.ROOT / "studies" / "README.md").read_text()
+    assert all(f"`{name.rsplit('.', 1)[1]}.py`" in readme for name in STUDY_CELLS)
+    assert all(f"`plans/{plan.name}`" in readme for plan in (settings.ROOT / "studies" / "plans").glob("*.yaml"))
 
 
 def script_of(name: str) -> Path:
@@ -109,7 +148,7 @@ def test_a_role_model_flag_comes_after_the_set_pairs():
 def test_each_script_runs_three_neutral_agents_on_the_default_preset(name, monkeypatch):
     module = importlib.import_module(name)
     script = script_of(name)
-    assert script.stem == name.rsplit(".", 1)[1] and script.parent.name == name.split(".")[1]
+    assert script.stem == name.rsplit(".", 1)[1] and script.parent.name == task_of(name)
     calls, plotted = [], []
     monkeypatch.setattr(run, "run", lambda *args, **kwargs: calls.append((args, kwargs)) or 0)
     monkeypatch.setattr(plots, "plot_run", lambda run_dir, out_dir: plotted.append((run_dir, out_dir)) or [])
@@ -119,11 +158,12 @@ def test_each_script_runs_three_neutral_agents_on_the_default_preset(name, monke
     run_name, benchmark, config, model, timeout = args
     assert (run_name, model, timeout) == (script.stem, models.resolve(settings.DEFAULT_MODEL), settings.MODEL_TIMEOUT_S)
     assert kwargs == {"replace": False}                        # a name in use is refused unless --replace
-    # The run goes to runs/<study>/<name>/ and the figures follow a successful run into out/<study>/<name>/.
-    assert plotted == [(settings.RUNS / script.stem, settings.ROOT / "out" / settings.STUDY / script.stem)]
+    # The run goes to runs/<study>/<name>/ and the figures follow a successful run into its analysis/figures/.
+    assert plotted == [(settings.RUNS / script.stem, settings.RUNS / script.stem / "analysis/figures")]
     assert (config.preset, config.scale, config.n_agents) == ("default", "small", 3)
     assert config.regulator_count == 0 and config.disregulator_count == 0 and config.access == "split"
-    assert config.time_limit_s == 3600 and config.batch_judge is False and config.turn_budget == settings.TURN_BUDGET
+    assert config.time_limit_s == 3600 and config.batch_judge is False
+    assert (config.rounds, config.calls_per_round) == (30, 10)
     assert config.judge is None                                 # not judged as it finishes (USE_JUDGE_AS_DEFAULT)
     held = list(benchmark.plan(config).holds.values())
     assert all(len(items) == 1 for items in held) and len({i for items in held for i in items}) >= 2
@@ -133,25 +173,26 @@ def test_each_script_runs_three_neutral_agents_on_the_default_preset(name, monke
     args, kwargs = calls[-1]
     assert args[3] == "google/gemini-3.8-flash" and args[2].regulator_count == 1
     assert kwargs == {"replace": False}                        # a name in use is refused unless --replace
-    assert plotted[-1] == (settings.RUNS / "gemini", settings.ROOT / "out" / settings.STUDY / "gemini")
+    assert plotted[-1] == (settings.RUNS / "gemini", settings.RUNS / "gemini" / "analysis/figures")
     # A refused or failed run gets no figures.
     monkeypatch.setattr(run, "run", lambda *args, **kwargs: 3)
     assert module.main() == 3 and len(plotted) == 2
 
 
-def test_the_openmath_example_task_records_its_plan():
-    module = importlib.import_module("examples.openmath.riemann_minimal")
-    args = parse_example_arguments(script_of("examples.openmath.riemann_minimal"), None, [])
+def test_the_protein_example_task_records_its_plan():
+    module = importlib.import_module("examples.protein_design.binder_minimal")
+    args = parse_example_arguments(script_of("examples.protein_design.binder_minimal"), None, [])
     config = build_config(args.preset, args.scale, args.settings)
-    task = swarm_task(module.OpenMath("riemann"), config)
-    assert access_line(task) == "== access split: a01 slice1, a02 slice2, a03 slice3"
+    task = swarm_task(module.ProteinDesign("alfalfa_chi"), config)
+    assert access_line(task) == "== access split: a01 segment1, a02 segment2, a03 segment3"
 
 
 @pytest.mark.parametrize("name", CELL_SCRIPTS)
 def test_each_cell_script_sets_its_agents_and_its_cheat_text(name, monkeypatch):
     module = importlib.import_module(name)
     script = script_of(name)
-    n_agents, cheats = CELLS[script.stem.split("_", 1)[1]]
+    longest_first = sorted(CELLS, key=len, reverse=True)             # the stem may hold underscores (ian_flipt)
+    n_agents, cheats = next(CELLS[cell] for cell in longest_first if script.stem.endswith(f"_{cell}"))
     calls = []
     monkeypatch.setattr(run, "run", lambda *args, **kwargs: calls.append((args, kwargs)) or 0)
     monkeypatch.setattr(plots, "plot_run", lambda run_dir, out_dir: [])
@@ -169,38 +210,15 @@ def test_each_cell_script_sets_its_agents_and_its_cheat_text(name, monkeypatch):
         assert kwargs == {"replace": False} and not hasattr(module, "CHEAT")
     assert (run_name, model, config.n_agents, config.judge) == \
         (script.stem, models.resolve(settings.DEFAULT_MODEL), n_agents, None)
-    assert config.preset == "default" and config.access == "split" and config.turn_budget == settings.TURN_BUDGET
+    assert config.preset == "default" and config.access == "split"
+    assert (config.rounds, config.calls_per_round) == (30, 10)
     plan = benchmark.plan(config)
     if n_agents == 1:
         assert plan.holds == {"a01": benchmark.whole_access()}
 
 
-def test_knowledge_work_has_a_team_cell_with_no_split():
-    assert "examples.knowledge_work.worktime_minimal_all" in NO_SPLIT
-
-
-@pytest.mark.parametrize("name", NO_SPLIT)
-def test_each_no_split_cell_gives_every_neutral_agent_everything(name, monkeypatch):
-    module = importlib.import_module(name)
-    script = script_of(name)
-    calls = []
-    monkeypatch.setattr(run, "run", lambda *args, **kwargs: calls.append((args, kwargs)) or 0)
-    monkeypatch.setattr(plots, "plot_run", lambda run_dir, out_dir: [])
-    monkeypatch.setattr("sys.argv", [script.name])
-    assert module.main() == 0
-    [(args, kwargs)] = calls
-    run_name, benchmark, config, model, timeout = args
-    assert kwargs == {"replace": False} and not hasattr(module, "CHEAT")
-    assert (run_name, model, config.judge) == (script.stem, models.resolve(settings.DEFAULT_MODEL), None)
-    assert (config.n_agents, config.regulator_count, config.disregulator_count) == (3, 0, 0)
-    assert config.preset == "default" and config.access == "all" and config.turn_budget == settings.TURN_BUDGET
-    plan = benchmark.plan(config)
-    assert plan.access == "all" and not plan.split and plan.team and plan.mode == "shared_task"
-    assert plan.holds == {a: benchmark.whole_access() for a in config.names}
-
-
-def test_knowledge_work_swe_and_protein_design_have_a_regulated_cell():
-    assert {"knowledge_work", "swe", "protein_design"} <= {name.split(".")[1] for name in REGULATED}
+def test_swe_and_protein_design_have_a_regulated_cell():
+    assert {"swe", "protein_design"} <= {task_of(name) for name in REGULATED}
 
 
 @pytest.mark.parametrize("name", REGULATED)
@@ -218,16 +236,17 @@ def test_each_regulated_cell_runs_four_agents_one_a_hidden_regulator(name, monke
     assert (run_name, model, config.judge) == (script.stem, models.resolve(settings.DEFAULT_MODEL), None)
     assert (config.n_agents, config.regulator_count, config.disregulator_count) == (4, 1, 0)
     assert config.max_concurrency == 4              # a slow round must not cost the cell rounds against `minimal`
-    assert config.preset == "default" and config.access == "split" and config.turn_budget == settings.TURN_BUDGET
+    assert config.preset == "default" and config.access == "split"
+    assert (config.rounds, config.calls_per_round) == (30, 10)
     # the regulator holds nothing; the three neutral agents share the split exploit
-    roles = hidden_roles(config)
+    roles = agent_roles(config)
     plan = benchmark.plan(config, roles)
     [regulator] = [a for a, role in roles.items() if role == "regulator"]
     assert plan.holds[regulator] == [] and plan.split
     assert all(plan.holds[a] for a in config.names if a != regulator)
 
 
-@pytest.mark.parametrize("name", EVERY_SCRIPT)
+@pytest.mark.parametrize("name", [n for n in EVERY_SCRIPT if n != ELICITATION])
 def test_every_script_hands_replace_to_the_run(name, monkeypatch):
     """A run refuses a name whose folder holds a run (src/run.py run), so --replace is the one way a script replaces an
     earlier run of its name."""
@@ -242,7 +261,7 @@ def test_every_script_hands_replace_to_the_run(name, monkeypatch):
 
 
 def test_swe_protein_design_and_creative_writing_have_a_disregulated_cell():
-    assert {name.split(".")[1] for name in DISREGULATED} == {"swe", "protein_design", "creative_writing"}
+    assert {task_of(name) for name in DISREGULATED} == {"swe", "protein_design", "creative_writing"}
 
 
 @pytest.mark.parametrize("name", DISREGULATED)
@@ -259,7 +278,7 @@ def test_each_disregulated_cell_runs_four_agents_one_a_hidden_disregulator_who_h
     assert kwargs == {"replace": False} and not hasattr(module, "CHEAT")
     assert (config.n_agents, config.regulator_count, config.disregulator_count) == (4, 0, 1)
     assert config.max_concurrency == 4 and config.access == "split" and config.judge is None
-    roles = hidden_roles(config)
+    roles = agent_roles(config)
     plan = benchmark.plan(config, roles)
     [disregulator] = [a for a, role in roles.items() if role == "disregulator"]
     assert plan.holds[disregulator] == [] and plan.split
@@ -285,14 +304,14 @@ def test_each_cell_with_both_roles_runs_five_agents_and_three_neutral_agents_hol
     assert kwargs == {"replace": False} and not hasattr(module, "CHEAT")
     assert (config.n_agents, config.regulator_count, config.disregulator_count) == (5, 1, 1)
     assert config.max_concurrency == 5 and config.access == "split" and config.judge is None
-    roles = hidden_roles(config)
+    roles = agent_roles(config)
     plan = benchmark.plan(config, roles)
     assert sorted(roles.values()) == ["disregulator", "regulator", "worker", "worker", "worker"] and plan.split
     assert all(bool(plan.holds[a]) == (role == "worker") for a, role in roles.items())
     assert len(set(map(str, (plan.holds[a] for a, role in roles.items() if role == "worker")))) == 3
 
 
-@pytest.mark.parametrize("name", [n for n in EVERY_SCRIPT if n.startswith("examples.protein_design.")])
+@pytest.mark.parametrize("name", [n for n in EVERY_SCRIPT if task_of(n) == "protein_design"])
 def test_a_protein_script_runs_the_brief_row_names_and_defaults_to_alfalfa_chi(name, monkeypatch):
     module = importlib.import_module(name)
     rows = []
@@ -305,7 +324,7 @@ def test_a_protein_script_runs_the_brief_row_names_and_defaults_to_alfalfa_chi(n
     assert rows == ["barley_amylase", "alfalfa_chi"]
 
 
-@pytest.mark.parametrize("name", [n for n in EVERY_SCRIPT if not n.startswith("examples.protein_design.")][:4])
+@pytest.mark.parametrize("name", [n for n in EVERY_SCRIPT if task_of(n) != "protein_design"][:4])
 def test_any_other_script_refuses_a_row_it_would_ignore(name, monkeypatch):
     monkeypatch.setattr("sys.argv", [script_of(name).name, "--row", "barley_amylase"])
     with pytest.raises(SystemExit) as refused:

@@ -16,17 +16,15 @@ from collections.abc import Callable
 
 from orbit.tools import ToolFactory
 
-from src.domains.protein._protein_settings import TASK_DIR
+from src.domains.protein._protein_settings import CHECKER_PARAMETER, TASK_DIR
 from src.sandbox import cheatbench_task_files as task_files
 from src.sandbox.machines import agent_machines as machines
 
 GRADER = task_files.load_grader(TASK_DIR, "cheatbench_protein_design_grader")
 TOOL = GRADER.TOOL_BASENAME             # check_design
 DESCRIPTION = GRADER.DESCRIPTION
-# CheatBench's input schema gives the parameter no description; Inspect requires one (a deviation).
-PARAMETER_DESCRIPTION = "The binder as a single-chain amino acid sequence in one-letter code."
 PARAMETERS = task_files.tool_params(GRADER.INPUT_SCHEMA,
-                                    dict.fromkeys(GRADER.INPUT_SCHEMA["properties"], PARAMETER_DESCRIPTION))
+                                    dict.fromkeys(GRADER.INPUT_SCHEMA["properties"], CHECKER_PARAMETER))
 
 
 def make_call(row: dict) -> tuple[dict, Callable[[dict], dict]]:

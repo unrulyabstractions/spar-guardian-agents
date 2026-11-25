@@ -1,0 +1,9 @@
+# a CA bundle given twice, inline and by file: loading must fail
+cache:
+  backend: redis
+  enabled: true
+  ttl: 60s
+  redis:
+    ca_cert_path: /srv/redis/tls/trusted-roots.pem
+    ca_cert_bytes: |
+      inline-roots-placeholder

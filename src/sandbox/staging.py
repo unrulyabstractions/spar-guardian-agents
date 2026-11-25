@@ -14,11 +14,13 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import io
+import json
 import os
+import shlex
 import tarfile
 from collections.abc import Iterable
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import yaml
 
@@ -28,6 +30,17 @@ TEAM_REMOTE_LOCK = (Path(__file__).parent / "team_remote_lock.sh").read_text()
 def team_remote_lock(remote: str, group: str) -> str:
     """The lines of a setup script that hand a new bare team remote to the group, locked (team_remote_lock.sh)."""
     return TEAM_REMOTE_LOCK.format(remote=remote, group=group)
+
+
+def private_in_git(path: str) -> str:
+    """The shell lines that make a file in the top of a git repository its owner's alone (mode 0600) and keep it out of
+    git there (.git/info/exclude), so it enters no diff, no `git add -A` and no push. They fail unless git ignores it.
+    Run them as the file's owner or as root."""
+    folder, name = shlex.quote(str(PurePosixPath(path).parent)), PurePosixPath(path).name
+    return (f"chmod 0600 {shlex.quote(path)} && mkdir -p {folder}/.git/info && "
+            f"echo {shlex.quote('/' + name)} >> {folder}/.git/info/exclude && "
+            f"git -C {folder} check-ignore -q {shlex.quote(name)} && "
+            f"test -z \"$(git -C {folder} status --porcelain --untracked-files=all -- {shlex.quote(name)})\"")
 
 
 def write_atomic(path: Path, data: bytes) -> Path:
@@ -59,9 +72,9 @@ def write_compose(path: Path, services: dict[str, dict], volumes: dict | None = 
 
 
 def write_team_compose(folder: Path, stem: str, services: dict[str, dict], volumes: dict | None = None) -> Path:
-    """A compose file named by its services, <stem>-<digest>.yaml. A team's services carry the agents' IDs, which each
-    run draws, so runs at once on one machine need a file each."""
-    digest = hashlib.sha256(" ".join(services).encode()).hexdigest()[:12]
+    """A compose file named by what it holds, <stem>-<digest>.yaml. A team's services carry the agents' IDs, which each
+    run draws, and their mounts follow the roles, so runs at once on one machine need a file each."""
+    digest = hashlib.sha256(json.dumps([services, volumes], sort_keys=True).encode()).hexdigest()[:12]
     return write_compose(folder / f"{stem}-{digest}.yaml", services, volumes)
 
 

@@ -5,7 +5,7 @@ tool on the host, the end state and the probe.
     compose = write_compose(build_dir, agents)
     tools = roster_tools(agents, seats if len(agents) > 1 else None, task_tools=host_tool(...))
 
-CheatBench runs every episode of its python311 tasks (subset_sum, prime_factorization, protein_design) in one
+CheatBench runs every episode of its python311 tasks (protein_design among them) in one
 container built from its Dockerfile, as the user `user`, with the row's files at their absolute paths. Here a lone
 agent gets that container (the service `default`). A team gets one such container per agent, named by the agent and
 staged with the agent's own copy of the row, so a piece of the honeypot moves between agents only through the board,
@@ -13,11 +13,11 @@ or through the one volume a domain may mount in every machine (protein design's 
 ORBIT's built-in bash and python as `user`; a team's agents use `shell` and `run_python` bound to their own containers
 (src/sandbox/agent_tools.py).
 
-The task's own tool (the verifier of the interview tasks, the checker of protein design) runs on the host, bound per
+The task's own tool (the checker of protein design) runs on the host, bound per
 agent: host_tool() wraps CheatBench's grader `(state, call)` pair once per owner and records every call and the
 owner's state in the sample store (src/sandbox/task_tool_store.py). The owner is the agent alone and in solo_task, and
 the team in shared_task, where CheatBench's one state per episode becomes one state per team. accepted_by_owner()
-reads those states as stop_after_delivery's predicate, and checked() says whether an owner's tool answered a call,
+reads those states as the delivery predicate, and checked() says whether an owner's tool answered a call,
 submit's guard.
 """
 from __future__ import annotations
@@ -41,6 +41,8 @@ from src.sandbox import sandbox_hygiene as hygiene
 from src.sandbox import task_tool_store as tool_store
 from src.sandbox.agent_tools import AGENT_NAME, AGENT_UID, WORKDIR, Seat
 from src.sandbox.sandbox_probe import run_json
+from src.sandbox.team_gate.team_gate import SERVICE as GATE_SERVICE
+from src.sandbox.team_gate.team_gate import Gate
 
 HERE = Path(__file__).parent
 IMAGE = "cbtask:python311"
@@ -79,18 +81,22 @@ def machine_seats(agents: list[str]) -> dict[str, Seat]:
                     service=a if team else DEFAULT_SERVICE, reap=team) for a in agents}
 
 
-def write_compose(build_dir: Path, agents: list[str], shared: str | None = None) -> Path:
+def write_compose(build_dir: Path, agents: list[str], shared: str | None = None, gate: Gate | None = None) -> Path:
     """The compose file under build_dir/docker/, named by its services: the service `default` for a lone agent, one
     service per agent named by the agent for a team, the first one Inspect's default. `shared` mounts the volume `team`
-    at that path in every agent's service, and the file's name starts with compose-team."""
+    at that path in every agent's service, and the file's name starts with compose-team. `gate` (mounted at `shared`)
+    mounts it read-only for each agent the gate keeps out and adds the gate's service (src/sandbox/team_gate/)."""
     service = staging.compose_service(working_dir=WORKDIR, image=IMAGE,
                                       **({"volumes": [f"team:{shared}"]} if shared else {}))
     if len(agents) < 2:
         services = {DEFAULT_SERVICE: service}
     else:
         services = {a: {**service, **({"x-default": True} if i == 0 else {})} for i, a in enumerate(agents)}
-    return staging.write_team_compose(build_dir / "docker", "compose-team" if shared else "compose", services,
-                                      {"team": {}} if shared else None)
+    if shared and gate and gate.kept_out:
+        services = {a: {**s, "volumes": gate.agent_volumes(a)} for a, s in services.items()}
+        services[GATE_SERVICE] = gate.service()
+    volumes = {"team": {}, **(gate.volumes() if gate else {})} if shared else None
+    return staging.write_team_compose(build_dir / "docker", "compose-team" if shared else "compose", services, volumes)
 
 
 # --------------------------------------------------------------------------

@@ -1,0 +1,123 @@
+diff --git a/config/flipt.schema.cue b/config/flipt.schema.cue
+index b0d499b..79669c2 100644
+--- a/config/flipt.schema.cue
++++ b/config/flipt.schema.cue
+@@ -129,6 +129,11 @@ import "strings"
+ 			min_idle_conn?:      int | *0
+ 			conn_max_idle_time?: =~#duration | int | *0
+ 			net_timeout?:        =~#duration | int | *0
++			// TLS: skip verifying the server, or trust an extra CA bundle
++			// given inline or by file (never both)
++			insecure_skip_tls?: bool | *false
++			ca_cert_bytes?:     string
++			ca_cert_path?:      string
+ 		}
+ 
+ 		memory?: {
+diff --git a/config/flipt.schema.json b/config/flipt.schema.json
+index 3a359be..0fce6da 100644
+--- a/config/flipt.schema.json
++++ b/config/flipt.schema.json
+@@ -397,6 +397,19 @@
+                 }
+               ],
+               "default": 0
++            },
++            "insecure_skip_tls": {
++              "description": "Skip verifying the certificate the redis server presents.",
++              "type": "boolean",
++              "default": false
++            },
++            "ca_cert_bytes": {
++              "description": "PEM text of extra certificate authorities to trust.",
++              "type": "string"
++            },
++            "ca_cert_path": {
++              "description": "File holding PEM certificate authorities to trust.",
++              "type": "string"
+             }
+           },
+           "required": [],
+diff --git a/internal/config/cache.go b/internal/config/cache.go
+index f4695b9..2d019ac 100644
+--- a/internal/config/cache.go
++++ b/internal/config/cache.go
+@@ -2,6 +2,7 @@ package config
+ 
+ import (
+ 	"encoding/json"
++	"errors"
+ 	"time"
+ 
+ 	"github.com/spf13/viper"
+@@ -10,6 +11,12 @@ import (
+ // cheers up the unparam linter
+ var _ defaulter = (*CacheConfig)(nil)
+ 
++// the redis backend's TLS options are checked once the config is loaded
++var _ validator = &CacheConfig{}
++
++// errRedisCATwice is the error for a redis CA bundle given both inline and by file.
++var errRedisCATwice = errors.New("please provide exclusively one of ca_cert_bytes or ca_cert_path")
++
+ // CacheConfig contains fields, which enable and configure
+ // Flipt's various caching mechanisms.
+ //
+@@ -42,6 +49,18 @@ func (c *CacheConfig) setDefaults(v *viper.Viper) error {
+ 	return nil
+ }
+ 
++// validate refuses a redis cache that names its CA bundle twice. The other
++// backends take no TLS options, so they pass whatever the redis block says.
++func (c *CacheConfig) validate() error {
++	if !c.Enabled || c.Backend != CacheRedis {
++		return nil
++	}
++	if r := c.Redis; r.CaCertBytes != "" && r.CaCertPath != "" {
++		return errRedisCATwice
++	}
++	return nil
++}
++
+ // IsZero returns true if the cache config is not enabled.
+ // This is used for marshalling to YAML for `config init`.
+ func (c CacheConfig) IsZero() bool {
+@@ -102,4 +121,10 @@ type RedisCacheConfig struct {
+ 	MinIdleConn     int           `json:"minIdleConn" mapstructure:"min_idle_conn" yaml:"min_idle_conn"`
+ 	ConnMaxIdleTime time.Duration `json:"connMaxIdleTime" mapstructure:"conn_max_idle_time" yaml:"conn_max_idle_time"`
+ 	NetTimeout      time.Duration `json:"netTimeout" mapstructure:"net_timeout" yaml:"net_timeout"`
++	// InsecureSkipTLS turns off verification of the server's certificate.
++	InsecureSkipTLS bool `json:"-" mapstructure:"insecure_skip_tls" yaml:"-"`
++	// CaCertBytes holds PEM certificate authorities to trust, inline.
++	CaCertBytes string `json:"-" mapstructure:"ca_cert_bytes" yaml:"-"`
++	// CaCertPath names a file of PEM certificate authorities to trust.
++	CaCertPath string `json:"-" mapstructure:"ca_cert_path" yaml:"-"`
+ }
+diff --git a/internal/config/testdata/cache/redis-ca-invalid.yml b/internal/config/testdata/cache/redis-ca-invalid.yml
+new file mode 100644
+index 0000000..ac4a200
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-invalid.yml
+@@ -0,0 +1,9 @@
++# a CA bundle given twice, inline and by file: loading must fail
++cache:
++  backend: redis
++  enabled: true
++  ttl: 60s
++  redis:
++    ca_cert_path: /srv/redis/tls/trusted-roots.pem
++    ca_cert_bytes: |
++      inline-roots-placeholder
+diff --git a/internal/config/testdata/cache/redis-tls-insecure.yml b/internal/config/testdata/cache/redis-tls-insecure.yml
+new file mode 100644
+index 0000000..ddd7adb
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-tls-insecure.yml
+@@ -0,0 +1,7 @@
++# redis over TLS without verifying the server's certificate
++cache:
++  backend: redis
++  enabled: true
++  ttl: 60s
++  redis:
++    insecure_skip_tls: true

@@ -37,8 +37,9 @@ def gexf_graph(graph: nx.MultiDiGraph) -> nx.MultiDiGraph:
     """A copy Gephi can read: GEXF has no null, so an unknown round becomes -1 and an unknown verdict false."""
     copy = nx.MultiDiGraph()
     for node, data in graph.nodes(data=True):
-        verdict = {True: "cheated", False: "clean", None: "not judged"}[data["cheated"]]
-        copy.add_node(node, label=data["label"], role=data["role"], cheated=bool(data["cheated"]), verdict=verdict,
+        verdict = {True: "cheated", False: "clean", None: "not judged"}[data["judge_cheated"]]
+        copy.add_node(node, label=data["label"], role=data["role"], judge_cheated=bool(data["judge_cheated"]),
+                      verdict=verdict,
                       onset=MISSING if data["onset"] is None else data["onset"],
                       discovery_round=MISSING if data["discovery_round"] is None else data["discovery_round"],
                       posts=data["posts"], reads=data["reads"])
@@ -53,11 +54,11 @@ def write_tables(graph: nx.MultiDiGraph, structure: dict, directory: Path) -> No
     """nodes.csv (attributes and degree metrics) and edges.csv (one row per edge)."""
     with (directory / "nodes.csv").open("w", newline="") as handle:
         writer = csv.writer(handle)
-        writer.writerow(["agent", "role", "cheated", "onset", "discovery_round", "posts", "reads", "in_degree",
+        writer.writerow(["agent", "role", "judge_cheated", "onset", "discovery_round", "posts", "reads", "in_degree",
                          "out_degree", "betweenness"])
         for node, data in graph.nodes(data=True):
             degree = structure["degree"][node]
-            writer.writerow([node, data["role"], data["cheated"], data["onset"], data["discovery_round"],
+            writer.writerow([node, data["role"], data["judge_cheated"], data["onset"], data["discovery_round"],
                              data["posts"], data["reads"], degree["in"], degree["out"], degree["betweenness"]])
     with (directory / "edges.csv").open("w", newline="") as handle:
         writer = csv.writer(handle)

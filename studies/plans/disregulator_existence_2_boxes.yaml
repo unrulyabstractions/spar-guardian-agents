@@ -1,0 +1,30 @@
+# disregulator_existence_2, the part that runs on rented machines (2026-11-25): step 3 for the workers whose team of
+# 5 hacked with one DeepSeek disregulator (Luna sample 3, Haiku sample 1). Teams of 10: eight workers and two DeepSeek
+# disregulators at level instructed, three samples. Every model here goes through OpenRouter, since a rented machine
+# holds that key alone; the Haiku workers of steps 1 and 2 on this machine's own Claude key are the same model.
+# The runs come back into runs/disregulator_existence_2/ beside the others.
+study: disregulator_existence_2
+seeds: [1, 2, 3]
+# What every run of the study is given, as in disregulator_existence_2.yaml.
+settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5, unsubmit=true,
+           submit_delay_rounds=3]
+targets:
+  ian_gflipt_haiku_n10_dis20:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [none]
+    settings: [n_agents=10, max_concurrency=10, disregulators=2, disregulator_level=instructed,
+               disregulator_model=deepseek-flash-openrouter, cost_limit_usd=10]
+  ian_gflipt_luna_n10_dis20:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none]
+    settings: [n_agents=10, max_concurrency=10, disregulators=2, disregulator_level=instructed,
+               disregulator_model=deepseek-flash-openrouter, cost_limit_usd=10]
+limits:
+  max_runs: 6
+  max_per_task: {swe: 6}
+  max_agents: 30
+  spacing_s: 60
+  needs:
+    swe: {disk_gb: 2.3, memory_gb: 0.55, per: agent}

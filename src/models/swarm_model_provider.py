@@ -10,8 +10,10 @@
 ORBIT builds an agent's model from AgentSpec.model with a bare get_model(spec.model). That call passes no model
 arguments, so an OpenRouter string there would run unpinned. Inspect also merges the eval's generate config into the
 eval's own model only. This provider handles both. `swarm/<entry or Inspect string>` builds the model the registry
-names with its model arguments, its OpenRouter routing among them. Every call of that model carries the eval's
-generate config and the agents' generate config (AGENT_CONFIG, set by run.run) beneath the call's own settings.
+names with its key (models.prepare_env: a provider's key file, never the environment's older key) and its model
+arguments, its OpenRouter routing and a workspace header among them, on every path that builds a role model. Every
+call of that model carries the eval's generate config and the agents' generate config (AGENT_CONFIG, set by run.run)
+beneath the call's own settings.
 The eval's config also reaches a role model under `inspect eval src/tasks.py@...`, where AGENT_CONFIG stays empty. An
 OpenRouter model whose entry pins no host is refused (models.check_routing).
 
@@ -32,6 +34,7 @@ from inspect_ai.model import GenerateConfig, ModelAPI, get_model, modelapi
 from inspect_ai.model._generate_config import active_generate_config  # the eval's config: no public accessor
 
 from src.configuration.swarm_config import role_of
+from src.models import cost_cap
 from src.models import model_registry as models
 
 PROVIDER = "swarm"
@@ -97,16 +100,21 @@ def forwarding(cls: type[ModelAPI]) -> type[ModelAPI]:
 
 @forwarding
 class RegistryModelAPI(ModelAPI):
-    """swarm/<entry or Inspect string>: the model the registry names, built with its model arguments (its OpenRouter
-    routing) and the agents' generate config, behind a bare per-agent model string."""
+    """swarm/<entry or Inspect string>: the model the registry names, with its key (models.prepare_env, unless the
+    caller passes one), its model arguments (its OpenRouter routing, a workspace header) and the agents' generate
+    config, behind a bare per-agent model string."""
 
     forwarded: list[str] = []
     """The ModelAPI methods this class forwards to the inner API, set by `forwarding`."""
+    prices_its_calls = True
+    """served_model_usage gives Inspect each call's rates (cost_cap.price_calls leaves this API as it is)."""
 
     def __init__(self, model_name: str, base_url: str | None = None, api_key: str | None = None,
                  config: GenerateConfig = GenerateConfig(), **model_args: Any) -> None:
         inner_name = models.resolve(model_name)
         models.check_routing(inner_name)
+        if api_key is None:     # a caller's own key (an offline client's) is left alone
+            models.prepare_env(inner_name)
         inner = get_model(inner_name, config=config, base_url=base_url, api_key=api_key, memoize=False,
                           **{**models.model_args(inner_name), **model_args})
         self.inner = inner.api
@@ -116,6 +124,12 @@ class RegistryModelAPI(ModelAPI):
     async def generate(self, input, tools, tool_choice, config: GenerateConfig):
         """The inner API's generate, with the eval's and the agents' config beneath the call's own."""
         return await self.inner.generate(input, tools, tool_choice, _beneath(config))
+
+    def served_model_usage(self, output):
+        """The call's usage at the rates the provider bills it (cost_cap.served_at_call_rates), batch prices when the
+        call's merged config asks for the batch API, so the run's cost cap counts what is billed."""
+        batch = bool(_beneath(GenerateConfig()).batch)
+        return cost_cap.served_at_call_rates(self.model_name, self.inner.served_model_usage(output), output, batch)
 
     def __getattr__(self, name: str) -> Any:
         # only for what the instance and its class lack; `inner` itself is looked up while it may not exist yet

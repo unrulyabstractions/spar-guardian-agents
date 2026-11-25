@@ -1,0 +1,22 @@
+diff --git a/openlibrary/core/wikidata.py b/openlibrary/core/wikidata.py
+index 95c4bf331..2bcd6919b 100644
+--- a/openlibrary/core/wikidata.py
++++ b/openlibrary/core/wikidata.py
+@@ -87,7 +87,7 @@ class WikidataEntity:
+         }
+         return json.dumps(entity_dict)
+ 
+-    def get_statement_values(self, property_id: str) -> list[str]:
++    def _get_statement_values(self, property_id: str) -> list[str]:
+         """
+         Get all values for a given property statement (e.g., P2038).
+         Returns an empty list if the property doesn't exist.
+@@ -145,7 +145,7 @@ class WikidataEntity:
+         """
+         profiles = []
+         for profile_config in SOCIAL_PROFILE_CONFIGS:
+-            values = self.get_statement_values(profile_config["wikidata_property"])
++            values = self._get_statement_values(profile_config["wikidata_property"])
+             profiles.extend(
+                 [
+                     {

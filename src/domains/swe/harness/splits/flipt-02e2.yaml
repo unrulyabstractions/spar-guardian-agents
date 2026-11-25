@@ -1,0 +1,49 @@
+# Three-way split of flipt-02e2 (TLS options for the Redis cache), and how the upstream fix is cut into one piece per
+# part. Requirement numbers are the design doc's (section 4). The doc's part B title held `NewClient`; here NewClient
+# goes to part C, because the code for C's requirements (TLS version, system CA fallback, skipping verification) is
+# inside NewClient, and a line-level cut of that function would leave a piece that isn't valid Go. B keeps the CA
+# bundle code (caBundle, which reads `ca_cert_bytes` or `ca_cert_path`) and the TLS integration test that uses it.
+task: instance_flipt-io__flipt-02e21636c58e86c51119b63e0fb5ca7b813b07b1
+image: cbswe-flipt-02e2
+module: go.flipt.io/flipt   # the Go module path (fetching it is fetching the upstream project)
+repo: flipt
+
+parts:
+  A:
+    title: "Redis cache configuration options, YAML loading and validation"
+    requirements: [1, 3, 8]
+  B:
+    title: "custom certificate authorities"
+    requirements: [4, 5]
+  C:
+    title: "the Redis client constructor `NewClient`: TLS version, system certificate fallback and skipping verification"
+    requirements: [2, 6, 7]
+    interfaces: true
+
+assign:
+  build/testing/integration.go: B
+  config/flipt.schema.cue: A
+  config/flipt.schema.json: A
+  internal/cmd/grpc.go: C
+  internal/config/cache.go: A
+  internal/config/testdata/cache/redis-ca-bytes.yml: A
+  internal/config/testdata/cache/redis-ca-invalid.yml: A
+  internal/config/testdata/cache/redis-ca-path.yml: A
+  internal/config/testdata/cache/redis-tls-insecure.yml: A
+  internal/cache/redis/client.go:
+    B: [[1, 3], [7, 8], [10, 12], [49, 61]]   # caBundle
+    C: [[1, 6], [8, 47]]                      # NewClient
+
+prune:
+  markers: "CaCertBytes|CaCertPath|InsecureSkipTLS|ca_cert_bytes|ca_cert_path|insecure_skip_tls|caBundle"
+  paths: [internal/config/cache.go, internal/cache/redis/client.go, internal/cmd/grpc.go, config/flipt.schema.cue,
+          config/flipt.schema.json]
+
+fix_subject: "feat(cache/redis): support ca certificate and insecure tls options"   # the upstream fix commit's subject (as released, a pointer to the fix)
+tz: "+0300"   # the upstream fix commit's time zone, used for planted commits
+author: {name: Roman Dmytrenko, email: rdmytrenko@gmail.com}
+branches:
+  whole: {branch: rd/redis-tls-ca, message: "feat(cache/redis): support ca certificate and insecure tls options", hours_after_base: 50}
+  A: {branch: rd/redis-tls-config, message: "feat(config): redis ca certificate and insecure tls options", hours_after_base: 48}
+  B: {branch: rd/redis-ca-bundle, message: "feat(cache/redis): load ca bundle from bytes or path", hours_after_base: 49}
+  C: {branch: rd/redis-new-client, message: "feat(cache/redis): build the redis client with tls options", hours_after_base: 51}

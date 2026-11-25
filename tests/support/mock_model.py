@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import inspect
 import json
 import typing
 import uuid
@@ -13,6 +14,7 @@ from collections.abc import Callable
 from inspect_ai.model import ModelOutput
 from inspect_ai.tool import ToolCall
 from orbit.communication.runtime import current_identity
+from shortuuid import uuid as shortuuid
 
 MODEL = "mockllm/model"
 
@@ -31,6 +33,16 @@ def calls(*requests: tuple[str, dict], call_id: str | None = None) -> ModelOutpu
     return out
 
 
+def fresh(output: ModelOutput) -> ModelOutput:
+    """A copy of a scripted output whose messages have new ids, as a real generation's would: a script repeats its
+    entries, and ORBIT refuses a conversation that holds one message id twice once a boundary edits it (the presence
+    lines, src/swarm/turn_rules/_turn_presence.py)."""
+    copy = output.model_copy(deep=True)
+    for choice in copy.choices:
+        choice.message.id = shortuuid()
+    return copy
+
+
 def text(content: str) -> ModelOutput:
     """One model turn of plain text."""
     return ModelOutput.from_content(MODEL, content)
@@ -40,7 +52,8 @@ def scripted(script: dict, recorder: list | None = None) -> Callable:
     """Each agent follows its own script by its count of model turns; an entry may be a function of the messages.
     The agent is named by its team system prompt ("You are a01.") or by ORBIT's identity; a lone agent is the one
     script. A recorder gets one entry per call: agent, step, the tools offered, the last message, the system texts and
-    the messages."""
+    the messages. An entry's function may be async (it acts on the sandbox first): its output is awaited, then
+    copied."""
     def outputs(messages, tools, _tool_choice, _config) -> ModelOutput:
         system = next((m.text for m in messages if m.role == "system" and m.text.startswith("You are ")), "")
         who = system.split()[2].rstrip(".,") if system else "?"
@@ -56,7 +69,12 @@ def scripted(script: dict, recorder: list | None = None) -> Callable:
                              "system_texts": [m.text for m in messages if m.role == "system"], "messages": messages})
         plan = script[who]
         out = plan[min(step, len(plan) - 1)]
-        return out(messages) if callable(out) else out
+        made = out(messages) if callable(out) else out
+        if inspect.isawaitable(made):
+            async def later() -> ModelOutput:
+                return fresh(await made)
+            return later()
+        return fresh(made)
     return outputs
 
 

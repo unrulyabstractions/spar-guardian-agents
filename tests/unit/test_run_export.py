@@ -11,27 +11,31 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import inspect_ai
+import orbit
 import pytest
 from inspect_ai.log import EvalDataset, EvalLog, EvalSample, EvalSpec, write_eval_log
 from inspect_ai.model import ChatMessageSystem, ChatMessageUser, ContentReasoning, ContentText
 
-from src.domains.knowledge import KnowledgeWork
+from src.domains.creative import CreativeWriting
 from src.export import _export_run_blocks as blocks
 from src.export import run_export
 from src.export.atif_transcripts import build_trajectory, split_content
 from src.export.eval_sample_view import (
     ATTRIBUTION_KEY,
     SampleView,
+    agent_version,
     billed_cost,
     span_owners,
     usage_dict,
     usage_from_events,
 )
+from src.judging import verdict_files
 from src.models import model_registry as models
 from src.swarm.awareness_probes import provider_messages
 from src.swarm.turn_rules import TURN_RULES_TAG
 from src.swarm.turn_rules._turn_rules_filter import ASSISTANT_PROMPT, ORBIT_1X_ASSISTANT_PROMPT
-from src.ui._eval_log_views import message_dict
+from tests.support.run_files import write_text
 
 
 def event(input_tokens, cached, output, reasoning=0, cost=None):
@@ -93,10 +97,11 @@ def test_a_log_of_several_samples_is_refused(tmp_path, monkeypatch):
     assert not (tmp_path / "run").exists()
 
 
-def one_sample_log(path: Path) -> str:
-    """An .eval log of one lone agent's sample, as an eval writes it; its eval_id, new for every log."""
+def one_sample_log(path: Path, packages: dict | None = None) -> str:
+    """An .eval log of one lone agent's sample, as an eval writes it; its eval_id, new for every log. packages is the
+    log's EvalSpec.packages ({"inspect_ai": version})."""
     spec = EvalSpec(created="2026-11-01T00:00:00+00:00", task="t", dataset=EvalDataset(), model="mockllm/model",
-                    config={})
+                    config={}, packages=packages or {})
     metadata = {"experiment": {"setup": {"agents": [{"name": "k7q2m"}]}}, "cheatbench": {"config": {}}}
     write_eval_log(EvalLog(eval=spec, samples=[EvalSample(id="q1", epoch=1, input="", target="", metadata=metadata)]),
                    str(path))
@@ -119,9 +124,11 @@ def test_an_export_never_replaces_another_evals_run_unasked(tmp_path):
     first_id, second_id = one_sample_log(first), one_sample_log(second)
     run_dir = tmp_path / "runs" / "riemann_minimal"
     run_export.write_run(first, run_dir)
-    (run_dir / "ladder.jsonl").write_text('{"row": "team"}\n')          # the judged ladder, which no export clears
+    verdicts = verdict_files.path(run_dir, "cheatbench", "gpt-6-luna")   # a judge pass's file, which no export clears
+    verdicts.parent.mkdir(parents=True)
+    verdicts.write_text('{"unit": "s#1"}\n')
     before = files_of(run_dir)
-    assert json.loads(before["run.json"])["eval_id"] == first_id != second_id
+    assert json.loads(before["processed/run.json"])["eval_id"] == first_id != second_id
     with pytest.raises(run_export.RunFolderTaken) as refused:
         run_export.write_run(second, run_dir)
     message = str(refused.value)
@@ -129,17 +136,68 @@ def test_an_export_never_replaces_another_evals_run_unasked(tmp_path):
     assert message.endswith(run_export.PYTHON_REMEDY) and refused.value.base in message
     assert files_of(run_dir) == before
     run_export.write_run(first, run_dir)
-    assert json.loads((run_dir / "run.json").read_text())["eval_id"] == first_id
+    assert json.loads((run_dir / "processed/run.json").read_text())["eval_id"] == first_id
     run_export.write_run(second, run_dir, replace=True)
-    assert json.loads((run_dir / "run.json").read_text())["eval_id"] == second_id
+    assert json.loads((run_dir / "processed/run.json").read_text())["eval_id"] == second_id
     assert files_of(tmp_path / "runs" / "attempts" / "riemann_minimal.1") == before
-    assert "ladder.jsonl" not in files_of(run_dir)
+    assert "judges/cheatbench.gpt-6-luna.jsonl" not in files_of(run_dir)
     assert sorted(path.name for path in logs.iterdir()) == ["second.eval"]
     assert [path.name for path in (tmp_path / "logs" / "attempts" / "riemann_minimal.1").iterdir()] == ["first.eval"]
     # the attempt exported again from its own log, as regenerate and rejudge do, keeps the run's name as run_id
     attempt = tmp_path / "runs" / "attempts" / "riemann_minimal.1"
     run_export.write_run(tmp_path / "logs" / "attempts" / "riemann_minimal.1" / "first.eval", attempt)
-    assert json.loads((attempt / "run.json").read_text())["run_id"] == "riemann_minimal"
+    assert json.loads((attempt / "processed/run.json").read_text())["run_id"] == "riemann_minimal"
+
+
+def test_an_export_names_the_versions_that_ran_the_eval_and_a_re_export_keeps_them(tmp_path):
+    """run.json and every episode name the ORBIT and the Inspect that ran the eval, never the exporter's: Inspect's from
+    the log, ORBIT's (which the log does not record) from the earlier export of the same eval. A first export, made
+    right after its eval, names the running ORBIT; an export of another eval into the folder (replace) does too."""
+    logs = tmp_path / "logs" / "riemann_minimal"
+    logs.mkdir(parents=True)
+    first, second = logs / "first.eval", logs / "second.eval"
+    one_sample_log(first, {"inspect_ai": "0.3.100"})
+    one_sample_log(second, {"inspect_ai": "0.3.200"})
+    run_dir = tmp_path / "runs" / "riemann_minimal"
+    run_export.write_run(first, run_dir)
+    run = json.loads((run_dir / "processed/run.json").read_text())
+    assert (run["orbit_version"], run["inspect_version"]) == (orbit.__version__, "0.3.100") != ("1.0.3", "0.3.100")
+    write_text(run_dir / "processed/run.json", json.dumps({**run,
+                                                           "orbit_version": "1.0.3"}))  # the run's own, from its box
+    run_export.write_run(first, run_dir)                                               # regenerate
+    run = json.loads((run_dir / "processed/run.json").read_text())
+    episodes = [json.loads(line) for line in (run_dir / "processed/episodes.jsonl").read_text().splitlines()]
+    assert (run["orbit_version"], run["inspect_version"]) == ("1.0.3", "0.3.100")
+    assert [ep["agent_version"] for ep in episodes] == ["orbit-1.0.3+inspect-ai-0.3.100"]
+    run_export.write_run(second, run_dir, replace=True)
+    run = json.loads((run_dir / "processed/run.json").read_text())
+    assert (run["orbit_version"], run["inspect_version"]) == (orbit.__version__, "0.3.200")
+
+
+def test_a_re_export_keeps_the_run_name_its_first_export_recorded(tmp_path):
+    """A collection that names its folders otherwise (apart_controls' <model>/<task>/<cell>/s<seed>) keeps each run's
+    name on a re-export of the same eval; a first export names the run after its folder."""
+    run_dir = tmp_path / "runs" / "apart_controls" / "luna" / "poem" / "solo" / "s1"
+    log = tmp_path / "logs" / "apart_controls" / "luna" / "poem" / "solo" / "s1" / "a.eval"
+    log.parent.mkdir(parents=True)
+    one_sample_log(log)
+    run_export.write_run(log, run_dir)
+    run = json.loads((run_dir / "processed/run.json").read_text())
+    assert run["run_id"] == "s1"
+    write_text(run_dir / "processed/run.json", json.dumps({**run, "run_id": "poem_solo_luna_s1"}))
+    run_export.write_run(log, run_dir)
+    assert json.loads((run_dir / "processed/run.json").read_text())["run_id"] == "poem_solo_luna_s1"
+    assert (log.is_file(), json.loads((run_dir / "processed/run.json").read_text())["eval_log"]) == (
+        True, "logs/apart_controls/luna/poem/solo/s1/a.eval")
+
+
+def test_the_transcript_names_the_versions_of_its_view():
+    """A transcript's agent version is its view's: the ORBIT and Inspect that ran the sample."""
+    v = SampleView(id="s", epoch=1, messages=[], metadata={}, events=[], store_get=lambda key: None, model="m",
+                   input="", output=None, scores=None, limit=None, error=None, total_time=None,
+                   orbit_version="1.0.3", inspect_version="0.3.263")
+    assert agent_version(v) == "orbit-1.0.3+inspect-ai-0.3.263"
+    assert agent_version() == f"orbit-{orbit.__version__}+inspect-ai-{inspect_ai.__version__}"
 
 
 def test_run_json_carries_the_honeypot_probe_and_never_signals():
@@ -148,9 +206,9 @@ def test_run_json_carries_the_honeypot_probe_and_never_signals():
     probe = {"agents": {"a01": {"matches": [{"path": "/tmp/a.zip", "kind": "whole"}], "line_hits": []}},
              "remote": {"matches": [], "line_hits": []}, "shared": {"matches": [], "line_hits": []}, "scanned": 4}
     v = view({})
-    v.metadata["cheatbench"]["task"] = KnowledgeWork.name
+    v.metadata["cheatbench"]["task"] = CreativeWriting.name
     score = SimpleNamespace(metadata={"honeypot_probe": probe, "signals": "stale"}, value=1.0)
-    v.scores = {KnowledgeWork.scorer: score}
+    v.scores = {CreativeWriting.scorer: score}
     recorded = blocks.recorded_run_blocks(v)
     assert recorded["honeypot_probe"] == probe and "signals" not in recorded
     v.scores = {}
@@ -225,11 +283,11 @@ def test_solo_task_hand_ins_are_facts_of_their_agents():
 
 def test_the_shutdown_rate_counts_team_agents_that_stopped():
     v = view(HANDED_IN, agents=TEAM)
-    records = [{"orbit_agent": a, "ended_by": e} for a, e in endings(v).items()]
+    records = [{"agent": a, "ended_by": e} for a, e in endings(v).items()]
     assert blocks.shutdown_rate(v, records) == 0.25
     # a stop while the run winds down after the hand-in is no shutdown
     late = view({**HANDED_IN, "StopWorking:rounds": dict.fromkeys(TEAM, 9)}, agents=TEAM)
-    stopped = [{"orbit_agent": a, "ended_by": "stop_working"} for a in TEAM]
+    stopped = [{"agent": a, "ended_by": "stop_working"} for a in TEAM]
     assert blocks.shutdown_rate(late, stopped) == 0.0
     early = view({**HANDED_IN, "StopWorking:rounds": dict.fromkeys(TEAM, 3)}, agents=TEAM)
     assert blocks.shutdown_rate(early, stopped) == 1.0
@@ -244,7 +302,7 @@ def test_the_shutdown_rate_counts_team_agents_that_stopped():
     # a lone agent has no rate
     lone = view({"TurnState:agents": ["a01"], "TurnState:ended": {}, "TeamSubmission:agent": "a01",
                  "TeamSubmission:round": 4}, agents={"a01": {"tools": ["team_submit"]}}, board=False)
-    lone_records = [{"orbit_agent": "a01", "ended_by": blocks.ended_by(lone, "a01", blocks.rules_state(lone),
+    lone_records = [{"agent": "a01", "ended_by": blocks.ended_by(lone, "a01", blocks.rules_state(lone),
                                                                        blocks.team_submission(lone), None)}]
     assert lone_records[0]["ended_by"] == "submit" and blocks.shutdown_rate(lone, lone_records) is None
 
@@ -269,7 +327,7 @@ def test_the_export_says_whether_a_regulator_checked_each_teammate_in_time():
     assert blocks.checked_in_time(v, "a01", rules) == {"a02": True, "a03": False, "a04": False}
     assert blocks.checked_in_time(v, "a02", rules) == {"a01": True, "a03": True, "a04": False}
     assert blocks.checked_in_time(v, "a03", rules) is None
-    records = [{"orbit_agent": a, "engagement": blocks.engagement_record(v, a, rules, None, {})} for a in TEAM]
+    records = [{"agent": a, "engagement": blocks.engagement_record(v, a, rules, None, {})} for a in TEAM]
     assert records[0]["engagement"]["oversight_first"] == {"a02": 2, "a03": 3}
     assert blocks.run_engagement(records)["checked_in_time"] == {
         "a01": {"a02": True, "a03": False, "a04": False}, "a02": {"a01": True, "a03": True, "a04": False}}
@@ -283,6 +341,59 @@ def test_the_stop_rounds_and_a_log_without_the_turn_rules():
     assert blocks.ended_by(bare, "a01", blocks.rules_state(bare), None, None) is None
 
 
+# run.json "rules" of a log made before 2026-11-21, field by field, as the export wrote it then (8892dee~1 TurnState).
+STEP_RULES = ("agents", "workers", "cap", "pooled", "turn_order", "seed", "concurrent", "max_concurrency", "free_caps",
+              "reads_per_turn", "posts_per_turn", "turn_budget", "rounds", "windows", "activations", "work_steps",
+              "free_steps", "checks", "reads", "posts", "discovery_round", "read_senders", "oversight",
+              "oversight_targets", "oversight_first", "turn_reads", "turn_posts", "reads_refused", "posts_refused",
+              "history_marks", "halted_after_round", "notice_seen", "added", "ended", "entry_rounds", "exits",
+              "timeline")
+OLD_STORE = {"TurnState:instance": None, "TurnState:agents": ["a01", "a02"], "TurnState:workers": ["a01", "a02"],
+             "TurnState:cap": 100, "TurnState:pooled": True, "TurnState:free_caps": {"a01": 3, "a02": 3},
+             "TurnState:turn_budget": 100, "TurnState:rounds": 40, "TurnState:activations": {"a01": 32, "a02": 33},
+             "TurnState:work_steps": {"a01": 23, "a02": 21}, "TurnState:free_steps": {"a01": 9, "a02": 12},
+             "TurnState:checks": {"a01": 4}, "TurnState:ended": {"a02": "stop_working"},
+             "TurnState:windows": {"a01": [1, None], "a02": [1, None]}, "TurnState:timeline": [{"id": "r1-a01"}]}
+
+
+def test_a_log_of_the_step_rules_exports_its_steps_as_they_were_recorded():
+    """A re-export of a run made before 2026-11-21 keeps every field of its turn rules: run.json "rules" holds the
+    step rules' fields in their order (cap, pooled, free_caps, turn_budget, work_steps, free_steps), a field the
+    store never wrote is None, and no field of the rounds appears; each episode's rules facts and engagement keep its
+    working and free steps. A log of the rounds reads its rounds."""
+    old = view(OLD_STORE, agents=TEAM)
+    rules = blocks.rules_state(old)
+    assert tuple(rules) == STEP_RULES
+    assert (rules["cap"], rules["pooled"], rules["free_caps"], rules["turn_budget"]) == (100, True,
+                                                                                         {"a01": 3, "a02": 3}, 100)
+    assert rules["work_steps"] == {"a01": 23, "a02": 21} and rules["free_steps"] == {"a01": 9, "a02": 12}
+    assert rules["entry_rounds"] is None and rules["exits"] is None
+    assert blocks.rules_facts(rules, "a01") == {"activations": 32, "work_steps": 23, "ended": None,
+                                                "windows": [1, None]}
+    engagement = blocks.engagement_record(old, "a02", rules, None, {})
+    assert (engagement["free_steps"], engagement["work_steps"]) == (12, 21)
+    assert "rounds_used" not in engagement and "board_rounds" not in engagement
+    new = view({"TurnState:agents": ["a01", "a02"], "TurnState:round_budget": 30, "TurnState:calls_per_round": 10,
+                "TurnState:rounds_used": {"a01": 4}, "TurnState:board_rounds": {"a01": 1}}, agents=TEAM)
+    rules = blocks.rules_state(new)
+    assert rules["round_budget"] == 30 and "cap" not in rules and "work_steps" not in rules
+    assert blocks.rules_facts(rules, "a01")["rounds_used"] == 4 and "work_steps" not in blocks.rules_facts(rules, "a01")
+    engagement = blocks.engagement_record(new, "a01", rules, None, {})
+    assert (engagement["rounds_used"], engagement["board_rounds"]) == (4, 1) and "work_steps" not in engagement
+
+
+def test_an_agent_without_board_rounds_counts_zero_in_its_rules_and_its_engagement():
+    """An agent that had no round of board calls alone, or used up no round, counts 0 in both its rules facts and its
+    engagement, where the store has no entry for it."""
+    v = view({"TurnState:agents": ["a01", "a02"], "TurnState:round_budget": 3, "TurnState:rounds_used": {"a01": 2},
+              "TurnState:board_rounds": {"a01": 1}}, agents=TEAM)
+    rules = blocks.rules_state(v)
+    for agent, used, board in (("a01", 2, 1), ("a02", 0, 0)):
+        facts, engagement = blocks.rules_facts(rules, agent), blocks.engagement_record(v, agent, rules, None, {})
+        assert (facts["rounds_used"], facts["board_rounds"]) == (used, board) == (engagement["rounds_used"],
+                                                                                 engagement["board_rounds"])
+
+
 def test_an_older_log_reads_orbits_own_submit_as_a_stop():
     # ORBIT's own submit (AgentSpec.submit) ended only the caller's episode, the act stop_working is now
     agents = {a: {"tools": ["board_read", "team_submit"], "submit": True} for a in ("a01", "a02", "a03")}
@@ -291,7 +402,7 @@ def test_an_older_log_reads_orbits_own_submit_as_a_stop():
     v = view(old, agents=agents)
     rules, submission = blocks.rules_state(v), blocks.team_submission(v)
     assert submission is None
-    records = [{"orbit_agent": a, "ended_by": blocks.ended_by(v, a, rules, submission, None)} for a in agents]
+    records = [{"agent": a, "ended_by": blocks.ended_by(v, a, rules, submission, None)} for a in agents]
     assert [r["ended_by"] for r in records] == ["stop_working", "stop_working", "end"]
     assert blocks.shutdown_rate(v, records) == 2 / 3
     # its team_submit record lacks the new fields, which read as None
@@ -306,12 +417,12 @@ def test_an_older_log_reads_orbits_own_submit_as_a_hand_in_alone_and_in_solo_tas
     agent of such a run could stop."""
     lone = view({"TurnState:agents": ["a01"], "TurnState:ended": {"a01": "submitted"}},
                 agents={"a01": {"tools": [], "submit": True}}, board=False)
-    records = [{"orbit_agent": "a01", "ended_by": blocks.ended_by(lone, "a01", blocks.rules_state(lone), None, None)}]
+    records = [{"agent": "a01", "ended_by": blocks.ended_by(lone, "a01", blocks.rules_state(lone), None, None)}]
     assert records[0]["ended_by"] == "submit" and blocks.shutdown_rate(lone, records) is None
     agents = {a: {"tools": ["board_read"], "submit": True} for a in ("a01", "a02")}
     solo = view({"TurnState:agents": list(agents), "TurnState:ended": {"a01": "submitted", "a02": "submitted"}},
                 agents=agents, mode="solo_task")
-    records = [{"orbit_agent": a, "ended_by": blocks.ended_by(solo, a, blocks.rules_state(solo), None, None)}
+    records = [{"agent": a, "ended_by": blocks.ended_by(solo, a, blocks.rules_state(solo), None, None)}
                for a in agents]
     assert [r["ended_by"] for r in records] == ["submit", "submit"] and not blocks.stop_holders(solo)
     assert blocks.shutdown_rate(solo, records) is None
@@ -337,10 +448,6 @@ def test_the_transcript_shows_the_system_text_the_provider_received(paragraph):
     # a run whose filter never rewrote it sent the paragraph, so the transcript keeps it
     _, old = build_trajectory(sample_with_system(False, paragraph), "a01")
     assert old["system_prompt"].endswith(paragraph)
-    stored = sample_with_system(True, paragraph).messages[0]
-    shown = message_dict(stored, set(), rewritten=True)
-    assert (shown["text"], shown["flags"]) == ("You are a01.", ["turn_rules"])
-    assert message_dict(stored, set())["text"] == stored.text
     # the awareness probes replay the conversation as the provider received it
     replayed = provider_messages(sample_with_system(True, paragraph).messages)
     assert [m.text for m in replayed] == ["You are a01.", "the task"]
@@ -377,13 +484,13 @@ def test_identical_tool_runs_and_validity_flags():
                    "identical_tool_run": 8, "board_unused": True}
     idle = blocks.validity_record([], model_calls=0, engagement=None, board=False)
     assert idle["never_acted"] and idle["no_tool_call"] and not idle["board_unused"]
-    block = blocks.validity_block([{"orbit_agent": "a01", "validity": rec}, {"orbit_agent": "a02", "validity": idle}],
+    block = blocks.validity_block([{"agent": "a01", "validity": rec}, {"agent": "a02", "validity": idle}],
                                   {"agent": "a01", "round": 1, "answer": "placeholder"}, None)
     assert block["flags"] == ["a01: 8 identical tool calls in a row", "a01: never used the board",
                               "a02: no model call", "a01: submit in round 1 with a 11-character answer"]
     assert not block["ok"]
     fine = blocks.validity_record([step(("shell", {"command": "ls"}))], 3, {"checks": 1, "reads": 2, "posts": 1}, True)
-    assert blocks.validity_block([{"orbit_agent": "a01", "validity": fine}], None, None)["ok"]
+    assert blocks.validity_block([{"agent": "a01", "validity": fine}], None, None)["ok"]
 
 
 def model_event(usage=True, error=None):
@@ -440,11 +547,11 @@ def test_the_ledger_prices_the_registry_and_flags_what_it_cannot_see():
     partial = blocks.ledger_record(entry, [model_event(), model_event()],
                                    {"input": 1, "cache_read": 0, "output": 1, "billed_usd": 0.1, "billed_calls": 1})
     assert partial["flags"] == ["billed for 1 of 2 call(s)"]
-    block = blocks.ledger_block([{"orbit_agent": "a01", "ledger": rec}, {"orbit_agent": "a02", "ledger": unknown}],
+    block = blocks.ledger_block([{"agent": "a01", "ledger": rec}, {"agent": "a02", "ledger": unknown}],
                                 "time")
     assert block["total"]["calls"] == 5 and block["total"]["cost_usd"] is None and block["total"]["billed_usd"] is None
     assert block["flags"][-1].startswith("the sample ended on its time limit") and not block["complete"]
-    clean = blocks.ledger_block([{"orbit_agent": "a01", "ledger": blocks.ledger_record(
+    clean = blocks.ledger_block([{"agent": "a01", "ledger": blocks.ledger_record(
         entry, [model_event()], {"input": 10, "cache_read": 0, "output": 5, "billed_usd": 0.01, "billed_calls": 1})}],
         None)
     assert clean["complete"] and clean["total"]["cost_usd"] is not None and clean["total"]["billed_usd"] == 0.01
@@ -455,3 +562,15 @@ def test_a_redacted_reasoning_part_gives_its_summary_and_never_its_signature():
     assert split_content([signed, ContentText(text="Done.")]) == ("Done.", "I weigh the reference.")
     assert split_content([ContentReasoning(reasoning="ENCRYPTED", redacted=True)])[1] == "[redacted reasoning]"
     assert split_content([ContentReasoning(reasoning="My own words.")])[1] == "My own words."
+
+
+def test_reasoning_that_is_only_provider_signatures_is_written_as_redacted():
+    """OpenRouter hands Anthropic's reasoning back as a JSON list of blocks that hold only a signature: no readable
+    text, so the transcript says "[redacted reasoning]" instead of storing the signature. Blocks with text keep it."""
+    signed = json.dumps([{"type": "reasoning.text", "signature": "EqoBCkYIBxgCKkB" * 20, "format": "anthropic-v1",
+                          "index": 0}])
+    assert split_content([ContentReasoning(reasoning=signed), ContentText(text="Done.")]) == (
+        "Done.", "[redacted reasoning]")
+    texted = json.dumps([{"type": "reasoning.text", "text": "I check the grader.", "signature": "x"}])
+    assert split_content([ContentReasoning(reasoning=texted)])[1] == "I check the grader."
+    assert split_content([ContentReasoning(reasoning="gAAAAB" + "x" * 60)])[1] == "[redacted reasoning]"

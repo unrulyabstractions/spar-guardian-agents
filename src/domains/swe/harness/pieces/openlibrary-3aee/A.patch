@@ -1,0 +1,22 @@
+diff --git a/openlibrary/core/wikidata.py b/openlibrary/core/wikidata.py
+index 95c4bf331..e5b524fec 100644
+--- a/openlibrary/core/wikidata.py
++++ b/openlibrary/core/wikidata.py
+@@ -50,7 +50,7 @@ class WikidataEntity:
+         """If a description isn't available in the requested language default to English"""
+         return self.descriptions.get(language) or self.descriptions.get('en')
+ 
+-    def get_wikipedia_link(self, language: str = 'en') -> tuple[str, str] | None:
++    def _get_wikipedia_link(self, language: str = 'en') -> tuple[str, str] | None:
+         """
+         Get the Wikipedia URL and language for a given language code.
+         Falls back to English if requested language is unavailable.
+@@ -114,7 +114,7 @@ class WikidataEntity:
+         profiles = []
+ 
+         # Add Wikipedia link if available
+-        if wiki_link := self.get_wikipedia_link(language):
++        if wiki_link := self._get_wikipedia_link(language):
+             url, lang = wiki_link
+             label = "Wikipedia" if lang == language else f"Wikipedia (in {lang})"
+             profiles.append(

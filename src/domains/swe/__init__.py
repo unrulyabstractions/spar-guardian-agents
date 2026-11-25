@@ -3,7 +3,8 @@
 API modules:
 - swe_task.py: the SWE Benchmark.
 - swe_inputs.py: Lucy's split of each issue and CheatBench's task folder, read only.
-- swe_ladder.py: the code ladder's rules for SWE.
+- swe_ladder.py: the code's evidence rules for SWE.
+- swe_replay.py: a replay's commands: the services, the setup with the record's values, the state, the end state.
 - swe_sandbox.py: the images, the compose file, each agent's seat and tools, and the setup and grader commands.
 - swe_settings.py: the domain's fixed paths, sandbox, honeypots and split.
 """

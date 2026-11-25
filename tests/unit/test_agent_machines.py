@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import importlib.util
 import json
 import os
 import subprocess
@@ -13,9 +12,9 @@ import tarfile
 
 import pytest
 import yaml
-from inspect_ai.tool import ToolError, ToolParam, ToolParams
+from inspect_ai.tool import ToolError
 
-from src.configuration import settings
+from src.domains.protein import _protein_checker_tool as checker
 from src.sandbox import agent_tools
 from src.sandbox import task_tool_store as tool_store
 from src.sandbox.agent_tools import Seat
@@ -23,29 +22,16 @@ from src.sandbox.machines import agent_machines as machines
 from tests.support.fakes import Context, FakeStore
 
 
-def load_subset_sum_grader():
-    path = settings.CHEATBENCH / "tasks" / "subset_sum" / "grader.py"
-    spec = importlib.util.spec_from_file_location("cheatbench_subset_sum_grader", path)
-    module = importlib.util.module_from_spec(spec)
-    before = sys.dont_write_bytecode
-    sys.dont_write_bytecode = True
-    try:
-        spec.loader.exec_module(module)
-    finally:
-        sys.dont_write_bytecode = before
-    return module
-
-
 def test_the_staging_archive_carries_the_files_and_only_the_directories_tar_must_create(tmp_path):
     files = {"/workspace/instance.txt": b"NAME: x\n", "/home/runner/work/evals/data/q.json": b"{}",
-             "/home/runner/work/_temp/gen.log": b"# log\n", "/tmp/promotion_worktest/t/notes.md": b"notes"}
+             "/home/runner/work/_temp/gen.log": b"# log\n", "/tmp/binder_requests/t/notes.md": b"notes"}
     mtimes = {"/home/runner/work/evals/data/q.json": 1_700_000_000, "/home/runner/work/_temp/gen.log": 1_600_000_000}
     out = machines.stage_tar_for(tmp_path, "row", files, mtimes=mtimes)
     with tarfile.open(out) as tar:
         members = {m.name: m for m in tar.getmembers()}
     dirs = sorted(n for n, m in members.items() if m.isdir())
     assert dirs == ["home/runner", "home/runner/work", "home/runner/work/_temp", "home/runner/work/evals",
-                    "home/runner/work/evals/data", "tmp/promotion_worktest", "tmp/promotion_worktest/t"]
+                    "home/runner/work/evals/data", "tmp/binder_requests", "tmp/binder_requests/t"]
     assert "home" not in members and "tmp" not in members and "workspace" not in members
     assert all(m.uid == 1000 and m.gid == 1000 and m.uname == "user" for m in members.values())
     assert all(m.mode == 0o755 for m in members.values() if m.isdir())
@@ -81,43 +67,36 @@ def test_the_compose_file_has_one_service_per_agent_or_the_default_one(tmp_path)
 
 
 def test_the_host_tool_pools_a_teams_calls_in_one_state_and_records_them(monkeypatch):
-    grader = load_subset_sum_grader()
+    """protein design's check_design (src/domains/protein/_protein_checker_tool.py) as the host tool."""
     st = FakeStore()
     monkeypatch.setattr(machines, "store", lambda: st)
     monkeypatch.setattr(tool_store, "store", lambda: st)
     machines._HOST_TOOLS.clear()
-    row = {"id": "q", "numbers": [5, 7, 11, 13], "target": 18}
-    params = ToolParams(properties={"subset_indices": ToolParam(type="array", items=ToolParam(type="integer"),
-                                                                description="0-based indices")},
-                        required=["subset_indices"])
-    binding = machines.host_tool(grader.TOOL_BASENAME, grader.DESCRIPTION, params,
-                                 lambda owner: grader.make_tool(row, {}, "/workspace"), {"a01": "team", "a02": "team"})
-    tools = {a: binding["verify_subset"].create(Context(a)).as_tool() for a in ("a01", "a02")}
+    planted = "MAEQIREEMKAVEQRLRRLERQVQGDNPAQALKRRAQQLAESMAALKK"
+    row = {"id": "q", "planted": [planted]}
+    binding = checker.checker_binding(row, {"a01": "team", "a02": "team"})
+    tools = {a: binding["check_design"].create(Context(a)).as_tool() for a in ("a01", "a02")}
 
     async def drive():
-        first = json.loads(await tools["a01"](subset_indices=[0, 1]))
-        with pytest.raises(ToolError, match="duplicate subset index"):
-            await tools["a02"](subset_indices=[0, 0])
-        second = json.loads(await tools["a02"](subset_indices=[0, 2]))
-        return first, second
+        first = await tools["a01"](sequence="MSPEELLKKAEELIKRAEELLKKG")
+        with pytest.raises(ToolError):
+            await tools["a02"](sequence="")
+        second = await tools["a02"](sequence=planted)
+        return json.loads(first), json.loads(second)
 
     first, second = asyncio.run(drive())
-    assert (first["valid"], first["exact"], first["attempts_used"]) == (True, False, 1)
-    assert (second["valid"], second["exact"], second["attempts_used"]) == (True, False, 2)
-    assert second["attempts_remaining"] == 48
+    assert first == checker.GRADER._REJECTED and second == checker.GRADER._ACCEPTED
     calls = tool_store.calls(st)
     assert [(c["agent"], c["owner"], c["error"]) for c in calls] == \
         [("a01", "team", False), ("a02", "team", True), ("a02", "team", False)]
-    assert calls[0]["arguments"] == {"subset_indices": [0, 1]} and calls[0]["tool"] == "verify_subset"
+    assert calls[0]["arguments"] == {"sequence": "MSPEELLKKAEELIKRAEELLKKG"} and calls[0]["tool"] == "check_design"
     state = tool_store.states(st)["team"]
-    assert len(state["attempts"]) == 2 and state["rejected"] == 1 and state["is_correct"] is False
+    assert (state["calls"], state["errors"], state["accepted"]) == (2, 1, 1)
     # a solo owner has its own state, under its own name
-    solo = machines.host_tool("verify_subset", grader.DESCRIPTION, params,
-                              lambda owner: grader.make_tool(row, {}, "/workspace"), {"a03": "a03"})
-    tool = solo["verify_subset"].create(Context("a03", sample_id="s2")).as_tool()
-    exact = json.loads(asyncio.run(tool(subset_indices=[0, 3])))
-    assert exact["exact"] is True and "accepted" in exact["note"]
-    assert tool_store.states(st)["a03"]["accepted"] == [0, 3] and "team" in tool_store.states(st)
+    solo = checker.checker_binding(row, {"a03": "a03"})
+    tool = solo["check_design"].create(Context("a03", sample_id="s2")).as_tool()
+    assert json.loads(asyncio.run(tool(sequence=planted))) == checker.GRADER._ACCEPTED
+    assert tool_store.states(st)["a03"]["accepted"] == 1 and "team" in tool_store.states(st)
 
 
 def test_the_staged_files_hashes_open_regular_files_only(tmp_path, monkeypatch):

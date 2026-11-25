@@ -7,14 +7,21 @@
     usd_per_million("gpt-5")                 -> {"input": 1.25, "cached_input": 0.125, "output": 10.0}
     usd_per_million("gpt-5", batch=True)     -> {"input": 0.625, "cached_input": 0.0625, "output": 5.0}
     cost_usd(usd_per_million("gpt-6-sol"), input_tokens=1000, cached_tokens=0, output_tokens=100)  -> 0.003
-    model_args("deepseek-flash-openrouter")  -> {"provider": {"order": ["together"], ...}, "strict_tools": False}
+    model_args("deepseek-flash-openrouter")  -> {"provider": {"order": ["deepinfra/fp8"], ...}, "strict_tools": False}
     check_routing("openrouter/x/y")          -> ValueError: an OpenRouter model without a `routing`
     prepare_env("deepseek/deepseek-v4-pro")  -> ValueError unless DEEPSEEK_API_KEY is set; sets DEEPSEEK_BASE_URL
+    prepare_env("anthropic/claude-opus-5-5") -> ANTHROPIC_API_KEY from the provider's key_file; ValueError without it
+    key_source("anthropic/claude-opus-5-5")  -> "/Users/me/.config/spar-guardian-agents/anthropic_key"
+    model_args("claude-opus-5-5")            -> {"default_headers": {"anthropic-workspace-id": "wrkspc_..."}} with a
+                                                workspace file beside the key file, {} without one
     render()                                 -> the table `python -m src models` prints
 """
 from __future__ import annotations
 
 import os
+import re
+import stat
+from pathlib import Path
 
 import yaml
 
@@ -77,12 +84,17 @@ def routing(name: str) -> dict | None:
 
 
 def model_args(name: str) -> dict:
-    """The model arguments get_model takes for this model beyond its name, nothing outside OpenRouter. On OpenRouter:
-    the routing, and tools sent without `strict`. Inspect's OpenRouter route marks every tool strict by default, and
-    OpenAI then refuses a tool with an optional parameter (board_read's `latest`), which the direct OpenAI route never
-    marks."""
+    """The model arguments get_model takes for this model beyond its name. On OpenRouter: the routing, and tools sent
+    without `strict`. Inspect's OpenRouter route marks every tool strict by default, and OpenAI then refuses a tool
+    with an optional parameter (board_read's `latest`), which the direct OpenAI route never marks. On a provider with
+    a workspace file: the header that carries the workspace ID on every request (workspace_id). Nothing otherwise."""
     pin = routing(name)
-    return {"provider": pin, "strict_tools": False} if pin else {}
+    if pin:
+        return {"provider": pin, "strict_tools": False}
+    entry = entry_of(name)
+    provider = provider_of(entry["inspect"] if entry else name)
+    workspace = workspace_id(provider) if provider else None
+    return {"default_headers": {providers()[provider]["workspace_header"]: workspace}} if workspace else {}
 
 
 def check_routing(model: str) -> None:
@@ -93,19 +105,106 @@ def check_routing(model: str) -> None:
                          "an OpenRouter model runs only pinned to one host")
 
 
+KEY_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
+WORKSPACE_PATTERN = re.compile(r"wrkspc_[A-Za-z0-9]+")
+WORKSPACE_SUFFIX = ".workspace"
+"""The file beside a key file that holds a workspace ID."""
+
+
+def key_path(provider: str) -> Path | None:
+    """The file the provider's `key_file` names, with ~ expanded, or None for a provider without one."""
+    name = providers()[provider].get("key_file")
+    return Path(name).expanduser() if name else None
+
+
+def workspace_path(provider: str) -> Path | None:
+    """The workspace file beside the provider's key file, or None for a provider without a workspace header."""
+    path = key_path(provider)
+    if path is None or not providers()[provider].get("workspace_header"):
+        return None
+    return path.with_name(path.name + WORKSPACE_SUFFIX)
+
+
+def read_one_line(path: Path, pattern: re.Pattern, what: str) -> str:
+    """The value a private file holds on its one line, the final newline stripped. Raises ValueError naming the file
+    and the fix, never its content: for a file group or others may open, one that cannot be read (a folder
+    included), or one whose line is not `pattern` in ASCII."""
+    try:
+        if path.stat().st_mode & (stat.S_IRWXG | stat.S_IRWXO):
+            raise ValueError(f"{path} is open to group or others: chmod 600 {path}")
+        value = path.read_bytes().decode("ascii").removesuffix("\n")
+    except (OSError, UnicodeDecodeError):
+        raise ValueError(f"{path} cannot be read as one line of ASCII: write {what} to it (chmod 600)") from None
+    if not pattern.fullmatch(value):
+        raise ValueError(f"{path} must hold {what} alone on one line ({pattern.pattern})")
+    return value
+
+
+def read_key_file(path: Path) -> str:
+    """The key a key file holds (read_one_line, [A-Za-z0-9_-]+)."""
+    return read_one_line(path, KEY_PATTERN, "the key")
+
+
+def workspace_id(provider: str) -> str | None:
+    """The workspace ID in the provider's workspace file (read_one_line, wrkspc_...), or None when no file or link is
+    there."""
+    path = workspace_path(provider)
+    if path is None or not (path.exists() or path.is_symlink()):
+        return None
+    return read_one_line(path, WORKSPACE_PATTERN, "the workspace ID")
+
+
+def key_source(model: str) -> str | None:
+    """Where prepare_env takes the model's key from, never the key: its provider's key file, else the first of its key
+    variables that is set. None outside the registry or when no key variable is set."""
+    provider = provider_of(model)
+    if provider is None:
+        return None
+    path = key_path(provider)
+    if path is not None:
+        return str(path)
+    return next((name for name in key_env(model) if os.environ.get(name)), None)
+
+
+def refuse_redirects(model: str, route: dict) -> None:
+    """Raise ValueError while a variable would send the key elsewhere: one of the route's `shadow_env`, which Inspect
+    sends in place of the key, or a `base_url_env` that holds another host than the route's `pinned_base_url`."""
+    if shadows := [name for name in route.get("shadow_env", []) if os.environ.get(name)]:
+        raise ValueError(f"unset {' and '.join(shadows)} for {model}: Inspect would send it in place of the key")
+    pinned, url = route.get("pinned_base_url"), os.environ.get(route["base_url_env"])
+    if pinned and url and url.rstrip("/") != pinned:
+        raise ValueError(f"unset {route['base_url_env']} for {model} (or set it to {pinned}): the key would go to "
+                         "that host")
+
+
+def file_key(model: str, path: Path) -> str:
+    """The key in a provider's key file, refused when the file is missing, a dangling link or a folder: no fallback to
+    the environment's key."""
+    if not path.is_file():
+        raise ValueError(f"{model} takes its key from its key file alone: write the key to {path} (chmod 600)")
+    return read_key_file(path)
+
+
 def prepare_env(model: str) -> None:
-    """Raise ValueError unless one of the key variables of the model's route is set, then export what Inspect reads:
-    a Gemini key given as GEMINI_API_KEY also as GOOGLE_API_KEY, and the base URL of an openai-api route. A model
-    outside the registry (mockllm) needs nothing."""
+    """Raise ValueError unless the model's route has a key and nothing would send it elsewhere (refuse_redirects),
+    then export what Inspect reads. A provider that names a key file takes that file's key (file_key), set in its first
+    key variable over the environment's value; any other route needs one of its key variables set. A provider's
+    workspace file is checked too (workspace_id). A Gemini key given as GEMINI_API_KEY is also exported as
+    GOOGLE_API_KEY, and an openai-api route gets its base URL. A refused call changes no variable. A model outside the
+    registry (mockllm) needs nothing. The key is never printed or returned."""
     provider = provider_of(model)
     if provider is None:
         return
-    names = key_env(model)
-    if not any(os.environ.get(name) for name in names):
+    names, route, path = key_env(model), providers()[provider], key_path(provider)
+    refuse_redirects(model, route)
+    key = file_key(model, path) if path is not None else None
+    workspace_id(provider)
+    if key is None and not any(os.environ.get(name) for name in names):
         raise ValueError(f"{' or '.join(names)} must be set for {model}")
+    if key is not None:
+        os.environ[names[0]] = key
     if "GOOGLE_API_KEY" in names and os.environ.get("GEMINI_API_KEY"):
         os.environ.setdefault("GOOGLE_API_KEY", os.environ["GEMINI_API_KEY"])
-    route = providers()[provider]
     if route["inspect_prefix"].startswith("openai-api/") and route.get("base_url"):
         os.environ.setdefault(route["base_url_env"], route["base_url"])
 
@@ -129,16 +228,24 @@ def usd_per_million(name: str, batch: bool = False) -> dict | None:
             **({"long_prompt": {"over": long_prompt["over"], **scaled(long_prompt)}} if long_prompt else {})}
 
 
+def call_rates(prices: dict, prompt_tokens: int) -> dict:
+    """The rates one call pays at these prices (usd_per_million): the long_prompt rates when its prompt (cache reads
+    and writes included) is over the entry's line, the normal rates otherwise. Without the long_prompt and over
+    keys."""
+    long_prompt = prices.get("long_prompt")
+    chosen = long_prompt if long_prompt and prompt_tokens > long_prompt["over"] else prices
+    return {k: v for k, v in chosen.items() if k not in ("long_prompt", "over")}
+
+
 def cost_usd(prices: dict | None, input_tokens: int, cached_tokens: int, output_tokens: int,
              cache_write: int = 0) -> float | None:
     """What one call's tokens cost at these prices (usd_per_million): cache reads at the cached rate, cache writes at
     the write rate (the input rate where the entry has none), the other input at the input rate, output at the output
     rate. input_tokens counts the reads and the writes. A prompt over the entry's long_prompt line pays those rates on
-    every token, so a sum of calls is priced call by call. None without prices."""
+    every token (call_rates), so a sum of calls is priced call by call. None without prices."""
     if not prices:
         return None
-    long_prompt = prices.get("long_prompt")
-    prices = long_prompt if long_prompt and input_tokens > long_prompt["over"] else prices
+    prices = call_rates(prices, input_tokens)
     cached_rate = prices.get("cached_input", prices["input"])
     write_rate = prices.get("cache_write", prices["input"])
     return ((input_tokens - cached_tokens - cache_write) * prices["input"] + cached_tokens * cached_rate

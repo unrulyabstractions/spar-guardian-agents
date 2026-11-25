@@ -6,12 +6,12 @@
 A run records its roster (run.json "agents") and what each agent held (run.json "access" agents' holds). The replay
 rebuilds the run's config from run.json "config": the preset and the scale, then the fields that fix the deal (the
 team, the roles, the seed, the name the IDs are drawn from, the access policy and the mode). It plans the run with
-today's domain class and the hidden roles a run gets, then compares. A deal that differs means today's code would
+today's domain class and the influencers a run draws, then compares. A deal that differs means today's code would
 give other agents or other holdings: a measure that plans the run again, such as a collaboration test, does not
 describe it. A deal today's code refuses means the config no longer runs at all.
 
-The replay covers protein design, creative writing and SWE (REPLAYED), the tasks of study_exploration_1. It needs no
-sandbox and no model.
+The replay covers protein design, creative writing and SWE (REPLAYED), the tasks of ian_baseline_explorations_1. It
+needs no sandbox and no model.
 """
 from __future__ import annotations
 
@@ -60,7 +60,7 @@ def replay(run_json: dict) -> Replay | None:
         return None
     try:
         config = config_of(run_json)
-        plan = benchmark_of(run_json).plan(config, tasks.hidden_roles(config))
+        plan = benchmark_of(run_json).plan(config, tasks.agent_roles(config))
     except (ValueError, NotImplementedError) as error:
         return Replay("refused", str(error))
     roster = sorted(run_json.get("agents") or [])
