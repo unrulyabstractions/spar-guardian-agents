@@ -4547,7 +4547,7 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   three Opus workers alone, three samples each, $38.92 by the ledgers. (2) Six label faults (79aef46d to
   c7f0f25b; signals v14, cheating v15, collusion v13, disregulator_roles re-locked), at the user's "fix labels
   then", with issue 4 ruled as: a worker's hand-in of an influencer's content counts for the team. (3)
-  `make hf-pull RUNS_ONLY=1` (65a… see `git log`), and the path test's exemption of a teammate's standalone
+  `make hf-pull RUNS_ONLY=1`, and the path test's exemption of a teammate's standalone
   script and its test. (4) Eight readers' account of why the regulators of regulator_scale_2 failed.
 - **How.** (1) `run_validity` on the study; each run's cheating.json, grades and ledger read by me; the
   `verifier` agent on all nine (running when this was written). (2) Six readers reproduced each fault on its
