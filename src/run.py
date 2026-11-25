@@ -61,9 +61,9 @@ from src.measures import episode_summary as summary
 from src.measures import process_runs, run_figures, swe_measures
 from src.measures.run_directory import RunDir, find_run, set_aside_attempt
 from src.models import (
+    claude_prompt_cache,
     cost_cap,
     gemini_402_retry,
-    openrouter_anthropic_cache,
     openrouter_gemini_tool_ids,
     openrouter_google_400_retry,
 )
@@ -120,10 +120,12 @@ def require_role_model(model: str) -> None:
 
 
 def require_judge_key(judge_name: str, code: int) -> None:
-    """The judge's key, named by its src/judging/judge_models.yaml entry (OPENAI_API_KEY for gpt-6-luna)."""
+    """The judge's key, named by its src/judging/judge_models.yaml entry (OPENAI_API_KEY for gpt-6-luna), taken from
+    its provider's key file where one exists (model_registry.prepare_env)."""
     try:
+        models.prepare_env(judging.judge_model_config(judge_name)[0])
         judging.require_judge_key(judge_name)
-    except RuntimeError as error:
+    except (RuntimeError, ValueError) as error:
         raise Refusal(f"{error} for the judge", code) from error
 
 
@@ -222,9 +224,9 @@ def run(name: str, benchmark: Benchmark, config: SwarmConfig, model: str, timeou
     require_model(model)
     for role_model in filter(None, config.role_models().values()):
         require_role_model(role_model)
+    if config.judge is not None:
+        require_judge_key(config.judge, 1)     # before the judge's client reads its key
     judge_model = judge_role_model(config)
-    if judge_model is not None:
-        require_judge_key(config.judge, 1)
     run_dir = settings.RUNS / name
     if not replace:
         require_free(run_dir, None, RUN_REMEDY)
@@ -234,7 +236,7 @@ def run(name: str, benchmark: Benchmark, config: SwarmConfig, model: str, timeou
     openrouter_gemini_tool_ids.install()
     run_models = [model, *config.role_models().values(), str(judge_model) if judge_model is not None else None]
     try:
-        openrouter_anthropic_cache.require_proven(run_models)
+        claude_prompt_cache.require_proven(run_models)
         cost_limit = cost_cap.cap_for(run_models, config.cost_limit_usd)
     except ValueError as error:   # UnpricedModel included
         raise Refusal(f"refused: {error}", 2) from error

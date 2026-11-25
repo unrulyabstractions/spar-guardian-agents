@@ -15,6 +15,13 @@
 # `allow_fallbacks` false), and its prices are that host's: left to its default, OpenRouter sends each call to a
 # different host of the same model, priced up to five times apart, and some of them charge cached tokens in full
 # (measured 2026-10-28). A run refuses an OpenRouter model without a routing (model_registry.check_routing).
+#
+# Keys. A provider's key comes from the environment, in any one of its `key_env` variables. A provider that names a
+# `key_file` takes its key from that file instead, when the file exists: its one line is the key, exported in the
+# first `key_env` variable over the environment's value (model_registry.prepare_env). The file must be readable by its
+# owner alone (chmod 600); an empty file, or one whose key has whitespace inside it, is refused. A run on Claude at
+# Anthropic thus spends the key in ~/.config/spar-guardian-agents/anthropic_key, not the ANTHROPIC_API_KEY that
+# ~/.zshrc exports. `shadow_env` names variables Inspect would send in place of the key; a run refuses while one is set.
 
 as_of: 2026-10-27
 
@@ -51,6 +58,8 @@ providers:
   anthropic:
     inspect_prefix: anthropic
     key_env: [ANTHROPIC_API_KEY]
+    key_file: ~/.config/spar-guardian-agents/anthropic_key
+    shadow_env: [ANTHROPIC_AUTH_TOKEN]
     base_url_env: ANTHROPIC_BASE_URL
     batch_discount: 0.5
     docs: https://platform.claude.com/docs/en/about-claude/pricing

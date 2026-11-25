@@ -1,6 +1,6 @@
 """What the unit tests share: ordered agent names in place of the draw, SWE's image names with no Docker, no tracer for
-the network log, the proc-hiding profile's name with no Docker, and the stub domain registered with the code's evidence
-as a fixture."""
+the network log, the proc-hiding profile's name with no Docker, no provider's real key file, and the stub domain
+registered with the code's evidence as a fixture."""
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -10,6 +10,7 @@ import pytest
 from src.domains import BY_TASK
 from src.domains.swe import swe_sandbox, swe_task
 from src.measures.ladder_domain import Domain
+from src.models import model_registry
 from src.sandbox.network_log import network_monitor
 from src.sandbox.proc_hiding import proc_hiding
 from tests.support.ordered_ids import use_ordered_ids
@@ -37,6 +38,13 @@ def no_profile_load(monkeypatch):
     """A sample's compose file names the proc-hiding profile without loading it: ensure_profile asks Docker and runs a
     privileged container."""
     monkeypatch.setattr(proc_hiding, "ensure_profile", lambda: proc_hiding.PROFILE)
+
+
+@pytest.fixture(autouse=True)
+def no_real_key_files(monkeypatch, tmp_path_factory):
+    """A provider that names a key file looks for it in an empty folder: a test never reads a real key file."""
+    folder, real = tmp_path_factory.getbasetemp() / "no_key_files", model_registry.key_path
+    monkeypatch.setattr(model_registry, "key_path", lambda provider: real(provider) and folder / provider)
 
 
 @pytest.fixture

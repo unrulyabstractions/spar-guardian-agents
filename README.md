@@ -238,7 +238,7 @@ scripts/                 study/ (a study from its plan, the screens, replay, sor
                          hf/ (runs and logs to and from the Hugging Face datasets spar-swarm and arena-capstone),
                          paper/ (the paper's figures, tables and appendix),
                          box/ (the rented boxes, from offer to destroy; see scripts/box/README.md),
-                         check_anthropic_cache.py (the cache check that Claude through OpenRouter needs)
+                         check_anthropic_cache.py (the cache check Claude needs, through OpenRouter or at Anthropic)
 tools/                   the analysis tools in their own environment; see tools/README.md
 tests/                   unit/ (make test), tools/ (make test-tools), smoke/ (the mock-model suites, make smoke-all) and
                          support/ (what they share)

@@ -1,20 +1,26 @@
-"""The paid check that Claude's prompt cache is read through OpenRouter under the installed Inspect. Run only with the
-user's yes.
+"""The paid check that Claude's prompt cache is read, through OpenRouter or at Anthropic, under the installed Inspect.
+Run only with the user's yes.
 
     zsh -lic 'cd <repo> && uv run python -m scripts.check_anthropic_cache --model claude-haiku-5-5-openrouter --yes'
+    zsh -lic 'cd <repo> && uv run python -m scripts.check_anthropic_cache --model claude-haiku-5-5 --yes'
 
-Three calls through the swarm provider, the path a run takes with its OpenRouter routing pinned, shaped like an
-agent's turns. The first history ends in a tool result that holds nearly all of its 2,400 tokens. The second call adds
-a tool call and its result. The third adds the round line a new round opens with, then another tool call and result.
-A stamp in the system prompt keeps each run of the check from reading an earlier run's cache.
+Three calls through the swarm provider, the path a run takes: an OpenRouter entry with its routing pinned, a direct
+entry through Inspect's Anthropic provider, which places the cache marks itself. The calls are shaped like an agent's
+turns. The first history ends in a tool result that holds nearly all of its 2,400 tokens. The second call adds a tool
+call and its result. The third adds the round line a new round opens with, then another tool call and result. A stamp
+in the system prompt keeps each run of the check from reading an earlier run's cache. A direct entry's key comes from
+model_registry.prepare_env: the key file ~/.config/spar-guardian-agents/anthropic_key, and the check refuses while that
+file is missing, so it never spends the ANTHROPIC_API_KEY of the environment. The plan line names where the key came
+from.
 
-Before anything is sent, each call's request is built offline (a fake OpenRouter answers) and must carry at most four
-cache marks, one of them on the last message; otherwise the check is refused. Each later call passes when its cache
-read covers at least 95% of the previous call's whole prompt. On a pass the check prints the `caching_verified` line
-for the entry in src/models/model_registry.yaml, with the installed Inspect commit. Exit 0 on a pass, 1 on a fail, 2
-when refused or without --yes, in which case nothing is sent.
+Before anything is sent, each call's request is built offline (a fake OpenRouter or Anthropic answers) and must carry
+at most four cache marks and cover the last message (claude_prompt_cache.shape_problem); otherwise the check is
+refused. Each later call passes when its cache read covers at least 95% of the previous call's whole prompt. On a pass
+the check prints the `caching_verified` line for the entry in src/models/model_registry.yaml, with the installed
+Inspect commit. Exit 0 on a pass, 1 on a fail, 2 when refused or without --yes, in which case nothing is sent.
 
-Cost from registry prices: about $0.007 for Sonnet 5.5, $0.0004 for Haiku 5.5 and $0.014 for Opus 5.5.
+Cost from registry prices, the same on both routes: about $0.014 for Opus 5.5, $0.007 for Sonnet 5.5 and $0.0004 for
+Haiku 5.5.
 """
 from __future__ import annotations
 
@@ -24,7 +30,9 @@ import datetime as dt
 import json
 import sys
 
+import anthropic
 import httpx
+import httpx2
 import openai
 from inspect_ai.model import (
     ChatMessage,
@@ -37,8 +45,8 @@ from inspect_ai.model import (
 )
 from inspect_ai.tool import ToolCall, ToolInfo, ToolParams
 
+from src.models import claude_prompt_cache as cache
 from src.models import model_registry as models
-from src.models import openrouter_anthropic_cache as cache
 from src.models import swarm_model_provider as provider  # importing it registers the "swarm" provider
 
 FILLER = " ".join(f"Post {i}: the redis client now trusts the custom certificate in test {i}." for i in range(80))
@@ -46,27 +54,43 @@ TOOLS = [ToolInfo(name="board_read", description="Read the board.", parameters=T
          ToolInfo(name="bash", description="Run a shell command.", parameters=ToolParams())]
 READ_SHARE = 0.95
 FAKE_COMPLETION = {
-    "id": "x", "object": "chat.completion", "created": 0, "model": "m",
-    "choices": [{"index": 0, "message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
-    "usage": {"prompt_tokens": 10, "completion_tokens": 1, "total_tokens": 11}}
+    "openrouter": {"id": "x", "object": "chat.completion", "created": 0, "model": "m",
+                   "choices": [{"index": 0, "finish_reason": "stop",
+                                "message": {"role": "assistant", "content": "ok"}}],
+                   "usage": {"prompt_tokens": 10, "completion_tokens": 1, "total_tokens": 11}},
+    "anthropic": {"id": "msg_x", "type": "message", "role": "assistant", "model": "m",
+                  "content": [{"type": "text", "text": "ok"}], "stop_reason": "end_turn", "stop_sequence": None,
+                  "usage": {"input_tokens": 10, "output_tokens": 1}}}
+"""Each route's answer to an offline request."""
 
 
-def swarm_model(name: str, max_tokens: int = 16):
-    return get_model(provider.role_model(name), memoize=False, config=GenerateConfig(max_tokens=max_tokens))
+def swarm_model(name: str, max_tokens: int = 16, **model_args):
+    return get_model(provider.role_model(name), memoize=False, config=GenerateConfig(max_tokens=max_tokens),
+                     **model_args)
+
+
+def offline_client(route: str, answer):
+    """A client of the route's provider whose every request `answer` handles: no network."""
+    if route == "anthropic":
+        return anthropic.AsyncAnthropic(api_key="offline", max_retries=0,
+                                        http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(answer)))
+    return openai.AsyncOpenAI(api_key="offline", base_url="https://openrouter.ai/api/v1", max_retries=0,
+                              http_client=httpx.AsyncClient(transport=httpx.MockTransport(answer)))
 
 
 def request_body(name: str, messages: list[ChatMessage], tools: list[ToolInfo] = TOOLS) -> dict:
-    """The JSON body Inspect's real request code sends for these messages, read by a fake OpenRouter: no network."""
+    """The JSON body Inspect's real request code sends for these messages, read by a fake OpenRouter or Anthropic: no
+    network and no key."""
+    route = "anthropic" if models.provider_of(models.resolve(name)) == "anthropic" else "openrouter"
+    response = httpx2.Response if route == "anthropic" else httpx.Response
     bodies: list[dict] = []
 
-    def answer(request: httpx.Request) -> httpx.Response:
+    def answer(request):
         bodies.append(json.loads(request.content))
-        return httpx.Response(200, json=FAKE_COMPLETION)
+        return response(200, json=FAKE_COMPLETION[route])
 
-    model = swarm_model(name)
-    model.api.inner.client = openai.AsyncOpenAI(
-        api_key="offline", base_url="https://openrouter.ai/api/v1", max_retries=0,
-        http_client=httpx.AsyncClient(transport=httpx.MockTransport(answer)))
+    model = swarm_model(name, api_key="offline")
+    model.api.inner.client = offline_client(route, answer)
     asyncio.run(model.generate(messages, tools=tools))
     return bodies[0]
 
@@ -87,15 +111,6 @@ def histories(stamp: str) -> list[list[ChatMessage]]:
     return [first, second, third]
 
 
-def shape_problem(body: dict) -> str | None:
-    marks = cache.breakpoints(body)
-    if len(marks) > cache.MAX_BREAKPOINTS:
-        return f"{len(marks)} cache marks, Anthropic accepts {cache.MAX_BREAKPOINTS}: {marks}"
-    if f"{body['messages'][-1]['role']} {len(body['messages']) - 1}" not in marks:
-        return f"the last message carries no cache mark: {marks}"
-    return None
-
-
 async def paid_calls(name: str, calls: list[list[ChatMessage]]) -> list[dict]:
     model = swarm_model(name)
     return [(await model.generate(messages, tools=TOOLS)).usage.model_dump() for messages in calls]
@@ -110,17 +125,29 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--model", default="claude-haiku-5-5-openrouter")
     parser.add_argument("--yes", action="store_true", help="spend the three calls (the user said yes)")
     args = parser.parse_args(argv)
-    if not cache.is_claude_on_openrouter(args.model):
-        print(f"refused: {args.model} is not a Claude model through OpenRouter")
+    route = cache.claude_route(args.model)
+    if route is None:
+        print(f"refused: {args.model} is not a Claude model of the registry")
         return 2
     calls = histories(dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"))
     for k, messages in enumerate(calls, 1):
         body = request_body(args.model, messages)
         print(f"== call {k} marks: {cache.breakpoints(body)}")
-        if problem := shape_problem(body):
+        if problem := cache.shape_problem(body, route):
             print(f"refused: call {k} has {problem}")
             return 2
-    print(f"== plan: three calls to {args.model} under Inspect {cache.installed_inspect()}, about 7,000 input tokens")
+    inspect_name = models.resolve(args.model)
+    key_file = models.key_path(models.provider_of(inspect_name))
+    if key_file is not None and not key_file.exists():
+        print(f"refused: {key_file} does not exist, and the check spends only the key it holds (chmod 600)")
+        return 2
+    try:
+        models.prepare_env(inspect_name)
+    except ValueError as error:
+        print(f"refused: {error}")
+        return 2
+    print(f"== plan: three calls to {args.model} under Inspect {cache.installed_inspect()}, about 7,000 input tokens, "
+          f"with the key from {models.key_source(inspect_name)}")
     if not args.yes:
         print("nothing sent: pass --yes once the user has said yes")
         return 2

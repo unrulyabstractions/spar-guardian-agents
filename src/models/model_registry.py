@@ -10,11 +10,16 @@
     model_args("deepseek-flash-openrouter")  -> {"provider": {"order": ["deepinfra/fp8"], ...}, "strict_tools": False}
     check_routing("openrouter/x/y")          -> ValueError: an OpenRouter model without a `routing`
     prepare_env("deepseek/deepseek-v4-pro")  -> ValueError unless DEEPSEEK_API_KEY is set; sets DEEPSEEK_BASE_URL
+    prepare_env("anthropic/claude-opus-5-5") -> ANTHROPIC_API_KEY set from the provider's key_file when it exists
+    key_source("anthropic/claude-opus-5-5")  -> "the key file /Users/me/.config/spar-guardian-agents/anthropic_key"
     render()                                 -> the table `python -m src models` prints
 """
 from __future__ import annotations
 
 import os
+import re
+import stat
+from pathlib import Path
 
 import yaml
 
@@ -93,19 +98,57 @@ def check_routing(model: str) -> None:
                          "an OpenRouter model runs only pinned to one host")
 
 
+def key_path(provider: str) -> Path | None:
+    """The file the provider's `key_file` names, with ~ expanded, or None for a provider without one."""
+    name = providers()[provider].get("key_file")
+    return Path(name).expanduser() if name else None
+
+
+def read_key_file(path: Path) -> str:
+    """The key a key file holds on its one line. Raises ValueError, naming the file and the fix but never its content,
+    for a file group or others may open, an empty file, or a key with whitespace inside it."""
+    if path.stat().st_mode & (stat.S_IRWXG | stat.S_IRWXO):
+        raise ValueError(f"{path} is open to group or others: chmod 600 {path}")
+    key = path.read_text().strip()
+    if not key:
+        raise ValueError(f"{path} is empty: write the key on its one line")
+    if re.search(r"\s", key):
+        raise ValueError(f"{path} must hold the key alone on one line, with no whitespace inside it")
+    return key
+
+
+def key_source(model: str) -> str | None:
+    """Where prepare_env takes the model's key from, never the key: its provider's key file when the file exists, else
+    the first of its key variables that is set. None outside the registry or when no key is found."""
+    provider = provider_of(model)
+    if provider is None:
+        return None
+    path = key_path(provider)
+    if path is not None and path.exists():
+        return f"the key file {path}"
+    return next((name for name in key_env(model) if os.environ.get(name)), None)
+
+
 def prepare_env(model: str) -> None:
-    """Raise ValueError unless one of the key variables of the model's route is set, then export what Inspect reads:
-    a Gemini key given as GEMINI_API_KEY also as GOOGLE_API_KEY, and the base URL of an openai-api route. A model
-    outside the registry (mockllm) needs nothing."""
+    """Raise ValueError unless the model's route has a key, then export what Inspect reads. The key of a provider
+    whose key file exists is that file's (read_key_file), set in its first key variable over the environment's value;
+    any other route needs one of its key variables set. A variable of the route's `shadow_env`, which Inspect would
+    send in place of the key, is refused. A Gemini key given as GEMINI_API_KEY is also exported as GOOGLE_API_KEY, and
+    an openai-api route gets its base URL. A model outside the registry (mockllm) needs nothing. The key is never
+    printed or returned."""
     provider = provider_of(model)
     if provider is None:
         return
-    names = key_env(model)
-    if not any(os.environ.get(name) for name in names):
-        raise ValueError(f"{' or '.join(names)} must be set for {model}")
+    names, route, path = key_env(model), providers()[provider], key_path(provider)
+    if path is not None and path.exists():
+        os.environ[names[0]] = read_key_file(path)
+    elif not any(os.environ.get(name) for name in names):
+        raise ValueError(f"{' or '.join(names)} must be set for {model}"
+                         + (f", or its key written to {path} (chmod 600)" if path else ""))
+    if shadows := [name for name in route.get("shadow_env", []) if os.environ.get(name)]:
+        raise ValueError(f"unset {' and '.join(shadows)} for {model}: Inspect would send it in place of the key")
     if "GOOGLE_API_KEY" in names and os.environ.get("GEMINI_API_KEY"):
         os.environ.setdefault("GOOGLE_API_KEY", os.environ["GEMINI_API_KEY"])
-    route = providers()[provider]
     if route["inspect_prefix"].startswith("openai-api/") and route.get("base_url"):
         os.environ.setdefault(route["base_url_env"], route["base_url"])
 
