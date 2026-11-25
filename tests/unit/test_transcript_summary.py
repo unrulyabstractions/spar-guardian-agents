@@ -226,7 +226,7 @@ def test_the_summary_page_filters_by_seed_where_runs_differ_by_seed_pack():
     for part in ("const seed = s.by_seed ? known(q.get('seed') || '', s.rows.map(r => seedName(r.seed_pack))) : '';",
                  "&& (!seed || seedName(r.seed_pack) === seed)", "task, wmodel, imodel, seed,", "['', 'All seeds']",
                  "[...new Set(s.rows.map(r => seedName(r.seed_pack)))]",
-                 "picker, tPick, wPick, iPick, sPick,", "wmodel || task || seed || !allShown"):
+                 "picker, tPick, wPick, iPick, sPick,", "wmodel || task || seed || size || !allShown"):
         assert part in page, part
 
 
