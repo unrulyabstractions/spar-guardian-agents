@@ -4443,3 +4443,25 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   The regulator study's upload began while the verifier was still on its last run (reg20_sonnet), which it then
   found sound. UNVERIFIED: nothing was downloaded and opened from the Hub.
 
+## 2026-11-25: four figures of the night's two studies (tmp/), and the copied sample buffers cleared
+
+- **What.** `tmp/disregulator_existence_2_rungs.png`, `tmp/disregulator_existence_2_disregulators.png`,
+  `tmp/regulator_scale_2_rungs.png` and `tmp/regulator_scale_2_take_backs.png`, drawn by
+  `scripts/study/team_rung_figures.py` (24c74279) from the 40 and 9 stored runs. And the deletion of the copies of
+  Inspect's live sample buffers under `logs/boxes/*/files/root/.local/share/inspect_ai/samplebuffer/`.
+- **How.** I viewed each PNG after each draw; two were drawn again after a layout fix (an empty band over the
+  regulator grid, the row order of the take-back panels). The script refuses a run whose `passed` disagrees with
+  the planted values in its hand-in. The `verifier` agent built its own table from each run's cheating.json,
+  run.json and team.diff, without the script, viewed the four PNGs and compared every chip, cell and bar. For the
+  buffers, a scratch script proved for each one that a single finished .eval of the same name lies outside
+  logs/boxes, that Inspect reads it at status success with every sample completed and without error, and that the
+  run is stored under runs/. I gave it a buffer with no finished log and it refused (exit 1, the 33 files still
+  there), then ran it with --apply.
+- **Result.** VERIFIED: the four figures (35 and 10 chips, 9 cells, 8 bars: no mismatch, no clipped text). The
+  verifier's notes, not figure errors: one model name covers two routes (Haiku workers through OpenRouter alone,
+  with one disregulator in the team of 4 and in the teams of 10, straight at Anthropic in the teams of 5; the
+  Haiku and Opus regulators one route per column), and the run without a regulator is one chip across both
+  columns. Buffers: 33 files of 11 runs deleted, 13.39 GB, none left; `logs/boxes` holds 2.7 GB (the machines'
+  captured logs, traces and setup records, kept). UNVERIFIED: the Fable-worker row of the first figure (its three
+  runs were live when this was written).
+
