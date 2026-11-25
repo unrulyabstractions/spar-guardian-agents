@@ -112,8 +112,8 @@ parts:
       src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*,
       src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
-    version: 13
-    fingerprint: sha256:b962a0e2e8b4f08e4e5e170409496ba743ecfb3337567410c8dce6c4838f8d76
+    version: 14
+    fingerprint: sha256:b6954496492315880edb80c7d0295b78dd182f50e2f588536b1b651692af7f06
     log:
       1: '2026-11-22 first version: the code record''s agent and team rows (code_ladder.signal_rows) of
         b7b1bed, and run.json''s signals block (re-locked 2026-11-22: the stored layout: the same bytes,
@@ -271,6 +271,10 @@ parts:
         shows only versions.json differs) (re-locked 2026-11-25: unsubmit: the accepted submit skips the
         submitter''s taken-back hand-ins (run.json unsubmits); stored runs have none and reprocess to
         the same bytes but versions.json)'
+      14: '2026-11-25 SWE: a push carries a unit only where its commit may hold it; a named file the agent''s
+        machine does not hold is no read; an influencer''s left branches are its own work; reverts hold
+        no work; a worker''s hand-in of an influencer''s content is the team''s shipped; a value the next
+        sentences refuse is no gift'
   topology:
     file: processed/facts/topology.json
     make: src.measures.topology_fact:topology_part
@@ -311,8 +315,8 @@ parts:
       src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*, src/domains/*/*_exploits.py,
       src/domains/*/revealed/**/*]
     pins: []
-    version: 14
-    fingerprint: sha256:6baa565afd97702e592512b7dbb2440a43bae684486612e3e7a092996867c5cd
+    version: 15
+    fingerprint: sha256:02516f8abc25d9db9bbff13f76820fb1f02d5dba8ed19f023f6217f778a5cba8
     log:
       1: '2026-11-22 first version: the Cheating ladder with CheatBench''s labels beside its clauses,
         as the viewer keeps it, of b7b1bed (re-locked 2026-11-22: the stored layout: the same bytes, read
@@ -459,6 +463,10 @@ parts:
         shows only versions.json differs) (re-locked 2026-11-25: unsubmit: the accepted submit skips the
         submitter''s taken-back hand-ins (run.json unsubmits); stored runs have none and reprocess to
         the same bytes but versions.json)'
+      15: '2026-11-25 SWE: a push carries a unit only where its commit may hold it; a named file the agent''s
+        machine does not hold is no read; an influencer''s left branches are its own work; reverts hold
+        no work; a worker''s hand-in of an influencer''s content is the team''s shipped; a value the next
+        sentences refuse is no gift'
   coordination:
     file: analysis/labels/coordination.json
     make: src.measures.coordination:coordination_part
@@ -487,8 +495,8 @@ parts:
       src/ui/transcript_levels.py, src/ui/viewer_parts.py, src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py,
       src/domains/*/*_settings.py, src/domains/*/second/**/*, src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
-    version: 12
-    fingerprint: sha256:fe9564f0521db8d6ae0ae59a27412d759a7b225de51e6ff8b8affc4009ed212a
+    version: 13
+    fingerprint: sha256:cced46ceed32787484ed2d0f6107d1622ddf4eef7029eb016592c186b5ce345d
     log:
       1: '2026-11-22 first version: the Collusion ladder as the viewer keeps it, of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -623,6 +631,10 @@ parts:
         reprocess_compare on all seven stored studies shows only versions.json differs) (re-locked 2026-11-25:
         unsubmit: the accepted submit skips the submitter''s taken-back hand-ins (run.json unsubmits);
         stored runs have none and reprocess to the same bytes but versions.json)'
+      13: '2026-11-25 SWE: a push carries a unit only where its commit may hold it; a named file the agent''s
+        machine does not hold is no read; an influencer''s left branches are its own work; reverts hold
+        no work; a worker''s hand-in of an influencer''s content is the team''s shipped; a value the next
+        sentences refuse is no gift'
   judged:
     file: analysis/labels/judged.json
     make: src.ui.viewer_parts:judged_part
@@ -654,7 +666,7 @@ parts:
       src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 4
-    fingerprint: sha256:30def26d648d0a4378f6abbdc518209b0b40f1c832d2304da67c5b5f140dd913
+    fingerprint: sha256:1c19edafdfb2b5b37df8f5e81f0993cebc48a19b06b6c6a82a119c46a506d1cb
     log:
       1: '2026-11-23 first version: what each disregulator did with its role (carried_out, filtered, refused,
         dropped, unknown), with mode, disclosed and the evidence, by code from the board, the code record''s
@@ -743,7 +755,9 @@ parts:
         in scratch, only versions.json differs) (re-locked 2026-11-24: ian_gflipt (check_fix, its own
         values, hashed tests): every exploit takes the variant''s values; seven studies reprocessed in
         scratch byte-equal) (re-locked 2026-11-24: the four older tasks deleted, rebased on ian_gflipt:
-        reprocess_compare on all seven stored studies shows only versions.json differs)'
+        reprocess_compare on all seven stored studies shows only versions.json differs) (re-locked 2026-11-25:
+        the six SWE label rules of 2026-11-25 change which evidence a rung rests on, not the disregulators''
+        role labels (checked by reprocess_compare on both studies))'
   row:
     file: analysis/row.json
     make: src.ui.viewer_parts:row_part
