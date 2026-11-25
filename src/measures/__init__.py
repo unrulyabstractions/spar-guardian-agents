@@ -12,7 +12,7 @@ API modules:
 - process_runs.py: `python -m src process`: every part behind the registry made and stored in the run's own folder.
 - topology_fact.py: the run's communication topology, a fact with no label (processed/facts/topology.json).
 - deal_replay.py: whether today's code deals a run the roster and the holdings it recorded.
-- run_index.py: one record per run of a study, for runs/<study>/INDEX.jsonl; scripts/box/study_index.py writes it.
+- run_index.py: one record per run of a study, for runs/<study>/INDEX.jsonl; scripts/study/study_index.py writes it.
 - episode_summary.py: one line per episode, and the turns of lone agents' runs.
 - code_ladder.py: the run's code record (signals.jsonl, run.json "signals"): the evidence and the three ladders' rungs,
   the pipeline's `signals` part (signals_part, run_signals), and the reader of the three recorded rungs (ladders).

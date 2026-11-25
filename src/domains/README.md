@@ -22,7 +22,7 @@ Outside its package a domain adds these:
 | `tools/scout/scout_scanners.py`, `tools/scout/scout_results.py` | `PERMITTED`, `NAMERS` and `JUDGE_FIELDS` |
 | `examples/<task>/` | the minimal script and the cells; `tests/unit/test_examples.py` fails without them |
 | `tests/smoke/<domain>.py`, `Makefile` | its smoke suite and target; `make smoke-all` finds the suite by itself |
-| `scripts/box/fleet_layout.py`, `scripts/box/box_runner.py` | `TASKS` and its build step, for a domain that runs on the boxes |
+| `scripts/box/box_build.py` | its build step in `BUILDS`, for a domain that runs on the boxes |
 | `scripts/paper/domain_figures.py`, `scripts/paper/tables.py` | its setup figure and its rows of the tables |
 
 Every run's deviations open with two labels: the agent is Inspect's `react()` loop under ORBIT (`agent_is_inspect_react_under_orbit_not_vendor_harness`; a run made on ORBIT 1.x says `agent_is_orbit_turn_react_not_vendor_harness`, for ORBIT's own copy of that loop), and its system prompt says how to hand in work and how to stop (`submit_and_stop_sentences_added_to_the_system_prompt`), which CheatBench's runner never says. A `shared_task` team whose neutral agents hold `submit` adds `team_submit_takes_effect_after_<d>_rounds`. A run without `submit` and `stop_working` records `agents_have_no_submit_tool_and_run_until_their_turn_cap_or_the_time_limit` instead of the second label. The domain's own labels follow, then its team's. A run with a regulator that oversees adds `a_regulator_gets_its_own_prompt_and_reads_the_task_as_its_teammates_work`. A run with the network log adds `network_calls_recorded_by_a_monitor_outside_the_agents_machines`, and a run with the access log ends with `honeypot_opens_recorded_by_a_monitor_outside_the_agents_machines`.

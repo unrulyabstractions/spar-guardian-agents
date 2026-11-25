@@ -9,8 +9,6 @@ import json
 import pytest
 
 from scripts.box import box_key
-from src.configuration.swarm_config import SwarmConfig
-from src.models.cost_cap import DEFAULT_CAP_USD
 
 BOX, MAIN = "sk-or-box-key-for-one-launch", "sk-or-main-key-of-the-account"
 
@@ -92,17 +90,9 @@ def test_without_the_flag_the_main_key_is_still_refused_under_the_box_key_s_name
     assert code == 1 and "is the main key" in out
 
 
-def test_a_run_takes_its_set_cap_or_the_default_and_the_config_default_is_the_same():
-    assert box_key.run_cap(["--model", "m", "--set", "seed=1"]) == DEFAULT_CAP_USD
-    assert box_key.run_cap(["--set", "seed=1", "--set", "cost_limit_usd=2.5"]) == 2.5
-    assert SwarmConfig.model_fields["cost_limit_usd"].default == DEFAULT_CAP_USD
-
-
-def test_a_box_s_worst_case_sums_its_runs_caps_from_the_study_table(monkeypatch):
-    entry = {"id": 7, "box": "fixed-phase2-flipt-luna-1"}
+def test_a_box_s_worst_case_is_its_registry_entry_s_runs_and_caps(monkeypatch):
+    entry = {"id": 7, "runs": 5, "cap_usd": 45.0}
     monkeypatch.setattr(box_key.fleet_registry, "load_registry", lambda: {"boxes": [entry]})
-    monkeypatch.setattr(box_key.fleet_registry, "registered", lambda registry, instance_id: entry)
-    assert box_key.box_worst_case(7) == (6, 6 * DEFAULT_CAP_USD)
-    monkeypatch.setattr(box_key.fleet_registry, "registered", lambda registry, instance_id: None)
+    assert box_key.box_worst_case(7) == (5, 45.0)
     with pytest.raises(ValueError):
         box_key.box_worst_case(8)

@@ -57,11 +57,9 @@ def study(tmp_path) -> Path:
     write_status_log(tmp_path / "logs" / STUDY / "riemann_minimal_luna3" / "2026-11-01T01-00-00-00-00_early.eval",
                      "error")
     os.utime(tmp_path / "runs" / STUDY / "riemann_minimal_luna4" / "processed/run.json")               # just pulled
-    (tmp_path / "logs" / STUDY / "screen").mkdir(parents=True)
-    (tmp_path / "logs" / STUDY / "screen" / "box_b1.json").write_text(json.dumps(
-        {"box": "b1", "runs": {"riemann_minimal_luna5": {}}}))
-    (tmp_path / "runs" / "boxes.json").write_text(json.dumps({"boxes": [{"id": 1, "box": "b1", "destroyed": None},
-                                                                        {"id": 2, "box": "b0", "destroyed": "x"}]}))
+    (tmp_path / "runs" / "boxes.json").write_text(json.dumps({"boxes": [
+        {"id": 1, "study": STUDY, "targets": ["riemann_minimal_luna5"], "destroyed": None},
+        {"id": 2, "study": STUDY, "targets": ["riemann_minimal_luna1"], "destroyed": "x"}]}))
     run(tmp_path, "set_aside/riemann_minimal_luna6")                                          # held twice
     write_status_log(tmp_path / "logs" / STUDY / "set_aside" / "riemann_minimal_luna6" / LOG, "success")
     for place in ("riemann_minimal_luna1", "riemann_minimal_lunamock1"):
@@ -156,13 +154,13 @@ def test_a_taken_target_is_left_and_named(study, capsys):
     assert "== left, target exists: 1 ['runs/study_x/mock/riemann_minimal_lunamock1']" in capsys.readouterr().out
 
 
-def test_a_live_box_with_no_name_refuses_the_whole_sort(study, capsys):
+def test_a_live_box_with_no_study_refuses_the_whole_sort(study, capsys):
     boxes = json.loads((study / "runs" / "boxes.json").read_text())
     boxes["boxes"].append({"id": 3, "destroyed": None})
     (study / "runs" / "boxes.json").write_text(json.dumps(boxes))
     before = tree(study)
     assert sort.main([str(study / "runs" / STUDY), "--apply"]) == 2
-    assert "REFUSED: live instances with no box name [3]" in capsys.readouterr().out
+    assert "REFUSED: live instances with no study [3]" in capsys.readouterr().out
     assert tree(study) == before
 
 

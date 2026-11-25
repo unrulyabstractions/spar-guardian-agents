@@ -13,7 +13,7 @@ and creative_writings. A page or a figure names a task by its display name in ru
 heading capitalises its first letter.
 
 This module uses the standard library alone. The analysis tools' environment lacks ORBIT, so it cannot import
-src.domains, and it reads the names here; so does the box's scripts/box/fleet_layout.py.
+src.domains, and it reads the names here.
 tests/unit/test_task_names.py checks this table against src.domains.
 """
 from __future__ import annotations

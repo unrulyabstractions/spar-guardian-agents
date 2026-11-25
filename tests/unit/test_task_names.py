@@ -1,5 +1,5 @@
 """The task names (src/configuration/task_names.py): one table of each task's CheatBench name, domain key and display
-name, the same as the domain classes carry, read by the registry, the analysis tools and the fleet."""
+name, the same as the domain classes carry, read by the registry and the analysis tools."""
 from __future__ import annotations
 
 import json
@@ -8,25 +8,11 @@ import sys
 
 import pytest
 
-from scripts.box import fleet_layout
 from src.configuration import settings
 from src.configuration.task_names import NAMES, display_name, domain_of, names_of, task_of
 from src.domains import BY_TASK, DOMAINS
 from tests.support.run_files import write_text
 from tools import run_reader
-
-
-def test_the_fleet_reads_the_table_and_keeps_its_names():
-    assert fleet_layout.TASKS == {"creative_writing": "creative_writing", "protein_design": "protein_design",
-                                  "software_engineering": "swe"}
-
-
-def test_the_fleet_layout_imports_nothing_outside_the_standard_library():
-    """The box imports fleet_layout before its .venv holds anything; the task names keep it light."""
-    code = ("import sys, scripts.box.fleet_layout; "
-            "print(sorted({m.split('.')[0] for m in sys.modules} & {'orbit', 'inspect_ai', 'pydantic', 'yaml'}))")
-    done = subprocess.run([sys.executable, "-c", code], cwd=settings.ROOT, capture_output=True, text=True, check=True)
-    assert done.stdout.split() == ["[]"]
 
 
 def test_every_domain_class_carries_the_names_of_the_table():

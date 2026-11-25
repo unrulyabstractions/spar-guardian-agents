@@ -8,14 +8,13 @@ the command line, never printing it, and asks OpenRouter's GET /api/v1/key, whic
 - no box key;
 - the main key itself (its limit covers everything else on the account);
 - a key with no credit limit;
-- a key with less left than the box's runs could spend at their caps (each run's cost_limit_usd, its --set or the
-  default in src/models/cost_cap.py, summed over the jobs study_table.py gives the box).
-Exit 0 when the key passes, 1 with every reason when it does not. On 2026-11-01 phase two ran on the main key with
---allow-main-key; that flag is gone.
+- a key with less left than the box's runs could spend at their caps (each run's cost_limit_usd, the plan's or the
+  target's or the default in src/models/cost_cap.py, summed over every run the box may make, the gated arms too: the
+  registry's cap_usd, which fleet_plan.py gives the box).
+Exit 0 when the key passes, 1 with every reason when it does not.
 
---main-key checks the main key itself, for box_run.sh --main-key. The user ordered it for ian_baseline_explorations_1 on
-2026-11-02 ("Capped key NO, JUST USE THE KEY WE HAVE"). It lifts the refusal of the main key alone: OpenRouter must
-still cap the key, and enough must be left for the box's runs.
+--main-key checks the main key itself, for box_run.sh --main-key, which a study takes only by the user's word. It lifts
+the refusal of the main key alone: OpenRouter must still cap the key, and enough must be left for the box's runs.
 """
 from __future__ import annotations
 
@@ -27,8 +26,6 @@ import urllib.request
 from typing import Callable
 
 from scripts.box import fleet_registry
-from scripts.box.study_table import box_jobs, find_box
-from src.models.cost_cap import DEFAULT_CAP_USD
 
 KEY_URL = "https://openrouter.ai/api/v1/key"
 
@@ -40,20 +37,12 @@ def key_info(key: str, opener: Callable = urllib.request.urlopen) -> dict:
         return json.load(response)["data"]
 
 
-def run_cap(arguments: list[str]) -> float:
-    """A job's dollar cap: its --set cost_limit_usd=X, else the default every run gets."""
-    pairs = [arguments[i + 1] for i, arg in enumerate(arguments[:-1]) if arg == "--set"]
-    caps = [float(pair.split("=", 1)[1]) for pair in pairs if pair.startswith("cost_limit_usd=")]
-    return caps[-1] if caps else DEFAULT_CAP_USD
-
-
 def box_worst_case(instance_id: int) -> tuple[int, float]:
-    """(the box's runs, what they may spend at their caps), from the registry and the study table."""
+    """(the box's runs, what they may spend at their caps), from its registry entry."""
     entry = fleet_registry.registered(fleet_registry.load_registry(), instance_id)
     if entry is None:
         raise ValueError(f"box {instance_id} is not in the registry")
-    jobs = box_jobs(find_box(entry["box"]))
-    return len(jobs), sum(run_cap(job.arguments) for job in jobs)
+    return entry["runs"], entry["cap_usd"]
 
 
 def refusals(box_key: str | None, main_key: str | None, info: dict | None, worst_case_usd: float) -> list[str]:

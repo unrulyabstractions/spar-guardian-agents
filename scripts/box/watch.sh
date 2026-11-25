@@ -2,10 +2,10 @@
 # Watch the boxes: scripts/box/watch.sh [--once] [--every MINUTES] [<instance-id> ...]
 #
 # Every few minutes (3 by default), for each box (the given ids, else every registered box not destroyed): rsync its
-# runs/ and logs/ down into this repository's with --update, and its /root/screen.log, /root/setup.log and
-# Inspect's data folder (traces, sample buffers) into logs/boxes/<id>/files/, then check that /root/box_id names the
-# box and print what box_runner.py status says there (runs finished, running, failed, incomplete, hung, lost),
-# prefixed with the time and the box. Each pass starts with what the watched boxes bill per hour. A box that cannot be
+# runs/ and logs/ down into this repository's with --update, its /root/launcher.log into logs/<study>/boxes/<id>/,
+# and its /root/setup.log and Inspect's data folder (traces, sample buffers) into logs/boxes/<id>/files/, then check
+# that /root/box_id names the box and print what box_probe.py status reads there (the launcher, the live cells, the
+# last write, the runs stored), prefixed with the time and the box. Each pass starts with what the watched boxes bill per hour. A box that cannot be
 # reached, a failed rsync, a box that reports trouble, and a box whose runs all ended (it bills until it is captured
 # and destroyed) get a line starting with !!. One box failing never stops the watch of the others. The watch only
 # reads and copies: it never starts, stops or destroys anything. --once makes one pass and exits nonzero on any !!.
@@ -80,8 +80,9 @@ pull() {
 }
 
 watch_box() {
-  local id=$1 dph=$2 status trouble=0 qid
+  local id=$1 dph=$2 status trouble=0 qid study
   qid=$(printf %q "$id")
+  study=$(uv run python -m scripts.box.fleet entry "$id" study) || return 1
   if [ ! -f "$root/logs/boxes/$id/ssh_config" ]; then
     echo "!! $(date -u +%H:%M:%S) $id: no ssh config; run uv run python -m scripts.box.fleet status"
     return 1
@@ -89,12 +90,14 @@ watch_box() {
   # One rsync of the clone limited to runs/ and logs/: a folder the box has not made yet is no error.
   pull "$id" outputs --include='/runs/***' --include='/logs/***' --exclude='*' \
     box:/root/work/ "$root/" || trouble=1
-  mkdir -p "$root/logs/boxes/$id/files"
-  pull "$id" "the screen's logs" --relative --ignore-missing-args box:/root/screen.log box:/root/setup.log \
+  mkdir -p "$root/logs/boxes/$id/files" "$root/logs/$study/boxes/$id"
+  pull "$id" "the launcher's output" --ignore-missing-args box:/root/launcher.log "$root/logs/$study/boxes/$id/" \
+    || trouble=1
+  pull "$id" "the setup's log" --relative --ignore-missing-args box:/root/setup.log \
     box:/root/.local/share/inspect_ai/ "$root/logs/boxes/$id/files/" || trouble=1
   if ! status=$("$here/box_ssh.sh" "$id" "[ \"\$(cat /root/box_id 2> /dev/null)\" = $qid ] \
 || { echo \"/root/box_id does not name $qid: the endpoint reaches another box\"; exit 3; }; \
-cd /root/work && .venv/bin/python -m scripts.box.box_runner status" 2>&1); then
+python3 - status" < "$here/box_probe.py" 2>&1); then
     printf '%s\n' "$status" | prefix "!! $(date -u +%H:%M:%S) $id: "
     trouble=1
   else

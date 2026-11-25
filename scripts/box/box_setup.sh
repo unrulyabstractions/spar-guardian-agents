@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Set up a rented box for its task: scripts/box/box_setup.sh <instance-id>
+# Set up a rented box for its plan's tasks: scripts/box/box_setup.sh <instance-id>
 #
-# Runs on the Mac right after `fleet.py create`. The task and what to deploy come from the registry and the box's launch
-# (fleet.py entry). In order:
+# Runs on the Mac right after `fleet.py create`. The tasks of the box's runs and what to deploy come from the registry
+# and the box's launch (fleet.py entry). In order:
 #  1. the box's ssh, waited for up to 30 minutes with `fleet.py status` refreshing the endpoint each pass. A VM boots
 #     behind its port: another sshd answers first and its host key would lock the VM out, so until the baseline exists
 #     each try starts from an empty known_hosts. After the baseline a changed key stays refused;
@@ -14,7 +14,7 @@
 #  4. what only the Mac has goes up through ssh: the package list the launch pinned;
 #  5. box_kernel.sh: a kernel with fanotify permission events, which the access log needs, by kexec;
 #  6. box_setup_remote.sh, sent to the box and started there under nohup setsid: the box's cores, RAM and disk, its
-#     packages, the clone, the .venv and the task's rows and images (box_runner.py build). This script prints
+#     packages, the clone, the .venv and the tasks' rows and images (box_build.py). This script prints
 #     /root/setup.log as it grows and exits with the setup's exit code. A drop of this machine's network costs nothing:
 #     the setup goes on, and running this again follows a setup alive on the box, or resumes one that ended.
 # The box clones what is public itself, since the Mac's uplink is slow. No GitHub token and no model key goes to the
@@ -30,10 +30,10 @@ fi
 id=$1
 setup_limit_s=7200
 
-fields=$(uv run python -m scripts.box.fleet entry "$id" task commit requirements requirements_sha256 uv_version \
+fields=$(uv run python -m scripts.box.fleet entry "$id" tasks commit requirements requirements_sha256 uv_version \
   python_version cores ram_gb min_cores min_ram_gb min_disk_gb)
 {
-  read -r task
+  read -r tasks
   read -r commit
   read -r requirements
   read -r requirements_sha256
@@ -45,8 +45,11 @@ fields=$(uv run python -m scripts.box.fleet entry "$id" task commit requirements
   read -r min_ram_gb
   read -r min_disk_gb
 } <<< "$fields"
-uv run python -c 'import sys; from scripts.box.box_runner import BUILDS; sys.exit(sys.argv[1] not in BUILDS)' "$task" \
-  || { echo "refused: no build steps for $task in scripts/box/box_runner.py BUILDS"; exit 1; }
+uv run python - "$tasks" <<'EOF' || { echo "refused: box_build.py has no steps for some of $tasks"; exit 1; }
+import sys
+from scripts.box.box_build import BUILDS
+sys.exit(not set(sys.argv[1].split(",")) <= set(BUILDS))
+EOF
 url=$(git remote get-url origin)
 case $url in
   https://*@*) echo "refused: origin's URL carries credentials; the box clones over https without them"; exit 1 ;;
@@ -147,7 +150,7 @@ echo "== 6. on the box"
 start=$("$here/box_ssh.sh" "$id" "if grep -qs box_setup_remote /proc/\$(cat /root/setup.pid 2> /dev/null)/cmdline; then \
 cat /root/setup.log | wc -l; else rm -f /root/setup.exit; echo \$(cat /root/setup.log 2> /dev/null | wc -l) started; \
 nohup setsid bash /root/ship/box_setup_remote.sh $(printf '%q ' "$commit" "$cheatbench" "$orbit" \
-  "$uv_version" "$python_version" "$task" "$url" "$cores" "$ram_gb" "$min_cores" "$min_ram_gb" "$min_disk_gb") \
+  "$uv_version" "$python_version" "$tasks" "$url" "$cores" "$ram_gb" "$min_cores" "$min_ram_gb" "$min_disk_gb") \
 > /dev/null 2>&1 < /dev/null & fi")
 seen=${start%% *}
 case $start in

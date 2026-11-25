@@ -1,10 +1,10 @@
 """Sort a study's runs into its groups, each with its eval log, and prove every file arrived.
 
-    uv run python -m scripts.study.sort_study_runs runs/ian_baseline_explorations_1           # dry run: what would move
-    uv run python -m scripts.study.sort_study_runs runs/ian_baseline_explorations_1 --apply   # move, record and verify
+    uv run python -m scripts.study.sort_study_runs runs/<study>           # dry run: what would move
+    uv run python -m scripts.study.sort_study_runs runs/<study> --apply   # move, record and verify
 
-A run at the study's top level goes into a group by its index record (src/measures/run_index.py, joined with the study
-table for the study the table states), which carries run_validity's verdict as the study applies it:
+A run at the study's top level goes into a group by its index record (src/measures/run_index.py), which carries
+run_validity's verdict as the study applies it:
 - mock: a mock rehearsal;
 - incomplete: its eval did not complete;
 - invalid: any other reason it is not valid;
@@ -16,9 +16,9 @@ and logs/, with the eval log its run.json names.
 A run's eval log folder goes to the same place under logs/. Its figures sit in its own analysis/figures/ and move
 with it.
 
-It refuses to touch a run whose box is still live (runs/boxes.json, by the study table's box or the runner's plans),
+It refuses to touch a run of a target a live box of the study runs (runs/boxes.json: the box's study and targets),
 a run whose run.json changed in the last 10 minutes, a run whose name two folders hold, and a move whose target exists.
-It refuses the whole sort while a live box has no box name. Without --apply it writes nothing. With it, it first
+It refuses the whole sort while a live box records no study. Without --apply it writes nothing. With it, it first
 writes a move record to logs/moves/<UTC stamp>_sort_<study>.jsonl: every file with its source, its target, its byte
 size and its sha256. It then moves each folder or file with one rename, checks that every file arrived with the same
 size and sha256 and that no source file is left, appends the result to the record, and exits 1 on any mismatch.
@@ -37,7 +37,6 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-from scripts.box.study_index import join_for
 from src.measures.run_directory import ATTEMPTS, GROUPS, RunDir, attempt_places
 from src.measures.run_index import build
 from src.utils.json_files import read_json
@@ -71,19 +70,13 @@ def group_of(rec: dict) -> str | None:
     return None
 
 
-def live_runs(root: Path, study: str, join) -> tuple[set[str], list[int]]:
-    """(the run names a live box holds, by the study table's box or the runner's plans; the live instances with no
-    box name)."""
+def live_targets(root: Path, study: str) -> tuple[set[str], list[int]]:
+    """(the targets the live boxes of the study run, the live instances that record no study). A run is a target's
+    when its name is the target's or <target>_<pack>_s<seed> (run_study)."""
     entries = (read_json(root / "runs" / "boxes.json") or {}).get("boxes", [])
     live = [entry for entry in entries if not entry.get("destroyed")]
-    boxes = {entry["box"] for entry in live if entry.get("box")}
-    names = {name for name, arm in (join.arms if join else {}).items() if arm["box"] in boxes}
-    screen = root / "logs" / study / "screen"
-    for path in [*screen.glob("box_*.json"), *screen.glob("attempts/box_*.json")]:
-        plan = read_json(path) or {}
-        if plan.get("box") in boxes:
-            names |= set(plan.get("runs", {}))
-    return names, [entry["id"] for entry in live if not entry.get("box")]
+    targets = {target for entry in live if entry.get("study") == study for target in entry.get("targets") or []}
+    return targets, [entry["id"] for entry in live if not entry.get("study")]
 
 
 def files_of(path: Path) -> list[Path]:
@@ -96,17 +89,16 @@ def files_of(path: Path) -> list[Path]:
 def plan_moves(study_dir: Path, now: float) -> tuple[list[Move], dict[str, list]]:
     """Every move of the sort, attempts first, and what the sort refuses or leaves, by reason."""
     root, study = study_dir.parent.parent, study_dir.name
-    join = join_for(study_dir)
-    records, _ = build(study_dir, join)
-    live, nameless = live_runs(root, study, join)
+    records, _ = build(study_dir)
+    live, nameless = live_targets(root, study)
     left: dict[str, list] = {"live box": [], "young run.json": [], "two folders": [], "target exists": [],
-                             "attempt's eval log not found": [], "live instances with no box": nameless}
+                             "attempt's eval log not found": [], "live instances with no study": nameless}
     places = Counter(rec["run"] for rec in records if rec["group"] != ATTEMPTS)
     moves: list[Move] = []
     claimed: set[Path] = set()
 
     def refused(name: str, folder: Path) -> str | None:
-        if name in live:
+        if any(name == target or name.startswith(f"{target}_") for target in live):
             return "live box"
         run_json = RunDir(folder).file("run.json")
         if run_json.is_file() and now - run_json.stat().st_mtime < YOUNG_S:
@@ -246,8 +238,8 @@ def main(argv: list[str] | None = None) -> int:
     if not args.apply:
         print("== dry run: nothing moved; --apply moves, records and verifies")
         return 0
-    if left["live instances with no box"]:
-        print(f"REFUSED: live instances with no box name {left['live instances with no box']}; nothing moved")
+    if left["live instances with no study"]:
+        print(f"REFUSED: live instances with no study {left['live instances with no study']}; nothing moved")
         return 2
     root = study_dir.parent.parent
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")

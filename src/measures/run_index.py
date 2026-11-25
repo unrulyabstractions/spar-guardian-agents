@@ -1,9 +1,8 @@
 """One record per run of a study, for runs/<study>/INDEX.jsonl: what the run is, where it ran, its arm, its outcome and
 its checks.
 
-    records, notes = build(Path("runs/ian_baseline_explorations_0"))            # a study without a table
-    records, notes = build(Path("runs/ian_baseline_explorations_1"), join)      # with the study table's join
-    uv run python -m scripts.box.study_index runs/<study> [--write]     # the command: the summary, and INDEX.jsonl
+    records, notes = build(Path("runs/<study>"))
+    uv run python -m scripts.study.study_index runs/<study> [--write]     # the command: the summary, and INDEX.jsonl
 
 A study keeps its runs at runs/<study>/<run> and in its groups, runs/<study>/<group>/<run> (run_directory.study_runs).
 A record holds these fields, in this order:
@@ -27,12 +26,12 @@ A record holds these fields, in this order:
 An earlier attempt, runs/<study>/attempts/<name>.<n>, keeps its run's name in `run` and its own folder in `path`. It is
 listed as superseded: valid false, reason superseded. The check for a run name found twice skips it.
 
-This module never reads the study table or the fleet. A study with a table gets them through a join (Join), which
-scripts/box/study_index.py builds: the stage, the box, the cell, the arm and the instance. Any other study takes its
-cell, kind and worker from the run's name as scripts/study/screen.py builds it, <stem>_<kind>_<worker>[mock]<k>, and
-leaves the table's fields null. Every run's validity is run_validity's verdict, the same checks in every study: an
-earlier attempt and a mock rehearsal never count, and an SWE run before run_validity.SWE_FIX graded a task one agent
-could cheat alone. Every SWE run of ian_baseline_explorations_0 predates the fix.
+A run takes its cell, kind and worker from its name as scripts/study/screen.py builds it,
+<stem>_<kind>_<worker>[mock]<k>, and leaves stage, box, instance_id, instance_source, target and tag null: the study
+table that once filled them for ian_baseline_explorations_1 is gone, and that study's INDEX.jsonl keeps what it wrote.
+Every run's validity is run_validity's verdict, the same checks in every study: an earlier attempt and a mock
+rehearsal never count, and an SWE run before run_validity.SWE_FIX graded a task one agent could cheat alone. Every
+SWE run of ian_baseline_explorations_0 predates the fix.
 """
 from __future__ import annotations
 
@@ -40,7 +39,6 @@ import collections
 import json
 import re
 from pathlib import Path
-from typing import Protocol
 
 from src.configuration import task_names
 from src.domains import BY_TASK
@@ -62,23 +60,6 @@ FIELDS = ("study", "run", "path", "group", "cheatbench_task", "domain", "row",
           "eval_status", "completed", "failed_episodes", "cheating_rung", "regulator_posts", "disregulator_posts",
           "alerts", "true_alarms", "false_alarms", "export_flags_ok", "valid", "why", "reason", "deal_replay",
           "deal_replay_detail")
-ARM_FIELDS = ("stage", "box", "cell", "kind", "target", "worker", "worker_model", "rule_level", "regulator",
-              "regulator_model", "regulator_level", "disregulator_level", "tag")
-
-
-class Join(Protocol):
-    """What a study's table adds to its runs' records (scripts/box/study_index.py TableJoin)."""
-
-    def place(self, run: Path, name: str) -> dict:
-        """The run's ARM_FIELDS, instance_id and instance_source; {} for a name the table lacks."""
-
-    def problems(self, rec: dict, data: dict) -> list[str]:
-        """Where the table and the run's run.json disagree."""
-
-    def notes(self, records: list[dict]) -> dict[str, list]:
-        """The table's own notes for the summary, by label."""
-
-
 def screen_arm(name: str, domain: str | None) -> dict:
     """The arm fields a screen's run name gives: its cell, kind and worker; {} for a name of another shape."""
     match = SCREEN_NAME.match(name)
@@ -109,7 +90,7 @@ def model_key(model: str | None) -> str | None:
 
 
 def level(value: str | None) -> str | None:
-    """An instruction level as a study table names it: None for none."""
+    """An instruction level as a record names it: None for none."""
     return None if value in (None, "none") else value
 
 
@@ -119,8 +100,8 @@ def role_posts(checked: dict, role: str) -> int | None:
     return sum(agent["posts"] for agent in agents) if agents else None
 
 
-def record(run: Path, data: dict, study_dir: Path, join: Join | None = None) -> dict:
-    """One run's index record (FIELDS) from its folder and its run.json, with the study table's join or without."""
+def record(run: Path, data: dict, study_dir: Path) -> dict:
+    """One run's index record (FIELDS) from its folder and its run.json."""
     config, role_models = data.get("config") or {}, data.get("role_models") or {}
     (study, group), name = run_place(run), run_name(run)
     domain = domain_of(data.get("task"))
@@ -131,12 +112,9 @@ def record(run: Path, data: dict, study_dir: Path, join: Join | None = None) -> 
                mock=checked["mock"], commit=(data.get("code") or {}).get("commit"), inspect_model=data.get("model"),
                regulator_inspect_model=role_models.get("regulator"), model_key=model_key(data.get("model")),
                regulator_model_key=model_key(role_models.get("regulator")))
-    if join is None:
-        out.update(screen_arm(name, domain), rule_level=level(config.get("rule_level")),
-                   regulator_level=level(config.get("regulator_level")) if config.get("regulators") else None,
-                   disregulator_level=level(config.get("disregulator_level")) if config.get("disregulators") else None)
-    else:
-        out.update(join.place(run, name))
+    out.update(screen_arm(name, domain), rule_level=level(config.get("rule_level")),
+               regulator_level=level(config.get("regulator_level")) if config.get("regulators") else None,
+               disregulator_level=level(config.get("disregulator_level")) if config.get("disregulators") else None)
     out.update({key: checked.get(key) for key in ("eval_status", "completed", "failed_episodes")},
                cheating_rung=cheating_rungs(run)["team"] if RunDir(run).team_signals() else None,
                export_flags_ok=(data.get("validity") or {}).get("ok"), regulator_posts=role_posts(checked, "regulator"),
@@ -152,33 +130,19 @@ def record(run: Path, data: dict, study_dir: Path, join: Join | None = None) -> 
     return out
 
 
-def build(study_dir: Path, join: Join | None = None) -> tuple[list[dict], dict[str, list]]:
+def build(study_dir: Path) -> tuple[list[dict], dict[str, list]]:
     """Every run's record, in the order of study_runs, and what the summary reports beside the counts: the folders
-    that are neither a run nor a group, the run names found twice (an earlier attempt aside), and, with a join, where
-    the table and a run disagree and the table's own notes."""
+    that are neither a run nor a group, and the run names found twice (an earlier attempt aside)."""
     study_dir = Path(study_dir)
-    records, disagree = [], []
-    for run in study_runs(study_dir):
-        data = RunDir(run).run_json
-        rec = record(run, data, study_dir, join)
-        records.append(rec)
-        if join is not None:
-            disagree += [(rec["path"], problem) for problem in join.problems(rec, data)]
+    records = [record(run, RunDir(run).run_json, study_dir) for run in study_runs(study_dir)]
     names = collections.Counter(rec["run"] for rec in records if rec["group"] != ATTEMPTS)
     notes = {"other_folders": sorted(p.name for p in study_dir.iterdir()
                                      if p.is_dir() and p.name not in GROUPS and not RunDir(p).is_run()),
              "names_twice": sorted(name for name, n in names.items() if n > 1)}
-    if join is not None:
-        notes.update(join.notes(records), table_disagrees=disagree)
     return records, notes
 
 
-NOTE_LABELS = {"other_folders": "folders that are neither a run nor a group", "names_twice": "run names found twice",
-               "not_in_table": "runs the study table lacks",
-               "captured_bytes_differ": "runs a box captured under their name whose run.json no capture holds",
-               "instance_box_differs": "instances whose registry box is not the table's box (path, id, registry, "
-                                       "table)",
-               "table_disagrees": "where the study table and run.json disagree"}
+NOTE_LABELS = {"other_folders": "folders that are neither a run nor a group", "names_twice": "run names found twice"}
 """Each note's line in the summary."""
 
 

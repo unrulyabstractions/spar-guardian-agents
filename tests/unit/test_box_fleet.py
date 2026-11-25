@@ -1,9 +1,9 @@
 """The vast.ai fleet without vast.ai: offer filtering and ranking on offers from a real search, the registry and the
 launch pins, the create, status and destroy paths against a fake API (a launch cut short, a destroy vast.ai does not
-carry out, the fleet's $/h cap), the key on a redirect, the destroy gate, run-args, entry and repin, the layout's cells,
-labels and run names, the capture's sweep and comparison on two fake trees (also end to end through a stand-in ssh
-with the real rsync, with the manifest, the snapshot and a conflict), the runner's hung-run guard, flags, refusals,
-resume and status, and the watch's interval check."""
+carry out, the fleet's $/h cap), the key on a redirect, the destroy gate, run-args, entry and repin, the labels, the
+capture's sweep and comparison on two fake trees (also end to end through a stand-in ssh with the real rsync, with the
+manifest, the snapshot and a conflict), the capture's places and its refusal of a run made elsewhere, and the watch's
+interval check. The boxes are those of studies/plans/disregulator_existence_2.yaml on two boxes."""
 from __future__ import annotations
 
 import hashlib
@@ -12,7 +12,6 @@ import json
 import os
 import re
 import shutil
-import signal
 import subprocess
 import sys
 import tarfile
@@ -27,23 +26,19 @@ import pytest
 
 from scripts.box import (
     box_capture,
-    box_runner,
     box_sweep,
     fleet,
     fleet_create,
     fleet_destroy,
     fleet_layout,
+    fleet_plan,
     fleet_registry,
     fleet_status,
-    study_table,
     vast_api,
     vast_offers,
 )
 from scripts.box.box_sweep import Sweep
-from scripts.box.study_table import Arm, Box, box_jobs, find_box, jobs_sha256, stage_boxes
-from scripts.study import screen
-from src import cli, run
-from src.configuration import settings
+from scripts.study import run_study
 from tests.support.run_files import write_text
 
 # Offers from the searches of 2026-10-30 (POST /api/v0/bundles/), cut to the fields the filter reads, and one made-up
@@ -68,26 +63,13 @@ PIN = {"commit": "c0ffee" * 6 + "c0ff", "requirements": REQUIREMENTS,
        "requirements_sha256": hashlib.sha256(REQUIREMENTS).hexdigest(), "python_version": "3.11.13",
        "uv_version": "0.8.15"}
 LAUNCH = "l0a1b2c"
-BOX = find_box("gate-protein-luna-1")
+PLAN = fleet_layout.ROOT / "studies" / "plans" / "disregulator_existence_2.yaml"
+STUDY = "disregulator_existence_2"
+ASSIGNMENT = fleet_plan.assign(PLAN, boxes=2)
+BOX = ASSIGNMENT.boxes[0]
 LABEL = f"spar-screen-{BOX.name}-{LAUNCH}"
-TWO_RUNS = Box(BOX.name, BOX.stage, tuple(Arm(arm.target, arm.kind, seeds=(1,)) for arm in BOX.arms))
-"""A box with one run of each of its arms."""
-PILOT_REGULATORS = ("gpt-6-luna-openrouter", "claude-opus-5-5-openrouter", "gemini-4-argon-openrouter")
-PILOT = {f"pilot-{target.name}": tuple(Arm(target, "minimal_regulated", regulator=regulator, regulator_level="generic",
-                                           seeds=(1,), tag="pilot") for regulator in PILOT_REGULATORS)
-         for target in study_table.TARGETS[1:]}
-"""A stage of three boxes, flipt, protein and creative on Luna, each with three regulated runs: the shape of
-ian_baseline_explorations_1's pilot at a level that exists. The table lost the pilot on 2026-11-23 (its level is
-gone); create and the runner are tested on this stand-in, which pilot_stage puts into the table."""
-
-
-@pytest.fixture(autouse=True)
-def pilot_stage(monkeypatch):
-    monkeypatch.setitem(study_table.STAGES, "pilot", PILOT)
-
-
-ONE_PILOT_BOX = ("--stage", "pilot", "--count", "1", "--only", "pilot-protein-luna-1")
-TWO_PILOT_BOXES = ("--stage", "pilot", "--count", "2", "--only", "pilot-protein-luna-1", "pilot-creative-luna-1")
+TWO_BOXES = ("--plan", str(PLAN), "--boxes", "2")
+ONE_BOX = (*TWO_BOXES, "--only", BOX.name)
 
 
 # ---- offers ----
@@ -98,13 +80,14 @@ def test_candidates_keep_what_can_hold_a_box_cheapest_first():
 
 
 def test_each_task_rents_at_its_own_floor():
-    assert fleet_layout.floor_of("software_engineering") == (32, 64)
-    assert fleet_layout.floor_of("creative_writing") == (16, 32)
-    assert fleet_registry.minimums("software_engineering")["min_cores"] == 30
-    assert fleet_registry.minimums("creative_writing")["min_cores"] == 14
+    assert fleet_layout.floor_of(["swe"]) == (32, 64)
+    assert fleet_layout.floor_of(["creative_writing"]) == (16, 32)
+    assert fleet_layout.floor_of(["swe", "creative_writing"]) == (32, 64)
+    assert fleet_registry.minimums([32, 64])["min_cores"] == 30
+    assert fleet_registry.minimums([16, 32])["min_cores"] == 14
     small = {**SAVED_SEARCH[0], "cpu_cores_effective": 16, "cpu_cores": 16, "cpu_ram": 40000}
-    assert vast_offers.rejections(small, floor=fleet_layout.floor_of("creative_writing")) == []
-    assert vast_offers.rejections(small, floor=fleet_layout.floor_of("software_engineering")) == [
+    assert vast_offers.rejections(small, floor=fleet_layout.floor_of(["creative_writing"])) == []
+    assert vast_offers.rejections(small, floor=fleet_layout.floor_of(["swe"])) == [
         "fewer than 32 cores", "less than 64 GB of RAM in its share"]
 
 
@@ -176,8 +159,8 @@ def registry(tmp_path, monkeypatch):
     monkeypatch.setattr(fleet_registry, "BOXES", tmp_path / "boxes")
     monkeypatch.setattr(box_capture, "BOXES", tmp_path / "boxes")
     monkeypatch.setattr(fleet_registry, "fleet_pin", lambda commit="HEAD": dict(PIN))
-    monkeypatch.setattr(fleet_create, "layout_problems", lambda tasks: [])
     monkeypatch.setattr(fleet_create, "guard_alive", lambda: True)   # the cloud box guard's daemon, never the real one
+    monkeypatch.setattr(run_study, "RUNS", tmp_path / "runs")         # no run of this checkout's runs/ is held here
     return path
 
 
@@ -185,7 +168,8 @@ def add_box(instance_id=7, box=BOX, label=LABEL, launch=LAUNCH, **fields) -> dic
     """A registered box of a launch whose pins are written."""
     if not fleet_registry.launch_dir(launch).exists():
         fleet_registry.write_launch(launch, dict(PIN))
-    entry = fleet_registry.box_entry(instance_id, label, box, SAVED_SEARCH[3], launch) | fields
+    entry = fleet_registry.box_entry(instance_id, label, ASSIGNMENT, box, SAVED_SEARCH[3], launch, PIN["commit"])
+    entry |= fields
     fleet_registry.register(entry)
     return entry
 
@@ -203,11 +187,12 @@ def test_a_client_without_writes_refuses_all_but_reads():
 def test_the_dry_run_prints_every_request_and_sends_none(registry, monkeypatch, capsys):
     fake = FakeVast()
     monkeypatch.setattr(vast_api, "http", fake)
-    code = fleet.main(["create", "--stage", "pilot", "--count", "3", "--dry-run"])
+    code = fleet.main(["create", *TWO_BOXES, "--dry-run"])
     out = capsys.readouterr().out
     assert code == 0
-    assert out.count("would send: PUT https://console.vast.ai/api/v0/asks/") == 3
-    assert '"label": "spar-screen-pilot-creative-luna-1-l' in out and '"vm": true' in out
+    assert out.count("would send: PUT https://console.vast.ai/api/v0/asks/") == 2
+    assert '"label": "spar-screen-disregulator-existence-2-2-l' in out and '"vm": true' in out
+    assert "disregulator-existence-2-1: 5 runs, 18 agents in all, 44 at once; $45.00" in out
     assert f"commit {PIN['commit']}" in out
     assert all(call.reads for call in fake.calls) and not registry.exists()
     assert not fleet_registry.BOXES.exists()                                           # no launch pinned on a dry run
@@ -217,48 +202,61 @@ def test_the_dry_run_prints_every_request_and_sends_none(registry, monkeypatch, 
 def test_create_takes_no_offer_from_a_skipped_machine(registry, monkeypatch, capsys):
     """A VM can come up smaller than its offer; its machine's next offer then goes untaken."""
     monkeypatch.setattr(vast_api, "http", FakeVast())
-    assert fleet.main(["create", *ONE_PILOT_BOX, "--dry-run"]) == 0
+    assert fleet.main(["create", *ONE_BOX, "--dry-run"]) == 0
     first = re.search(r"/asks/(\d+)/", capsys.readouterr().out).group(1)
     machine = next(o["machine_id"] for o in SAVED_SEARCH if str(o["id"]) == first)
-    assert fleet.main(["create", *ONE_PILOT_BOX, "--skip-machine", str(machine), "--dry-run"]) == 0
+    assert fleet.main(["create", *ONE_BOX, "--skip-machine", str(machine), "--dry-run"]) == 0
     assert f"/asks/{first}/" not in capsys.readouterr().out
 
 
 def test_the_dry_run_names_the_boxes_no_offer_is_left_for(registry, monkeypatch, capsys):
-    """Six SWE boxes, each one arm of five runs, and four offers that hold one."""
+    """Six SWE boxes and four offers that hold one."""
     monkeypatch.setattr(vast_api, "http", FakeVast())
-    flipt = study_table.SWE_TARGETS[1]
-    monkeypatch.setitem(study_table.STAGES, "six", {"six-flipt-luna": tuple(
-        Arm(flipt, "minimal", tag=f"six{k}") for k in range(6))})
-    assert fleet.main(["create", "--stage", "six", "--count", "6", "--dry-run"]) == 1
+    assert fleet.main(["create", "--plan", str(PLAN), "--boxes", "6", "--dry-run"]) == 1
     out = capsys.readouterr().out
     assert out.count("would send: PUT") == 4 and "4 of 6 requests printed" in out
 
 
 def test_the_dry_run_stops_at_the_fleets_cap(registry, monkeypatch, capsys):
     monkeypatch.setattr(vast_api, "http", FakeVast())
-    assert fleet.main(["create", "--stage", "pilot", "--count", "3", "--max-fleet-dph", "1.0", "--dry-run"]) == 1
+    assert fleet.main(["create", *TWO_BOXES, "--max-fleet-dph", "0.5", "--dry-run"]) == 1
     out = capsys.readouterr().out
-    assert "!!: the fleet would bill $1.210/h, past its cap $1.00/h" in out
-    assert out.count("would send: PUT") == 2 and "takes the fleet to $1.210/h" in out
+    assert "!!: the fleet would bill $0.688/h, past its cap $0.50/h" in out
+    assert out.count("would send: PUT") == 1 and "takes the fleet to $0.688/h" in out
 
 
 def test_create_refuses_past_the_fleets_cap_counting_the_boxes_it_holds(registry, monkeypatch, capsys):
     fake = FakeVast()
     monkeypatch.setattr(vast_api, "http", fake)
-    add_box(5, dph=14.5)
-    assert fleet.main(["create", "--stage", "pilot", "--count", "3"]) == 1
-    assert "refused: the fleet would bill $15.710/h" in capsys.readouterr().out
+    add_box(5, dph=14.5, study="regulator_scale_1")
+    assert fleet.main(["create", *TWO_BOXES]) == 1
+    assert "refused: the fleet would bill $15.188/h" in capsys.readouterr().out
     assert all(call.reads for call in fake.calls)
 
 
-def test_create_refuses_tasks_that_cannot_run(registry, monkeypatch, capsys):
+def test_create_refuses_a_model_on_another_key(registry, monkeypatch, capsys):
     fake = FakeVast()
     monkeypatch.setattr(vast_api, "http", fake)
-    monkeypatch.setattr(fleet_create, "layout_problems",
-                        lambda tasks: ["protein_design: examples/protein_design needs one script per kind"])
-    assert fleet.main(["create", "--stage", "pilot", "--count", "3"]) == 1
-    assert "refused: a box rented for these jobs could not run them" in capsys.readouterr().out
+    monkeypatch.setattr(fleet_plan, "key_problems", lambda box: ["openai/x needs OPENAI_API_KEY"])
+    assert fleet.main(["create", *TWO_BOXES]) == 1
+    out = capsys.readouterr().out
+    assert "!! openai/x needs OPENAI_API_KEY" in out and "refused: a box rented for these runs" in out
+    assert fake.calls == []
+
+
+def test_create_refuses_a_run_held_here_and_a_target_another_open_box_runs(registry, monkeypatch, capsys):
+    """A box makes every run of its targets that its own runs/ lacks, so a run held here would come back as a second
+    run of its name; and two boxes of one study never run the same target."""
+    fake = FakeVast()
+    monkeypatch.setattr(vast_api, "http", fake)
+    name = BOX.runs[0].name
+    write_text(run_study.RUNS / STUDY / name / "processed/run.json", "{}")
+    assert fleet.main(["create", *TWO_BOXES]) == 1
+    assert f"runs/{STUDY}/{name} is here already" in capsys.readouterr().out
+    (run_study.RUNS / STUDY / name / "processed/run.json").unlink()
+    add_box(5)
+    assert fleet.main(["create", *TWO_BOXES]) == 1
+    assert f"box 5 of {STUDY} runs {', '.join(sorted(BOX.targets))} already" in capsys.readouterr().out
     assert fake.calls == []
 
 
@@ -278,24 +276,29 @@ def test_a_package_list_pins_inspect_to_a_release_or_a_git_commit():
 def test_create_registers_each_instance_pins_its_launch_and_passes_its_audit(registry, monkeypatch, capsys):
     fake = FakeVast()
     monkeypatch.setattr(vast_api, "http", fake)
-    assert fleet.main(["create", *TWO_PILOT_BOXES]) == 0
+    assert fleet.main(["create", *TWO_BOXES]) == 0
     boxes = json.loads(registry.read_text())["boxes"]
     launch = boxes[0]["launch"]
     assert fleet_layout.LAUNCH.match(launch) and {b["launch"] for b in boxes} == {launch}
-    assert [(b["id"], b["label"], b["offer"], b["box"], b["stage"], b["task"]) for b in boxes] == [
-        (901, f"spar-screen-pilot-protein-luna-1-{launch}", 57970273, "pilot-protein-luna-1", "pilot",
-         "protein_design"),
-        (902, f"spar-screen-pilot-creative-luna-1-{launch}", 57143771, "pilot-creative-luna-1", "pilot",
-         "creative_writing")]
+    assert [(b["id"], b["label"], b["offer"], b["box"]) for b in boxes] == [
+        (901, f"spar-screen-disregulator-existence-2-1-{launch}", 57970273, "disregulator-existence-2-1"),
+        (902, f"spar-screen-disregulator-existence-2-2-{launch}", 57143771, "disregulator-existence-2-2")]
+    for entry, box in zip(boxes, ASSIGNMENT.boxes):
+        assert {key: entry[key] for key in ("study", "plan", "gates", "targets", "max_agents", "runs", "cap_usd",
+                                            "tasks", "floor", "commit")} == {
+            "study": STUDY, "plan": "studies/plans/disregulator_existence_2.yaml", "gates": None,
+            "targets": box.targets, "max_agents": 44, "runs": 5, "cap_usd": 45.0, "tasks": ["swe"], "floor": [32, 64],
+            "commit": PIN["commit"]}
     pins = fleet_registry.load_launch(launch)
     assert pins["commit"] == PIN["commit"] and Path(pins["requirements"]).read_bytes() == REQUIREMENTS
     assert "never-stored" not in registry.read_text() and "never-stored" not in capsys.readouterr().out
 
 
-def test_create_refuses_a_count_that_is_not_the_boxes_asked_for(registry, monkeypatch):
+def test_create_refuses_more_boxes_than_groups_of_targets(registry, monkeypatch, capsys):
     fake = FakeVast()
     monkeypatch.setattr(vast_api, "http", fake)
-    assert fleet.main(["create", "--stage", "gate", "--count", "5"]) == 2
+    assert fleet.main(["create", "--plan", str(PLAN), "--boxes", "11"]) == 2
+    assert "10 groups of targets for 11 boxes" in capsys.readouterr().out
     assert fake.calls == []
 
 
@@ -305,32 +308,32 @@ def test_create_refuses_without_the_cloud_box_guard_and_a_dry_run_needs_none(reg
     fake = FakeVast()
     monkeypatch.setattr(vast_api, "http", fake)
     monkeypatch.setattr(fleet_create, "guard_alive", lambda: False)
-    assert fleet.main(["create", "--stage", "pilot", "--count", "3"]) == 1
+    assert fleet.main(["create", *TWO_BOXES]) == 1
     assert "no cloud box guard daemon" in capsys.readouterr().out
     assert fake.calls == []
-    assert fleet.main(["create", "--stage", "pilot", "--count", "3", "--dry-run"]) == 0
+    assert fleet.main(["create", *TWO_BOXES, "--dry-run"]) == 0
 
 
-def test_create_refuses_only_names_outside_the_stage(registry, monkeypatch, capsys):
+def test_create_refuses_only_names_outside_the_assignment(registry, monkeypatch, capsys):
     fake = FakeVast()
     monkeypatch.setattr(vast_api, "http", fake)
-    assert fleet.main(["create", "--stage", "pilot", "--count", "1", "--only", BOX.name]) == 2
-    assert f"not boxes of pilot: {BOX.name}" in capsys.readouterr().out
+    assert fleet.main(["create", *TWO_BOXES, "--only", "regulator-scale-1-1"]) == 2
+    assert "not boxes of the assignment: regulator-scale-1-1" in capsys.readouterr().out
     assert fake.calls == []
 
 
 def test_create_refuses_a_label_destroy_would_not_act_on(registry, monkeypatch, capsys):
     fake = FakeVast()
     monkeypatch.setattr(vast_api, "http", fake)
-    assert fleet.main(["create", *ONE_PILOT_BOX, "--label-prefix", "retry-spar-screen"]) == 2
+    assert fleet.main(["create", *ONE_BOX, "--label-prefix", "retry-spar-screen"]) == 2
     assert "--label-prefix must start with spar-screen" in capsys.readouterr().out
     assert fake.calls == []
 
 
 def test_create_refuses_a_box_the_account_holds_from_another_launch(registry, monkeypatch, capsys):
-    fake = FakeVast(instances=[{"id": 5, "label": "spar-screen-pilot-protein-luna-1-l999999"}])
+    fake = FakeVast(instances=[{"id": 5, "label": f"spar-screen-{BOX.name}-l999999"}])
     monkeypatch.setattr(vast_api, "http", fake)
-    assert fleet.main(["create", *ONE_PILOT_BOX]) == 1
+    assert fleet.main(["create", *ONE_BOX]) == 1
     assert "holds these boxes already: 5" in capsys.readouterr().out
     assert all(call.reads for call in fake.calls)
 
@@ -347,7 +350,7 @@ def test_a_rent_whose_reply_is_lost_is_registered_by_the_audit(registry, monkeyp
             raise error
         return reply
     monkeypatch.setattr(vast_api, "http", transport)
-    assert fleet.main(["create", *TWO_PILOT_BOXES]) == 1
+    assert fleet.main(["create", *TWO_BOXES]) == 1
     boxes = json.loads(registry.read_text())["boxes"]
     assert [(b["id"], b["note"]) for b in boxes] == [(901, "registered by the audit")]
     assert sum(call.method == "PUT" for call in fake.calls) == 1
@@ -364,24 +367,25 @@ def test_an_interrupted_launch_is_still_audited(registry, monkeypatch):
         return reply
     monkeypatch.setattr(vast_api, "http", transport)
     with pytest.raises(KeyboardInterrupt):
-        fleet.main(["create", *ONE_PILOT_BOX])
+        fleet.main(["create", *ONE_BOX])
     assert [b["id"] for b in json.loads(registry.read_text())["boxes"]] == [901]
 
 
 def test_the_audit_adopts_only_its_own_launchs_labels(registry, capsys):
-    asked = {LABEL: BOX}
+    rental = fleet_create.Rental(LAUNCH, ASSIGNMENT, {LABEL: BOX}, PIN["commit"], 0.0, 1.0, 15.0, False)
     fake = FakeVast(instances=[{"id": 7, "label": LABEL, "dph_total": 0.4}])
-    assert fleet_create.audit(vast_api.Vast(writes=False, transport=fake), asked) == 0
-    assert [(b["id"], b["launch"], b["dph"]) for b in json.loads(registry.read_text())["boxes"]] == [(7, LAUNCH, 0.4)]
-    assert fleet_create.audit(vast_api.Vast(writes=False, transport=fake), asked) == 0    # registered already: no error
+    assert fleet_create.audit(vast_api.Vast(writes=False, transport=fake), rental) == 0
+    assert [(b["id"], b["launch"], b["dph"], b["targets"]) for b in json.loads(registry.read_text())["boxes"]] == [
+        (7, LAUNCH, 0.4, BOX.targets)]
+    assert fleet_create.audit(vast_api.Vast(writes=False, transport=fake), rental) == 0   # registered already: no error
     other_launch = FakeVast(instances=[{"id": 8, "label": f"spar-screen-{BOX.name}-l999999"}])
-    assert fleet_create.audit(vast_api.Vast(writes=False, transport=other_launch), asked) == 1
+    assert fleet_create.audit(vast_api.Vast(writes=False, transport=other_launch), rental) == 1
     assert "UNREGISTERED 8" in capsys.readouterr().out
     assert [b["id"] for b in json.loads(registry.read_text())["boxes"]] == [7]
 
 
 def test_the_registry_refuses_an_id_twice(registry):
-    entry = fleet_registry.box_entry(3, LABEL, BOX, SAVED_SEARCH[3], LAUNCH)
+    entry = fleet_registry.box_entry(3, LABEL, ASSIGNMENT, BOX, SAVED_SEARCH[3], LAUNCH, PIN["commit"])
     assert fleet_registry.register(entry)
     with pytest.raises(ValueError):
         fleet_registry.register(entry)
@@ -499,7 +503,7 @@ def test_the_destroy_gate_refuses_without_a_fresh_clean_marker(marker, words):
 
 def test_the_destroy_gate_refuses_another_workstreams_box():
     assert "not a box of this fleet" in gate(fresh_marker(), live_label="lucy-gpu-box")[0]
-    assert "not a box of this fleet" in gate(fresh_marker(), live_label="spar-screen-gate-creative-luna-1")[0]
+    assert "not a box of this fleet" in gate(fresh_marker(), live_label="spar-screen-regulator-scale-1-1")[0]
     assert "not in the registry" in fleet_destroy.destroy_refusals(7, None, {"label": "x"}, fresh_marker(), 1000.0)[0]
 
 
@@ -570,8 +574,7 @@ def test_status_flags_a_box_vast_ai_cannot_start_and_create_avoids_its_machine(r
     out = capsys.readouterr().out
     assert f"!! 7 {LABEL}: vast.ai cannot start it ({error})" in out and "bill $0.056/h" in out
     assert json.loads(registry.read_text())["boxes"][0]["start_error"] == error
-    assert fleet.main(["create", "--stage", "gate", "--count", "1", "--only", BOX.name, "--label-prefix",
-                       "spar-screen-retry"]) == 0
+    assert fleet.main(["create", *ONE_BOX, "--label-prefix", "spar-screen-retry"]) == 0
     assert json.loads(registry.read_text())["boxes"][-1]["offer"] == 57143771
 
 
@@ -593,11 +596,12 @@ def test_accept_loss_takes_a_reason_and_logs_what_is_lost(registry, monkeypatch,
 
 def test_entry_prints_a_boxs_fields_and_its_launchs_pins(registry, capsys):
     add_box()
-    assert fleet.main(["entry", "7", "task", "commit", "requirements_sha256", "min_ram_gb", "box", "stage", "key"]) == 0
-    assert capsys.readouterr().out.split() == ["protein_design", PIN["commit"], PIN["requirements_sha256"], "28",
-                                               BOX.name, "gate", "OPENROUTER_API_KEY"]
+    assert fleet.main(["entry", "7", "tasks", "commit", "requirements_sha256", "min_ram_gb", "box", "study", "key",
+                       "max_agents", "cap_usd"]) == 0
+    assert capsys.readouterr().out.split() == ["swe", PIN["commit"], PIN["requirements_sha256"], "57", BOX.name, STUDY,
+                                               "OPENROUTER_API_KEY", "44", "45.0"]
     (fleet_registry.launch_dir(LAUNCH) / "requirements.txt").write_bytes(b"inspect-ai==9\n")     # changed later
-    assert fleet.main(["entry", "7", "task"]) == 1
+    assert fleet.main(["entry", "7", "tasks"]) == 1
     assert "not the package list launch" in capsys.readouterr().err
 
 
@@ -615,91 +619,50 @@ def test_repin_moves_a_box_while_the_package_list_stays(registry, monkeypatch, c
     assert fleet.main(["repin", "8", "--commit", moved]) == 1
 
 
-def test_run_args_come_from_the_registry(registry, capsys):
+def test_run_args_start_the_launcher_on_the_box_s_targets_from_the_registry(registry, capsys):
     add_box()
     assert fleet.main(["run-args", "7"]) == 0
     assert capsys.readouterr().out.split("\n")[:-1] == [
-        "--box", BOX.name, "--commit", PIN["commit"], "--jobs-sha256", jobs_sha256(box_jobs(BOX))]
+        "scripts.study.run_study", "studies/plans/disregulator_existence_2.yaml", "--yes", "--only", *BOX.targets,
+        "--limit", "max_agents=44"]
+    assert fleet.main(["run-args", "7", "--mock"]) == 0
+    assert capsys.readouterr().out.split("\n")[-2] == "--mock"
     assert fleet.main(["run-args", "8"]) == 1
 
 
-def test_run_args_refuse_a_box_the_table_does_not_hold(registry, capsys):
-    add_box(box=Box("gate-nothing-luna-1", "gate", BOX.arms))
-    assert fleet.main(["run-args", "7"]) == 1
-    assert "no box 'gate-nothing-luna-1' in the study" in capsys.readouterr().err
+def test_run_args_pass_the_gates_and_every_target_of_the_box_s_chains(registry, capsys):
+    plan, gates = (fleet_layout.ROOT / "studies" / folder / "regulator_scale_1.yaml" for folder in ("plans", "gated"))
+    assignment = fleet_plan.assign(plan, gates, boxes=4)
+    box = assignment.boxes[0]
+    fleet_registry.write_launch(LAUNCH, dict(PIN))
+    fleet_registry.register(fleet_registry.box_entry(7, LABEL, assignment, box, SAVED_SEARCH[3], LAUNCH,
+                                                     PIN["commit"]))
+    assert fleet.main(["run-args", "7"]) == 0
+    out = capsys.readouterr().out.split("\n")[:-1]
+    assert out[:5] == ["scripts.study.run_study", "studies/plans/regulator_scale_1.yaml", "--yes", "--gates",
+                       "studies/gated/regulator_scale_1.yaml"]
+    assert out[5:] == ["--only", *box.targets, "--limit", "max_agents=44"]
+    assert "ian_flipt_deepseek_n5_reg20_weak" in box.targets and "ian_flipt_deepseek_n5_reg20_top" in box.targets
 
 
-def test_run_args_mock_says_so_in_the_run_names(registry, capsys):
+def test_run_args_refuse_a_run_made_elsewhere_and_a_model_on_another_key(registry, capsys, monkeypatch):
     add_box()
-    assert fleet.main(["run-args", "7", "--mock"]) == 0
-    assert capsys.readouterr().out.split("\n")[:-1] == [
-        "--box", BOX.name, "--commit", PIN["commit"], "--jobs-sha256", jobs_sha256(box_jobs(BOX, mock=True)), "--mock"]
-    assert all(job.name.endswith(f"mock{job.seed}") for job in box_jobs(BOX, mock=True))
-
-
-def test_run_args_refuse_a_run_name_made_elsewhere(registry, tmp_path, capsys, monkeypatch):
-    add_box()
-    monkeypatch.setattr(settings, "RUNS", tmp_path / "runs" / "study_x")
-    monkeypatch.setattr(settings, "LOGS", tmp_path / "logs" / "study_x")
-    run_dir = tmp_path / "runs" / "study_x" / "binder_minimal_luna1"
-    run_dir.mkdir(parents=True)
-    write_text(run_dir / "processed/run.json",
-               json.dumps({"eval_log": "/Users/someone/logs/binder_minimal_luna1/x.eval"}))
+    run_json = run_study.RUNS / STUDY / BOX.runs[0].name / "processed/run.json"
+    write_text(run_json, json.dumps({"eval_log": f"/Users/someone/logs/{STUDY}/x/x.eval"}))
     assert fleet.main(["run-args", "7"]) == 1
-    assert "runs/study_x/binder_minimal_luna1" in capsys.readouterr().err
-    write_text(run_dir / "processed/run.json", json.dumps({"eval_log": "/root/work/logs/binder_minimal_luna1/x.eval"}))
-    assert fleet.main(["run-args", "7"]) == 0                                 # this box's own, pulled by the watch
-    log = tmp_path / "logs" / "study_x" / "screen" / "binder_minimal_luna2.log"
-    log.parent.mkdir(parents=True)
-    log.write_text("/Users/someone/.venv/bin/python -m examples.protein_design.binder_minimal --name x\n")
+    assert f"{STUDY}/{BOX.runs[0].name}" in capsys.readouterr().err
+    write_text(run_json, json.dumps({"eval_log": f"/root/work/logs/{STUDY}/x/x.eval"}))
+    assert fleet.main(["run-args", "7"]) == 0                                # the box's own, pulled by the watch
+    capsys.readouterr()
+    monkeypatch.setattr(fleet_plan, "key_problems", lambda box: ["openai/x needs OPENAI_API_KEY"])
+    assert fleet.main(["run-args", "7"]) == 1 and "OPENAI_API_KEY" in capsys.readouterr().err
+    assert fleet.main(["run-args", "7", "--mock"]) == 0                      # the mock model needs no key
+
+
+def test_run_args_refuse_a_plan_that_no_longer_holds_the_box_s_targets(registry, capsys):
+    add_box(targets=["ian_gflipt_nobody_baseline"])
     assert fleet.main(["run-args", "7"]) == 1
-    assert "logs/study_x/screen/binder_minimal_luna2.log" in capsys.readouterr().err
-    log.unlink()
-    relative = {"eval_log": "logs/study_x/binder_minimal_luna1/x.eval"}     # the export's link from the checkout
-    write_text(run_dir / "processed/run.json", json.dumps(relative))
-    assert fleet.main(["run-args", "7"]) == 1                                 # no sign a box made it
-    assert "runs/study_x/binder_minimal_luna1" in capsys.readouterr().err
-    box_log = tmp_path / "logs" / "study_x" / "screen" / "binder_minimal_luna1.log"
-    box_log.write_text("/root/work/.venv/bin/python -m examples.protein_design.binder_minimal --name x\n")
-    assert fleet.main(["run-args", "7"]) == 0                                 # the box's screen log beside it
-
-
-# ---- the layout ----
-
-def test_a_task_has_one_cell_per_kind_or_none(tmp_path):
-    package = tmp_path / "creative_writing"
-    package.mkdir()
-    kinds = fleet_layout.kinds_of("creative_writing")
-    for kind in kinds:
-        (package / f"poem_{kind}.py").write_text("")
-    assert fleet_layout.cells("creative_writing", examples=tmp_path) == [f"creative_writing.poem_{k}" for k in kinds]
-    (package / "poem_minimal_regulated.py").unlink()
-    with pytest.raises(ValueError, match="minimal_regulated: 0 scripts"):
-        fleet_layout.cells("creative_writing", examples=tmp_path)
-    (package / "poem_minimal_regulated.py").write_text("")
-    (package / "other_solo.py").write_text("")
-    with pytest.raises(ValueError, match="solo: 2 scripts"):
-        fleet_layout.cells("creative_writing", examples=tmp_path, stem="*")
-
-
-def test_every_task_has_its_cells():
-    assert len(fleet_layout.cells("software_engineering")) == len(fleet_layout.KINDS)
-    assert fleet_layout.layout_problems(list(fleet_layout.TASKS)) == []
-    with pytest.raises(ValueError, match="minimal_all: 0 scripts"):
-        fleet_layout.cells("protein_design", ("minimal_all",))
-
-
-def test_two_tasks_with_one_cell_stem_are_refused(tmp_path, monkeypatch):
-    monkeypatch.setitem(fleet_layout.STEMS, "protein_design", "poem")
-    for package in ("protein_design", "creative_writing"):
-        (tmp_path / package).mkdir()
-        for kind in fleet_layout.kinds_of(package):
-            (tmp_path / package / f"poem_{kind}.py").write_text("")
-    problems = fleet_layout.layout_problems(["protein_design", "creative_writing"], tmp_path)
-    assert len(problems) == len(fleet_layout.KINDS) and "run names collide" in problems[0]
-    assert fleet_layout.layout_problems(["protein_design"], tmp_path) == []
-    assert "needs one script per kind" in fleet_layout.layout_problems(["software_engineering"], tmp_path)[0]
-
+    assert "no longer holds the box's targets" in capsys.readouterr().err
 
 def test_labels_and_the_fleet_prefix():
     assert fleet_layout.box_label("spar-screen", BOX.name, LAUNCH) == LABEL
@@ -709,11 +672,6 @@ def test_labels_and_the_fleet_prefix():
     assert fleet_layout.label_base(f"spar-screen-{BOX.name}") == f"spar-screen-{BOX.name}"
     assert fleet_layout.is_fleet_label(f"spar-screen-retry-{BOX.name}")
     assert not fleet_layout.is_fleet_label("spar-screens") and not fleet_layout.is_fleet_label(None)
-
-
-def test_run_names_are_the_screens():
-    assert fleet_layout.run_name("protein_design.binder_solo", "luna", 2) == \
-        screen.run_name("protein_design.binder_solo", "luna", 2)
 
 
 # ---- the capture ----
@@ -762,6 +720,7 @@ def box(tmp_path, monkeypatch):
     monkeypatch.setattr(box_capture, "TMP", str(tmp))
     monkeypatch.setattr(box_capture, "ROOT", local)
     monkeypatch.setattr(box_capture, "BOXES", local / "logs" / "boxes")
+    monkeypatch.setattr(box_capture, "REGISTRY", local / "runs" / "boxes.json")
     return {"work": work, "home": home, "tmp": tmp, "local": local, "folder": local / "logs" / "boxes" / "7",
             "root": tmp_path}
 
@@ -985,6 +944,52 @@ def test_a_newer_local_copy_stays_and_the_boxs_bytes_go_beside_it(box, stand_in_
     assert "!! CONFLICT" in out and "LOCAL ONLY runs/study_x/r1/stale.json" in out
 
 
+def a_plan_box(box) -> None:
+    """Box 7 runs study_x's plan: its launcher's output and the plan its launcher rewrote, and one run of study_x."""
+    box["local"].joinpath("runs").mkdir(parents=True, exist_ok=True)
+    (box["local"] / "runs" / "boxes.json").write_text(json.dumps({"boxes": [
+        {"id": 7, "study": "study_x", "plan": "studies/plans/study_x.yaml", "destroyed": None}]}))
+    write_text(box["home"] / "launcher.log", "LAUNCH r2\n")
+    write_text(box["work"] / "studies" / "plans" / "study_x.yaml", "study: study_x\n")
+    write_text(box["work"] / "logs" / "study_x" / "r2" / "a.eval", "the box's eval")
+    write_text(box["work"] / "runs" / "study_x" / "r2" / "processed/run.json",
+               json.dumps({"eval_log": "/root/work/logs/study_x/r2/a.eval"}))
+
+
+def test_the_launcher_s_output_and_plan_copy_go_under_the_study_s_box_folder(box, stand_in_ssh):
+    a_plan_box(box)
+    marker = box_capture.check(7, pull=True)
+    place = box["local"] / "logs" / "study_x" / "boxes" / "7"
+    assert marker is not None and marker["lost"] == 0
+    assert (place / "launcher.log").read_text() == "LAUNCH r2\n"
+    assert (place / "study_x.yaml").read_text() == "study: study_x\n"
+    assert (box["local"] / "logs" / "study_x" / "r2" / "a.eval").read_text() == "the box's eval"
+    assert not (box["folder"] / "files" / str(box["home"] / "launcher.log").lstrip("/")).exists()
+
+
+def test_a_run_of_a_name_held_here_from_another_run_is_refused_before_any_pull(box, stand_in_ssh, capsys):
+    a_plan_box(box)
+    write_text(box["local"] / "logs" / "study_x" / "r2" / "b.eval", "the Mac's own eval")
+    assert box_capture.check(7, pull=True) is None
+    out = capsys.readouterr().out
+    assert "logs/study_x/r2/b.eval here is not the box's: this machine holds another run of r2" in out
+    assert "nothing pulled" in out and not (box["local"] / "logs" / "study_x" / "r2" / "a.eval").exists()
+    (box["local"] / "logs" / "study_x" / "r2" / "b.eval").unlink()
+    write_text(box["local"] / "runs" / "study_x" / "r2" / "processed/run.json",
+               json.dumps({"eval_log": "/Users/someone/logs/study_x/r2/c.eval"}))
+    assert box_capture.check(7, pull=True) is None
+    assert "names the eval log c.eval, which the box does not hold" in capsys.readouterr().out
+
+
+def test_an_eval_log_the_box_holds_with_other_bytes_is_another_run(box):
+    lines = [{"file": f"{box_capture.REMOTE_REPO}/logs/study_x/r2/a.eval", "sha256": "0" * 64},
+             {"file": f"{box_capture.REMOTE_REPO}/logs/r1/x.eval", "sha256": "1" * 64}]
+    assert box_capture.box_evals(lines) == {("study_x", "r2"): {"a.eval": "0" * 64}}
+    write_text(box["local"] / "logs" / "study_x" / "r2" / "a.eval", "other bytes")
+    assert box_capture.foreign_runs(lines) == [
+        "logs/study_x/r2/a.eval here is not the box's: this machine holds another run of r2"]
+
+
 def test_a_baseline_after_the_setup_is_refused(box, stand_in_ssh, tmp_path, monkeypatch):
     assert box_capture.baseline(7) == 3                                       # the clone and screen.log are there
     assert not (box["folder"] / "baseline.jsonl").exists()
@@ -1006,371 +1011,6 @@ def test_the_sweep_runs_from_standard_input_with_the_standard_library_alone(box,
     lines = [json.loads(text) for text in result.stdout.decode().splitlines()]
     assert lines[-1]["done"] is True and sum("file" in line for line in lines) == 8
     assert EMPTY_DOCKER in lines
-
-
-# ---- the hung-run guard ----
-
-LIMIT = 5400
-
-
-@pytest.mark.parametrize("alive_min, quiet_min, hung", [
-    (60, 60, False),                   # quiet, but inside Inspect's limit
-    (110, 25, True),                   # 20 min past the limit, nothing written for 20 min
-    (110, 5, False),                   # past the limit, still writing (the export)
-    (219, 1, False),
-    (220, 1, True),                    # twice the limit and the grace, whatever it writes
-])
-def test_a_run_is_hung_past_its_limit_when_it_writes_nothing(alive_min, quiet_min, hung):
-    now = 100_000.0
-    started, last = now - alive_min * 60, now - quiet_min * 60
-    assert (box_runner.hung(now, started, last, LIMIT) is not None) == hung
-
-
-def test_a_run_that_never_wrote_is_quiet_since_its_start():
-    now = 100_000.0
-    assert box_runner.hung(now, now - 111 * 60, 0.0, LIMIT) is not None
-    assert box_runner.hung(now, now - 89 * 60, 0.0, LIMIT) is None
-
-
-def test_the_limit_is_the_tasks_domains(monkeypatch):
-    """Only SWE grades after the agents stop, and Inspect gives its scorer half the sample's limit again: a non-SWE run
-    is hung 90 minutes in, an SWE run 155."""
-    protein, swe = box_runner.inspect_limit_s("protein_design"), box_runner.inspect_limit_s("software_engineering")
-    assert swe == (protein - settings.HARD_TIME_GRACE_S + 1800) * 3 // 2
-    assert (protein + box_runner.GRACE_S) / 60 == 90 and (swe + box_runner.GRACE_S) / 60 == 155
-    assert box_runner.inspect_limit_s("creative_writing") == protein
-    monkeypatch.setitem(box_runner.TASKS, "go", "go")
-    with pytest.raises(ValueError, match="no domain"):
-        box_runner.inspect_limit_s("go")
-
-
-def test_stop_ends_the_whole_process_group_even_when_it_ignores_sigterm(monkeypatch):
-    monkeypatch.setattr(box_runner, "STOP_WAIT_S", 1)
-    process = subprocess.Popen(["sh", "-c", 'trap "" TERM; sleep 600 & wait'], start_new_session=True)
-    time.sleep(0.3)
-    box_runner.stop(process)
-    assert process.poll() == -signal.SIGKILL
-    deadline = time.time() + 5
-    while time.time() < deadline:                      # the orphaned sleep is reaped by the system
-        try:
-            os.killpg(process.pid, 0)
-        except ProcessLookupError:
-            break
-        time.sleep(0.1)
-    with pytest.raises(ProcessLookupError):
-        os.killpg(process.pid, 0)
-
-
-# ---- what a run left, resume and status ----
-
-@pytest.fixture
-def runner_dirs(tmp_path, monkeypatch):
-    """runs/, logs/screen/ and the pid file in tmp_path; the clone at PIN's commit."""
-    monkeypatch.setattr(settings, "RUNS", tmp_path / "runs")
-    monkeypatch.setattr(settings, "ROOT", tmp_path)
-    monkeypatch.setattr(box_runner, "SCREEN_LOGS", tmp_path / "logs" / "screen")
-    monkeypatch.setattr(box_runner, "ATTEMPTS", tmp_path / "logs" / "screen" / "attempts")
-    monkeypatch.setattr(box_runner, "PID_FILE", tmp_path / "screen.pid")
-    monkeypatch.setattr(box_runner, "clone_head", lambda: PIN["commit"])
-    return tmp_path
-
-
-def left_run(root: Path, name: str, status: str = "success", failures=(None,)) -> None:
-    run_dir = root / "runs" / name
-    run_dir.mkdir(parents=True)
-    write_text(run_dir / "analysis/signals.jsonl", "{}\n")
-    eval_log = root / "logs" / name / f"{status}.eval"
-    eval_log.parent.mkdir(parents=True, exist_ok=True)
-    eval_log.write_text("")
-    write_text(run_dir / "processed/run.json", json.dumps({"eval_log": str(eval_log)}))
-    write_text(run_dir / "processed/episodes.jsonl", "".join(json.dumps({"failure": f}) + "\n" for f in failures))
-
-
-def test_a_run_is_done_only_when_its_eval_succeeded_and_no_episode_failed(runner_dirs, monkeypatch):
-    monkeypatch.setattr(box_runner, "eval_status", lambda path: Path(path).stem)
-    left_run(runner_dirs, "ok")
-    left_run(runner_dirs, "erred", status="error")
-    left_run(runner_dirs, "crashed", failures=(None, "harness"))
-    assert box_runner.outcome("ok") == ("finished", "its eval succeeded")
-    assert box_runner.outcome("erred") == ("failed", "its eval ended error")
-    assert box_runner.outcome("crashed") == ("incomplete", "1 episodes failed (harness)")
-    assert box_runner.outcome("never") == ("failed", "no run.json")
-    left_run(runner_dirs, "derived")
-    (runner_dirs / "runs" / "derived" / "analysis/signals.jsonl").unlink()
-    assert box_runner.outcome("derived") == ("derive", "its eval succeeded, no signals.jsonl")
-
-
-class Ended:
-    """A launched run that has already ended with code."""
-
-    def __init__(self, code: int):
-        self.pid, self.code = 4242, code
-
-    def poll(self) -> int:
-        return self.code
-
-
-def run_box(monkeypatch, box=TWO_RUNS, mock=False, sha256=None, commit=PIN["commit"]) -> int:
-    """box_runner run on a box of two runs, as box_run.sh starts it."""
-    monkeypatch.setattr(box_runner, "find_box", lambda name: box)
-    sha256 = sha256 or jobs_sha256(box_jobs(box, mock))
-    return box_runner.main(["run", "--box", box.name, "--commit", commit, "--jobs-sha256", sha256,
-                            *(["--mock"] if mock else [])])
-
-
-def test_a_box_of_another_issue_builds_its_images_once_before_any_run_starts(runner_dirs, monkeypatch, capsys):
-    (runner_dirs / "logs" / "screen").mkdir(parents=True)
-    box = stage_boxes("vuls-gate")[0]
-    order = []
-    monkeypatch.setattr(box_runner.swe_sandbox, "ensure_images", lambda issue: order.append(issue))
-    monkeypatch.setattr(box_runner, "launch", lambda job: order.append(job.name) or Ended(0))
-    monkeypatch.setattr(box_runner, "POLL_S", 0)
-    monkeypatch.setattr(box_runner, "outcome", lambda name: ("finished", "") if name in order else ("failed", "new"))
-    assert run_box(monkeypatch, box=box, mock=True) == 0
-    assert order[0] == "vuls-1832" and order.count("vuls-1832") == 1 and len(order) == 3
-
-
-def test_a_resume_rebuilds_a_finished_evals_ladder_and_never_pays_for_it_again(runner_dirs, monkeypatch, capsys):
-    (runner_dirs / "logs" / "screen").mkdir(parents=True)
-    monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
-    states = {"binder_minimal_luna1": "derive", "binder_minimal_cheat_luna1": "derive"}
-    monkeypatch.setattr(box_runner, "outcome", lambda name: (states[name], "why"))
-    rebuilt = []
-
-    def regenerate(command, **kwargs):
-        rebuilt.append(command[command.index("regenerate") + 1])
-        if "cheat" not in rebuilt[-1]:
-            states[rebuilt[-1]] = "finished"
-
-    monkeypatch.setattr(box_runner.subprocess, "run", regenerate)
-    monkeypatch.setattr(box_runner, "launch", lambda job: pytest.fail("a finished eval ran again"))
-    assert run_box(monkeypatch) == 1 and rebuilt == ["binder_minimal_luna1", "binder_minimal_cheat_luna1"]
-    plan = json.loads((runner_dirs / "logs" / "screen" / "box_gate-protein-luna-1.json").read_text())
-    assert plan["runs"]["binder_minimal_luna1"]["exit"] == 0 and plan["runs"]["binder_minimal_cheat_luna1"]["exit"] == 1
-
-
-def test_a_resume_reruns_what_did_not_finish_and_keeps_the_earlier_attempt(runner_dirs, monkeypatch, capsys):
-    logs = runner_dirs / "logs" / "screen"
-    logs.mkdir(parents=True)
-    monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
-    monkeypatch.setattr(box_runner, "POLL_S", 0)
-    finished = {"binder_minimal_luna1"}
-    monkeypatch.setattr(box_runner, "outcome", lambda name: ("finished", "") if name in finished else
-                        ("failed", "its eval ended error"))
-    launched = []
-
-    def launch(job):
-        with open(logs / f"{job.name}.log", "x") as log:
-            log.write("second attempt\n")
-        launched.append(job.name)
-        finished.add(job.name)
-        return Ended(0)
-    monkeypatch.setattr(box_runner, "launch", launch)
-    (logs / "binder_minimal_cheat_luna1.log").write_text("first attempt: rc=3\n")
-    (logs / "box_gate-protein-luna-1.json").write_text('{"first": "plan", "runs": {}}\n')
-    assert run_box(monkeypatch) == 0 and launched == ["binder_minimal_cheat_luna1"]
-    attempts = logs / "attempts"
-    assert (attempts / "binder_minimal_cheat_luna1.1.log").read_text() == "first attempt: rc=3\n"
-    assert (attempts / "box_gate-protein-luna-1.1.json").read_text() == '{"first": "plan", "runs": {}}\n'
-    plan = json.loads((logs / "box_gate-protein-luna-1.json").read_text())
-    assert plan["earlier_plan"].endswith("box_gate-protein-luna-1.1.json")
-    assert plan["runs"]["binder_minimal_luna1"]["ended"] == box_runner.BEFORE
-    assert plan["runs"]["binder_minimal_cheat_luna1"]["again"].startswith("its eval ended error")
-    assert box_runner.set_aside(logs / "binder_minimal_cheat_luna1.log").name == "binder_minimal_cheat_luna1.2.log"
-
-
-def test_a_relaunch_moves_the_earlier_attempt_into_attempts_before_it_starts(runner_dirs, monkeypatch, capsys):
-    """A run whose eval ended in error starts again under the plan's arguments. Before the launch its run folder and
-    its eval log folder move to attempts/<name>.1, so the example's export finds an empty folder and is never refused,
-    and the earlier attempt keeps every file. The job's arguments carry no --replace, so jobs_sha256 stays the same."""
-    (runner_dirs / "logs" / "screen").mkdir(parents=True)
-    monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
-    monkeypatch.setattr(box_runner, "POLL_S", 0)
-    monkeypatch.setattr(box_runner, "eval_status", lambda path: Path(path).stem)
-    for job in box_jobs(TWO_RUNS):
-        left_run(runner_dirs, job.name, status="error")
-    seen = []
-
-    def launch(job):
-        seen.append((job.name, (runner_dirs / "runs" / job.name).exists(), (runner_dirs / "logs" / job.name).exists(),
-                     "--replace" in job.arguments))
-        left_run(runner_dirs, job.name)                    # the new attempt's export, its eval a success
-        return Ended(0)
-
-    monkeypatch.setattr(box_runner, "launch", launch)
-    assert run_box(monkeypatch) == 0
-    assert seen == [(job.name, False, False, False) for job in box_jobs(TWO_RUNS)]
-    plan = json.loads((runner_dirs / "logs" / "screen" / f"box_{TWO_RUNS.name}.json").read_text())
-    for job in box_jobs(TWO_RUNS):
-        attempt = runner_dirs / "runs" / "attempts" / f"{job.name}.1"
-        assert json.loads((attempt / "processed/run.json").read_text())["eval_log"].endswith(f"{job.name}/error.eval")
-        assert (runner_dirs / "logs" / "attempts" / f"{job.name}.1" / "error.eval").is_file()
-        assert plan["runs"][job.name]["again"].endswith(f"earlier attempt {attempt}")
-        assert box_runner.outcome(job.name) == ("finished", "its eval succeeded")
-
-
-def test_the_runner_refuses_a_clone_away_from_the_pinned_commit(runner_dirs, monkeypatch, capsys):
-    assert run_box(monkeypatch, commit="0" * 40) == 1
-    assert "the fleet pinned 0000" in capsys.readouterr().out and not (runner_dirs / "screen.pid").exists()
-
-
-REGULATED = study_table.pack("pilot-protein-luna", "pilot", PILOT["pilot-protein-luna"])[0]
-
-
-def test_the_runner_gives_each_run_its_flags_and_the_plan_records_them(runner_dirs, monkeypatch, capsys):
-    (runner_dirs / "logs" / "screen").mkdir(parents=True)
-    monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
-    monkeypatch.setattr(box_runner, "POLL_S", 0)
-    monkeypatch.setattr(box_runner, "outcome", lambda name: ("failed", "no run.json"))
-    commands = []
-
-    def popen(command, **kwargs):
-        commands.append(command)
-        return Ended(0)
-    monkeypatch.setattr(box_runner.subprocess, "Popen", popen)
-    assert run_box(monkeypatch, box=REGULATED) == 1
-    regulators = [command[command.index("--regulator-model") + 1] for command in commands]
-    assert regulators == list(PILOT_REGULATORS)
-    assert all(command[command.index("--name") + 2:command.index("--name") + 4] == ["--set", "seed=1"]
-               for command in commands)
-    assert all("regulator_level=generic" in command for command in commands)
-    plan = json.loads((runner_dirs / "logs" / "screen" / f"box_{REGULATED.name}.json").read_text())
-    assert plan["box"] == REGULATED.name and plan["stage"] == "pilot" and plan["task"] == "protein_design"
-    for job, command in zip(box_jobs(REGULATED), commands):
-        assert plan["runs"][job.name]["arguments"] == job.arguments == command[command.index("--model"):]
-
-
-def test_a_resume_starts_a_run_again_with_the_arguments_of_its_plan(runner_dirs, monkeypatch, capsys):
-    (runner_dirs / "logs" / "screen").mkdir(parents=True)
-    monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
-    monkeypatch.setattr(box_runner, "POLL_S", 0)
-    monkeypatch.setattr(box_runner, "outcome", lambda name: ("failed", "its eval ended error"))
-    launched = []
-
-    def launch(job):
-        (runner_dirs / "logs" / "screen" / f"{job.name}.log").write_text("attempt\n")
-        launched.append(job.arguments)
-        return Ended(1)
-    monkeypatch.setattr(box_runner, "launch", launch)
-    assert run_box(monkeypatch, box=REGULATED) == 1
-    first = list(launched)
-    launched.clear()
-    assert run_box(monkeypatch, box=REGULATED) == 1
-    assert launched == first and len(first) == 3
-
-
-def test_a_resume_refuses_a_run_its_plan_holds_with_other_arguments(runner_dirs, monkeypatch, capsys):
-    logs = runner_dirs / "logs" / "screen"
-    logs.mkdir(parents=True)
-    monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
-    monkeypatch.setattr(box_runner, "launch", lambda job: pytest.fail("a run started with other flags"))
-    job = box_jobs(REGULATED)[1]
-    plan = {"runs": {job.name: {"arguments": [*job.arguments[:-1], "gemini-4-argon-openrouter"]}}}
-    (logs / f"box_{REGULATED.name}.json").write_text(json.dumps(plan))
-    assert run_box(monkeypatch, box=REGULATED) == 1
-    assert f"ran {job.name} with other arguments" in capsys.readouterr().out
-    assert json.loads((logs / f"box_{REGULATED.name}.json").read_text()) == plan     # the plan stays as it was
-    assert not (runner_dirs / "screen.pid").exists()
-
-
-def test_a_resume_after_a_mock_check_holds_the_set_aside_plan_too(runner_dirs, monkeypatch, capsys):
-    """Real runs, then a mock check that sets their plan aside, then a resume of the real runs."""
-    logs = runner_dirs / "logs" / "screen"
-    (logs / "attempts").mkdir(parents=True)
-    monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
-    monkeypatch.setattr(box_runner, "launch", lambda job: pytest.fail("a run started with other flags"))
-    job = box_jobs(REGULATED)[1]
-    real = {"runs": {job.name: {"arguments": [*job.arguments[:-1], "gemini-4-argon-openrouter"]}}}
-    (logs / "attempts" / f"box_{REGULATED.name}.1.json").write_text(json.dumps(real))
-    mock = {"mock": True, "runs": {other.name: {"arguments": other.arguments} for other in box_jobs(REGULATED, True)}}
-    (logs / f"box_{REGULATED.name}.json").write_text(json.dumps(mock))
-    assert run_box(monkeypatch, box=REGULATED) == 1
-    assert f"ran {job.name} with other arguments" in capsys.readouterr().out
-
-
-def test_the_runner_refuses_jobs_the_mac_did_not_list(runner_dirs, monkeypatch, capsys):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
-    monkeypatch.setattr(box_runner, "launch", lambda job: pytest.fail("a run started off another table"))
-    assert run_box(monkeypatch, sha256="0" * 64) == 1
-    assert "not the one the Mac listed" in capsys.readouterr().out and not (runner_dirs / "screen.pid").exists()
-
-
-def test_a_mock_run_needs_no_key_and_a_real_run_sets_its_plan_aside(runner_dirs, monkeypatch, capsys):
-    logs = runner_dirs / "logs" / "screen"
-    logs.mkdir(parents=True)
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    monkeypatch.setattr(box_runner, "POLL_S", 0)
-    monkeypatch.setattr(box_runner, "outcome", lambda name: ("failed", "no run.json"))
-
-    def launch(job):
-        (logs / f"{job.name}.log").write_text("run\n")
-        return Ended(0)
-    monkeypatch.setattr(box_runner, "launch", launch)
-    assert run_box(monkeypatch, mock=True) == 1
-    plan_path = logs / f"box_{TWO_RUNS.name}.json"
-    assert all(name.endswith("mock1") for name in json.loads(plan_path.read_text())["runs"])
-    monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
-    assert run_box(monkeypatch) == 1
-    assert sorted(path.name for path in logs.glob("box_*.json")) == [plan_path.name]
-    assert not any(name.endswith("mock1") for name in json.loads(plan_path.read_text())["runs"])
-    assert (logs / "attempts" / f"box_{TWO_RUNS.name}.1.json").exists()
-
-
-@pytest.fixture
-def other_key_box(monkeypatch):
-    """A study whose gate-protein-luna-1 has a regulator on OPENAI_API_KEY."""
-    monkeypatch.setitem(fleet_layout.REGULATORS, "gpt-6-luna", "direct")
-    arm = Arm(BOX.arms[0].target, "minimal_regulated", regulator="gpt-6-luna", regulator_level="generic", seeds=(1,))
-    monkeypatch.setitem(study_table.STAGES["gate"], "gate-protein-luna", (arm,))
-    return find_box(BOX.name)
-
-
-def test_create_refuses_a_regulator_on_another_key(registry, monkeypatch, capsys, other_key_box):
-    fake = FakeVast()
-    monkeypatch.setattr(vast_api, "http", fake)
-    assert fleet.main(["create", "--stage", "gate", "--count", "1", "--only", BOX.name]) == 1
-    assert "gpt-6-luna needs OPENAI_API_KEY" in capsys.readouterr().out
-    assert fake.calls == []
-
-
-def test_run_args_refuse_a_regulator_on_another_key(registry, capsys, other_key_box):
-    add_box(box=other_key_box)
-    assert fleet.main(["run-args", "7"]) == 1
-    captured = capsys.readouterr()
-    assert "gpt-6-luna needs OPENAI_API_KEY" in captured.err and captured.out == ""
-
-
-def test_the_runner_refuses_a_regulator_on_another_key(runner_dirs, monkeypatch, capsys, other_key_box):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
-    monkeypatch.setattr(box_runner, "launch", lambda job: pytest.fail("a run started without its key"))
-    assert run_box(monkeypatch, box=other_key_box) == 1
-    assert "gpt-6-luna needs OPENAI_API_KEY" in capsys.readouterr().out
-    assert not (runner_dirs / "screen.pid").exists()
-
-
-def test_a_ladder_rebuild_finds_a_run_under_its_study_and_needs_no_judge(tmp_path, monkeypatch, capsys):
-    """derive's own command, through the real command line, with no key in the environment."""
-    run_dir = tmp_path / "runs" / "study_x" / "binder_minimal_luna1"
-    run_dir.mkdir(parents=True)
-    write_text(run_dir / "processed/run.json", "{}")
-    monkeypatch.setattr(settings, "RUNS", run_dir.parent)
-    monkeypatch.chdir(tmp_path)
-    for key in ("OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY"):
-        monkeypatch.delenv(key, raising=False)
-    commands = []
-    with monkeypatch.context() as box:      # subprocess is one module: the rebuild below runs git for its ledger
-        box.setattr(box_runner.subprocess, "run", lambda command, **kwargs: commands.append(command))
-        box.setattr(box_runner, "outcome", lambda name: ("finished", "its eval succeeded"))
-        assert box_runner.derive("binder_minimal_luna1") == ("finished", "its eval succeeded")
-    built = []
-    # the code record is the pipeline's signals part, which the rebuild processes (run.processed)
-    monkeypatch.setattr(run.signals, "signals_part", lambda job: built.append(job.run.path) or [])
-    monkeypatch.setattr(run.judging, "require_judge_key", lambda name: pytest.fail("a rebuild asked for a judge"))
-    monkeypatch.setattr(run.judging.Judge, "of", lambda *args, **kwargs: pytest.fail("a rebuild built a judge"))
-    arguments = commands[0][commands[0].index("src") + 1:]
-    assert arguments == ["regenerate", "binder_minimal_luna1", "--no-export", "--no-plots"]
-    assert cli.main(arguments) == 0
-    assert built == [run_dir]
 
 
 def test_local_only_lists_what_this_machine_added_to_a_run_of_a_study(tmp_path, monkeypatch):
@@ -1402,77 +1042,6 @@ def test_local_only_reads_a_runs_figures_and_an_attempts_own_folder(tmp_path, mo
                          "runs/study_x/attempts/game_solo.1/processed/run.json")]
     assert box_capture.local_only(lines) == ["runs/study_x/attempts/game_solo.1/analysis/judge.jsonl",
                                              "runs/study_x/game_solo/analysis/figures/a.png"]
-
-
-def test_the_runner_refuses_without_the_key(runner_dirs, monkeypatch, capsys):
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    assert run_box(monkeypatch) == 1
-    assert "OPENROUTER_API_KEY" in capsys.readouterr().out and not (runner_dirs / "screen.pid").exists()
-
-
-def test_the_runner_refuses_a_task_without_every_cell(runner_dirs, monkeypatch, capsys):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "x" * 30)
-    monkeypatch.setattr(study_table, "cells",
-                        lambda task, kinds, stem=None: fleet_layout.cells(task, kinds, Path("/nowhere"), stem))
-    monkeypatch.setattr(box_runner, "find_box", lambda name: TWO_RUNS)
-    assert box_runner.main(["run", "--box", TWO_RUNS.name, "--commit", PIN["commit"], "--jobs-sha256", "x"]) == 1
-    assert "refused: examples/protein_design needs one script per kind" in capsys.readouterr().out
-    assert not (runner_dirs / "screen.pid").exists()
-
-
-def test_build_refuses_a_task_without_build_steps(capsys, monkeypatch):
-    assert set(box_runner.BUILDS) == set(box_runner.TASKS)
-    monkeypatch.setitem(box_runner.TASKS, "go", "go")
-    assert box_runner.main(["build", "--task", "go"]) == 1
-    assert "no build steps for go" in capsys.readouterr().out
-
-
-def test_status_names_each_runs_state(monkeypatch):
-    states = {"a": "finished", "c": "incomplete"}
-    monkeypatch.setattr(box_runner, "outcome", lambda name: (states.get(name, "failed"), ""))
-
-    def record(**fields):
-        return {"pid": None, "exit": None, "hung": None} | fields
-
-    assert box_runner.state("a", record(exit=0)) == "finished"
-    assert box_runner.state("b", record(exit=0)) == "failed"            # ended well without its signals
-    assert box_runner.state("c", record(exit=0)) == "incomplete"        # an episode failed in the harness
-    assert box_runner.state("b", record(exit=1)) == "failed"
-    assert box_runner.state("b", record(exit=-9, hung="nothing written")) == "hung"
-    assert box_runner.state("b", record()) == "waiting"
-    assert box_runner.state("b", record(pid=os.getpid())) == "lost"     # a live pid that is not this run
-
-
-def write_plan(runner_dirs: Path, runs: dict, mock: bool = False) -> None:
-    logs = runner_dirs / "logs" / "screen"
-    logs.mkdir(parents=True, exist_ok=True)
-    plan = {"box": "gate-protein-luna-1", "task": "protein_design", "mock": mock, "runner_pid": 999_999_999,
-            "runs": {name: {"pid": None, "started": None, "ended": None, "exit": None, "hung": None} | fields
-                     for name, fields in runs.items()}}
-    (logs / "box_gate-protein-luna-1.json").write_text(json.dumps(plan))
-
-
-def test_status_flags_a_runner_that_ended_with_runs_unwatched(runner_dirs, monkeypatch, capsys):
-    monkeypatch.setattr(box_runner, "outcome", lambda name: ("finished", ""))
-    write_plan(runner_dirs, {"a": {"exit": 0, "ended": "2026-10-30T06:00:00Z"}, "b": {}})
-    assert box_runner.main(["status"]) == 1
-    assert "!! the runner ended with 0 runs running and 1 waiting" in capsys.readouterr().out
-
-
-def test_status_sends_nobody_to_the_destroy_after_a_mock_check(runner_dirs, monkeypatch, capsys):
-    monkeypatch.setattr(box_runner, "outcome", lambda name: ("finished", ""))
-    write_plan(runner_dirs, {"a": {"exit": 0, "ended": "2026-10-30T06:00:00Z"}}, mock=True)
-    assert box_runner.main(["status"]) == 0
-    out = capsys.readouterr().out
-    assert "the mock runs ended" in out and "all runs ended" not in out
-
-
-def test_status_says_when_every_run_has_ended(runner_dirs, monkeypatch, capsys):
-    monkeypatch.setattr(box_runner, "outcome", lambda name: ("finished", ""))
-    write_plan(runner_dirs, {"a": {"exit": 0, "ended": "2026-10-30T06:00:00Z"},
-                             "b": {"exit": 0, "ended": box_runner.BEFORE}})
-    assert box_runner.main(["status"]) == 0
-    assert "all runs ended, the last at 2026-10-30T06:00:00Z" in capsys.readouterr().out
 
 
 # ---- the watch ----

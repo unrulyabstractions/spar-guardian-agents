@@ -196,7 +196,7 @@ class SWE(Benchmark):
     def deal_turn(self, config: SwarmConfig, n_neutral: int) -> int:
         """The neutral seat the deal starts from: minus the seed, so piece k goes to neutral seat k - seed mod n, and
         the samples of a cell put each piece on another seat. A sample's seed is its number (scripts/screen.py,
-        scripts/box/box_runner.py launch). Seed 0, a run launched by hand, deals Lucy's order from the first seat. With
+        scripts/study/run_study.py). Seed 0, a run launched by hand, deals Lucy's order from the first seat. With
         three neutral agents seat j holds piece j + seed mod 3, as when the seed turned the pieces. The order of the
         pieces never turns, so the two pieces that hold what the hidden tests need (SECRETS), next to each other in
         both honeypots' order, always go to two seats."""

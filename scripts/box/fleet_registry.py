@@ -2,6 +2,7 @@
 
 A launch pins the commit, the package list and the Python and uv versions in logs/boxes/launch-<launch>/, so every box
 of the launch runs the same code and packages whatever this checkout does later. repin moves a box to another commit.
+A box's entry records what it runs (box_entry), so box_setup.sh, box_run.sh and box_key.py need only its id.
 """
 from __future__ import annotations
 
@@ -15,15 +16,15 @@ import subprocess
 from collections.abc import Iterator
 from pathlib import Path
 
-from scripts.box.fleet_layout import BOX_KEY, BOXES, REGISTRY, ROOT, floor_of, now_iso
-from scripts.box.study_table import Box
+from scripts.box.fleet_layout import BOX_KEY, BOXES, REGISTRY, ROOT, now_iso
+from scripts.box.fleet_plan import Assignment, BoxPlan
 from scripts.box.vast_offers import DISK_GB, ram_share_gb
 
 
-def minimums(task: str) -> dict[str, int]:
-    """What box_setup.sh requires a box of the task to have (nproc, MemTotal, the root filesystem; GB of 10^9 bytes):
-    the offer's floor, less what a VM's kernel and filesystem take."""
-    cores, ram_gb = floor_of(task)
+def minimums(floor: list[int]) -> dict[str, int]:
+    """What box_setup.sh requires a box of this floor (cores, GB of RAM) to have (nproc, MemTotal, the root
+    filesystem; GB of 10^9 bytes): the offer's floor, less what a VM's kernel and filesystem take."""
+    cores, ram_gb = floor
     return {"min_cores": cores - 2, "min_ram_gb": int(0.9 * ram_gb), "min_disk_gb": int(0.85 * DISK_GB)}
 
 
@@ -73,10 +74,15 @@ def registered(registry: dict, instance_id: int) -> dict | None:
     return next((box for box in registry["boxes"] if box["id"] == instance_id), None)
 
 
-def box_entry(instance_id: int, label: str, box: Box, offer: dict | None, launch: str) -> dict:
-    """The registry's record of one instance. Only what identifies and prices the box: never the reply's keys."""
+def box_entry(instance_id: int, label: str, assignment: Assignment, box: BoxPlan, offer: dict | None, launch: str,
+              commit: str) -> dict:
+    """The registry's record of one instance: what it runs (the study, the plan and spec as the clone holds them, the
+    box's targets, its agents at once, its runs and their caps, the commit) and what identifies and prices it. Never
+    the reply's keys."""
     offer = offer or {}
-    return {"id": instance_id, "label": label, "box": box.name, "stage": box.stage, "task": box.task,
+    return {"id": instance_id, "label": label, "box": box.name, "study": assignment.study, "plan": assignment.plan,
+            "gates": assignment.gates, "targets": box.targets, "max_agents": box.max_agents, "runs": len(box.runs),
+            "cap_usd": round(box.cap_usd, 2), "tasks": box.tasks, "floor": list(box.floor), "commit": commit,
             "launch": launch, "offer": offer.get("id"), "machine_id": offer.get("machine_id"),
             "dph": offer.get("dph_total"), "cores": offer.get("cpu_cores_effective"),
             "ram_gb": round(ram_share_gb(offer), 1) if offer else None, "disk_gb": DISK_GB,
@@ -155,4 +161,4 @@ def open_entry(instance_id: int) -> dict:
     if entry is None or entry["destroyed"]:
         raise RuntimeError(f"{instance_id} is not a registered box that is not destroyed")
     pins = load_launch(entry["launch"])
-    return entry | pins | minimums(entry["task"]) | {"commit": entry.get("commit", pins["commit"]), "key": BOX_KEY}
+    return entry | pins | minimums(entry["floor"]) | {"commit": entry["commit"], "key": BOX_KEY}

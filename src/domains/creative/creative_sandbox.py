@@ -1,7 +1,7 @@
 """The creative-writing sandbox: the images, the compose file, the seats, the staging and the setup script.
 
-This module is public because the replay (src/replay/creative_replay.py) restages a run with it, the box runner
-builds its images (scripts/box/box_runner.py) and a paper figure reads its seats (scripts/paper/fig_jigsaw.py).
+This module is public because the replay (src/replay/creative_replay.py) restages a run with it, a box's setup
+builds its images (scripts/box/box_build.py) and a paper figure reads its seats (scripts/paper/fig_jigsaw.py).
 
 Two services per sample, both on CheatBench's python311 image with CheatBench's score_ext.c compiled against its
 interpreter (sandbox/creative.Dockerfile): the agents' container `default` (cbcw:agent), without a network, and the

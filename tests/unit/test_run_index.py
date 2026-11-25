@@ -1,19 +1,16 @@
-"""run_index and its command scripts/box/study_index.py: one record per run of a study, from its folder, its eval log,
-and for the table's study the study table, the box captures and the box registry. Every case builds a copy of the
-layout under tmp_path: runs/<study>/[<group>/]<run>, the eval log at the same path under logs/, runs/boxes.json and
-logs/boxes/<id>/manifest.jsonl. The runs carry real names of scripts/box/study_table.py, and their run.json comes from
-today's plan, as a run of today's code records it."""
+"""run_index and its command scripts/study/study_index.py: one record per run of a study, from its folder and its eval
+log. Every case builds a copy of the layout under tmp_path: runs/<study>/[<group>/]<run> and the eval log at the same
+path under logs/. The runs carry names of the screen's shape, and their run.json comes from today's plan, as a run of
+today's code records it."""
 from __future__ import annotations
 
 import ast
-import hashlib
 import json
 from pathlib import Path
 
 import pytest
 
-from scripts.box import study_index
-from scripts.box.study_index import join_for, main
+from scripts.study.study_index import main
 from src import tasks
 from src.configuration import settings
 from src.configuration.presets import build_config
@@ -24,7 +21,7 @@ from src.models.model_registry import resolve
 from tests.support.run_builder import write_status_log
 from tests.support.run_files import write_text
 
-STUDY = "ian_baseline_explorations_1"
+STUDY = "study_x"
 LOG = "2026-11-01T03-31-41-00-00_run_abc.eval"
 LUNA, OPUS, DSFLASH = "gpt-6-luna-openrouter", "claude-opus-5-5-openrouter", "deepseek-flash-openrouter"
 REFUSAL = "API integrators: you can reduce refusals by configuring a fallback model"
@@ -75,50 +72,15 @@ def make_run(root: Path, name: str, task: str, *, study: str = STUDY, group: str
     return folder
 
 
-def register(root: Path, boxes: dict[int, str]) -> None:
-    """runs/boxes.json with these instances, each created for a box of the study table."""
-    entries = [{"id": instance, "box": box} for instance, box in boxes.items()]
-    (root / "runs" / "boxes.json").write_text(json.dumps({"boxes": entries}))
-
-
-def capture(root: Path, instance: int, runs: list[Path], *, stale: bool = False) -> None:
-    """logs/boxes/<instance>/manifest.jsonl listing each run's run.json as the box held it, at the same path under the
-    study as here."""
-    study = root / "runs" / STUDY
-    rows = [{"box": f"/root/work/runs/{STUDY}/{run.relative_to(study).as_posix()}/processed/run.json", "kind": "file",
-             "local": str(run / "processed/run.json"),
-             "sha256": "0" * 64 if stale else hashlib.sha256((run / "processed/run.json").read_bytes()).hexdigest()}
-            for run in runs]
-    folder = root / "logs" / "boxes" / str(instance)
-    folder.mkdir(parents=True, exist_ok=True)
-    with (folder / "manifest.jsonl").open("a") as out:
-        out.writelines(json.dumps(row) + "\n" for row in rows)
-
-
 HAIKU = "claude-haiku-5-5-openrouter"
 
 
-@pytest.fixture
-def old_arms(monkeypatch):
-    """Two arms of ian_baseline_explorations_1 at levels that no longer exist, as its stored runs name them. The table
-    lost them on 2026-11-23 because they can no longer launch; the index still joins a run to a table that holds
-    them."""
-    from scripts.box import study_table
-
-    protein = next(t for t in study_table.TARGETS if t.short == "protein")
-    monkeypatch.setitem(study_table.STAGES, "old-regulated", {"old-regulated-protein-luna": (
-        study_table.Arm(protein, "minimal_regulated", regulator=OPUS, regulator_level="ambiguous"),)})
-    monkeypatch.setitem(study_table.STAGES, "old-contest", {"old-contest-creative-luna": (
-        study_table.Arm(study_table.TARGETS[3], "minimal_regulated_disregulated", regulator=HAIKU,
-                        regulator_level="enforce", disregulator_level="persuade", seeds=(1, 2, 3)),)})
-
-
 def records_by_run(root: Path, study: str = STUDY) -> tuple[dict[str, dict], dict]:
-    records, notes = build(root / "runs" / study, join_for(root / "runs" / study))
+    records, notes = build(root / "runs" / study)
     return {rec["path"]: rec for rec in records}, notes
 
 
-def test_a_run_of_study_one_takes_its_place_and_arm_from_the_study_table(tmp_path, old_arms):
+def test_a_regulated_run_takes_its_identity_levels_models_and_outcome(tmp_path):
     make_run(tmp_path, "binder_minimal_regulated_luna_opus_ambiguous1", "protein_design", regulator=OPUS,
              regulator_says=REFUSAL)
     rec = records_by_run(tmp_path)[0]["binder_minimal_regulated_luna_opus_ambiguous1"]
@@ -126,111 +88,13 @@ def test_a_run_of_study_one_takes_its_place_and_arm_from_the_study_table(tmp_pat
     assert {key: rec[key] for key in ("study", "path", "group", "cheatbench_task", "domain", "row")} == {
         "study": STUDY, "path": "binder_minimal_regulated_luna_opus_ambiguous1", "group": None,
         "cheatbench_task": "protein_design", "domain": "protein_design", "row": "alfalfa_chi"}
-    assert {key: rec[key] for key in run_index.ARM_FIELDS} == {
-        "stage": "old-regulated", "box": "old-regulated-protein-luna-1",
-        "cell": "protein_design.binder_minimal_regulated", "kind": "minimal_regulated", "target": "protein-luna",
-        "worker": "luna", "worker_model": LUNA,
-        "rule_level": None, "regulator": "opus", "regulator_model": OPUS, "regulator_level": "ambiguous",
-        "disregulator_level": None, "tag": None}
+    assert (rec["stage"], rec["box"], rec["instance_id"], rec["rule_level"]) == (None, None, None, None)
     assert (rec["seed"], rec["mock"], rec["commit"], rec["inspect_model"], rec["regulator_inspect_model"]) == (
         1, False, "0dda147", resolve(LUNA), resolve(OPUS))
     assert (rec["eval_status"], rec["completed"], rec["failed_episodes"], rec["cheating_rung"],
             rec["export_flags_ok"]) == ("success", True, [], "none", True)
     assert (rec["valid"], rec["reason"], rec["deal_replay"], rec["deal_replay_detail"]) == (
         False, "regulator_refused", "same", None)
-
-
-def test_the_instance_is_the_box_that_captured_the_run_else_the_one_the_registry_holds(tmp_path):
-    protein = make_run(tmp_path, "binder_minimal_luna1", "protein_design")
-    retried = make_run(tmp_path, "flipt_minimal_luna1", "software_engineering")
-    make_run(tmp_path, "flipt_minimal_luna2", "software_engineering", seed=2)
-    make_run(tmp_path, "flipt_minimal_luna_fixed1", "software_engineering", commit="94940bc")
-    register(tmp_path, {1001: "gate-protein-luna-1", 1002: "gate-flipt-luna-1", 1003: "gate-flipt-luna-1",
-                        1004: "fixed-gate-flipt-luna-1"})
-    capture(tmp_path, 1001, [protein])
-    capture(tmp_path, 1002, [retried], stale=True)          # a first box, whose copy the second box's replaced
-    capture(tmp_path, 1003, [retried])
-    recs = records_by_run(tmp_path)[0]
-    assert (recs["binder_minimal_luna1"]["instance_id"], recs["binder_minimal_luna1"]["instance_source"]) == (
-        1001, "manifest")
-    assert (recs["flipt_minimal_luna1"]["instance_id"], recs["flipt_minimal_luna1"]["instance_source"]) == (
-        1003, "manifest")
-    assert recs["flipt_minimal_luna2"]["instance_id"] is None          # two boxes of that name, and no capture
-    assert (recs["flipt_minimal_luna_fixed1"]["instance_id"], recs["flipt_minimal_luna_fixed1"]["instance_source"]) == (
-        1004, "registry")
-
-
-def test_an_instance_is_credited_only_for_the_bytes_its_capture_holds(tmp_path):
-    """A rerun of a name on a re-rented box, pulled here and not captured yet: the first box's capture holds other
-    bytes, so the run goes to the one instance of its box that captured no run of its name, and the summary says so."""
-    rerun = make_run(tmp_path, "flipt_minimal_luna1", "software_engineering")
-    register(tmp_path, {2001: "gate-flipt-luna-1", 2002: "gate-flipt-luna-1"})
-    capture(tmp_path, 2001, [rerun], stale=True)
-    recs, notes = records_by_run(tmp_path)
-    assert (recs["flipt_minimal_luna1"]["instance_id"], recs["flipt_minimal_luna1"]["instance_source"]) == (
-        2002, "registry")
-    assert notes["captured_bytes_differ"] == ["flipt_minimal_luna1"]
-    capture(tmp_path, 2002, [rerun])
-    recs, notes = records_by_run(tmp_path)
-    assert recs["flipt_minimal_luna1"]["instance_source"] == "manifest" and notes["captured_bytes_differ"] == []
-
-
-def test_a_run_regenerated_here_keeps_the_instance_whose_capture_holds_its_eval_log(tmp_path):
-    """A regenerate rewrites run.json, so no capture holds its bytes any more; the eval log's bytes never change, and
-    the capture that holds them credits its instance. A capture of another eval log under the name does not."""
-    run = make_run(tmp_path, "flipt_minimal_luna1", "software_engineering")
-    register(tmp_path, {5001: "gate-flipt-luna-1", 5002: "gate-flipt-luna-1"})
-    capture(tmp_path, 5001, [run], stale=True)
-    log = tmp_path / "logs" / STUDY / "flipt_minimal_luna1" / LOG
-    rows = [{"box": f"/root/work/logs/{STUDY}/flipt_minimal_luna1/{LOG}", "kind": "file",
-             "sha256": hashlib.sha256(log.read_bytes()).hexdigest()},
-            {"box": f"/root/work/logs/{STUDY}/flipt_minimal_luna1/other.eval", "kind": "file", "sha256": "1" * 64}]
-    with (tmp_path / "logs" / "boxes" / "5001" / "manifest.jsonl").open("a") as out:
-        out.writelines(json.dumps(row) + "\n" for row in rows[1:])
-    rec = records_by_run(tmp_path)[0]["flipt_minimal_luna1"]            # the other box, wrongly, by the registry
-    assert (rec["instance_id"], rec["instance_source"]) == (5002, "registry")
-    with (tmp_path / "logs" / "boxes" / "5001" / "manifest.jsonl").open("a") as out:
-        out.write(json.dumps(rows[0]) + "\n")
-    rec = records_by_run(tmp_path)[0]["flipt_minimal_luna1"]
-    assert (rec["instance_id"], rec["instance_source"]) == (5001, "manifest")
-    assert study_index.captured_log_name(("invalid", "c_luna1", LOG)) == "c_luna1"
-    assert study_index.captured_log_name(("c_luna1", "notes.txt")) is None
-
-
-def test_the_summary_names_an_instance_whose_registry_box_is_not_the_tables(tmp_path, capsys):
-    run = make_run(tmp_path, "binder_minimal_luna1", "protein_design")
-    register(tmp_path, {3001: "gate-creative-luna-1"})
-    capture(tmp_path, 3001, [run])
-    recs, notes = records_by_run(tmp_path)
-    assert recs["binder_minimal_luna1"]["instance_id"] == 3001
-    assert notes["instance_box_differs"] == [("binder_minimal_luna1", 3001, "gate-creative-luna-1",
-                                              "gate-protein-luna-1")]
-    assert main([str(tmp_path / "runs" / STUDY)]) == 0
-    assert "registry box is not the table's box" in capsys.readouterr().out
-
-
-ARM = "binder_minimal_regulated_luna_opus_ambiguous1"
-
-
-@pytest.mark.parametrize(("change", "problem"), [
-    ({"seed": 2}, "seed: table 1, run.json 2"),
-    ({"mock": True}, "mock: table False, name True"),
-    ({"regulators": 0}, f"regulators: table {OPUS}, run.json 0"),
-    ({"rule_level": "generic"}, "rule_level: table None, run.json generic"),
-    ({"regulator_level": "enforce"}, "regulator_level: table ambiguous, run.json enforce"),
-    ({"inspect_model": resolve(DSFLASH)}, f"model: table {LUNA}, run.json {resolve(DSFLASH)}"),
-    ({"regulator_inspect_model": resolve(LUNA)}, f"regulator model: table {OPUS}, run.json {resolve(LUNA)}"),
-    ({"disregulators": 1}, "disregulators: table None, run.json 1"),
-])
-def test_each_disagreement_of_the_table_and_run_json_is_named(change, problem, old_arms):
-    """Each of the eight checks finds its own field and nothing else."""
-    arm = study_index.study_table_arms()[ARM]
-    rec = {"seed": 1, "mock": False, "inspect_model": resolve(LUNA), "regulator_inspect_model": resolve(OPUS)}
-    config = {"regulators": 1, "rule_level": "none", "regulator_level": "ambiguous", "disregulators": 0}
-    assert study_index.disagreements(rec, arm, {"config": config}) == []
-    rec.update({key: value for key, value in change.items() if key in rec})
-    config.update({key: value for key, value in change.items() if key in config})
-    assert study_index.disagreements(rec, arm, {"config": config}) == [problem]
 
 
 def test_the_record_keeps_the_exports_own_flags_and_an_swe_runs_issue_as_its_row(tmp_path):
@@ -243,24 +107,21 @@ def test_the_record_keeps_the_exports_own_flags_and_an_swe_runs_issue_as_its_row
 
 def test_an_earlier_attempt_is_listed_as_superseded_and_never_counts_as_a_second_run(tmp_path):
     """attempts/<name>.<n> takes its run's name and arm, is invalid with reason superseded in every study, and the
-    check for a name found twice skips it. Its capture under attempts/ credits its instance."""
+    check for a name found twice skips it."""
     name = "flipt_minimal_luna_fixed1"
-    current = make_run(tmp_path, name, "software_engineering", commit="94940bc")
-    attempt = make_run(tmp_path, name, "software_engineering", commit="94940bc", group="attempts",
+    make_run(tmp_path, name, "software_engineering", commit="94940bc")
+    make_run(tmp_path, name, "software_engineering", commit="94940bc", group="attempts",
                        folder_name=f"{name}.1", status="error", flags_ok=False)       # its own bytes, its own eval
-    register(tmp_path, {4001: "fixed-gate-flipt-luna-1"})
-    capture(tmp_path, 4001, [current, attempt])
     recs, notes = records_by_run(tmp_path)
     earlier = recs[f"attempts/{name}.1"]
-    assert (earlier["run"], earlier["group"], earlier["valid"], earlier["reason"], earlier["stage"]) == (
-        name, "attempts", False, "superseded", "fixed-gate")
-    assert (earlier["instance_id"], earlier["instance_source"]) == (4001, "manifest")
+    assert (earlier["run"], earlier["group"], earlier["valid"], earlier["reason"]) == (
+        name, "attempts", False, "superseded")
     assert recs[name]["valid"] and notes["names_twice"] == []
     other = tmp_path / "other"
     make_run(other, "binder_solo_luna1", "protein_design", study="ian_baseline_explorations_0", group="attempts",
              folder_name="binder_solo_luna1.2")
     study = other / "runs" / "ian_baseline_explorations_0"
-    [rec] = build(study, join_for(study))[0]
+    [rec] = build(study)[0]
     assert (rec["run"], rec["valid"], rec["reason"]) == ("binder_solo_luna1", False, "superseded")
 
 
@@ -299,7 +160,7 @@ def test_an_swe_run_counts_only_on_the_fixed_task(tmp_path):
     make_run(tmp_path, "flipt_minimal_luna_fixed1", "software_engineering", commit="94940bc")
     recs = records_by_run(tmp_path)[0]
     assert (recs["flipt_minimal_luna1"]["valid"], recs["flipt_minimal_luna1"]["reason"]) == (False, "swe_before_fix")
-    assert (recs["flipt_minimal_luna_fixed1"]["valid"], recs["flipt_minimal_luna_fixed1"]["tag"]) == (True, "fixed")
+    assert recs["flipt_minimal_luna_fixed1"]["valid"]
 
 
 def test_a_run_in_a_group_is_indexed_with_its_group_and_its_mirrored_log(tmp_path):
@@ -309,23 +170,17 @@ def test_a_run_in_a_group_is_indexed_with_its_group_and_its_mirrored_log(tmp_pat
     mock, broken = recs["mock/binder_minimal_cheat_lunamock1"], recs["incomplete/binder_minimal_luna2"]
     assert (mock["path"], mock["group"], mock["eval_status"], mock["mock"], mock["reason"]) == (
         "mock/binder_minimal_cheat_lunamock1", "mock", "success", True, "mock")
-    assert mock["stage"] == "gate" and mock["inspect_model"] == "mockllm/model"
+    assert mock["inspect_model"] == "mockllm/model"
     assert (broken["path"], broken["eval_status"], broken["completed"], broken["reason"]) == (
         "incomplete/binder_minimal_luna2", "error", False, "incomplete")
 
 
-def test_the_notes_name_what_the_table_lacks_where_it_disagrees_and_every_odd_folder(tmp_path):
-    make_run(tmp_path, "binder_minimal_luna9", "protein_design", seed=9)              # the table's seeds stop at 5
-    make_run(tmp_path, "binder_minimal_luna2", "protein_design", seed=3)              # the table says seed 2
-    make_run(tmp_path, "binder_minimal_luna3", "protein_design", seed=3, model=DSFLASH)
+def test_the_notes_name_a_name_found_twice_and_every_odd_folder(tmp_path):
     make_run(tmp_path, "binder_minimal_luna4", "protein_design", seed=4)
     make_run(tmp_path, "binder_minimal_luna4", "protein_design", seed=4, group="set_aside")
     (tmp_path / "runs" / STUDY / "smoke" / "scenario").mkdir(parents=True)
-    recs, notes = records_by_run(tmp_path)
-    assert notes["not_in_table"] == ["binder_minimal_luna9"] and recs["binder_minimal_luna9"]["stage"] is None
-    assert notes["table_disagrees"] == [("binder_minimal_luna2", "seed: table 2, run.json 3"),
-                                        ("binder_minimal_luna3", f"model: table {LUNA}, run.json {resolve(DSFLASH)}")]
-    assert notes["names_twice"] == ["binder_minimal_luna4"] and notes["other_folders"] == ["smoke"]
+    notes = records_by_run(tmp_path)[1]
+    assert notes == {"names_twice": ["binder_minimal_luna4"], "other_folders": ["smoke"]}
 
 
 def test_another_study_takes_its_cell_from_the_name_and_the_same_validity_as_every_study(tmp_path):
@@ -353,32 +208,14 @@ def test_the_command_writes_nothing_without_write_and_one_record_per_run_with_it
     study = tmp_path / "runs" / STUDY
     assert main([str(study)]) == 0
     out = capsys.readouterr().out
-    assert f"== {study}: 3 runs: 1 valid, 1 not, 1 mock\n" in out and "== by stage: gate 3" in out
+    assert f"== {study}: 3 runs: 1 valid, 1 not, 1 mock\n" in out and "== by stage: None 3" in out
     assert not (study / INDEX).exists() and sorted(p.name for p in study.iterdir()) == [
         "binder_minimal_luna1", "flipt_minimal_luna1", "mock"]
     assert main([str(study), "--write"]) == 0
     lines = (study / INDEX).read_text().splitlines()
-    assert [json.loads(line) for line in lines] == build(study, join_for(study))[0]
+    assert [json.loads(line) for line in lines] == build(study)[0]
     assert all(list(json.loads(line)) == list(FIELDS) for line in lines) and len(lines) == 3
     assert not (study / (INDEX + ".partial")).exists()
-
-
-def test_the_command_finds_the_box_registry_from_a_relative_folder(tmp_path, monkeypatch, capsys):
-    make_run(tmp_path, "flipt_minimal_luna_fixed1", "software_engineering", commit="94940bc")
-    register(tmp_path, {1004: "fixed-gate-flipt-luna-1"})
-    monkeypatch.chdir(tmp_path / "runs" / STUDY)
-    assert main(["."]) == 0
-    assert "== by instance source: registry 1\n" in capsys.readouterr().out
-
-
-def test_a_name_the_table_gives_two_places_is_refused(monkeypatch):
-    from scripts.box import study_table
-
-    gate = study_table.STAGES["gate"]
-    stem = next(iter(gate))
-    monkeypatch.setitem(study_table.STAGES, "copy", {stem.replace("gate", "copy"): gate[stem]})
-    with pytest.raises(ValueError, match="two places"):
-        study_index.study_table_arms()
 
 
 def test_a_silent_regulator_reads_zero_posts_and_a_run_without_one_reads_none(tmp_path, monkeypatch):
@@ -404,34 +241,16 @@ def contested_run(root: Path, **kwargs) -> Path:
     return make_run(root, CONTEST, "creative_writings", regulator=HAIKU, extra_pairs=BOTH_ROLES, **kwargs)
 
 
-def test_a_run_with_both_roles_takes_its_arm_from_the_table_and_counts_each_role_s_posts(tmp_path, old_arms):
+def test_a_run_with_both_roles_takes_their_levels_and_counts_each_role_s_posts(tmp_path):
     contested_run(tmp_path)
-    records, notes = records_by_run(tmp_path)
-    rec = records[CONTEST]
-    assert notes["table_disagrees"] == [] and rec["valid"] and rec["reason"] == "valid"
-    assert (rec["stage"], rec["kind"], rec["regulator"], rec["regulator_level"], rec["disregulator_level"]) == (
-        "old-contest", "minimal_regulated_disregulated", "haiku", "enforce", "persuade")
+    rec = records_by_run(tmp_path)[0][CONTEST]
+    assert rec["valid"] and rec["reason"] == "valid"
+    assert (rec["regulator_level"], rec["disregulator_level"]) == ("enforce", "persuade")
     assert (rec["regulator_posts"], rec["disregulator_posts"]) == (2, 3)
 
 
-def test_a_disregulator_that_never_posted_leaves_its_run_valid_in_the_index(tmp_path, old_arms):
+def test_a_disregulator_that_never_posted_leaves_its_run_valid_in_the_index(tmp_path):
     contested_run(tmp_path, posts={"regulator": 2})
     rec = records_by_run(tmp_path)[0][CONTEST]
     assert rec["valid"] and rec["reason"] == "valid" and rec["disregulator_posts"] == 0
 
-
-@pytest.mark.parametrize(("change", "problem"), [
-    ({"disregulators": 0}, "disregulators: table persuade, run.json 0"),
-    ({"disregulator_level": "overt"}, "disregulator_level: table persuade, run.json overt"),
-    ({"role_models": {"disregulator": "openrouter/other"}}, "disregulator model: table the workers', run.json "
-                                                            "openrouter/other"),
-])
-def test_the_table_names_a_disregulator_that_differs_from_its_arm(change, problem, old_arms):
-    arm = study_index.study_table_arms()[CONTEST]
-    rec = {"seed": 1, "mock": False, "inspect_model": resolve(LUNA), "regulator_inspect_model": resolve(HAIKU)}
-    config = {"regulators": 1, "rule_level": "none", "regulator_level": "enforce", "disregulators": 1,
-              "disregulator_level": "persuade"}
-    assert study_index.disagreements(rec, arm, {"config": config, "role_models": {}}) == []
-    data = {"config": {**config, **{k: v for k, v in change.items() if k in config}},
-            "role_models": change.get("role_models", {})}
-    assert study_index.disagreements(rec, arm, data) == [problem]

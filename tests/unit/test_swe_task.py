@@ -15,8 +15,7 @@ from inspect_ai.log import read_eval_log
 from inspect_ai.solver import solver
 
 from examples.example_arguments import parse_example_arguments
-from scripts.box import box_runner, fleet_layout
-from scripts.box.study_table import Job
+from scripts.study.run_study import Cell
 from src.configuration import settings
 from src.configuration.presets import build_config
 from src.domains.swe import SWE, _swe_grading, _swe_honeypot, _swe_scoring, swe_ladder, swe_sandbox
@@ -296,26 +295,21 @@ def test_run_json_names_no_file_of_the_grader(monkeypatch):
 
 
 # ---------------------------------------------------------------- the deal
-def launched(cell: str, sample: int, monkeypatch, tmp_path) -> list[str]:
-    """The arguments the fleet's runner gives sample k of a cell (box_runner.launch), as scripts/study/screen.py
-    does."""
-    commands = []
-    monkeypatch.setattr(box_runner, "SCREEN_LOGS", tmp_path)
-    monkeypatch.setattr(box_runner.subprocess, "Popen", lambda command, **kwargs: commands.append(command))
-    box_runner.launch(Job(f"swe.{cell}", f"{cell}_luna{sample}_{id(commands)}", sample, "gpt-6-luna", None, ()))
-    return commands[0][commands[0].index("--model"):]
+def launched(cell: str, sample: int) -> list[str]:
+    """The arguments run_study gives seed k of a target on a cell without a pack."""
+    return Cell(f"{cell}_luna", "none", sample, f"examples.swe.{cell}", "gpt-6-luna", "swe").argv([], False)
 
 
 @pytest.mark.parametrize("cell", ["flipt_minimal", "flipt_minimal_cheat", "flipt_minimal_regulated"])
-def test_each_sample_of_a_cell_puts_piece_a_on_another_seat(cell, monkeypatch, tmp_path):
+def test_each_sample_of_a_cell_puts_piece_a_on_another_seat(cell):
     """On the seed and the name a real launch gives, with the real draw of the IDs."""
     with drawn_ids():
         seats = []
         for sample in (1, 2, 3):
             script = settings.ROOT / "examples" / "swe" / f"{cell}.py"
-            args = parse_example_arguments(script, None, launched(cell, sample, monkeypatch, tmp_path))
+            args = parse_example_arguments(script, None, launched(cell, sample))
             config = build_config(args.preset, args.scale, args.settings)
-            assert config.seed == sample and config.id_salt.startswith(f"{cell}_luna{sample}_")
+            assert config.seed == sample and config.id_salt == f"{cell}_luna_s{sample}"
             if cell.endswith("regulated"):
                 config = config.replace(n_agents=4, regulators=1, max_concurrency=4)
             plan = SWE(ISSUE, "jigsaw").plan(config, agent_roles(config))
@@ -477,10 +471,3 @@ def test_flipt_keeps_its_branch_prefix_among_the_piece_words(no_base_lines):
     assert terms.search("the rd/ branches") and terms.search("the upstream fix") and terms.search("the existing patch")
     assert not terms.search("my branch and your patch")
 
-
-def test_the_fleet_runs_flipt_and_vuls_cells_stand_beside_it():
-    cells = fleet_layout.cells("software_engineering")
-    assert cells == [f"swe.flipt_{kind}" for kind in fleet_layout.KINDS]
-    assert fleet_layout.layout_problems(list(fleet_layout.TASKS)) == []
-    assert sorted(path.stem for path in (settings.ROOT / "examples" / "swe").glob("vuls_*.py")) == \
-        sorted(f"vuls_{kind}" for kind in fleet_layout.KINDS)
