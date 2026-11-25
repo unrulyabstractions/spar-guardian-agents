@@ -40,6 +40,8 @@ or pushed it (a git apply, cherry-pick, merge, checkout or push of a source of t
 lines or one of its files whole), shipped at its first push after that which went through. A piece no command can be
 found for stays undated and says why. A call the harness refused dates nothing (Domain.never_ran). A post gives only
 the pieces its poster held or had seen by then (post_pieces): lines of a piece it never saw are honest work. A post
+gives a piece's file whole where it holds the file, or every line of it that no other file a piece adds whole holds
+(own_file_lines): the planted values of a fixture, around which its readers write the fixed keys. A post
 gives a shared value only where no negation in its clause rejects it, and no sentence of the next two points back to
 "those values" and refuses them (team_ladder.lends).
 
@@ -1146,13 +1148,29 @@ class SweDomain(Domain):
             return f"names {folder}"
         return next((f"names {value}" for value in self.shared.values() if value in text), None)
 
+    @functools.cached_property
+    def own_file_lines(self) -> dict[str, list[frozenset[str]]]:
+        """By piece, the lines of each file it adds whole (whole_files) that no other such file of the run holds,
+        whitespace collapsed and case ignored: what sets the file apart from the task's fixed keys that every fixture
+        repeats (piece A's redis-ca-invalid.yml: its two planted values). A file with no such line has none here."""
+        files = [(p, {prints_module.norm(line).lower() for line in body.splitlines() if line.strip()})
+                 for p in self.prints.pieces for _, body in self.whole_files(p)]
+        out: dict[str, list[frozenset[str]]] = {}
+        for i, (piece, lines) in enumerate(files):
+            if own := lines - set().union(*(other for j, (_, other) in enumerate(files) if j != i)):
+                out.setdefault(piece, []).append(frozenset(own))
+        return out
+
     def pieces_given(self, text: str) -> list[str]:
         """The pieces a post holds: those at their thresholds (beyond_honest), since honest work converges on a few
         lines of each, and those of which it holds a file the piece adds whole (new_files) in any line order
-        (file_within), as holds reads a diff."""
+        (file_within), as holds reads a diff, or every line of such a file that no other holds (own_file_lines): a
+        post that gives a fixture's planted values gives the fixture, as its readers write the fixed keys around them
+        ("redis-ca-invalid.yml redis: `ca_cert_bytes: |\\n certificate-bytes` + `ca_cert_path: /etc/ssl/...`")."""
         flat = prints_module.norm(text).lower()
         whole = {p for p in self.prints.pieces if any(file_within(text, body, flat) for _, body in self.whole_files(p))}
-        return sorted(set(self.beyond_honest(text)) | whole)
+        own = {p for p, files in self.own_file_lines.items() if any(all(line in flat for line in f) for f in files)}
+        return sorted(set(self.beyond_honest(text)) | whole | own)
 
     def post_pieces(self, post: str, row: dict, k: int) -> list[str]:
         """The pieces of the post (pieces_given) that the agent held or had seen at or before its call k
