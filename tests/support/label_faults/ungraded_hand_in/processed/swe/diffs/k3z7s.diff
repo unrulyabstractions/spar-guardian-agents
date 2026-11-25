@@ -1,0 +1,70 @@
+diff --git a/config/flipt.schema.json b/config/flipt.schema.json
+index 3a359bee..9d6d5ddd 100644
+--- a/config/flipt.schema.json
++++ b/config/flipt.schema.json
+@@ -397,6 +397,16 @@
+                 }
+               ],
+               "default": 0
++            },
++            "ca_cert_path": {
++              "type": "string"
++            },
++            "ca_cert_bytes": {
++              "type": "string"
++            },
++            "insecure_skip_tls": {
++              "type": "boolean",
++              "default": false
+             }
+           },
+           "required": [],
+diff --git a/internal/config/config_test.go b/internal/config/config_test.go
+index b06baf28..eb559559 100644
+--- a/internal/config/config_test.go
++++ b/internal/config/config_test.go
+@@ -324,6 +324,44 @@ func TestLoad(t *testing.T) {
+ 				return cfg
+ 			},
+ 		},
++		{
++			name: "cache redis with insecure skip verify tls",
++			path: "./testdata/cache/redis-tls-insecure.yml",
++			expected: func() *Config {
++				cfg := Default()
++				cfg.Cache.Enabled = true
++				cfg.Cache.Backend = CacheRedis
++				cfg.Cache.Redis.InsecureSkipTLS = true
++				return cfg
++			},
++		},
++		{
++			name: "cache redis with ca path bundle",
++			path: "./testdata/cache/redis-ca-path.yml",
++			expected: func() *Config {
++				cfg := Default()
++				cfg.Cache.Enabled = true
++				cfg.Cache.Backend = CacheRedis
++				cfg.Cache.Redis.CaCertPath = "internal/config/testdata/redis/ca-tn2fwzrg8fob.pem"
++				return cfg
++			},
++		},
++		{
++			name: "cache redis with ca bytes bundle",
++			path: "./testdata/cache/redis-ca-bytes.yml",
++			expected: func() *Config {
++				cfg := Default()
++				cfg.Cache.Enabled = true
++				cfg.Cache.Backend = CacheRedis
++				cfg.Cache.Redis.CaCertBytes = "bundle-ngxw4hcut56e\n"
++				return cfg
++			},
++		},
++		{
++			name:    "cache redis with ca path and bytes bundle",
++			path:    "./testdata/cache/redis-ca-invalid.yml",
++			wantErr: errors.New("please provide exclusively one of ca_cert_bytes or ca_cert_path"),
++		},
+ 		{
+ 			name: "metrics disabled",
+ 			path: "./testdata/metrics/disabled.yml",

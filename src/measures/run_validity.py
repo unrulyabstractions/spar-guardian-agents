@@ -12,6 +12,8 @@ A run is valid when all of these hold. `why` names each failure, and `reason` th
 - it completed: the eval log's header says success, and no episode died in the harness or at the provider
   (settings.INCOMPLETE_FAILURES);
 - the task met the collaboration rule when it ran: an SWE run's code commit descends from SWE_FIX;
+- the grader gave the hand-in a result: an SWE hand-in whose grading gave none (a timeout, an error) counts only where
+  an agent's graded tree has its bytes, whose grade is then its own (the SWE ladder's reward_of);
 - a regulator, when the cell has one, acted: it made at least one turn that was not the provider's refusal notice.
   On 2026-11-01 every turn of the Opus regulator in 7 protein runs was Anthropic's refusal notice;
 - a disregulator, when the cell has one, acted the same way. What it then did with its role is a result, never a
@@ -49,11 +51,12 @@ REFUSAL_NOTICE = "API integrators: you can reduce refusals"
 """The text Anthropic's API returns in place of a turn it refuses."""
 MOCK = re.compile(r"mock\d+$")
 REASONS = ("no_run_json", "superseded", "mock", "incomplete", "swe_before_fix", "swe_commit_unknown",
-           "regulator_silent", "regulator_refused", "disregulator_silent", "disregulator_refused",
+           "swe_ungraded", "regulator_silent", "regulator_refused", "disregulator_silent", "disregulator_refused",
            "no_team_record", "failed_episodes")
 """Why a run is not valid, the first that applies naming it: no run.json; an earlier attempt; a mock rehearsal; an eval
-that did not complete; an SWE run before SWE_FIX, or on a commit git does not know; a regulator or a disregulator that
-made no turn, or only refusal notices; no team row in signals.jsonl; an episode that failed otherwise."""
+that did not complete; an SWE run before SWE_FIX, or on a commit git does not know; an SWE hand-in with no grade
+result; a regulator or a disregulator that made no turn, or only refusal notices; no team row in signals.jsonl; an
+episode that failed otherwise."""
 CHECKED_ROLES = ("regulator", "disregulator")
 """The influencers a cell's meaning rests on."""
 
@@ -143,6 +146,7 @@ def validity(run: Path) -> dict:
             why.append(("swe_before_fix", "SWE task before the fix: one agent could cheat alone"))
         elif fixed is None:
             why.append(("swe_commit_unknown", f"SWE commit {record['commit']} unknown to git"))
+        why += ungraded_hand_in(run, data)
     for role in CHECKED_ROLES:
         agents, problems = role_check(run, data, role)
         if agents:
@@ -154,6 +158,20 @@ def validity(run: Path) -> dict:
     if others:
         why.append(("failed_episodes", "failed episodes: " + ", ".join(others)))
     return finish(record, why)
+
+
+def ungraded_hand_in(run: Path, data: dict) -> list[tuple[str, str]]:
+    """Each SWE hand-in whose grading gave no result and whose bytes no agent's graded tree has (the SWE ladder's
+    reward_of), with the grader's error. Nothing where the run recorded no grades: the grader never ran."""
+    grades = (data.get("swe") or {}).get("grades")
+    if grades is None:
+        return []
+    from src.domains import BY_TASK  # noqa: PLC0415 - the domains import Inspect, only for an SWE run with grades
+    domain = BY_TASK[data["task"]].ladder(data)
+    domain.attach(run)
+    return [("swe_ungraded", f"the hand-in's grading gave no result: "
+                             f"{(grades.get(target) or {}).get('error') or 'no error recorded'}")
+            for target in domain.graded_targets() if domain.reward_of(target)[0] is None]
 
 
 def finish(record: dict, why: list[tuple[str, str]]) -> dict:

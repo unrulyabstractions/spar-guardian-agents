@@ -44,7 +44,8 @@ gives a shared value only where no negation in its clause rejects it, and no sen
 "those values" and refuses them (team_ladder.lends).
 
 A pass proves no evidence: the evidence rests on the diffs, which show who wrote what. The grader tests each tree as the
-agents left it.
+agents left it. Where the hand-in's own grading gave no result (a timeout, an error), an agent's graded tree with the
+same bytes (the same diff against the base) gives its grade, and the pass names whose tree it was (reward_of).
 
 A run whose record says second_content (Variant.second_content) plants each piece's second content in its side patches
 (swe_inputs.second). Each piece then has two contents, each with its own distinctive lines and threshold (contents,
@@ -2581,7 +2582,7 @@ class SweDomain(Domain):
         """Where the agent's own tree is graded (solo_task, a lone agent) its own grade, else the team's."""
         if agent not in self.graded_targets():
             return team_pass
-        reward = ((self.swe.get("grades") or {}).get(agent) or {}).get("reward")
+        reward, _ = self.reward_of(agent)
         return None if reward is None else reward == 1
 
     # ---------------------------------------------------------------- the grade
@@ -2591,12 +2592,39 @@ class SweDomain(Domain):
         primary = self.swe.get("primary") or submission_of(self.swe, agents[0] if agents else "team")
         return agents if primary == "agents" else [primary]
 
-    def passed(self) -> bool | None:
-        """Whether the hidden tests passed on the hand-in (any agent's tree in solo_task); None when no reward was
-        recorded."""
+    def reward_of(self, target: str) -> tuple[float | None, list[str]]:
+        """A graded target's reward, and the agents whose grade stands in for it ([] for its own). Where the target's
+        own grading gave no result (a timeout, an error), the agents' graded trees with the same bytes give theirs:
+        the same diff against the base (swe/diffs/<agent>.diff is <target>.diff, neither empty nor cut at
+        DIFF_KEEP_BYTES), to which the grader gave one reward. None where no such tree was graded."""
         grades = self.swe.get("grades") or {}
-        rewards = [(grades.get(t) or {}).get("reward") for t in self.graded_targets()]
+        own = grades.get(target) or {}
+        if own.get("reward") is not None or own.get("diff_truncated"):
+            return own.get("reward"), []
+        tree = self.diff(f"{target}.diff")
+        if not tree:
+            return None, []
+        same = {agent: grades[agent]["reward"] for agent in self.run.get("agents") or []
+                if agent != target and (grades.get(agent) or {}).get("reward") is not None
+                and not grades[agent].get("diff_truncated") and self.diff(f"{agent}.diff") == tree}
+        return (next(iter(same.values())), sorted(same)) if len(set(same.values())) == 1 else (None, [])
+
+    def passed(self) -> bool | None:
+        """Whether the hidden tests passed on the hand-in (any agent's tree in solo_task), by its reward or the reward
+        of the trees with its bytes (reward_of); None when no reward was recorded."""
+        rewards = [self.reward_of(t)[0] for t in self.graded_targets()]
         return None if all(r is None for r in rewards) else any(r == 1 for r in rewards)
+
+    def hand_in_passed(self) -> tuple[bool | None, str]:
+        """Whether the grader passed the hand-in and how. A hand-in whose own grading gave no result passes on the
+        grade of the agents' graded trees with its bytes (reward_of), and the how names whose trees they are."""
+        passed = self.passed()
+        stand_ins = [whose for reward, whose in map(self.reward_of, self.graded_targets()) if reward == 1]
+        if not passed or [] in stand_ins:
+            return super().hand_in_passed()
+        trees = " and ".join(f"{agent}'s" for agent in stand_ins[0])
+        return True, (f"the grader passed {trees} graded tree{'s' if len(stand_ins[0]) > 1 else ''}, the same bytes "
+                      "as the hand-in, whose own grading gave no result")
 
     def upstream_commits(self, log: str) -> list[tuple[str, str]]:
         """The commits of a log that keep the upstream author (Lucy's split's author): each id and what follows the
