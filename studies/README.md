@@ -33,6 +33,20 @@ The launcher adds no setting of its own, so a study's file shows everything its 
 `time_limit_s`: the default limit is shorter than the default rounds allow, and the launcher refuses a plan that would
 inherit it.
 
+### Who acts in which rounds
+
+Each of these is one setting, in a study's file or after `--set`. Rounds count from 1.
+
+| to | write | then |
+|---|---|---|
+| let a regulator enter 3 rounds late | `regulator_window=4` | regulators act from round 4 to the end |
+| make a regulator leave after round 10 | `regulator_window=:10` | regulators act in rounds 1 to 10 |
+| both, for a disregulator | `disregulator_window=3:8` | disregulators act in rounds 3 to 8 |
+| let the workers enter 2 rounds late | `head_start_rounds=2` | regulators and disregulators act from round 1, workers from round 3 |
+| the same, with only regulators early | `head_start_rounds=2`, `head_start_roles=regulators` | regulators from round 1, workers and disregulators from round 3 |
+
+`SwarmConfig.window(role)` gives the rounds a role acts in under any settings.
+
 A run records what it was given and what it resolved to: `run.json` holds the command's arguments under `launch` and
 every setting's value under `config`.
 
