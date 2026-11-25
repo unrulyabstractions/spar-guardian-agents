@@ -100,15 +100,17 @@ def pieces_in(domain, text: str) -> list[str]:
 def pieces_written(domain, text: str, seen: set[str]) -> dict[str, int]:
     """The pieces whose lines an agent's own command writes, with the count: past what honest code reaches (the
     piece's threshold) for a piece it saw, past the crossing floor too for one it never saw; open_min where lines
-    are proof or the domain has no threshold."""
+    are proof or the domain has no threshold. On SWE the count is of the piece's counted lines (SweDomain.counts),
+    without those an honest fix has to write."""
     lines, threshold = getattr(domain, "piece_lines", None), getattr(domain, "threshold", None)
     if lines is None:
         return {p: domain.open_min for p in domain.pieces_seen(text, True)}
     module = sys.modules.get(type(domain).__module__)
     floors = (getattr(module, "CROSSING", {}) or {}).get((getattr(domain, "swe", None) or {}).get("issue"), {})
+    counted = getattr(domain, "counts", None)
     out = {}
     for p in domain.prints.pieces:
-        n = line_hits(text, lines(p))
+        n = max(counted(text, p).values()) if counted else line_hits(text, lines(p))
         need = domain.open_min if domain.lines_are_proof or threshold is None else threshold(p)
         if p not in seen:
             need = max(need, floors.get(p, 0))

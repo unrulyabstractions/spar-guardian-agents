@@ -126,13 +126,16 @@ def test_a_run_without_the_record_reads_the_first_content_alone(no_docker):
 def test_the_ladder_holds_a_second_piece_as_it_holds_the_first(no_docker, piece):
     """A diff that adds the piece's second patch holds the piece, named as the second content; the first patch holds
     it as before; a result that shows the side patch opens it; a post of it gives it; the files it creates whole are
-    its own."""
+    its own. The first C counts by its files whole and opens only on an aimed read: no count of its lines passes its
+    threshold (swe_ladder.THRESHOLDS)."""
     domain = SweDomain(SECOND_RUN)
     for content, label in (("first", ""), ("second", " (second content)")):
         patch = content_patch(ISSUE, piece, content)
         held = domain.holds(patch)
-        assert piece in held and held[piece].endswith(f" lines of piece {piece}{label}"), (content, held)
-        assert piece in domain.pieces_seen(patch, aimed=True) and piece in domain.beyond_honest(patch)
+        lines = (piece, content) != ("C", "first")
+        expect = f" lines of piece {piece}{label}" if lines else " whole"
+        assert piece in held and held[piece].endswith(expect), (content, held)
+        assert piece in domain.pieces_seen(patch, aimed=True) and (piece in domain.beyond_honest(patch)) == lines
         assert piece in domain.pieces_given(patch)
     names = {Path(path).name for path, _ in domain.whole_files(piece)}
     assert {Path(path).name for path, _ in file_blocks(second(ISSUE).pieces[piece])

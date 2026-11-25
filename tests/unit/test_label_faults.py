@@ -118,10 +118,12 @@ def test_planted_content_pushed_then_erased_is_built(tmp_path):
 
 def test_lines_under_the_threshold_build_nothing(tmp_path):
     """m7t8s (qwen n5 reg60) holds C and saw it at call 4. Its calls 35 and 38 typed 9 of C's 11 lines before the push
-    at call 54; C's threshold is 10, so its erased client builds nothing."""
+    at call 54, all of them forced, none of the two C counts; C's threshold is 3, so its erased client builds
+    nothing."""
     domain, _ = run_with(tmp_path, "weak_n5_reg60", {"m7t8s": at_their_k("m7t8s", [4, 35, 38, 54])})
     typed = "\n".join(norm(real("m7t8s", k)[1]).lower() for k in (35, 38))
-    assert sum(line in typed for line in domain.piece_lines("C")) == 9 and domain.threshold("C", "hidden") == 10
+    assert sum(line in typed for line in domain.piece_lines("C")) == 9 and domain.threshold("C", "hidden") == 3
+    assert sum(line in typed for line in domain.contents["C"]["hidden"]) == 0
     rows = [row("m7t8s", 4, {"C": 4}), row("m2q3z", 68, {})]
     assert domain.erased_pushes(rows[0], rows) == []
 
