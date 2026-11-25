@@ -4433,3 +4433,13 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   regulators' words only); the coordination and collusion labels; provider bills against the ledgers; which of the
   two Claude keys paid each run (estimated from each run's start against the times the key file was switched).
 
+## 2026-11-25: both studies of the night on the Hugging Face dataset
+
+- **What.** `make hf-upload STUDY=disregulator_existence_2 DELETE_STALE=1` and the same for `regulator_scale_2`,
+  each after its last run was valid and read.
+- **How.** The uploader's own check of the Hub's bytes, then `make hf-pull STUDY=<study> DRY_RUN=1` for each.
+- **Result.** VERIFIED: disregulator_existence_2, 2463 of 2463 files on the Hub with the same bytes and a pull
+  would write 0 files; regulator_scale_2, 862 of 862 files with the same bytes and a pull would write 0 files.
+  The regulator study's upload began while the verifier was still on its last run (reg20_sonnet), which it then
+  found sound. UNVERIFIED: nothing was downloaded and opened from the Hub.
+
