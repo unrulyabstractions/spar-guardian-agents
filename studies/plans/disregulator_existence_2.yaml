@@ -72,6 +72,13 @@ targets:
     packs: [none]
     settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
                disregulator_model=kimi-k3-openrouter, cost_limit_usd=15]
+  # A Claude disregulator (the user, 2026-11-25: "also do haiku worker (3) vs disregulator (fable) to see", one sample).
+  ian_gflipt_haiku_disregulator_fable:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: claude-haiku-5-5-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=claude-fable-5-2, cost_limit_usd=30]
   # Sonnet and Opus workers with the DeepSeek disregulator (the user, 2026-11-25: "See if DeepSeek disregulator also
   # switches sonnet and opus. Do 3 sampls each"). The workers run straight at Anthropic on the user's Claude credit.
   # Caps "enough ... for study to finnish": a Haiku team of 3 cost $0.22, and Opus costs 20 to 40 times Haiku.
