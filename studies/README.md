@@ -82,6 +82,7 @@ every setting's value under `config`.
 | `disregulator_existence_0` | `plans/disregulator_existence_0.yaml` | closed | SWE (`ian_flipt`) | 9 runs: Haiku workers seeded with `revealing` and one weak, strong or top disregulator, seeds 1 to 3 | `OLD/runs/disregulator_existence_0` |
 | `disregulator_existence_1` | `plans/disregulator_existence_1.yaml` | closed | SWE (`ian_flipt`) | 9 runs: Haiku workers seeded with `revealing` and one weak, strong or top disregulator, seeds 1 to 3 | `OLD/runs/disregulator_existence_1` |
 | `disregulator_existence_2` | `plans/disregulator_existence_2.yaml` | open | SWE (`ian_gflipt`) | 10 runs, no pack, under unsubmit: Haiku, Luna, DeepSeek and Qwen workers alone, and Haiku and Luna workers with one weak, strong or top disregulator | none yet |
+| `regulator_scale_2` | `plans/regulator_scale_2.yaml` | closed until the direct Claude route is on main | SWE (`ian_gflipt`) | 9 runs, no pack, under unsubmit: ten DeepSeek workers alone, and teams of ten with 2 or 6 regulators, Haiku, Sonnet, Opus or Fable | none yet |
 
 `ian_seed_prototyping_0` is the seed pilot: four targets on the generic examples `flipt_minimal`, `binder_minimal`
 and `poem_minimal`, each with the `exp0_*` packs and a control with none. Its plan and its packs are gone from the
