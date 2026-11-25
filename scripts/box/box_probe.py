@@ -8,13 +8,18 @@ probe runs on the box, on its own python3 with the standard library alone, and r
 /root/box_id, whether the clone exists, the launcher's pids (`python -m scripts.study.run_study`) and its start, each
 live cell by its run name (`-m studies.cells.<...>` or `-m examples.<...>` with `--name <run>`, uv's process and
 Python's counting once), the newest write among the files under the clone's runs/ and logs/ and Inspect's traces and
-sample buffers, the time on the box, the runs stored under each study (a run.json), and, with --key, what the box's own
-key has left at OpenRouter (nokey, err, inf or dollars). The launcher's own output and plan are not writes of the runs.
+sample buffers, the time on the box, the runs stored under each study (a run.json), the setup (whether the pid in
+/root/setup.pid runs box_setup_remote.sh, the last write of /root/setup.log, the code in /root/setup.exit), and, with
+--key, what the box's own key has left at OpenRouter (nokey, err, inf or dollars). The launcher's own output and plan
+are not writes of the runs.
 
 verdict runs on the Mac and turns a reading into the line .claude/box_progress.sh prints for the cloud box guard:
     unreachable wrong-box <name>   /root/box_id names another box: nothing may say `ended` of this id
-    ended no-clone-on-the-box      box_setup.sh has not cloned yet (the guard's setup grace covers it)
     blocked <why>                  the box's key has no limit left: no run can progress
+    progress <seconds>             the setup lives, and this long ago it last wrote its log
+    ended no-clone-on-the-box      no setup lives and the box holds no clone (the guard's grace covers a box that is
+                                   still booting)
+    ended setup-failed             the setup ended with a code other than 0, and no launcher and no cell lives
     ended launcher-ended           no launcher and no cell lives: the box is idle
     progress <seconds>             a launcher or a cell lives, and this long ago was the last write, or the launcher's
                                    start when nothing was written since
@@ -34,6 +39,9 @@ REPO, HOME, PROC = "/root/work", "/root", "/proc"
 INSPECT = ".local/share/inspect_ai"
 """Inspect's data folder under the home: its traces and sample buffers grow while a run works."""
 LAUNCHER = "scripts.study.run_study"
+SETUP = "box_setup_remote.sh"
+"""The setup box_setup.sh starts on the box: its pid in /root/setup.pid, its output in /root/setup.log, its exit code
+in /root/setup.exit once it ends."""
 CELLS = ("studies.cells.", "examples.")
 KEY_URL = "https://openrouter.ai/api/v1/key"
 KEY_LINE = re.compile(r"\s*(?:export\s+)?[A-Z_]*OPENROUTER_API_KEY=['\"]?([^'\"\s]+)")
@@ -77,6 +85,27 @@ def started(proc: str, pid: int) -> float | None:
     except (OSError, IndexError, ValueError, StopIteration):
         return None
     return boot + ticks / os.sysconf("SC_CLK_TCK")
+
+
+def read_text(path: str) -> str | None:
+    try:
+        with open(path) as handle:
+            return handle.read().strip()
+    except OSError:
+        return None
+
+
+def setup_state(home: str, proc: str) -> dict:
+    """The box's setup: whether the pid in setup.pid runs the setup script, its log's last write, its exit code."""
+    pid = read_text(os.path.join(home, "setup.pid")) or ""
+    args = command_line(proc, pid) if pid.isdigit() else None
+    try:
+        log = os.stat(os.path.join(home, "setup.log")).st_mtime
+    except OSError:
+        log = None
+    code = read_text(os.path.join(home, "setup.exit")) or ""
+    return {"live": any(arg.endswith(SETUP) for arg in args or []), "log": log,
+            "exit": int(code) if code.lstrip("-").isdigit() else None}
 
 
 def newest_write(roots: list[str]) -> float | None:
@@ -126,11 +155,7 @@ def key_left(box_env: str, opener=urllib.request.urlopen) -> str | float:
 
 def probe(repo: str = REPO, home: str = HOME, proc: str = PROC, key: bool = False) -> dict:
     """One reading of the box."""
-    try:
-        with open(os.path.join(home, "box_id")) as handle:
-            box_id = handle.read().strip()
-    except OSError:
-        box_id = None
+    box_id = read_text(os.path.join(home, "box_id"))
     launchers, cells = processes(proc)
     starts = [start for start in (started(proc, pid) for pid in launchers) if start is not None]
     inspect = os.path.join(home, INSPECT)
@@ -138,7 +163,7 @@ def probe(repo: str = REPO, home: str = HOME, proc: str = PROC, key: bool = Fals
              os.path.join(inspect, "samplebuffer")]
     return {"box_id": box_id, "work": os.path.isdir(repo), "launcher": launchers,
             "launcher_started": min(starts) if starts else None, "cells": cells, "newest": newest_write(roots),
-            "now": time.time(), "stored": stored_runs(repo),
+            "now": time.time(), "stored": stored_runs(repo), "setup": setup_state(home, proc),
             "key": key_left(os.path.join(home, ".box_env")) if key else "unread"}
 
 
@@ -146,12 +171,15 @@ def verdict(reading: dict, want: str) -> str:
     """The guard's line for one reading of box `want`."""
     if reading.get("box_id") != want:
         return f"unreachable wrong-box {re.sub(r'[^A-Za-z0-9._-]', '', str(reading.get('box_id')))[:40] or 'none'}"
-    if not reading["work"]:
-        return "ended no-clone-on-the-box"
     if isinstance(reading["key"], (int, float)) and reading["key"] <= 0:
         return "blocked the-box-key-has-no-limit-left"
+    setup = reading.get("setup") or {}
+    if setup.get("live"):
+        return f"progress {max(0, int(reading['now'] - (setup.get('log') or reading['now'])))}"
+    if not reading["work"]:
+        return "ended no-clone-on-the-box"
     if not reading["launcher"] and not reading["cells"]:
-        return "ended launcher-ended"
+        return "ended setup-failed" if setup.get("exit") not in (None, 0) else "ended launcher-ended"
     since = max(filter(None, (reading["newest"], reading["launcher_started"])), default=reading["now"])
     return f"progress {max(0, int(reading['now'] - since))}"
 
@@ -164,8 +192,11 @@ def status(reading: dict) -> list[str]:
     ago = f"{(reading['now'] - reading['newest']) / 60:.0f} min ago" if reading["newest"] else "never"
     stored = ", ".join(f"{study} {n}" for study, n in reading["stored"].items()) or "none"
     out = [f"{launcher}; {len(reading['cells'])} cells running; last write {ago}; runs stored: {stored}"]
+    setup = reading.get("setup") or {}
+    if setup.get("live") or setup.get("exit") not in (None, 0):
+        out.append("   setup running" if setup.get("live") else f"   setup ended with code {setup['exit']}")
     out += [f"   running {name} (pid {pid})" for name, pid in sorted(reading["cells"].items())]
-    if not reading["launcher"] and not reading["cells"]:
+    if not reading["launcher"] and not reading["cells"] and not setup.get("live"):
         out.append("all runs ended: capture this box and destroy it")
     return out
 

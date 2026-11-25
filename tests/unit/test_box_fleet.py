@@ -26,6 +26,7 @@ import pytest
 
 from scripts.box import (
     box_capture,
+    box_key,
     box_sweep,
     fleet,
     fleet_create,
@@ -147,6 +148,9 @@ class FakeVast:
                 return {"success": True}
             if row is None:
                 raise urllib.error.HTTPError(call.url, 404, "no such instance", {}, None)
+            if call.method == "PUT":
+                row["state"] = call.body["state"]
+                return {"success": True}
             return {"instances": row}
         raise AssertionError(f"unexpected call {call.show()}")
 
@@ -161,7 +165,15 @@ def registry(tmp_path, monkeypatch):
     monkeypatch.setattr(fleet_registry, "fleet_pin", lambda commit="HEAD": dict(PIN))
     monkeypatch.setattr(fleet_create, "guard_alive", lambda: True)   # the cloud box guard's daemon, never the real one
     monkeypatch.setattr(run_study, "RUNS", tmp_path / "runs")         # no run of this checkout's runs/ is held here
+    monkeypatch.setattr(run_study, "LOGS", tmp_path / "logs")         # nor any trace in its logs/
+    monkeypatch.setattr(run_study.HOST, "process_lines", list)        # no launcher lives on this machine
+    monkeypatch.setattr(fleet_layout, "committed", working_copy, raising=False)   # PIN's commit: the files here
     return path
+
+
+def working_copy(commit: str, path) -> str:
+    """A file as PIN's made-up commit holds it: as this checkout holds it."""
+    return (fleet_layout.ROOT / fleet_layout.from_root(path)).read_text()
 
 
 def add_box(instance_id=7, box=BOX, label=LABEL, launch=LAUNCH, **fields) -> dict:
@@ -244,20 +256,105 @@ def test_create_refuses_a_model_on_another_key(registry, monkeypatch, capsys):
     assert fake.calls == []
 
 
-def test_create_refuses_a_run_held_here_and_a_target_another_open_box_runs(registry, monkeypatch, capsys):
-    """A box makes every run of its targets that its own runs/ lacks, so a run held here would come back as a second
-    run of its name; and two boxes of one study never run the same target."""
+@pytest.mark.parametrize("trace", ["runs/{study}/{name}/processed/run.json", "runs/{study}/{name}/processed/.partial",
+                                   "logs/{study}/{name}/2026-11-25T10-00-00_mac.eval",
+                                   "logs/{study}/run_study/{name}.log"])
+def test_create_and_run_args_refuse_a_run_with_any_trace_here(registry, monkeypatch, capsys, trace):
+    """A failed attempt here leaves an eval log or a console log without a run.json; a box would make the run again
+    beside it, and its capture would then refuse the box. Both refuse before any rent or launch, with the remedy."""
     fake = FakeVast()
     monkeypatch.setattr(vast_api, "http", fake)
     name = BOX.runs[0].name
-    write_text(run_study.RUNS / STUDY / name / "processed/run.json", "{}")
+    write_text(run_study.RUNS.parent / trace.format(study=STUDY, name=name), "{}")
     assert fleet.main(["create", *TWO_BOXES]) == 1
-    assert f"runs/{STUDY}/{name} is here already" in capsys.readouterr().out
-    (run_study.RUNS / STUDY / name / "processed/run.json").unlink()
+    out = capsys.readouterr().out
+    assert f"!! {name} has traces here ({trace.format(study=STUDY, name=name).split('/processed')[0]})" in out
+    assert "set_aside_attempt" in out and "refused: a box rented for these runs" in out
+    assert fake.calls == []
+    add_box()
+    assert fleet.main(["run-args", "7"]) == 1
+    assert f"{name} has traces here" in capsys.readouterr().err
+
+
+def test_a_mock_launch_reads_traces_under_its_own_names(registry, capsys):
+    """A rehearsal's runs are <study>_mock/<name>_mock: a real run's trace is no clash for it, its own trace is."""
+    add_box()
+    name = BOX.runs[0].name
+    write_text(run_study.RUNS / STUDY / name / "processed/run.json", "{}")
+    assert fleet.main(["run-args", "7", "--mock"]) == 0
+    capsys.readouterr()
+    write_text(run_study.LOGS / f"{STUDY}_mock" / "run_study" / f"{name}_mock.log", "")
+    assert fleet.main(["run-args", "7", "--mock"]) == 1
+    assert f"{name}_mock has traces here (logs/{STUDY}_mock/run_study/{name}_mock.log)" in capsys.readouterr().err
+
+
+def test_create_refuses_a_target_another_open_box_runs(registry, monkeypatch, capsys):
+    """Two boxes of one study never run the same target."""
+    fake = FakeVast()
+    monkeypatch.setattr(vast_api, "http", fake)
     add_box(5)
     assert fleet.main(["create", *TWO_BOXES]) == 1
     assert f"box 5 of {STUDY} runs {', '.join(sorted(BOX.targets))} already" in capsys.readouterr().out
     assert fake.calls == []
+
+
+MAC_LAUNCHER = ("/Users/me/work/.venv/bin/python3 -m scripts.study.run_study "
+                "studies/plans/disregulator_existence_2.yaml --yes --limit max_runs=4")
+
+
+@pytest.mark.parametrize("line, refused", [
+    (MAC_LAUNCHER, True),
+    ("uv run python -m scripts.study.run_study --yes studies/plans/disregulator_existence_2.yaml --mock", True),
+    ("uv run python -m scripts.study.run_study studies/plans/regulator_scale_1.yaml --yes", False),
+    ("zsh -lic uv run python -m scripts.study.run_study studies/plans/disregulator_existence_2.yaml", False),
+])
+def test_create_and_run_args_refuse_while_a_launcher_of_the_study_lives_here(registry, monkeypatch, capsys, line,
+                                                                              refused):
+    """A launcher of the study on this machine would run the boxes' targets too, its mock rehearsal too; a launcher of
+    another study, or a shell that quotes one, is no launcher of it."""
+    fake = FakeVast()
+    monkeypatch.setattr(vast_api, "http", fake)
+    monkeypatch.setattr(run_study.HOST, "process_lines", lambda: ["/sbin/launchd", line])
+    assert fleet.main(["create", *TWO_BOXES, "--dry-run"]) == (1 if refused else 0)
+    assert (f"!! a launcher of {STUDY} is live on this machine ({line})" in capsys.readouterr().out) is refused
+    add_box()
+    assert fleet.main(["run-args", "7"]) == (1 if refused else 0)
+    assert ("stop it first" in capsys.readouterr().err) is refused
+
+
+def test_create_reads_the_plan_as_the_pinned_commit_holds_it_and_refuses_a_file_that_differs(registry, monkeypatch,
+                                                                                           capsys):
+    """The boxes clone the pin: create prices from the commit's plan, and refuses while the file here differs."""
+    fake = FakeVast()
+    monkeypatch.setattr(vast_api, "http", fake)
+    dearer = PLAN.read_text().replace("cost_limit_usd=5, unsubmit", "cost_limit_usd=7, unsubmit")
+    asked = []
+
+    def at_commit(commit, path):
+        asked.append((commit, fleet_layout.from_root(path)))
+        return dearer
+
+    monkeypatch.setattr(fleet_layout, "committed", at_commit)
+    assert fleet.main(["create", *TWO_BOXES]) == 1
+    out = capsys.readouterr().out
+    assert ("studies/plans/disregulator_existence_2.yaml here differs from commit c0ffeec0ffee, which the boxes run: "
+            "commit and push it, or restore it with git checkout c0ffeec0ffee -- "
+            "studies/plans/disregulator_existence_2.yaml") in out
+    assert (PIN["commit"], "studies/plans/disregulator_existence_2.yaml") in asked
+    assert f"{BOX.name}: 5 runs, 18 agents in all, 44 at once; ${BOX.cap_usd + 2 * 3:.2f}" in out   # three at $5
+    assert fake.calls == []
+
+
+def test_committed_reads_a_file_as_a_commit_holds_it():
+    head = subprocess.run(["git", "-C", str(fleet_layout.ROOT), "rev-parse", "HEAD"], capture_output=True,
+                          text=True).stdout.strip()
+    shown = subprocess.run(["git", "-C", str(fleet_layout.ROOT), "show", f"{head}:ruff.toml"],
+                           capture_output=True, text=True).stdout
+    assert fleet_layout.committed(head, fleet_layout.ROOT / "ruff.toml") == shown and shown
+    with pytest.raises(ValueError, match="holds no studies/plans/no_such_study.yaml"):
+        fleet_layout.committed(head, "studies/plans/no_such_study.yaml")
+    with pytest.raises(ValueError, match="outside this checkout"):
+        fleet_layout.committed(head, "/etc/hosts")
 
 
 def test_a_package_list_pins_inspect_to_a_release_or_a_git_commit():
@@ -557,6 +654,22 @@ def test_a_destroy_marks_the_box_destroyed_once_it_is_gone(registry, monkeypatch
     assert log["gone_from_account"] and log["snapshot"]["files"] == 12 and log["files_lost"] == 0
 
 
+def test_stop_sends_vast_ai_s_stop_only_to_a_registered_box_of_this_fleet(registry, monkeypatch, capsys):
+    """The teardown stops a box whose Docker cannot answer: its disk stays. A box outside the registry, or one vast.ai
+    labels otherwise, gets nothing."""
+    fake = FakeVast(instances=[{"id": 7, "label": LABEL, "dph_total": 0.5}, {"id": 8, "label": "someone-else"}])
+    monkeypatch.setattr(vast_api, "http", fake)
+    add_box()
+    add_box(8, label=LABEL.replace("-l", "-x"))
+    assert fleet.main(["stop", "9"]) == 1 and "not in the registry" in capsys.readouterr().out
+    assert fleet.main(["stop", "8"]) == 1 and "not a box of this fleet" in capsys.readouterr().out
+    assert not [call for call in fake.calls if call.method == "PUT"]
+    assert fleet.main(["stop", "7"]) == 0 and f"stopped 7 {LABEL}" in capsys.readouterr().out
+    assert [call.show() for call in fake.calls if call.method == "PUT"] == [
+        'PUT https://console.vast.ai/api/v0/instances/7/ {"state": "stopped"}']
+    assert fleet_registry.registered(fleet_registry.load_registry(), 7)["stopped"]
+
+
 def test_status_flags_a_destroyed_box_the_account_still_lists(registry, monkeypatch, capsys):
     monkeypatch.setattr(vast_api, "http", FakeVast(instances=[{"id": 7, "label": LABEL, "dph_total": 0.5}]))
     add_box(destroyed="2026-10-30T00:00:00Z")
@@ -617,6 +730,26 @@ def test_repin_moves_a_box_while_the_package_list_stays(registry, monkeypatch, c
     assert "a new list takes a new launch" in capsys.readouterr().err
     assert fleet.main(["entry", "7", "commit"]) == 0 and capsys.readouterr().out.split() == [moved]
     assert fleet.main(["repin", "8", "--commit", moved]) == 1
+
+
+def test_repin_sets_the_runs_and_caps_of_the_new_commit_or_refuses_a_plan_without_the_targets(registry, monkeypatch,
+                                                                                            capsys):
+    """box_key's need follows the commit a box runs: repin records what the new commit's plan gives the box's targets,
+    and box_key reads the same."""
+    add_box()
+    texts = {PIN["commit"]: PLAN.read_text(),
+             "e" * 40: PLAN.read_text().replace("cost_limit_usd=5, unsubmit", "cost_limit_usd=7, unsubmit"),
+             "f" * 40: PLAN.read_text().replace("ian_gflipt_haiku_baseline:", "ian_gflipt_haiku_renamed:")}
+    monkeypatch.setattr(fleet_layout, "committed", lambda commit, path: texts[commit])
+    monkeypatch.setattr(fleet_registry, "fleet_pin", lambda commit: PIN | {"commit": commit})
+    assert box_key.holders_need(7, "OPENROUTER_API_KEY") == [(7, 5, BOX.cap_usd)]
+    assert fleet.main(["repin", "7", "--commit", "f" * 40]) == 1
+    assert "no longer holds the box's targets" in capsys.readouterr().err
+    assert fleet.main(["repin", "7", "--commit", "e" * 40]) == 0
+    assert f"runs 5 to 5, caps ${BOX.cap_usd:.2f} to ${BOX.cap_usd + 6:.2f}" in capsys.readouterr().out
+    entry = fleet_registry.registered(fleet_registry.load_registry(), 7)
+    assert (entry["commit"], entry["cap_usd"]) == ("e" * 40, BOX.cap_usd + 6)
+    assert box_key.holders_need(7, "OPENROUTER_API_KEY") == [(7, 5, BOX.cap_usd + 6)]
 
 
 def test_run_args_start_the_launcher_on_the_box_s_targets_from_the_registry(registry, capsys):

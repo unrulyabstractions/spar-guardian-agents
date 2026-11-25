@@ -1,7 +1,7 @@
 """The guard's progress adapter on recorded inputs: box_probe.py's reading of a fake /proc and a fake clone (the
 launcher and its cells by their command lines, the newest write, the runs stored, the key), its verdict on each state of
-a box (busy, runs ended, launcher dead, nothing written for long, another box, no clone, an exhausted key), and
-.claude/box_progress.sh end to end through a stand-in ssh that runs the probe on the fake box."""
+a box (busy, runs ended, launcher dead, nothing written for long, another box, no clone, an exhausted key, a setup live
+or failed), and .claude/box_progress.sh end to end through a stand-in ssh that runs the probe on the fake box."""
 from __future__ import annotations
 
 import io
@@ -23,6 +23,7 @@ CELL = ["uv", "run", "python", "-m", "studies.cells.swe.ian_flipt_minimal", "--m
         "a_none_s1", "--set", "seed=1"]
 CELL_PYTHON = ["/root/work/.venv/bin/python3", "-m", "studies.cells.swe.ian_flipt_minimal", "--name", "a_none_s1"]
 SHELL = ["bash", "-c", "STUDY=x exec uv run python -m studies.cells.swe.ian_flipt_minimal --name b_none_s1"]
+SETUP = ["bash", "/root/ship/box_setup_remote.sh", "c0ffee", "3.11.13"]
 BOOT, TICKS = 1_700_000_000, os.sysconf("SC_CLK_TCK")
 
 
@@ -84,10 +85,29 @@ def test_the_key_is_read_from_the_box_env_and_only_what_is_left_comes_back(box):
     assert box_probe.key_left(str(env), lambda request, timeout: 1 / 0) == "err"
 
 
+def test_the_probe_reads_the_setup_by_its_pid_file_and_its_command_line(box):
+    home = Path(box["home"])
+    assert box_probe.probe(box["repo"], box["home"], fake_proc(box["tmp"] / "p0", {}))["setup"] == {
+        "live": False, "log": None, "exit": None}
+    (home / "setup.pid").write_text("20\n")
+    (home / "setup.log").write_text("== 3. the .venv\n")
+    age(str(home / "setup.log"), 300)
+    setup = box_probe.probe(box["repo"], box["home"], fake_proc(box["tmp"] / "p1", {20: SETUP}))["setup"]
+    assert setup["live"] and abs(setup["log"] - (time.time() - 300)) < 5 and setup["exit"] is None
+    reused = box_probe.probe(box["repo"], box["home"], fake_proc(box["tmp"] / "p2", {20: ["sleep", "60"]}))
+    assert reused["setup"]["live"] is False                     # the pid is another process's now
+    (home / "setup.exit").write_text("1\n")
+    assert box_probe.probe(box["repo"], box["home"], fake_proc(box["tmp"] / "p3", {}))["setup"]["exit"] == 1
+
+
 def reading(**changes) -> dict:
     now = 1_800_000_000.0
     return {"box_id": "7", "work": True, "launcher": [10], "launcher_started": now - 7200, "cells": {"a_none_s1": 11},
-            "newest": now - 120, "now": now, "stored": {"x": 1}, "key": 12.5} | changes
+            "newest": now - 120, "now": now, "stored": {"x": 1}, "key": 12.5,
+            "setup": {"live": False, "log": now - 9000, "exit": 0}} | changes
+
+
+IDLE = {"launcher": [], "cells": {}}
 
 
 @pytest.mark.parametrize("changes, said", [
@@ -101,6 +121,13 @@ def reading(**changes) -> dict:
     ({"box_id": None}, "unreachable wrong-box None"),
     ({"work": False, "launcher": [], "cells": {}}, "ended no-clone-on-the-box"),
     ({"key": "err"}, "progress 120"),
+    ({**IDLE, "work": False, "setup": {"live": True, "log": 1_800_000_000.0 - 300, "exit": None}}, "progress 300"),
+    ({**IDLE, "setup": {"live": True, "log": 1_800_000_000.0 - 300, "exit": None}}, "progress 300"),   # cloned
+    ({**IDLE, "setup": {"live": True, "log": None, "exit": None}}, "progress 0"),
+    ({**IDLE, "setup": {"live": False, "log": 1_800_000_000.0 - 300, "exit": 1}}, "ended setup-failed"),
+    ({**IDLE, "setup": {"live": False, "log": None, "exit": None}}, "ended launcher-ended"),
+    ({"setup": {"live": False, "log": None, "exit": 1}}, "progress 120"),        # a launcher runs all the same
+    ({**IDLE, "setup": {"live": True, "log": None, "exit": None}, "key": 0.0}, "blocked the-box-key-has-no-limit-left"),
 ])
 def test_the_verdict_of_each_state(changes, said):
     assert box_probe.verdict(reading(**changes), "7") == said
@@ -108,6 +135,8 @@ def test_the_verdict_of_each_state(changes, said):
 
 def test_watch_reads_all_runs_ended_only_when_nothing_lives():
     assert box_probe.status(reading(launcher=[], cells={}))[-1] == "all runs ended: capture this box and destroy it"
+    during_setup = box_probe.status(reading(**IDLE, setup={"live": True, "log": None, "exit": None}))
+    assert during_setup[-1] == "   setup running" and not any("all runs ended" in line for line in during_setup)
     assert not any("all runs ended" in line for line in box_probe.status(reading(launcher=[])))
     assert box_probe.status(reading())[0].startswith("launcher alive (pid 10); 1 cells running; last write 2 min ago")
 
@@ -161,4 +190,10 @@ def test_box_progress_says_busy_ended_and_idle_through_the_probe(box, progress):
     said = progress({10: LAUNCHER})
     assert said.startswith("progress ") and int(said.split()[1]) >= 3 * 3600 - 60
     assert progress({10: LAUNCHER}, "8") == "unknown"                       # not a box of the registry
+    (Path(box["home"]) / "setup.pid").write_text("20\n")
+    (Path(box["home"]) / "setup.log").write_text("== 4. box_build\n")
+    said = progress({20: SETUP})
+    assert said.startswith("progress ") and int(said.split()[1]) < 60       # a long setup after the clone is progress
+    (Path(box["home"]) / "setup.exit").write_text("1\n")
+    assert progress({}) == "ended setup-failed"
     assert progress({10: LAUNCHER}, "7;x") == "unknown"

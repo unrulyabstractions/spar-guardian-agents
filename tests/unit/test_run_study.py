@@ -632,8 +632,10 @@ def test_mock_gives_every_model_and_every_role_the_mock_model_and_its_own_study(
         assert "--model mockllm/model " in line
         assert all(seed_study.setting(pairs, f"{role}_model") == "mockllm/model" for role in ROLES)
     roles = " ".join(f"--set {role}_model=mockllm/model" for role in ("worker", "regulator", "disregulator"))
-    luna = next(line for line in lines if "--name swe_luna_revealing_s1" in line)
+    luna = next(line for line in lines if "--name swe_luna_revealing_s1_mock " in line)
     assert f"--set regulator_model=claude-haiku-5-5-openrouter {roles} --set id_salt=swe_luna_s1" in luna
+    names = [re.search(r"--name (\S+)", line)[1] for line in lines]   # a rehearsal's names are never a real run's
+    assert len(names) == 8 and all(name.endswith(seed_study.MOCK_SUFFIX) for name in names)
     assert seed_study.main([str(plan_file), "--dry-run", "--mock", "--gates", str(plan_file)]) == 2
     assert "--mock decides no gates" in capsys.readouterr().err
 
@@ -690,3 +692,92 @@ def test_a_launcher_adopts_a_live_run_of_its_own_study_only(plan_file, tmp_path,
     assert "ADOPT  swe_luna_none_s1" in out and "ADOPT  swe_deepseek_none_s1" not in out
     assert sorted(re.search(r"--name (\S+)", line)[1] for line in FakeRun.launched) == \
         ["swe_deepseek_none_s1", "swe_deepseek_revealing_s1", "swe_luna_revealing_s1"]
+
+
+# ---------------------------------------------------------------- one host or one box per target; a stuck launcher ends
+def registry(tmp_path, *boxes: dict) -> None:
+    """The fleet's registry runs/boxes.json in tmp_path with these entries."""
+    path = tmp_path / "runs" / "boxes.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"boxes": [{"destroyed": None, **box} for box in boxes]}))
+
+
+def test_the_launcher_leaves_out_every_target_an_open_box_of_the_study_runs(plan_file, tmp_path, monkeypatch, capsys):
+    """Box 5 runs swe_luna; box 6 ran swe_deepseek and is destroyed; box 7 could not start; box 8 is of another
+    study. Only swe_luna is left out, and the header says which box runs it."""
+    monkeypatch.setattr(seed_study, "RUNS", tmp_path / "runs")
+    registry(tmp_path, {"id": 5, "study": "study_x", "targets": ["swe_luna"]},
+             {"id": 6, "study": "study_x", "targets": ["swe_deepseek"], "destroyed": "2026-11-25T10:00:00Z"},
+             {"id": 7, "study": "study_x", "targets": ["swe_deepseek"], "start_error": "Error: no GPU"},
+             {"id": 8, "study": "study_y", "targets": ["swe_deepseek"]})
+    monkeypatch.setattr(seed_study.HOST, "free_memory_pct", lambda: 70)
+    monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 20)
+    for options in ([], ["--mock"]):                    # a mock rehearsal here would mix with a box's too
+        assert seed_study.main([str(plan_file), "--dry-run", *options]) == 0
+        out = capsys.readouterr().out
+        assert "4 cells, 0 done already, 4 to run" in out and "  box    5 runs swe_luna: left out here" in out
+        names = re.findall(r"--name (\S+)", out)
+        assert len(names) == 4 and not any(name.startswith("swe_luna") for name in names)
+    (tmp_path / "runs" / "boxes.json").write_text("{not json")
+    assert seed_study.main([str(plan_file), "--dry-run"]) == 2
+    assert "the fleet's registry" in capsys.readouterr().err
+
+
+def test_with_gates_a_box_s_target_leaves_out_every_arm_its_gate_reads(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(seed_study, "RUNS", tmp_path / "runs")
+    monkeypatch.setattr(seed_study.HOST, "free_memory_pct", lambda: 70)
+    monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 20)
+    spec_file, plan_file = tmp_path / "spec.yaml", tmp_path / "plan.yaml"
+    spec_file.write_text(GATED)
+    spec = gs.load_spec(spec_file)
+    gs.write_plan(gs.decide(spec, tmp_path / "runs" / "study_x"), plan_file)
+    baseline = next(spec.target(stem, worker, arm)[0] for stem, worker in spec.cells() for arm in spec.arms
+                    if arm.name == "baseline")
+    registry(tmp_path, {"id": 5, "study": "study_x", "targets": [baseline]})
+    assert seed_study.main([str(plan_file), "--dry-run", "--gates", str(spec_file)]) == 0
+    out = capsys.readouterr().out
+    assert f"box    5 runs {baseline}: left out here" in out and "0 to run" in out
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    """The launcher's clock, which its 20 s sleeps move on."""
+    now = [1_000_000.0]
+    monkeypatch.setattr(seed_study.time, "time", lambda: now[0])
+    monkeypatch.setattr(seed_study.time, "sleep", lambda s: now.__setitem__(0, now[0] + s))
+    return now
+
+
+@pytest.mark.parametrize("memory, free, disk, floor, said", [
+    (None, 50, (60, 50), 10, "the host's free memory cannot be read"),
+    (80, None, None, 10, "Docker's disk cannot be read"),
+    (80, 40, (59, 40), 100, "stage 0's cells need 100 GB free, more than Docker's whole disk of 59 GB"),
+])
+def test_a_launcher_that_cannot_launch_ends_after_its_wait(plan_file, tmp_path, monkeypatch, capsys, clock, memory,
+                                                           free, disk, floor, said):
+    """Nothing runs and the hold cannot clear by itself: the launcher ends with 3 after STUCK_MINUTES, saying why, so
+    a box whose Docker died is idle, not progress."""
+    monkeypatch.setattr(seed_study, "RUNS", tmp_path / "runs")
+    monkeypatch.setattr(seed_study, "LOGS", tmp_path / "logs")
+    monkeypatch.setattr(seed_study, "live_names", set)
+    monkeypatch.setattr(seed_study.HOST, "free_memory_pct", lambda: memory)
+    monkeypatch.setattr(seed_study, "free_disk_gb", lambda: free)
+    monkeypatch.setattr(seed_study.HOST, "docker_disk", lambda: disk)
+    monkeypatch.setattr(subprocess, "Popen", no_launch)
+    plan_file.write_text(PLAN.replace("max_runs: 10", f"max_runs: 10, min_disk_gb: {{swe: {floor}}}"))
+    start = clock[0]
+    assert seed_study.main([str(plan_file), "--yes"]) == 3
+    out = capsys.readouterr().out
+    assert f"STUCK  nothing runs and {said} for 30 min: 8 cells not launched, the launcher ends" in out
+    assert seed_study.STUCK_MINUTES * 60 <= clock[0] - start <= seed_study.STUCK_MINUTES * 60 + 20
+
+
+def test_a_hold_that_can_clear_is_no_reason_to_end(plan_file, monkeypatch):
+    """Low memory, or a disk short of a floor it could hold, may clear, so the launcher waits on; a floor above the
+    whole disk never clears."""
+    plan = seed_study.load_plan(plan_file)
+    monkeypatch.setattr(seed_study.HOST, "free_memory_pct", lambda: 5)
+    monkeypatch.setattr(seed_study.HOST, "docker_disk", lambda: (59, 3))
+    monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 3)
+    assert seed_study.hold_for_good(seed_study.cells(plan), {**plan["limits"], "min_disk_gb": {"swe": 50}}) is None
+    assert seed_study.hold_for_good(seed_study.cells(plan), {**plan["limits"], "min_disk_gb": {"swe": 60}})

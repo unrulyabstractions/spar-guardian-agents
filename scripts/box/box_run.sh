@@ -2,17 +2,19 @@
 # Start a box's launcher: scripts/box/box_run.sh <instance-id> [--mock] [--main-key]
 #
 # The launcher is the Mac's own, scripts/study/run_study.py, on the box's plan: `run_study <plan> --yes [--gates
-# <spec>] --only <the box's targets> --limit max_agents=<its agents at once>`, all from the box's registry entry through
-# fleet.py run-args, which refuses a model that needs a key a box does not hold and a run of the box this machine holds
-# from a run made elsewhere. --mock passes --mock without --gates and with only the targets the plan holds now: every
-# model is Inspect's mock model, the runs go to <study>_mock, no key goes to the box and nothing is paid. Running this
-# again on a box whose launcher ended starts the runs not stored.
+# <spec>] --only <the box's targets> --limit max_agents=<its agents at once>`, all from the box's registry entry and its
+# pinned commit's plan through fleet.py run-args. That refuses a model that needs a key a box does not hold, a run of
+# the box of which this machine holds a trace the box did not make, and a launcher of the study live on this machine.
+# --mock passes --mock without --gates and with only the targets the pinned plan holds: every model is Inspect's mock
+# model, the runs go to <study>_mock under names that end in _mock, no key goes to the box and nothing is paid. Running
+# this again on a box whose launcher ended starts the runs not stored.
 #
 # A box holds one key, OPENROUTER_API_KEY. It goes from this shell's environment to /root/.box_env (mode 600) through
 # ssh's standard input: never on a command line, never printed. The box checks only its length. --main-key sends
 # OPENROUTER_API_KEY itself, which every study's boxes take (CLAUDE.md §3a); without it the key sent is
 # BOX_OPENROUTER_API_KEY, a key made for the launch. scripts/box/box_key.py refuses either unless OpenRouter caps it
-# and enough is left for every run the box may make at its dollar cap.
+# and enough is left for every run of every open box that holds the key at its dollar cap, and records that this box
+# holds it.
 #
 # Once /root/box_id shows the endpoint reaches this instance, the launcher starts under nohup setsid with /root/.box_env
 # sourced, uv on its PATH and UV_NO_SYNC set (the cells' `uv run` uses the .venv the launch pinned as it is). Its output
@@ -22,7 +24,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 cd "$root"
 if [ $# -lt 1 ]; then
-  sed -n '2,19p' "$0"
+  sed -n '2,21p' "$0"
   exit 2
 fi
 id=$1

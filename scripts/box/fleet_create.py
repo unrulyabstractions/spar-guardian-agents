@@ -1,13 +1,16 @@
 """fleet.py create: rent the boxes of a plan's assignment (fleet_plan.py) and register each.
 
 A person names the plan, its gated spec when it has one, and the boxes; create rents the assignment's boxes, or those
-of them --only names. It refuses a box whose runs call a model that needs a key a box does not hold, a run this
-checkout holds already in runs/<study>/ (the box would make it again), a target another open box of the study runs,
-and a box the account holds already.
+of them --only names. It pins the launch first, and reads the assignment, the caps and the keys from the plan and spec
+as the pinned commit holds them, which is what the boxes clone. It refuses a plan or spec whose file here differs from
+that commit's, a box whose runs call a model that needs a key a box does not hold, a run of which this checkout holds a
+trace (fleet_plan.traces_here: the box would make it again beside it, and its capture would refuse it), a launcher of
+the study live on this machine (it would run the boxes' targets too), a target another open box of the study runs, and
+a box the account holds already.
 
-It pins the launch before the first rent, and it rents one offer per box in the same step as the search, since offer ids
-expire within minutes. It takes no offer above --max-dph and stops before the fleet's $/h (the registered boxes not
-destroyed, and this launch) would pass --max-fleet-dph. Each instance enters the registry the moment vast.ai returns its
+It rents one offer per box in the same step as the search, since offer ids expire within minutes. It takes no offer
+above --max-dph and stops before the fleet's $/h (the registered boxes not destroyed, and this launch) would pass
+--max-fleet-dph. Each instance enters the registry the moment vast.ai returns its
 id, with what it runs (fleet_registry.box_entry). A rejected offer moves on to the next one. Any other outcome (an
 error, a reply it cannot read, an interrupt) stops the launch, since the instance may exist.
 
@@ -25,12 +28,13 @@ import urllib.error
 from dataclasses import dataclass
 from pathlib import Path
 
-from scripts.box import fleet_plan, fleet_registry
-from scripts.box.fleet_layout import LABEL_PREFIX, ROOT, box_label, is_fleet_label, label_base, new_launch
+from scripts.box import fleet_layout, fleet_plan, fleet_registry
+from scripts.box.fleet_layout import LABEL_PREFIX, ROOT, box_label, from_root, is_fleet_label, label_base, new_launch
 from scripts.box.fleet_plan import Assignment, BoxPlan
 from scripts.box.fleet_registry import box_entry, load_registry, open_dph, register, write_launch
 from scripts.box.vast_api import Call, Vast, credit, list_instances
 from scripts.box.vast_offers import candidates, create_call, offer_row, rejections, search_call
+from scripts.study import run_study
 
 MAX_FLEET_DPH = 15.00
 """What the fleet may bill per hour in all (its boxes not destroyed), unless --max-fleet-dph says otherwise."""
@@ -171,12 +175,27 @@ def chosen_boxes(assignment: Assignment, only: list[str] | None) -> list[BoxPlan
     return [box for box in assignment.boxes if not only or box.name in only]
 
 
+def drift_problems(paths: list[Path | None], commit: str) -> list[str]:
+    """The plan or spec whose file here differs from the commit's: the boxes would run what create did not read."""
+    return [f"{from_root(path)} here differs from commit {commit[:12]}, which the boxes run: commit and push it, or "
+            f"restore it with git checkout {commit[:12]} -- {from_root(path)}"
+            for path in paths if path is not None and Path(path).read_text() != fleet_layout.committed(commit, path)]
+
+
+def launcher_problems(study: str) -> list[str]:
+    """A launcher of the study live on this machine, which would run the boxes' targets too."""
+    return [f"a launcher of {study} is live on this machine ({line}): stop it first; one started later leaves out "
+            f"the targets an open box runs" for line in run_study.live_launchers(study)[:1]]
+
+
 def box_problems(assignment: Assignment, boxes: list[BoxPlan]) -> list[str]:
-    """Why these boxes could not run their plan's runs: a model's key, a run this checkout holds, a target another
-    open box of the study runs (a box vast.ai cannot start runs nothing, so its replacement may take its targets)."""
+    """Why these boxes could not run their plan's runs: a model's key, a run this checkout holds a trace of, a launcher
+    of the study here, a target another open box of the study runs (a box vast.ai cannot start runs nothing, so its
+    replacement may take its targets)."""
     problems = [problem for box in boxes for problem in fleet_plan.key_problems(box)]
-    problems += [f"runs/{assignment.study}/{name} is here already: the box would make it again, and its capture would "
-                 f"refuse it" for box in boxes for name in fleet_plan.held_here(assignment.study, box)]
+    problems += [fleet_plan.trace_problem(name, traces) for box in boxes
+                 for name, traces in fleet_plan.held_here(assignment.study, box).items()]
+    problems += launcher_problems(assignment.study)
     targets = {target for box in boxes for target in box.targets}
     for entry in load_registry()["boxes"]:
         shared = sorted(targets & set(entry.get("targets") or []))
@@ -187,18 +206,23 @@ def box_problems(assignment: Assignment, boxes: list[BoxPlan]) -> list[str]:
 
 
 def cmd_create(args: argparse.Namespace) -> int:
+    if not args.label_prefix.startswith(LABEL_PREFIX):
+        print(f"--label-prefix must start with {LABEL_PREFIX}: destroy acts on nothing else")
+        return 2
     try:
-        assignment = fleet_plan.assign(args.plan, args.gates, args.boxes, args.max_agents)
+        pin = fleet_registry.fleet_pin(args.commit)
+    except (RuntimeError, OSError) as error:
+        print(f"refused: {error}")
+        return 1
+    try:
+        assignment = fleet_plan.assign(args.plan, args.gates, args.boxes, args.max_agents, pin["commit"])
         boxes = chosen_boxes(assignment, args.only)
     except (OSError, ValueError) as error:
         print(f"refused: {error}")
         return 2
-    if not args.label_prefix.startswith(LABEL_PREFIX):
-        print(f"--label-prefix must start with {LABEL_PREFIX}: destroy acts on nothing else")
-        return 2
     print("\n".join(fleet_plan.lines(assignment)))
     refused = False
-    for problem in box_problems(assignment, boxes):
+    for problem in drift_problems([args.plan, args.gates], pin["commit"]) + box_problems(assignment, boxes):
         print(f"!! {problem}")
         refused = True
     if refused and not args.dry_run:
@@ -218,11 +242,6 @@ def cmd_create(args: argparse.Namespace) -> int:
     if clash:
         print("refused: the account holds these boxes already: "
               + ", ".join(f"{row['id']} {row['label']}" for row in clash))
-        return 1
-    try:
-        pin = fleet_registry.fleet_pin(args.commit)
-    except (RuntimeError, OSError) as error:
-        print(f"refused: {error}")
         return 1
     print(f"== launch {launch}: commit {pin['commit']}, package list sha256 {pin['requirements_sha256'][:16]}, "
           f"Python {pin['python_version']}, uv {pin['uv_version']}")

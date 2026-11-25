@@ -156,9 +156,10 @@ class Spec:
         return {self.run_name(stem, worker, arm) for stem, worker in self.cells() for arm in self.arms}
 
 
-def load_spec(path: Path) -> Spec:
-    """The spec, checked: its keys, its names, its modules and packs, its arms' settings and gates."""
-    raw = yaml.safe_load(Path(path).read_text()) or {}
+def load_spec(path: Path, text: str | None = None) -> Spec:
+    """The spec, checked: its keys, its names, its modules and packs, its arms' settings and gates. text is the spec as
+    a commit holds it, in place of the file's."""
+    raw = yaml.safe_load(Path(path).read_text() if text is None else text) or {}
 
     def refuse(why: str) -> ValueError:
         return ValueError(f"{path}: {why}")

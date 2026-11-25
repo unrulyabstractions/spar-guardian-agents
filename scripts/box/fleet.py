@@ -11,30 +11,34 @@
     uv run python -m scripts.box.fleet entry <id> <field> ...
     uv run python -m scripts.box.fleet repin <id> ... --commit SHA
     uv run python -m scripts.box.fleet run-args <id> [--mock]
+    uv run python -m scripts.box.fleet stop <id>
     uv run python -m scripts.box.fleet destroy <id> [--dry-run] [--accept-loss REASON]
 
 plan prints a plan's assignment to boxes (fleet_plan.py): it needs no key and sends nothing. offers reads the
 on-demand offers that can hold a box. create is fleet_create.py, status fleet_status.py and destroy fleet_destroy.py.
 ids prints the registered boxes not yet destroyed. entry prints a box's fields for the shell scripts. repin moves boxes
-to a commit origin/main holds, when the launch's package list is still the .venv's. run-args prints, one per line, what
-box_run.sh starts on a box after `.venv/bin/python -m`: the launcher on the box's plan, its targets and its agents at
-once. It refuses a model that needs a key a box does not hold, and a run of the box this checkout holds from a run made
-elsewhere, which the watch would overwrite.
+to a commit origin/main holds, when the launch's package list is still the .venv's, and sets each box's runs and caps to
+what that commit's plan gives its targets. run-args prints, one per line, what box_run.sh starts on a box after
+`.venv/bin/python -m`: the launcher on the box's plan, its targets and its agents at once, as its pinned commit holds
+them. It refuses a model that needs a key a box does not hold, a run of the box of which this checkout holds a trace
+the box did not make (the watch would mix the two), and a launcher of the study live on this machine. stop sends
+vast.ai's stop, which keeps the disk and bills storage alone, to a registered box of this repository.
 """
 from __future__ import annotations
 
 import argparse
 import sys
 from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 
-from scripts.box import fleet_plan, fleet_registry
-from scripts.box.fleet_create import MAX_FLEET_DPH, cmd_create
-from scripts.box.fleet_destroy import cmd_destroy
-from scripts.box.fleet_layout import LABEL_PREFIX, REMOTE_REPO
-from scripts.box.fleet_registry import load_registry, open_entry, update_box
+from scripts.box import fleet_layout, fleet_plan, fleet_registry
+from scripts.box.fleet_create import MAX_FLEET_DPH, cmd_create, launcher_problems
+from scripts.box.fleet_destroy import cmd_destroy, identity_refusals
+from scripts.box.fleet_layout import LABEL_PREFIX, REMOTE_REPO, now_iso
+from scripts.box.fleet_registry import entry_box, load_registry, open_entry, registered, update_box
 from scripts.box.fleet_status import cmd_status
-from scripts.box.vast_api import Vast
+from scripts.box.vast_api import Call, Vast, instance
 from scripts.box.vast_offers import MAX_DPH, OFFER_HEADER, candidates, offer_row, rejections, search_call
 from scripts.study import run_study
 from src.measures.run_directory import RunDir
@@ -107,29 +111,35 @@ def cmd_repin(args: argparse.Namespace) -> int:
         print(f"refused: the .venv's package list is not the one {other} pinned; a new list takes a new launch",
               file=sys.stderr)
         return 1
-    for entry in entries:
-        update_box(entry["id"], commit=pin["commit"])
-        print(f"{entry['id']}: {entry['commit']} to {pin['commit']}; run box_setup.sh {entry['id']} before box_run.sh")
+    try:
+        moved = [(entry, entry_box(entry, pin["commit"])) for entry in entries]
+    except ValueError as error:
+        print(f"refused: {error}", file=sys.stderr)
+        return 1
+    for entry, box in moved:
+        update_box(entry["id"], commit=pin["commit"], runs=len(box.runs), cap_usd=round(box.cap_usd, 2))
+        print(f"{entry['id']}: {entry['commit']} to {pin['commit']}; runs {entry['runs']} to {len(box.runs)}, caps "
+              f"${entry['cap_usd']:.2f} to ${box.cap_usd:.2f}; run box_setup.sh {entry['id']} before box_run.sh")
     return 0
 
 
-def made_elsewhere(study: str, name: str) -> str | None:
-    """The run of this name this checkout holds in runs/<study>/ when no box made it: its run.json names an eval log
-    outside a box's clone. None when it holds none, or a box's (the watch pulled it)."""
+def foreign_traces(study: str, name: str) -> list[str]:
+    """The traces this checkout holds of a run of this name (fleet_plan.traces_here), unless they are a box's run the
+    watch pulled: a run.json naming an eval log in a box's clone."""
     run = RunDir(run_study.RUNS / study / name)
-    if not run.is_run():
-        return None
-    eval_log = run.run_json.get("eval_log") or ""
-    return None if eval_log.startswith(REMOTE_REPO + "/") else f"{run.path} (its eval log {eval_log or 'unknown'})"
+    if run.is_run() and (run.run_json.get("eval_log") or "").startswith(REMOTE_REPO + "/"):
+        return []
+    return fleet_plan.traces_here(study, name)
 
 
 def launcher_args(entry: dict, mock: bool) -> list[str]:
     """What the box starts after `.venv/bin/python -m`: the launcher on the plan, the spec, the box's targets and its
     agents at once, as the registry records them. The launcher decides no gates under --mock, so a mock launch drops
-    the spec and names only the box's targets the plan holds now. ValueError when the plan holds none of them."""
+    the spec and names only the box's targets the pinned commit's plan holds. ValueError when it holds none of them."""
     gates, targets = ["--gates", entry["gates"]] if entry["gates"] else [], entry["targets"]
     if mock:
-        in_plan = run_study.load_plan(Path(entry["plan"]))["targets"]
+        pinned = fleet_layout.committed(entry["commit"], entry["plan"])
+        in_plan = run_study.load_plan(Path(entry["plan"]), pinned)["targets"]
         gates, targets = [], [target for target in targets if target in in_plan]
         if not targets:
             raise ValueError(f"{entry['plan']} holds none of the box's targets yet: --mock runs only open targets")
@@ -138,17 +148,16 @@ def launcher_args(entry: dict, mock: bool) -> list[str]:
 
 
 def run_refusals(entry: dict, mock: bool) -> list[str]:
-    """Why the box may not start its launcher: a model that needs another key, or a run of the box that this checkout
-    holds from a run made elsewhere."""
-    box = fleet_plan.box_for(Path(entry["plan"]), Path(entry["gates"]) if entry["gates"] else None, entry["box"],
-                             entry["targets"], entry["max_agents"])
+    """Why the box may not start its launcher: a model that needs another key, a run of the box of which this checkout
+    holds a trace the box did not make, or a launcher of the study live on this machine. Its runs are those of its
+    pinned commit's plan; a mock launch's carry run_study.MOCK_SUFFIX in their study and names."""
+    box = entry_box(entry)
     problems = [] if mock else fleet_plan.key_problems(box)
-    study = entry["study"] + (run_study.MOCK_SUFFIX if mock else "")
-    clashes = list(filter(None, (made_elsewhere(study, run.name) for run in box.runs)))
-    if clashes:
-        problems.append("this checkout holds runs of these names made elsewhere, which the watch would overwrite: "
-                        + ", ".join(clashes))
-    return problems
+    suffix = run_study.MOCK_SUFFIX if mock else ""
+    for name in (replace(run, suffix=suffix).name for run in box.runs):
+        if traces := foreign_traces(entry["study"] + suffix, name):
+            problems.append(fleet_plan.trace_problem(name, traces))
+    return problems + launcher_problems(entry["study"])
 
 
 def cmd_run_args(args: argparse.Namespace) -> int:
@@ -162,6 +171,23 @@ def cmd_run_args(args: argparse.Namespace) -> int:
         print("refused: " + "; ".join(problems), file=sys.stderr)
         return 1
     print("\n".join(launcher))
+    return 0
+
+
+def cmd_stop(args: argparse.Namespace) -> int:
+    """vast.ai's stop for a registered box of this repository: its disk stays, and it bills storage alone."""
+    vast = Vast(writes=True)
+    entry = registered(load_registry(), args.id)
+    refusals = identity_refusals(args.id, entry, instance(vast, args.id) if entry else None)
+    if refusals:
+        print("refused:\n  " + "\n  ".join(refusals))
+        return 1
+    reply = vast.send(Call("PUT", f"/api/v0/instances/{args.id}/", body={"state": "stopped"}))
+    if reply.get("success") is not True:
+        print(f"!! vast.ai did not stop {args.id}: {str(reply)[:300]}")
+        return 1
+    update_box(args.id, stopped=now_iso())
+    print(f"== stopped {args.id} {entry['label']}: its disk stays and bills storage; capture it before any destroy")
     return 0
 
 
@@ -209,6 +235,8 @@ def main(argv: list[str] | None = None) -> int:
     run_args = commands.add_parser("run-args", help="the launcher's arguments for a box, one per line")
     run_args.add_argument("id", type=int)
     run_args.add_argument("--mock", action="store_true", help="every model of the box's runs is Inspect's mock model")
+    stop = commands.add_parser("stop", help="stop one registered box: its disk stays, it bills storage alone")
+    stop.add_argument("id", type=int)
     destroy = commands.add_parser("destroy", help="destroy one box once its capture holds")
     destroy.add_argument("id", type=int)
     destroy.add_argument("--dry-run", action="store_true", help="every gate, the capture check and the snapshot; no "
@@ -217,7 +245,7 @@ def main(argv: list[str] | None = None) -> int:
                          help="destroy a box that can never pass the capture, recording what is lost and why")
     args = parser.parse_args(argv)
     command = {"plan": cmd_plan, "offers": cmd_offers, "create": cmd_create, "status": cmd_status, "ids": cmd_ids,
-               "entry": cmd_entry, "repin": cmd_repin, "run-args": cmd_run_args,
+               "entry": cmd_entry, "repin": cmd_repin, "run-args": cmd_run_args, "stop": cmd_stop,
                "destroy": cmd_destroy}[args.command]
     return command(args)
 

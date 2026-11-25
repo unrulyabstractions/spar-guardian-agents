@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 import secrets
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -63,6 +64,24 @@ def label_base(label: str) -> str:
     """The label without its launch: the box's identity across launches."""
     base, _, last = label.rpartition("-")
     return base if base and LAUNCH.match(last) else label
+
+
+def from_root(path: Path | str) -> str:
+    """A path from the checkout's root; ValueError for one outside it, which the box's clone would not hold."""
+    resolved = Path(path).resolve()
+    if not resolved.is_relative_to(ROOT):
+        raise ValueError(f"{path} is outside this checkout, so the box's clone does not hold it")
+    return resolved.relative_to(ROOT).as_posix()
+
+
+def committed(commit: str, path: Path | str) -> str:
+    """A file of this checkout as the commit holds it (git show <commit>:<path>), which is what a box's clone runs.
+    ValueError for a path outside the checkout or one the commit lacks."""
+    rel = from_root(path)
+    shown = subprocess.run(["git", "-C", str(ROOT), "show", f"{commit}:{rel}"], capture_output=True)
+    if shown.returncode:
+        raise ValueError(f"commit {commit[:12]} holds no {rel}: commit it and push it first")
+    return shown.stdout.decode()
 
 
 def is_fleet_label(label: str | None) -> bool:

@@ -2,7 +2,8 @@
 
 A launch pins the commit, the package list and the Python and uv versions in logs/boxes/launch-<launch>/, so every box
 of the launch runs the same code and packages whatever this checkout does later. repin moves a box to another commit.
-A box's entry records what it runs (box_entry), so box_setup.sh, box_run.sh and box_key.py need only its id.
+A box's entry records what it runs (box_entry), so box_setup.sh, box_run.sh and box_key.py need only its id. What a box
+runs is its plan and spec as its commit holds them (entry_box).
 """
 from __future__ import annotations
 
@@ -16,6 +17,7 @@ import subprocess
 from collections.abc import Iterator
 from pathlib import Path
 
+from scripts.box import fleet_plan
 from scripts.box.fleet_layout import BOX_KEY, BOXES, REGISTRY, ROOT, now_iso
 from scripts.box.fleet_plan import Assignment, BoxPlan
 from scripts.box.vast_offers import DISK_GB, ram_share_gb
@@ -88,6 +90,13 @@ def box_entry(instance_id: int, label: str, assignment: Assignment, box: BoxPlan
             "ram_gb": round(ram_share_gb(offer), 1) if offer else None, "disk_gb": DISK_GB,
             "reliability": offer.get("reliability"), "geolocation": offer.get("geolocation"),
             "created": now_iso(), "ssh": None, "destroy_sent": None, "destroyed": None}
+
+
+def entry_box(entry: dict, commit: str | None = None) -> BoxPlan:
+    """The box a registry entry runs: its targets of its plan and spec as the commit holds them (the entry's own pin
+    unless named). ValueError when that plan no longer holds them as whole groups, or the commit lacks a file."""
+    return fleet_plan.box_for(Path(entry["plan"]), Path(entry["gates"]) if entry["gates"] else None, entry["box"],
+                              entry["targets"], entry["max_agents"], commit or entry["commit"])
 
 
 def open_dph(registry: dict) -> float:

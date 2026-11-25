@@ -14,17 +14,18 @@ Every box of a launch has one floor, the largest of the plan's tasks (fleet_layo
 over the plan's memory need per agent (limits.needs.<task>.memory_gb). The cap of a run is run_study's: the last
 cost_limit_usd of the plan's and the target's settings, else the default.
 
-It reads only this checkout: it rents nothing and sends nothing.
+It reads only this checkout: it rents nothing and sends nothing. Given a commit, it reads the plan and the spec as that
+commit holds them, which is what a box's clone runs; without one, the files here.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
 
-from scripts.box.fleet_layout import BOX_KEY, ROOT, floor_of
+from scripts.box import fleet_layout
+from scripts.box.fleet_layout import BOX_KEY, floor_of, from_root
 from scripts.study import gated_study, run_study
 from scripts.study.run_study import Cell
-from src.measures.run_directory import RunDir
 from src.models.model_registry import key_env, resolve
 
 AGENTS_PER_CORE = 1.4
@@ -79,20 +80,13 @@ class Assignment:
         return sum(box.cap_usd for box in self.boxes)
 
 
-def from_root(path: Path) -> str:
-    """A path from the checkout's root; ValueError for one outside it, which the box's clone would not hold."""
-    resolved = Path(path).resolve()
-    if not resolved.is_relative_to(ROOT):
-        raise ValueError(f"{path} is outside this checkout, so the box's clone does not hold it")
-    return resolved.relative_to(ROOT).as_posix()
-
-
-def every_target(plan: dict, gates: Path | None) -> tuple[dict, list[list[str]]]:
-    """The plan with every target a launch may run, and its groups in the plan's order. With a spec, every arm of every
-    cell is a target, and the arms a gate joins are one group per cell."""
+def every_target(plan: dict, gates: Path | None, spec_text: str | None = None) -> tuple[dict, list[list[str]]]:
+    """The plan with every target a launch may run, and its groups in the plan's order. With a spec (its text as a
+    commit holds it, else its file's), every arm of every cell is a target, and the arms a gate joins are one group
+    per cell."""
     if gates is None:
         return plan, [[target] for target in plan["targets"]]
-    spec = gated_study.load_spec(gates)
+    spec = gated_study.load_spec(gates, spec_text)
     if spec.study != plan["study"]:
         raise ValueError(f"{gates} is of study {spec.study}, the plan of {plan['study']}")
     targets, groups = {}, []
@@ -147,21 +141,26 @@ def box_name(study: str, k: int) -> str:
     return f"{study.replace('_', '-')}-{k}"
 
 
-def load(plan_path: Path, gates: Path | None) -> tuple[dict, list[tuple[str, ...]], list[Cell]]:
-    """The plan with every target a launch may run, its groups and its runs. ValueError for a plan or spec that does
-    not load, or a closed study."""
-    plan, groups = every_target(run_study.load_plan(Path(plan_path)), gates)
+def load(plan_path: Path, gates: Path | None, commit: str | None = None) -> tuple[dict, list[tuple[str, ...]],
+                                                                               list[Cell]]:
+    """The plan with every target a launch may run, its groups and its runs, from the commit's plan and spec, else the
+    files here. ValueError for a plan or spec that does not load or the commit lacks, or a closed study."""
+    def text(path: Path | None) -> str | None:
+        return None if commit is None or path is None else fleet_layout.committed(commit, path)
+
+    plan, groups = every_target(run_study.load_plan(Path(plan_path), text(plan_path)), gates, text(gates))
     if plan.get("closed"):
         raise ValueError(f"{plan_path}: the study is closed, its plan is a record")
     return plan, [tuple(group) for group in groups], run_study.cells(plan)
 
 
-def assign(plan_path: Path, gates: Path | None = None, boxes: int = 1, max_agents: int | None = None) -> Assignment:
-    """The plan's targets on `boxes` boxes. ValueError for a plan or spec that does not load, fewer groups than boxes,
-    or no way to size the boxes."""
+def assign(plan_path: Path, gates: Path | None = None, boxes: int = 1, max_agents: int | None = None,
+           commit: str | None = None) -> Assignment:
+    """The plan's targets on `boxes` boxes, the plan and spec read as the commit holds them, else here. ValueError for
+    a plan or spec that does not load, fewer groups than boxes, or no way to size the boxes."""
     if boxes < 1 or (max_agents is not None and max_agents < 1):
         raise ValueError("--boxes and --max-agents take a positive number")
-    plan, groups, runs = load(plan_path, gates)
+    plan, groups, runs = load(plan_path, gates, commit)
     if len(groups) < boxes:
         raise ValueError(f"{len(groups)} groups of targets for {boxes} boxes: a box would run nothing")
     floor = floor_of(sorted({run.task or "" for run in runs}))
@@ -183,10 +182,11 @@ def assign(plan_path: Path, gates: Path | None = None, boxes: int = 1, max_agent
     return Assignment(plan["study"], from_root(plan_path), from_root(gates) if gates else None, tuple(out), said)
 
 
-def box_for(plan_path: Path, gates: Path | None, name: str, targets: list[str], max_agents: int) -> BoxPlan:
-    """The box of a registry entry: these targets of the plan, read again from this checkout. ValueError for a target
-    the plan lacks or a group the targets cut."""
-    plan, groups, runs = load(plan_path, gates)
+def box_for(plan_path: Path, gates: Path | None, name: str, targets: list[str], max_agents: int,
+            commit: str | None = None) -> BoxPlan:
+    """The box of a registry entry: these targets of the plan, read again as the commit holds it, else here.
+    ValueError for a target the plan lacks or a group the targets cut."""
+    plan, groups, runs = load(plan_path, gates, commit)
     mine = [group for group in groups if set(group) & set(targets)]
     cut = [group for group in mine if not set(group) <= set(targets)]
     missing = sorted(set(targets) - {target for group in mine for target in group})
@@ -210,10 +210,26 @@ def key_problems(box: BoxPlan) -> list[str]:
             for model in models if key_env(resolve(model)) not in ([], [BOX_KEY])]
 
 
-def held_here(study: str, box: BoxPlan) -> list[str]:
-    """The box's runs this checkout holds already in runs/<study>/: a box would make them again, and the capture
-    refuses a run of a name held here with other bytes."""
-    return [run.name for run in box.runs if RunDir(run_study.RUNS / study / run.name).is_run()]
+def traces_here(study: str, name: str) -> list[str]:
+    """What this checkout holds of a run of this name: its run folder runs/<study>/<name>/, an eval log in
+    logs/<study>/<name>/, its launcher's console log logs/<study>/run_study/<name>.log. Inspect writes the eval log at
+    a run's start, so a run that failed here leaves one."""
+    run, logs = run_study.RUNS / study / name, run_study.LOGS / study
+    found = [f"runs/{study}/{name}"] if run.exists() else []
+    found += [f"logs/{study}/{name}/{log.name}" for log in sorted((logs / name).glob("*.eval"))]
+    return found + ([f"logs/{study}/run_study/{name}.log"] if (logs / "run_study" / f"{name}.log").is_file() else [])
+
+
+def trace_problem(name: str, traces: list[str]) -> str:
+    """The refusal of a box run whose name this checkout holds traces of, with its remedy."""
+    return (f"{name} has traces here ({', '.join(traces)}): a box would make it again beside them and its capture "
+            f"would refuse it. Set them aside first (run_directory.set_aside_attempt moves the run and eval log "
+            f"folders into attempts/; move the console log beside them), or leave its target out")
+
+
+def held_here(study: str, box: BoxPlan) -> dict[str, list[str]]:
+    """{run name: its traces here} of the box's runs this checkout holds a trace of (traces_here)."""
+    return {run.name: traces for run in box.runs if (traces := traces_here(study, run.name))}
 
 
 def runs_said(n: int) -> str:
@@ -243,7 +259,7 @@ def lines(assignment: Assignment) -> list[str]:
             out.append(f"   !! a run of {largest} agents passes {box.max_agents}: it runs once no agent is live")
         for problem in key_problems(box):
             out.append(f"   !! {problem}")
-        for name in held_here(assignment.study, box):
-            out.append(f"   !! runs/{assignment.study}/{name} is here already: a box would make it again")
+        for name, traces in held_here(assignment.study, box).items():
+            out.append(f"   !! {name} has traces here: {', '.join(traces)}")
     out.append(f"== the study: {runs} runs, ${assignment.cap_usd:.2f} at the runs' caps")
     return out

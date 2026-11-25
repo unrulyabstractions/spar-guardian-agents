@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from scripts.box import fleet_plan
+from scripts.box import fleet_layout, fleet_plan
 from scripts.box.fleet_layout import ROOT
 from scripts.study import gated_study
 
@@ -36,7 +36,7 @@ def write_plan(folder: Path, targets: dict, needs: dict | None = None, **plan) -
 @pytest.fixture
 def here(tmp_path, monkeypatch):
     """A checkout's root in tmp_path, so a plan written there is one the box's clone would hold."""
-    monkeypatch.setattr(fleet_plan, "ROOT", tmp_path)
+    monkeypatch.setattr(fleet_layout, "ROOT", tmp_path)
     return tmp_path
 
 

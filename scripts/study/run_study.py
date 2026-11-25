@@ -8,8 +8,12 @@
 --only runs only the named targets of the plan; with --gates an arm runs only when its whole chain of gates lies among
 the named targets. --limit replaces one of the plan's limits for this launch (LIMIT_OPTIONS: max_runs, max_agents,
 spacing_s, max_per_task.<task>), again after each read of the plan; an unknown key is refused. --mock gives every model
-of every cell, the roles' models too, Inspect's mock model (MOCK_MODEL), runs into the study <study>_mock, reads no
-key and pays nothing; it takes no --gates. --dry-run shows what each of them changes.
+of every cell, the roles' models too, Inspect's mock model (MOCK_MODEL), runs into the study <study>_mock under run
+names that end in _mock, reads no key and pays nothing; it takes no --gates. --dry-run shows what each of them changes.
+
+A target that an open box of the study runs (the fleet's registry, runs/boxes.json) is left out, and the header says
+so: a target runs on this host or on one box, never on both. A box's clone holds no registry, so a box leaves out
+nothing.
 
 A plan (studies/plans/*.yaml, studies/README.md, seeds/README.md) names the study, the seeds, the targets and their
 packs:
@@ -61,7 +65,9 @@ MIN_FREE_MEMORY_PCT of the host's memory free, at least MIN_FREE_DISK_GB free on
 task's own floor, limits min_disk_gb), fewer than max_runs running, fewer than
 max_per_task[<task>] of the cell's task running, and spacing_s since the
 last launch. Each run's console goes to logs/<study>/run_study/<name>.log. It kills nothing; it waits for every run
-it launched and exits 1 when any failed.
+it launched and exits 1 when any failed. A launcher that cannot launch ends: with nothing running and a hold that
+cannot clear by itself (memory or Docker's disk unreadable, or every cell of the earliest queued stage needing more
+free disk than Docker's disk holds) for STUCK_MINUTES, it prints why and exits 3.
 
 A run counts its agents: the last `n_agents=` of the plan's and the target's settings, else DEFAULT_AGENTS. With
 limits max_agents, a cell launches only when its agents and the agents of every cell script live on this host (any
@@ -77,6 +83,7 @@ too, since it starts containers. The rules of CLAUDE.md
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import shlex
 import subprocess
@@ -111,6 +118,8 @@ team (ian_flipt_minimal_regulated) is counted at this too."""
 DEFAULT_RUN_MINUTES = 15.0
 """A run's expected wall time when the study stores no run of its task."""
 STALL_MINUTES = 10
+STUCK_MINUTES = 30
+"""How long a launcher with nothing running waits on a hold that cannot clear by itself before it exits."""
 RUNS = settings.ROOT / "runs"
 LOGS = settings.ROOT / "logs"
 """Where a study's runs and logs go: runs/<study>/ and logs/<study>/."""
@@ -132,7 +141,8 @@ LIMIT_OPTIONS = ("max_runs", "max_agents", "spacing_s", "max_per_task.<task>")
 MOCK_MODEL = "mockllm/model"
 """Inspect's mock model, which --mock gives every agent: no key and no spend."""
 MOCK_SUFFIX = "_mock"
-"""A mock launch's study is the plan's study with this suffix, so its runs never mix with real ones."""
+"""A mock launch's study and each of its run names end with this suffix, so a rehearsal is never taken for a real run
+by any tool that matches names."""
 
 
 @dataclass
@@ -146,10 +156,11 @@ class Cell:
     settings: tuple[str, ...] = ()   # the target's own settings, after the plan's
     n_agents: int = DEFAULT_AGENTS   # the run's team, from the plan's and the target's settings
     stage: int = 0                   # the target's stage: lower stages launch first
+    suffix: str = ""                 # MOCK_SUFFIX for a mock launch's cell
 
     @property
     def name(self) -> str:
-        return f"{self.target}_{self.pack.split('/')[-1]}_s{self.seed}"
+        return f"{self.target}_{self.pack.split('/')[-1]}_s{self.seed}{self.suffix}"
 
     def argv(self, extra: list[str], replace: bool) -> list[str]:
         """The cell script's arguments: the model, the name, the seed, the plan's settings (`extra`), the target's,
@@ -178,9 +189,10 @@ def pack_task(pack: str, plan: dict) -> str:
     return pack.split("/")[0] if plan.get("closed") else seed_packs.pack_of(pack)["task"]
 
 
-def load_plan(path: Path) -> dict:
-    """The plan, checked: its keys, its targets' modules and packs, one task per target."""
-    plan = yaml.safe_load(path.read_text()) or {}
+def load_plan(path: Path, text: str | None = None) -> dict:
+    """The plan, checked: its keys, its targets' modules and packs, one task per target. text is the plan as a commit
+    holds it, in place of the file's."""
+    plan = yaml.safe_load(path.read_text() if text is None else text) or {}
     if set(plan) - PLAN_KEYS or not {"study", "seeds", "targets"} <= set(plan):
         raise ValueError(f"{path}: a plan takes {sorted(PLAN_KEYS)} and needs study, seeds and targets")
     if not is_seeds(plan["seeds"]):
@@ -241,8 +253,9 @@ def is_seeds(seeds: object) -> bool:
 
 def cells(plan: dict) -> list[Cell]:
     """Every cell of the plan: seed by seed, target by target in the plan's order, pack by pack. A target runs the
-    seeds it states, else the plan's; the seeds go in the plan's order, then the targets' own further ones."""
-    out = []
+    seeds it states, else the plan's; the seeds go in the plan's order, then the targets' own further ones. A mocked
+    plan's cells carry MOCK_SUFFIX."""
+    out, suffix = [], MOCK_SUFFIX if plan.get("mock") else ""
     seeds_of = {target: spec.get("seeds", plan["seeds"]) for target, spec in plan["targets"].items()}
     for seed in dict.fromkeys([*plan["seeds"], *(seed for seeds in seeds_of.values() for seed in seeds)]):
         for target, spec in plan["targets"].items():
@@ -254,7 +267,7 @@ def cells(plan: dict) -> list[Cell]:
             agents = int(setting([*plan.get("settings", []), *own], "n_agents") or DEFAULT_AGENTS)
             for pack in spec["packs"]:
                 out.append(Cell(target, pack, seed, spec["module"], spec["model"], task, own, agents,
-                                spec.get("stage", 0)))
+                                spec.get("stage", 0), suffix))
     return out
 
 
@@ -311,11 +324,11 @@ def with_limits(path: Path, plan: dict, overrides: dict) -> dict:
 
 def mocked(plan: dict) -> dict:
     """The plan with every model Inspect's mock model: each target's model, and each role's model after the target's
-    own settings, so no setting of the plan can name a paid model."""
+    own settings, so no setting of the plan can name a paid model. Its cells' names end in MOCK_SUFFIX."""
     roles = [f"{role}_model={MOCK_MODEL}" for role in ROLES]
     targets = {target: {**spec, "model": MOCK_MODEL, "settings": [*(spec.get("settings") or []), *roles]}
                for target, spec in plan["targets"].items()}
-    return {**plan, "targets": targets}
+    return {**plan, "targets": targets, "mock": True}
 
 
 @dataclass(frozen=True)
@@ -349,9 +362,22 @@ def gated_runs(spec: gated_study.Spec, only: set[str] | None) -> set[str]:
     return out
 
 
-def chosen(cell: Cell, only: set[str] | None, allowed: set[str] | None) -> bool:
-    """Whether the launch runs the cell: its target among --only, and its run among the spec's with --gates."""
-    return (only is None or cell.target in only) and (allowed is None or cell.name in allowed)
+def chosen(cell: Cell, only: set[str] | None, allowed: set[str] | None, boxed: set[str]) -> bool:
+    """Whether the launch runs the cell: its target among --only and not run by a box, and its run among the spec's
+    with --gates."""
+    return (only is None or cell.target in only) and cell.target not in boxed and (allowed is None or
+                                                                                   cell.name in allowed)
+
+
+def box_targets(study: str) -> dict[str, int]:
+    """{target: instance id} of each target an open box of the study runs: a registered box not destroyed that
+    vast.ai could start, by the fleet's registry runs/boxes.json (scripts/box/fleet_layout.py). {} without one, as on a
+    box, whose clone holds none."""
+    path = RUNS / "boxes.json"
+    entries = json.loads(path.read_text())["boxes"] if path.is_file() else []
+    return {target: entry["id"] for entry in entries
+            if not entry.get("destroyed") and not entry.get("start_error") and entry.get("study") == study
+            for target in entry.get("targets") or []}
 
 
 def free_disk_gb() -> int | None:
@@ -380,11 +406,29 @@ def held_all(running: dict[str, tuple], limits: dict, last: float) -> str | None
     return None
 
 
+def disk_floor(cell: Cell, limits: dict) -> int:
+    """The free GB of Docker's disk the cell needs: its task's floor (limits min_disk_gb), else MIN_FREE_DISK_GB."""
+    return (limits.get("min_disk_gb") or {}).get(cell.task or "", MIN_FREE_DISK_GB)
+
+
 def disk_short(cell: Cell, limits: dict, disk: int | None) -> str | None:
-    """Why Docker's free disk does not take the cell: under its task's floor (limits min_disk_gb, else
-    MIN_FREE_DISK_GB), or unknown. None when it does."""
-    floor = (limits.get("min_disk_gb") or {}).get(cell.task or "", MIN_FREE_DISK_GB)
-    return f"docker disk {disk} GB free" if disk is None or disk < floor else None
+    """Why Docker's free disk does not take the cell: under its floor, or unknown. None when it does."""
+    return f"docker disk {disk} GB free" if disk is None or disk < disk_floor(cell, limits) else None
+
+
+def hold_for_good(queue: list[Cell], limits: dict) -> str | None:
+    """Why no queued cell can launch however long the launcher waits with nothing running, or None: the host's memory
+    or Docker's disk unreadable, or every cell of the earliest queued stage needing more free GB than Docker's whole
+    disk holds."""
+    if HOST.free_memory_pct() is None:
+        return "the host's free memory cannot be read"
+    if (free := free_disk_gb()) is None:
+        return "Docker's disk cannot be read"
+    first = min(cell.stage for cell in queue)
+    floor = min(disk_floor(cell, limits) for cell in queue if cell.stage == first)
+    if floor > free and (disk := HOST.docker_disk()) is not None and floor > disk[0]:
+        return f"stage {first}'s cells need {floor} GB free, more than Docker's whole disk of {disk[0]} GB"
+    return None
 
 
 def agents_full(live: int | None, cell: Cell, limits: dict) -> str | None:
@@ -437,17 +481,49 @@ LIVE = re.compile(r"^(?:uv run python|\S*python[\d.]*) -m (?:studies\.cells|exam
                   r"--name ([a-z0-9_]+)(?:\s|$)")
 """A cell script's own process (uv's, then Python's), never a shell whose text quotes one."""
 TEAM = re.compile(r"--set n_agents=(\d+)(?:\s|$)")
+CAP = re.compile(r"--set cost_limit_usd=([0-9.]+)(?:\s|$)")
+LAUNCHER = re.compile(r"^(?:uv run python|\S*python[\d.]*) -m scripts\.study\.run_study(?:\s+(.*))?$")
+"""A launcher's own process (uv's, then Python's), with its arguments."""
+
+
+def live_lines() -> dict[str, str]:
+    """The command line of each cell script running on this host now, by its run name (`--name <run>`). uv's process
+    and Python's count as one run."""
+    return {m[1]: line for line in HOST.process_lines() if (m := LIVE.match(line.strip()))}
 
 
 def live_runs() -> dict[str, int]:
-    """The cell scripts running on this host now, from their command lines: each run's name (`--name <run>`) and its
-    agents (the last `--set n_agents=N`, else DEFAULT_AGENTS). uv's process and Python's count as one run."""
-    found = {}
-    for line in HOST.process_lines():
-        if m := LIVE.match(line.strip()):
-            teams = TEAM.findall(line)
-            found[m[1]] = int(teams[-1]) if teams else DEFAULT_AGENTS
-    return found
+    """The cell scripts running on this host now and their agents: the last `--set n_agents=N`, else DEFAULT_AGENTS."""
+    return {name: int(teams[-1]) if (teams := TEAM.findall(line)) else DEFAULT_AGENTS
+            for name, line in live_lines().items()}
+
+
+def live_caps() -> dict[str, float]:
+    """The cell scripts running on this host now and their dollar caps: the last `--set cost_limit_usd=X`, else the
+    default."""
+    return {name: float(caps[-1]) if (caps := CAP.findall(line)) else DEFAULT_CAP_USD
+            for name, line in live_lines().items()}
+
+
+def launcher_study(arguments: str) -> str:
+    """The study a launcher's arguments run, without MOCK_SUFFIX: its --study, else its plan's study, else the plan
+    file's name. A relative plan is read from the checkout's root, where launchers start."""
+    try:
+        args, _ = parser().parse_known_args(arguments.split())
+    except SystemExit:
+        return ""
+    if args.study:
+        return args.study
+    try:
+        return str((yaml.safe_load((settings.ROOT / args.plan).read_text()) or {})["study"])
+    except (OSError, KeyError, TypeError, yaml.YAMLError):
+        return args.plan.stem
+
+
+def live_launchers(study: str) -> list[str]:
+    """The command lines of the launchers live on this host that run the study, a mock launch of it too."""
+    return [line.strip() for line in HOST.process_lines()
+            if (m := LAUNCHER.match(line.strip())) and launcher_study(m[1] or "") == study]
 
 
 def live_names() -> set[str]:
@@ -512,12 +588,12 @@ def gate_step(spec_path: Path, plan_path: Path, study_dir: Path) -> tuple[dict[s
 
 
 def new_cells(plan: dict, known: set[str], study: str, replace: bool, only: set[str] | None,
-              allowed: set[str] | None) -> list[Cell]:
+              allowed: set[str] | None, boxed: set[str]) -> list[Cell]:
     """The plan's cells the launch runs (chosen), not seen before and not done (or every one with replace). Each is
     added to known."""
     out = []
     for cell in cells(plan):
-        if cell.name in known or not chosen(cell, only, allowed):
+        if cell.name in known or not chosen(cell, only, allowed, boxed):
             continue
         known.add(cell.name)
         if replace or not RunDir(RUNS / study / cell.name).is_run():
@@ -558,7 +634,7 @@ def reload_plan(path: Path, plan: dict, options: Options) -> dict:
     return plan if fresh.get("closed") else fresh
 
 
-def parse_arguments(argv: list[str] | None) -> argparse.Namespace:
+def parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m scripts.study.run_study", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("plan", type=Path, help="a plan file, e.g. studies/plans/ian_influencers_0.yaml")
@@ -577,9 +653,14 @@ def parse_arguments(argv: list[str] | None) -> argparse.Namespace:
                         help=f"replace one of the plan's limits for this launch: {', '.join(LIMIT_OPTIONS)}")
     parser.add_argument("--mock", action="store_true", help=f"every model {MOCK_MODEL}, the runs into the study "
                         f"<study>{MOCK_SUFFIX}; no key is read and nothing is paid")
-    args = parser.parse_args(argv)
+    return parser
+
+
+def parse_arguments(argv: list[str] | None) -> argparse.Namespace:
+    options = parser()
+    args = options.parse_args(argv)
     if args.openrouter_key_env and not KEY_ENV.fullmatch(args.openrouter_key_env):
-        parser.error("--openrouter-key-env takes a variable's name, such as OPENROUTER_API_KEY_OWN")
+        options.error("--openrouter-key-env takes a variable's name, such as OPENROUTER_API_KEY_OWN")
     return args
 
 
@@ -595,6 +676,12 @@ def main(argv: list[str] | None = None) -> int:
     only = set(args.only) if args.only else None
     allowed = None                                              # with --gates: the spec's run names alone
     known_targets = set(plan["targets"])
+    try:
+        on_boxes = box_targets(args.study or plan["study"])
+    except (OSError, ValueError, KeyError) as error:
+        print(f"the fleet's registry {RUNS / 'boxes.json'} cannot be read: {error}", file=sys.stderr)
+        return 2
+    boxed = set(on_boxes)
     if args.gates:
         if args.mock:
             print("--mock decides no gates: rehearse a gated plan's targets with --mock --only", file=sys.stderr)
@@ -603,15 +690,16 @@ def main(argv: list[str] | None = None) -> int:
         if spec.study != study:
             print(f"--gates {args.gates} is of study {spec.study}, the launch of {study}", file=sys.stderr)
             return 2
-        allowed = gated_runs(spec, only)
         known_targets |= {spec.target(stem, worker, arm)[0] for stem, worker in spec.cells() for arm in spec.arms}
+        reach = only if not boxed else (known_targets if only is None else only) - boxed
+        allowed = gated_runs(spec, reach)                       # whole chains of gates, none on a box
     if only is not None and (unknown := sorted(only - known_targets)):
         print(f"--only {' '.join(unknown)}: no target of {args.plan}" + (" or of its spec" if args.gates else ""),
               file=sys.stderr)
         return 2
     todo, skipped = [], []
     for cell in cells(plan):
-        if not chosen(cell, only, allowed):
+        if not chosen(cell, only, allowed, boxed):
             continue
         done = RunDir(RUNS / study / cell.name).is_run()
         (skipped if done and not args.replace else todo).append(cell)
@@ -622,6 +710,8 @@ def main(argv: list[str] | None = None) -> int:
         f"{' and '.join(f'${cap:.2f}' for cap in caps)}")
     print(f"plan {args.plan}: study {study}, {len(todo) + len(skipped)} cells, {len(skipped)} done already, "
           f"{len(todo)} to run; {spend}")
+    for box_id in sorted(set(on_boxes.values())):
+        print(f"  box    {box_id} runs {', '.join(t for t, i in on_boxes.items() if i == box_id)}: left out here")
     for cell in skipped:
         print(f"  skip   {cell.name} (runs/{study}/{cell.name} holds its run)")
     for cell in todo:
@@ -660,10 +750,11 @@ def main(argv: list[str] | None = None) -> int:
     known = {cell.name for cell in [*todo, *skipped]}
     timings = stored_minutes(study_dir)
     stalled: set[str] = set()
+    stuck_since = None
     while queue or running:
         ended = False
         plan = reload_plan(args.plan, plan, options)           # the plan may gain targets and change its limits
-        for cell in new_cells(plan, known, study, args.replace, only, allowed):
+        for cell in new_cells(plan, known, study, args.replace, only, allowed, boxed):
             queue.append(cell)
             todo.append(cell)
             print(f"{stamp()} QUEUE  {cell.name} (new in the plan)", flush=True)
@@ -695,7 +786,7 @@ def main(argv: list[str] | None = None) -> int:
             except (OSError, ValueError, yaml.YAMLError) as error:
                 print(f"{stamp()} GATES  not written: {error}", flush=True)
             plan = reload_plan(args.plan, plan, options)
-            for cell in new_cells(plan, known, study, args.replace, only, allowed):
+            for cell in new_cells(plan, known, study, args.replace, only, allowed, boxed):
                 queue.append(cell)
                 todo.append(cell)
                 print(f"{stamp()} QUEUE  {cell.name} (opened by its gate)", flush=True)
@@ -707,6 +798,12 @@ def main(argv: list[str] | None = None) -> int:
         if queue:
             queue = by_critical_path(queue, timings, chains)
             cell, why = next_cell(running, queue, plan["limits"], last)
+            hold = None if cell is not None or running else hold_for_good(queue, plan["limits"])
+            stuck_since = (stuck_since or time.time()) if hold else None
+            if hold and time.time() - stuck_since >= STUCK_MINUTES * 60:
+                print(f"{stamp()} STUCK  nothing runs and {hold} for {STUCK_MINUTES} min: {len(queue)} cells not "
+                      f"launched, the launcher ends", flush=True)
+                return 3
             if cell is not None:
                 queue.remove(cell)
                 line = (f"cd {shlex.quote(str(settings.ROOT))} && "
