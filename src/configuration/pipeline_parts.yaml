@@ -40,7 +40,7 @@ parts:
     files: [src/replay/*.py, src/domains/*/*_replay.py, scripts/study/replay_study.py]
     pins: []
     version: 2
-    fingerprint: sha256:1756cee68b1db19a9f0392ca8b27359f0f00390b9156d299be88c34a8e6591c1
+    fingerprint: sha256:c08b999eb19ad7a504f78b6ea6d22c78bbe67db2ee13ce6b030403eb0b38aec3
     log:
       1: '2026-11-22 first version: the faithful replay''s steps.jsonl and replay.json, and its tmp_snapshots.json
         of c619e3d'
@@ -59,7 +59,8 @@ parts:
         CheatBench''s names without it); the 70 stored runs of ian_influencers_0 and ian_env_prototyping_0
         reprocess to the same bytes) (re-locked 2026-11-24: the protein and creative replays keep out
         whom the run''s record names (shared_result.kept_out), with the gate on protein; no stored run
-        records a protein or creative shared_result)'
+        records a protein or creative shared_result) (re-locked 2026-11-24: protein replay shares the
+        scorer''s probe fields, repository script and staged times; its unit tests pass)'
   judge_cheatbench:
     file: analysis/judges/cheatbench.*.jsonl
     make: null
@@ -105,7 +106,7 @@ parts:
       src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 13
-    fingerprint: sha256:00e064983b3af3f6c67b62ace1c49cc8a3b351f54e699fc6a7e0f002c1bde693
+    fingerprint: sha256:767f0b54aa769772f147a366dbe6cdc0bd69d6dc80d0b8974b31898715c8aeb3
     log:
       1: '2026-11-22 first version: the code record''s agent and team rows (code_ladder.signal_rows) of
         b7b1bed, and run.json''s signals block (re-locked 2026-11-22: the stored layout: the same bytes,
@@ -253,7 +254,9 @@ parts:
         refused push; regulator_scale_1 and disregulator_existence_1 reprocessed in scratch: only versions.json
         differ) (re-locked 2026-11-24: the hashed_tests option and a variant''s own values (swe_settings.own_values),
         off for every task; a stored run is read by its recorded own_values (swe_inputs.owns), the same
-        values: the 9 runs of disregulator_existence_1 reprocess to the same bytes)'
+        values: the 9 runs of disregulator_existence_1 reprocess to the same bytes) (re-locked 2026-11-24:
+        protein package cleanup; the 70 stored runs of ian_influencers_0 and ian_env_prototyping_0 reprocess
+        to the same bytes)'
   topology:
     file: processed/facts/topology.json
     make: src.measures.topology_fact:topology_part
@@ -295,7 +298,7 @@ parts:
       src/domains/*/revealed/**/*]
     pins: []
     version: 14
-    fingerprint: sha256:605b2a812387529b06c2fe5f38e18a55d923fc13bdc467f92fab14ea87995979
+    fingerprint: sha256:eacee7c72a855b17ae72fc9dcce11b166ef5d26966c91075456a694d5d476378
     log:
       1: '2026-11-22 first version: the Cheating ladder with CheatBench''s labels beside its clauses,
         as the viewer keeps it, of b7b1bed (re-locked 2026-11-22: the stored layout: the same bytes, read
@@ -432,7 +435,9 @@ parts:
       14: '2026-11-24 the same Cheating rules as signals v13: qwen n20 reg60 weak''s team reads tempted,
         not attempted (re-locked 2026-11-24: the hashed_tests option and a variant''s own values (swe_settings.own_values),
         off for every task; a stored run is read by its recorded own_values (swe_inputs.owns), the same
-        values: the 9 runs of disregulator_existence_1 reprocess to the same bytes)'
+        values: the 9 runs of disregulator_existence_1 reprocess to the same bytes) (re-locked 2026-11-24:
+        protein package cleanup; the 70 stored runs of ian_influencers_0 and ian_env_prototyping_0 reprocess
+        to the same bytes)'
   coordination:
     file: analysis/labels/coordination.json
     make: src.measures.coordination:coordination_part
@@ -462,7 +467,7 @@ parts:
       src/domains/*/*_settings.py, src/domains/*/second/**/*, src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 12
-    fingerprint: sha256:1960e6c6e2bb7fb3e6bc1744e43ecc920e8d7f32e8896b03919fbf3623644c59
+    fingerprint: sha256:f599a9519ef511c8f86b168f5cc8225c59089c17918d4f643b0e939d7cbb2340
     log:
       1: '2026-11-22 first version: the Collusion ladder as the viewer keeps it, of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -588,7 +593,8 @@ parts:
         reads collaboration (re-locked 2026-11-24: the hashed_tests option and a variant''s own values
         (swe_settings.own_values), off for every task; a stored run is read by its recorded own_values
         (swe_inputs.owns), the same values: the 9 runs of disregulator_existence_1 reprocess to the same
-        bytes)'
+        bytes) (re-locked 2026-11-24: protein package cleanup; the 70 stored runs of ian_influencers_0
+        and ian_env_prototyping_0 reprocess to the same bytes)'
   judged:
     file: analysis/labels/judged.json
     make: src.ui.viewer_parts:judged_part
@@ -619,7 +625,7 @@ parts:
       src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 4
-    fingerprint: sha256:d85390b02f13a0ad002f288ea791da879ad1ab1e35399775b67b16f4c4131201
+    fingerprint: sha256:4ac136d60ea782e9b628127ec8878945fed0cf4a0e342812197b8049b9c2be7c
     log:
       1: '2026-11-23 first version: what each disregulator did with its role (carried_out, filtered, refused,
         dropped, unknown), with mode, disclosed and the evidence, by code from the board, the code record''s
@@ -702,7 +708,8 @@ parts:
         v13 change no stored disregulator role) (re-locked 2026-11-24: the hashed_tests option and a variant''s
         own values (swe_settings.own_values), off for every task; a stored run is read by its recorded
         own_values (swe_inputs.owns), the same values: the 9 runs of disregulator_existence_1 reprocess
-        to the same bytes)'
+        to the same bytes) (re-locked 2026-11-24: protein package cleanup; the 70 stored runs of ian_influencers_0
+        and ian_env_prototyping_0 reprocess to the same bytes)'
   row:
     file: analysis/row.json
     make: src.ui.viewer_parts:row_part
