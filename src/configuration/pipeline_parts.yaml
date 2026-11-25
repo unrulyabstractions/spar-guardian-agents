@@ -115,8 +115,8 @@ parts:
       src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*,
       src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
-    version: 15
-    fingerprint: sha256:013358108f5b3b7f3ed9d7626b1992cb1bc7d5fd180b709658c8f4477b4270fe
+    version: 16
+    fingerprint: sha256:1c6dd6373317e1242d08c35716bdb5d5a53bc02c418e37e563d26b5789abf547
     log:
       1: '2026-11-22 first version: the code record''s agent and team rows (code_ladder.signal_rows) of
         b7b1bed, and run.json''s signals block (re-locked 2026-11-22: the stored layout: the same bytes,
@@ -283,6 +283,9 @@ parts:
         that holds every line of a piece''s whole file gives the piece; a unit no push carried is not
         given; a worker''s hand-in of an influencer''s content needs no worker to have opened it; an influencer''s
         left branch is left out as a place; a sentence that only describes those values refuses nothing'
+      16: '2026-11-25 SWE: a count of a piece''s lines leaves out the lines an honest fix has to write
+        (lines the patch moves, lines the issue''s interface gives), so piece C holds only by its files
+        whole'
   topology:
     file: processed/facts/topology.json
     make: src.measures.topology_fact:topology_part
@@ -323,8 +326,8 @@ parts:
       src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*, src/domains/*/*_exploits.py,
       src/domains/*/revealed/**/*]
     pins: []
-    version: 16
-    fingerprint: sha256:680393f840e804fe35840680a5a3b407ad642203d711aa889a91c04b0dc56baa
+    version: 17
+    fingerprint: sha256:0e175e88c6183ccaa137d09098f01c1af86a13743b0ea0b43bcbbaeb51499fb9
     log:
       1: '2026-11-22 first version: the Cheating ladder with CheatBench''s labels beside its clauses,
         as the viewer keeps it, of b7b1bed (re-locked 2026-11-22: the stored layout: the same bytes, read
@@ -480,6 +483,9 @@ parts:
         that holds every line of a piece''s whole file gives the piece; a unit no push carried is not
         given; a worker''s hand-in of an influencer''s content needs no worker to have opened it; an influencer''s
         left branch is left out as a place; a sentence that only describes those values refuses nothing'
+      17: '2026-11-25 SWE: a count of a piece''s lines leaves out the lines an honest fix has to write
+        (lines the patch moves, lines the issue''s interface gives), so piece C holds only by its files
+        whole'
   coordination:
     file: analysis/labels/coordination.json
     make: src.measures.coordination:coordination_part
@@ -508,8 +514,8 @@ parts:
       src/ui/transcript_levels.py, src/ui/viewer_parts.py, src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py,
       src/domains/*/*_settings.py, src/domains/*/second/**/*, src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
-    version: 14
-    fingerprint: sha256:1ed6bc30f0767c494b072e0ea9227874999ce5ee6fe2d3f9b97a754b90368591
+    version: 15
+    fingerprint: sha256:7927a6e944aad52ccea2fc2c51b543ecb40da1937da3a54ef1b3a70024ffe16d
     log:
       1: '2026-11-22 first version: the Collusion ladder as the viewer keeps it, of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -653,6 +659,9 @@ parts:
         that holds every line of a piece''s whole file gives the piece; a unit no push carried is not
         given; a worker''s hand-in of an influencer''s content needs no worker to have opened it; an influencer''s
         left branch is left out as a place; a sentence that only describes those values refuses nothing'
+      15: '2026-11-25 SWE: a count of a piece''s lines leaves out the lines an honest fix has to write
+        (lines the patch moves, lines the issue''s interface gives), so piece C holds only by its files
+        whole'
   judged:
     file: analysis/labels/judged.json
     make: src.ui.viewer_parts:judged_part
@@ -683,8 +692,8 @@ parts:
       src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*,
       src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
-    version: 4
-    fingerprint: sha256:a27bfed1830e9f54c7d75a60353c749f7133713f4611123dcb07b8929832d445
+    version: 5
+    fingerprint: sha256:ca7970ef56cc46712f085097000ef505b5fc6f7855b0d651bd25f95c914aa450
     log:
       1: '2026-11-23 first version: what each disregulator did with its role (carried_out, filtered, refused,
         dropped, unknown), with mode, disclosed and the evidence, by code from the board, the code record''s
@@ -778,6 +787,8 @@ parts:
         role labels (checked by reprocess_compare on both studies)) (re-locked 2026-11-25: the label rules
         of 2026-11-25, second round, change which evidence a rung rests on, not the disregulators'' role
         labels (checked by reprocess_compare on both studies))'
+      5: '2026-11-25 SWE: the disregulators'' evidence follows the count of a piece''s lines without the
+        lines an honest fix has to write'
   row:
     file: analysis/row.json
     make: src.ui.viewer_parts:row_part
