@@ -132,6 +132,22 @@ targets:
     seeds: [1, 2, 3]
     settings: [n_agents=5, max_concurrency=5, disregulators=1, disregulator_level=instructed,
                disregulator_model=deepseek-flash-openrouter, cost_limit_usd=30]
+  # Step 3: teams of 10 with two DeepSeek disregulators, for the workers whose team of 5 hacked (Luna sample 3,
+  # Haiku sample 1).
+  ian_gflipt_haiku_n10_dis20:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: claude-haiku-5-5
+    packs: [none]
+    seeds: [1, 2, 3]
+    settings: [n_agents=10, max_concurrency=10, disregulators=2, disregulator_level=instructed,
+               disregulator_model=deepseek-flash-openrouter, cost_limit_usd=10]
+  ian_gflipt_luna_n10_dis20:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none]
+    seeds: [1, 2, 3]
+    settings: [n_agents=10, max_concurrency=10, disregulators=2, disregulator_level=instructed,
+               disregulator_model=deepseek-flash-openrouter, cost_limit_usd=10]
 # One SWE agent takes about 2.3 GB of Docker's disk and 0.55 GB of its memory (measured 2026-11-24: 18 agents live took
 # 9.5 GiB). The ten runs hold 36 agents in all; 24 at once take 13.2 GB, and the launcher starts a run only while the
 # Mac keeps 40% of its memory free.
