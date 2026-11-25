@@ -4299,3 +4299,28 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   UNVERIFIED: anything on a real box; Docker's disk on Linux (the slim image has no docker CLI and printed `None`); a
   paid run on Linux; `fleet offers`, `create --dry-run`, `status`, the guard's commands and box_key against their
   services, which this branch was not allowed to call. No independent verifier agent was run.
+
+## 2026-11-25: the box tools close the reviewers' eight holes (branch vast-studies, not on main)
+
+- **What.** One launcher per run name (create and run-args refuse a Mac launcher of the study; run_study on the Mac
+  leaves out every target an open box runs); any trace of a run name refused before a rent or a launch; the plan and
+  spec read as the pinned commit holds them, a file here that differs refused; a launcher with nothing running and a
+  hold that cannot clear exits 3 after 30 minutes; box_key sums the caps of every open box holding the key, each on its
+  pinned commit, and prints this machine's live caps; repin refreshes runs and caps; the probe reads a live setup as
+  progress and a failed one as `ended setup-failed`; box_teardown.sh restarts a dead Docker once, stops the box when it
+  stays dead, and never claims an empty save; mock run names end in `_mock`.
+- **How.** New tests for each, run first against the branch's old sources (31 of the new fleet, key, probe, run_study
+  and teardown tests failed or errored there, the stuck-launcher test still looped after 90 s) and then against the new
+  ones. The probe on a real Linux kernel (6.8.0, `python:3.12-slim`, 1 GiB, removed after): a stand-in setup under
+  `nohup setsid bash /root/ship/box_setup_remote.sh` with /root/setup.pid, a setup that exited 1, a `python3 -m
+  scripts.study.run_study` launcher that writes, one silent with every file 3 h old, and none, each read through
+  `python3 - probe --key` and `verdict 7` as the adapter does. The selection `tests/unit -k "box or fleet or study or
+  plan or gate or capture or host or probe or teardown"` here and on main; ruff; `pipeline status`; `agent_texts
+  --check`.
+- **Result.** VERIFIED: on Linux the five states read `progress 300`, `ended setup-failed`, `progress 1`, `progress 5`
+  then `progress 65` sixty seconds later, and `ended launcher-ended`. The selection: 644 passed, 10 skipped here; main
+  694 passed, 1 failed (test_every_study_folder_has_an_entry, which reads main's runs/), so no failing id is new. Ruff
+  clean, 12 pipeline parts with 0 problems, 168 agent texts equal the golden ones. UNVERIFIED: anything on a real box
+  or against vast.ai or OpenRouter (fleet stop's PUT, the Docker restart on a box, box_key's live key read), which this
+  branch was not allowed to call; a silent launcher read after a real 30 minutes (the age was shown to grow, not to
+  pass the guard's limit). No independent verifier agent was run.

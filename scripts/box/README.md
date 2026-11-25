@@ -89,24 +89,24 @@ answer, it stops the box (`fleet stop`). A box it cannot capture is stopped, not
 | `N groups of targets for M boxes` | fewer boxes, since a box would run nothing |
 | `no memory need per agent` | add `limits.needs.<task>.memory_gb` to the plan, or pass `--max-agents` |
 | `needs OPENAI_API_KEY, and a box holds only OPENROUTER_API_KEY` | a run's model, a role's too, must route through OpenRouter |
-| `<plan> here differs from commit <sha>` | the boxes run the commit's plan and spec: commit and push the file, or restore it |
-| `<run> has traces here` | a run folder, eval log or console log of that name is here: set it aside, or leave its target out |
-| `a launcher of <study> is live on this machine` | stop the Mac's launcher first; one started later leaves out the boxes' targets |
+| `<plan> here differs from commit <sha>` | commit and push the file, or restore it: the boxes run the commit's |
+| `<run> has traces here` | a run folder, eval log or console log of the name is here: set it aside first |
+| `a launcher of <study> is live on this machine` | stop it; one started later leaves out the boxes' targets |
 | `box <id> of <study> runs <targets> already` | two boxes of one study never run the same target |
 | `the fleet would bill $X/h, past its cap` | `--max-fleet-dph` (15 $/h) holds the open boxes and this launch |
 | `the account holds these boxes already` | a box of this name is live: destroy it, or rent under another `--label-prefix` |
 | `vast.ai cannot start it` (status) | destroy it with `--accept-loss`, then `create --plan <plan> [--gates <spec>] --boxes N --only <box> --label-prefix spar-screen-retry` |
 | `the box needs N cores` (setup) | the VM came up smaller than its offer: capture, destroy, rent with `--skip-machine <machine>` |
-| `<run> has traces here` (run-args) | a trace the box did not make; a failed box run's pulled traces count too: set them aside |
-| `no longer holds the box's targets` (run-args, repin) | the commit's plan cut or dropped a target of the box: pin a commit that holds them |
-| `no box key`, `no credit limit`, `less than the $X the runs of the boxes that hold it may spend` | the key sent (`OPENROUTER_API_KEY` with `--main-key`, else `BOX_OPENROUTER_API_KEY`) must be capped in OpenRouter with room for every run of every open box that holds it, gated arms too |
+| `<run> has traces here` (run-args) | a failed box run's pulled traces count too: set them aside |
+| `no longer holds the box's targets` (run-args, repin) | pin a commit whose plan holds them whole |
+| `no box key`, `no credit limit`, `less than the $X the runs of the boxes that hold it may spend` | the key needs a cap in OpenRouter and room for every run of every open box that holds it |
 | `a launcher is alive` | the box runs already; watch it |
 | `/root/box_id names ...` | the endpoint reaches another box: run `fleet status` |
 | `this machine holds another run of <run>` (capture) | an eval log here, or the one a run.json here names, is not the box's: nothing is pulled; set the local run aside first |
 | `Docker holds ... containers` (capture) | a stopped run's workspace: `box_teardown.sh` saves it under `/root/docker_saved` and passes `--accept-docker` |
-| `cannot tell what Docker holds` (capture) | `box_teardown.sh` restarts Docker once; if it still cannot answer, the box is stopped for a person |
-| `STUCK nothing runs and ...` (launcher) | the launcher ended with 3: memory or Docker's disk unreadable, or a floor above the disk |
-| `box <id> runs <targets>: left out here` (launcher header) | the Mac leaves those targets to their box |
+| `cannot tell what Docker holds` (capture) | the teardown restarts Docker once, then stops the box for a person |
+| `STUCK nothing runs and ...` (launcher) | it ended with 3: memory or disk unreadable, or a floor above the disk |
+| `box <id> runs <targets>: left out here` (launcher) | the Mac leaves those targets to their box |
 
 ## Checks on one box
 
