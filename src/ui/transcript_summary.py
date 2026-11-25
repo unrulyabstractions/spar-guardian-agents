@@ -145,11 +145,12 @@ def column_of(worker: str, influencers: tuple) -> dict:
 
 
 def column_order(c: dict) -> tuple:
-    """A column's place: its band's place in PLACE, then within an influencer band its influencers' levels and models,
-    within a control band COLUMNS' order, and the other conditions by key."""
+    """A column's place: its band's place in PLACE, then within an influencer band its influencers' levels, their
+    share of the team and their models (every 20% column before the first 60% one), within a control band COLUMNS'
+    order, and the other conditions by key."""
     band = PLACE.index(c["group"])
     if c["group"] in SETS:
-        return (band, tuple((level_rank(x["role"], x["level"]), x["model"] or "", x["share"])
+        return (band, tuple((level_rank(x["role"], x["level"]), x["share"], x["model"] or "")
                             for x in c["influencers"]))
     if c["group"] in ("baseline", "positive", "negative"):
         return (band, (COLUMNS.index(next(x for x in COLUMNS if x["key"] == c["key"])),))

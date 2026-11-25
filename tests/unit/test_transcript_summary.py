@@ -282,3 +282,17 @@ def test_influencers_of_one_share_stand_in_one_column_whatever_the_teams_size():
     assert cells[20][fifth]["team"] == {"worker": [16], "regulator": [4], "disregulator": [0]}
     assert cells[20][most] is None and "workers" not in cells[5][fifth]["filters"]
     assert s["totals"][fifth]["n"] == 2 and s["totals"][fifth]["team"]["regulator"] == [1, 4]
+
+
+def test_influencer_columns_stand_by_share_before_model():
+    """Every 20% column stands before the first 60% one, each share's columns by model (the user, 2026-11-25:
+    "order by % not model first")."""
+    def team(run: str, workers: int, regulators: int, model: str) -> dict:
+        out = row(run, workers=workers, influencers=(("regulator", "enforce", model),))
+        out["influencer_conditioning"][0]["n"] = regulators
+        return out
+    rows = [team("a", 2, 3, "haiku"), team("b", 4, 1, "opus"), team("c", 2, 3, "opus"), team("d", 4, 1, "haiku")]
+    assert [c["label"] for c in ts.summary(rows, COL)["columns"] if c["influencers"]] == [
+        "+ 20% regulators · enforce · haiku", "+ 20% regulators · enforce · opus",
+        "+ 60% regulators · enforce · haiku", "+ 60% regulators · enforce · opus"]
+
