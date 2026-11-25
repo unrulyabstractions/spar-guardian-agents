@@ -2,7 +2,7 @@
 
 The dataset is public, so no token is needed. Pull one run, some runs or a whole study:
 
-    make hf-pull STUDY=<study> [RUN=<run>] [DRY_RUN=1] [FORCE=1] [DEST=<dir>]
+    make hf-pull STUDY=<study> [RUN=<run>] [RUNS_ONLY=1] [DRY_RUN=1] [FORCE=1] [DEST=<dir>]
 """
 from __future__ import annotations
 
@@ -36,8 +36,11 @@ analysis/. A run comes with its study's INDEX.jsonl (manifest.jsonl for the apar
 file is not here yet, since the viewer reads each run's valid flag from it. A study's own documents (its README,
 figures and tables) have no place under runs/ or logs/ and stay on the Hub. A local file that differs from the Hub's
 stops the pull before anything downloads; --force replaces it. Files already here with the Hub's bytes are skipped.
+--runs-only leaves <study>/logs/ on the Hub: the viewer's pages read runs/<study>/ alone, and a run without its eval
+log shows everything but the tool definitions of its Transcript tab.
 The download goes through the Hugging Face cache (~/.cache/huggingface/hub, or --cache-dir), then each file is copied
-into place and checked against the Hub's bytes.
+into place and checked against the Hub's bytes. The cache keeps its copy: delete
+~/.cache/huggingface/hub/datasets--unrulyabstractions--spar-swarm afterwards to free that room.
 """
 
 
@@ -159,6 +162,8 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
     parser.add_argument("--run", action="append", default=[], metavar="NAME",
                         help="one run of the study (repeat, or give several in one quoted value); without it, the "
                              "whole study")
+    parser.add_argument("--runs-only", action="store_true", help="leave the eval logs on the Hub: bring only "
+                                                                 "runs/<study>/, which is all the viewer's pages read")
     parser.add_argument("--dest", type=Path, help="the folder that gets runs/ and logs/ (default: this repository)")
     parser.add_argument("--force", action="store_true", help="replace local files that differ from the Hub's")
     parser.add_argument("--dry-run", action="store_true", help="list what would come and what differs; write nothing")
@@ -178,6 +183,8 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
         items, index = select(api, args.repo, args.study, runs)
     except RepositoryNotFoundError:
         refuse(f"no dataset {args.repo} on the Hub, or it is private and the token cannot read it")
+    if args.runs_only:
+        items = {name: {r: e for r, e in files.items() if r.split("/")[1] != "logs"} for name, files in items.items()}
 
     placed = {name: {r: e for r, e in files.items() if local_path(r, dest) and not junk(Path(r))}
               for name, files in items.items()}

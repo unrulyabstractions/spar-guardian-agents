@@ -169,6 +169,17 @@ def test_a_whole_study_leaves_its_documents_on_the_hub(tmp_path, capsys):
     assert "hub only     README.md, figures/" in capsys.readouterr().out
 
 
+def test_runs_only_leaves_the_eval_logs_on_the_hub(tmp_path):
+    """What the viewer's pages read comes; the study's logs/ stay."""
+    assert pull.main(["study_x", "--runs-only"], root=tmp_path) == 0
+    assert sorted(tree(tmp_path)) == [
+        "runs/study_x/INDEX.jsonl", "runs/study_x/mock/run_m/processed/run.json",
+        "runs/study_x/run_a/processed/run.json",
+        "runs/study_x/run_a/processed/trajectories/t#1@k7q2m/transcript.json", "runs/study_x/run_ab/processed/run.json"]
+    assert pull.main(["study_x", "--run", "run_a", "--runs-only"], root=tmp_path / "one") == 0
+    assert not (tmp_path / "one" / "logs").exists()
+
+
 def test_an_apart_control_run_comes_with_the_manifest(tmp_path):
     assert pull.main(["apart_controls", "--run", "ds/binder/cheat/s1"], root=tmp_path) == 0
     assert tree(tmp_path) == {

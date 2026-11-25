@@ -17,8 +17,10 @@ from src.configuration import settings
 from src.measures.run_directory import FILES
 
 FOLDERS_SCANNED = ("src", "scripts", "tools", "examples", "studies", "tests")
-EXEMPT = {"src/measures/run_directory.py", "tests/unit/test_run_paths.py", "scripts/box/box_probe.py"}
-"""The path table itself, this test, and the probe a box runs from standard input without the repository."""
+EXEMPT = {"src/measures/run_directory.py", "tests/unit/test_run_paths.py", "scripts/box/box_probe.py",
+          "src/measures/regulator_baseline_measures.py"}
+"""The path table itself, this test, the probe a box runs from standard input without the repository, and the measures
+of Lucy's guardian-baseline runs, which a standalone script reads in their own flat layout."""
 OLDER = ("judge.jsonl", "ladder.jsonl", "ladder_actions.jsonl", "rungs.json", "smoke_results.json")
 """The archive's older ladders' files, which no code reads any more."""
 DOTTED = {name for name in FILES if "." in name} | set(OLDER)

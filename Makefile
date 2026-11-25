@@ -83,9 +83,9 @@ hf-upload:  ## upload STUDY's runs and eval logs to the Hugging Face dataset spa
 	@$(PY) scripts/hf/upload_runs_to_hf.py "$(STUDY)" $(if $(findstring command line,$(origin RUN)),--run "$(RUN)") $(if $(DRY_RUN),--dry-run) $(if $(DELETE_STALE),--delete-stale) $(if $(LISTING),--listing "$(LISTING)") $(if $(ARCHIVED),--archived)
 
 .PHONY: hf-pull
-hf-pull:  ## download STUDY's runs and eval logs from the dataset spar-swarm into runs/ and logs/ (RUN="<run> ..." for some, DRY_RUN=1 to list, FORCE=1 to replace differing files, DEST=<dir> for another root, DEST=OLD for the archive)
+hf-pull:  ## download STUDY's runs and eval logs from the dataset spar-swarm into runs/ and logs/ (RUN="<run> ..." for some, RUNS_ONLY=1 without the eval logs, DRY_RUN=1 to list, FORCE=1 to replace differing files, DEST=<dir> for another root, DEST=OLD for the archive)
 	@test -n "$(STUDY)" || { echo "make hf-pull: give STUDY=<study>, e.g. make hf-pull STUDY=ian_influencers_0 RUN=<run>"; exit 2; }
-	@$(PY) scripts/hf/pull_runs_from_hf.py "$(STUDY)" $(if $(findstring command line,$(origin RUN)),--run "$(RUN)") $(if $(DRY_RUN),--dry-run) $(if $(FORCE),--force) $(if $(DEST),--dest "$(DEST)")
+	@$(PY) scripts/hf/pull_runs_from_hf.py "$(STUDY)" $(if $(findstring command line,$(origin RUN)),--run "$(RUN)") $(if $(RUNS_ONLY),--runs-only) $(if $(DRY_RUN),--dry-run) $(if $(FORCE),--force) $(if $(DEST),--dest "$(DEST)")
 
 .PHONY: replay
 replay:  ## replay STUDY's runs from their recorded calls in Docker (no model call) and put each faithful replay's steps beside its run (RUN="<run> ..." for some, JOBS=2)
