@@ -45,7 +45,9 @@ for pid in filter(str.isdigit, os.listdir("/proc")):
     except OSError:
         pass
 PY"""
-SEARCH = ("s=$(date +%s); timeout {limit} grep -r -l {needle} / 2>/dev/null | head -5; "
+# The pattern is the needle with its last character in brackets, so the search's own command lines under /proc hold
+# no match (as MARK above).
+SEARCH = ("s=$(date +%s); timeout {limit} grep -r -l '{pattern}' / 2>/dev/null | head -5; "
           "echo \"rc=${{PIPESTATUS[0]}} secs=$(( $(date +%s) - s ))\"")
 OWN = ("head -c 8 /proc/self/pagemap > /dev/null 2>&1 && echo pagemap=readable || echo pagemap=denied; "
        "cat <(echo procsub=ok); python3 -c 'import os; print(\"python=ok\", os.getpid() > 0)'; "
@@ -108,7 +110,7 @@ def check(image: str) -> dict:
                f"echo {needle} > /opt/proc_check/planted.txt; chmod 644 /opt/proc_check/planted.txt")
         start = time.monotonic()
         found = docker("exec", "-u", str(AGENT_UID), name, "bash", "-c",
-                       SEARCH.format(limit=SEARCH_S, needle=needle), timeout=SEARCH_S + 60)
+                       SEARCH.format(limit=SEARCH_S, pattern=f"{needle[:-1]}[{needle[-1]}]"), timeout=SEARCH_S + 60)
         report["search"] = {"output": found.stdout.strip()[-600:], "seconds": round(time.monotonic() - start, 1),
                             "found": "/opt/proc_check/planted.txt" in found.stdout}
         own = docker("exec", "-u", str(AGENT_UID), name, "bash", "-c", OWN)
