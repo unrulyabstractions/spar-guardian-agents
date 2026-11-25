@@ -4324,3 +4324,25 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   or against vast.ai or OpenRouter (fleet stop's PUT, the Docker restart on a box, box_key's live key read), which this
   branch was not allowed to call; a silent launcher read after a real 30 minutes (the age was shown to grow, not to
   pass the guard's limit). No independent verifier agent was run.
+
+## 2026-11-25: the first rented machine for the box tools (vast.ai 62502770), a mock rehearsal
+
+- **What.** One vast.ai VM (80 cores and 129 GB offered, 76 and 106 found; $0.442/h) taken through the whole
+  runbook of `scripts/box/README.md` for `studies/plans/box_rehearsal_0.yaml`: `fleet create`, `box_setup.sh`,
+  `box_run.sh --mock` (one team of three on ian_gflipt with the mock model, no key on the box), `watch.sh --once`,
+  `capture_check.sh --pull`, `fleet destroy`. Launch l9fcdcf, 02:11 to 03:01 PST.
+- **How.** Read each step's output. The first setup exited 1 at `proc_hiding_check.py`: its `grep -r` matched its own
+  command lines under /proc, which this host lists before /opt, so `head -5` closed the pipe before the planted file.
+  Fixed in 83b12b71 (the pattern's last character in brackets), run on the box before the commit, then the box was
+  repinned and set up again. After the capture I hashed every captured file on this machine against the manifest made
+  on the box, ran `run_validity` on the run as it arrived, and listed the account after the destroy.
+- **Result.** VERIFIED: the fixed check on the box reads ok true, planted file found in 1.9 s, page map denied, no
+  failures. The second setup exited 0 in 76 s. The mock run ended and is valid here
+  (`runs/box_rehearsal_0_mock/ian_gflipt_deepseek_baseline_none_s1_mock`, 32 files). Capture: 65608 files swept, 47
+  captured (10.0 MB, 0 different by size and sha256 in my own pass), 4 of the host image, 65557 excluded as
+  reproducible, 0 missing. Destroy: gone from the account, 0 instances, 0 boxes in the registry not destroyed;
+  record in `logs/boxes/destroyed.jsonl`, about $0.42. UNVERIFIED: a paid run on a box, `box_run.sh --main-key` and
+  `box_key.py` against the live key, `live_cost` on a box, two boxes at once, and the guard's own teardown of an idle
+  box. Seen and not fixed: `.claude/box_progress.sh` reads a box as `ended no-clone-on-the-box` during the first steps
+  of `box_setup.sh`, before the clone exists. No independent verifier agent was run on this rehearsal.
+
