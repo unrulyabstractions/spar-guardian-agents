@@ -1,0 +1,636 @@
+// The swarm in 3D. Each node is an agent; edges grow as agents talk on the board (a post naming the other, or a
+// read asking for the other's posts), thicker the more they go back and forth. Coloured orbs are the exploit's
+// pieces: each agent circles the pieces it holds, and an orb flies to an agent when it gets a piece it lacked.
+// Nodes warm and then turn red as they climb the Cheating ladder. No text is drawn anywhere.
+import * as THREE from 'three';
+
+const S = JSON.parse(document.getElementById('story').textContent);
+const N = S.agents.length;
+const T = Math.max(S.duration, 1e-6);
+const PLAY_SECONDS = 50;                 // the whole run plays in this many seconds at 1x
+const SPEEDS = [0.5, 1, 2, 4];
+const SPS = T / PLAY_SECONDS;            // story seconds per screen second at 1x
+const D = {spark: 1.3 * SPS, flow: 2.4 * SPS, ripple: 1.5 * SPS, flash: 1.8 * SPS, submit: 3.6 * SPS,
+           fade: 0.7 * SPS};
+const ASK = 1;
+const CHEATED = 3;
+
+const RUNG_COLORS = ['#c9d6e8', '#ffe1a6', '#ff9d47', '#ff2a2a', '#ff0a3c'].map(c => new THREE.Color(c));
+const PIECE_COLORS = ['#3d8bff', '#2fe07a', '#b46dff', '#00d8d0', '#f0e040', '#ff7ad9'].map(c => new THREE.Color(c));
+const EDGE_COLOR = new THREE.Color('#8fb3ff');
+const EDGE_RED = new THREE.Color('#ff2f45');
+const TALK_COLOR = new THREE.Color('#eaf2ff');
+const ASK_COLOR = new THREE.Color('#7fe8ff');
+
+// ---------- scene ----------
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({canvas, antialias: true, alpha: true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.setClearColor(0x000000, 0);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 4000);
+scene.add(new THREE.HemisphereLight(0xc4d6ff, 0x141824, 1.1));
+const keyLight = new THREE.DirectionalLight(0xffffff, 1.6);
+keyLight.position.set(12, 22, 16);
+scene.add(keyLight);
+const rimLight = new THREE.DirectionalLight(0x6f8cff, 0.8);
+rimLight.position.set(-18, -6, -12);
+scene.add(rimLight);
+
+function radialTexture(stops) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const gradient = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+  for (const [at, alpha] of stops) gradient.addColorStop(at, `rgba(255,255,255,${alpha})`);
+  g.fillStyle = gradient;
+  g.fillRect(0, 0, 256, 256);
+  const texture = new THREE.CanvasTexture(c);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+const GLOW = radialTexture([[0, 1], [0.2, 0.6], [0.5, 0.16], [1, 0]]);
+const RING = radialTexture([[0, 0], [0.7, 0], [0.8, 0.95], [0.88, 0.3], [1, 0]]);
+
+function sprite(texture, color = 0xffffff, opacity = 1) {
+  const material = new THREE.SpriteMaterial({map: texture, color, transparent: true, opacity,
+                                             blending: THREE.AdditiveBlending, depthWrite: false});
+  return new THREE.Sprite(material);
+}
+
+// A faint field of stars for depth.
+{
+  const count = 1400, positions = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const u = Math.random() * 2 - 1, a = Math.random() * Math.PI * 2, r = 300 + Math.random() * 500;
+    const s = Math.sqrt(1 - u * u);
+    positions.set([r * s * Math.cos(a), r * u, r * s * Math.sin(a)], i * 3);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  scene.add(new THREE.Points(geometry, new THREE.PointsMaterial({color: 0x8090b0, size: 1.4, sizeAttenuation: true,
+                                                                transparent: true, opacity: 0.55})));
+}
+
+// Pools of throwaway objects: begin() each frame, get() what is needed, end() hides the rest.
+class Pool {
+  constructor(make) { this.make = make; this.items = []; this.used = 0; }
+  begin() { this.used = 0; }
+  get() {
+    if (this.used >= this.items.length) { const o = this.make(); scene.add(o); this.items.push(o); }
+    const o = this.items[this.used++];
+    o.visible = true;
+    return o;
+  }
+  end() { for (let k = this.used; k < this.items.length; k++) this.items[k].visible = false; }
+}
+const glowPool = new Pool(() => sprite(GLOW));
+const ringPool = new Pool(() => sprite(RING));
+const orbGeometry = new THREE.SphereGeometry(1, 20, 14);
+const orbPool = new Pool(() => new THREE.Mesh(orbGeometry, new THREE.MeshStandardMaterial({
+  roughness: 0.25, metalness: 0.1, emissiveIntensity: 1.2, transparent: true})));
+const pools = [glowPool, ringPool, orbPool];
+
+// ---------- agents ----------
+function starGeometry() {
+  // A spiky star: an icosahedron whose every face is pulled out into a point.
+  const base = new THREE.IcosahedronGeometry(0.75, 0).toNonIndexed();
+  const p = base.getAttribute('position');
+  const out = [];
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), tip = new THREE.Vector3();
+  for (let f = 0; f < p.count; f += 3) {
+    a.fromBufferAttribute(p, f); b.fromBufferAttribute(p, f + 1); c.fromBufferAttribute(p, f + 2);
+    tip.copy(a).add(b).add(c).normalize().multiplyScalar(1.45);
+    for (const [u, v] of [[a, b], [b, c], [c, a]]) out.push(u.x, u.y, u.z, v.x, v.y, v.z, tip.x, tip.y, tip.z);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(out, 3));
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+const pos = [], vel = [];
+const nodes = S.agents.map((agent, i) => {
+  const group = new THREE.Group();
+  scene.add(group);
+  const material = new THREE.MeshStandardMaterial({color: RUNG_COLORS[0].clone(), emissive: RUNG_COLORS[0].clone(),
+                                                   emissiveIntensity: 0.25, roughness: 0.32, metalness: 0.12,
+                                                   transparent: true, flatShading: agent.role === 'disregulator'});
+  let core, cage = null;
+  if (agent.role === 'disregulator') {
+    core = new THREE.Mesh(starGeometry(), material);
+  } else if (agent.role === 'regulator') {
+    core = new THREE.Mesh(new THREE.SphereGeometry(0.82, 48, 32), material);
+    cage = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(1.42, 0)),
+                                  new THREE.LineBasicMaterial({color: 0xa9ccff, transparent: true, opacity: 0.85}));
+    group.add(cage);
+  } else {
+    core = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), material);
+  }
+  core.userData.agent = i;
+  group.add(core);
+  const glow = sprite(GLOW, RUNG_COLORS[0], 0.4);
+  glow.scale.setScalar(4);
+  group.add(glow);
+  const complete = new THREE.Mesh(new THREE.TorusGeometry(1.95, 0.05, 8, 72),
+                                  new THREE.MeshBasicMaterial({color: 0xffffff, transparent: true, opacity: 0,
+                                                               blending: THREE.AdditiveBlending, depthWrite: false}));
+  group.add(complete);
+  // Start on a sphere (Fibonacci points) so no two agents begin in the same place.
+  const k = i + 0.5, phi = Math.acos(1 - 2 * k / N), theta = Math.PI * (1 + Math.sqrt(5)) * k;
+  const r = 5 + Math.sqrt(N) * 1.6;
+  pos.push(new THREE.Vector3(r * Math.sin(phi) * Math.cos(theta), r * Math.cos(phi), r * Math.sin(phi) * Math.sin(theta)));
+  vel.push(new THREE.Vector3());
+  const tilt = new THREE.Quaternion().setFromEuler(new THREE.Euler((i * 1.7) % Math.PI, (i * 2.3) % Math.PI, 0));
+  return {agent, group, core, material, cage, glow, complete, tilt, spin: 0.6 + (i % 5) * 0.12};
+});
+const cores = nodes.map(n => n.core);
+
+// ---------- edges ----------
+const pairs = new Map();
+for (const [t, from, to, kind] of S.talk) {
+  const i = Math.min(from, to), j = Math.max(from, to), key = i * 1000 + j;
+  if (!pairs.has(key)) pairs.set(key, {i, j, ij: [], ji: [], all: [], w: 0, last: -Infinity, mesh: null});
+  const pair = pairs.get(key);
+  (from === i ? pair.ij : pair.ji).push(t);
+  pair.all.push(t);
+}
+const cylinder = new THREE.CylinderGeometry(1, 1, 1, 10, 1, true);
+for (const pair of pairs.values()) {
+  pair.ij.sort((a, b) => a - b); pair.ji.sort((a, b) => a - b); pair.all.sort((a, b) => a - b);
+  pair.mesh = new THREE.Mesh(cylinder, new THREE.MeshBasicMaterial({color: EDGE_COLOR.clone(), transparent: true,
+                                                                     opacity: 0, blending: THREE.AdditiveBlending,
+                                                                     depthWrite: false}));
+  scene.add(pair.mesh);
+}
+// The busiest pair's final weight: edge thickness is read against it.
+const W_MAX = Math.max(1, ...[...pairs.values()].map(p => p.ij.length + p.ji.length + 2 * Math.min(p.ij.length, p.ji.length)));
+const talkSorted = S.talk.slice().sort((a, b) => a[0] - b[0]);
+const postsSorted = S.posts.slice().sort((a, b) => a[0] - b[0]);
+
+function countUpTo(sorted, t) {              // how many values of a sorted list are <= t
+  let lo = 0, hi = sorted.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (sorted[mid] <= t) lo = mid + 1; else hi = mid; }
+  return lo;
+}
+function firstFrom(sortedRows, t) {          // the first row whose time is > t
+  let lo = 0, hi = sortedRows.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (sortedRows[mid][0] <= t) lo = mid + 1; else hi = mid; }
+  return lo;
+}
+function* windowed(sortedRows, t, span) {    // rows with t - span < time <= t
+  const end = firstFrom(sortedRows, t);
+  for (let k = firstFrom(sortedRows, t - span); k < end; k++) yield sortedRows[k];
+}
+
+// ---------- state at time t ----------
+function rungAt(agent, t) {
+  let rung = 0, previous = 0, since = -Infinity;
+  for (const [at, value] of agent.rungs) {
+    if (at > t) break;
+    if (value !== rung) { previous = rung; rung = value; since = at; }
+  }
+  return {rung, previous, since};
+}
+function presence(agent, t) {               // 0 not yet here, 1 here, fading to the exited look after its end
+  if (t < agent.start) return {here: 0, gone: 0};
+  const here = Math.min(1, (t - agent.start) / D.fade + (agent.start <= 0 ? 1 : 0));
+  const leaves = agent.end < T - 1e-6;
+  const gone = leaves && t > agent.end ? Math.min(1, (t - agent.end) / D.fade) : 0;
+  return {here, gone};
+}
+const flows = S.flows.slice().sort((a, b) => a[0] - b[0]);
+function piecesHeld(i, t) {
+  const held = new Set(S.agents[i].holds);
+  for (const [tf, piece, , to] of flows) {
+    if (tf + D.flow > t) break;
+    if (to === i) held.add(piece);
+  }
+  return [...held].sort((a, b) => a - b);
+}
+function farPoint(seed) {                    // where a piece no agent held comes in from
+  const a = seed * 2.399, u = Math.sin(seed * 12.9898) * 0.6;
+  const s = Math.sqrt(1 - u * u);
+  return new THREE.Vector3(60 * s * Math.cos(a), 60 * u, 60 * s * Math.sin(a));
+}
+const smooth = x => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
+
+// ---------- layout ----------
+const force = Array.from({length: N}, () => new THREE.Vector3());
+const tmp = new THREE.Vector3();
+function stepLayout(alive) {
+  for (const f of force) f.set(0, 0, 0);
+  for (let i = 0; i < N; i++) {
+    if (!alive[i]) continue;
+    for (let j = i + 1; j < N; j++) {
+      if (!alive[j]) continue;
+      tmp.subVectors(pos[j], pos[i]);
+      const d2 = Math.max(tmp.lengthSq(), 0.25);
+      tmp.normalize().multiplyScalar(40 / d2);
+      force[i].sub(tmp); force[j].add(tmp);
+    }
+  }
+  for (const pair of pairs.values()) {
+    if (pair.w <= 0 || !alive[pair.i] || !alive[pair.j]) continue;
+    tmp.subVectors(pos[pair.j], pos[pair.i]);
+    const d = Math.max(tmp.length(), 0.01);
+    const rest = 3.4 + 8 / (1 + 0.5 * pair.w);
+    const k = 0.02 * Math.min(1 + Math.sqrt(pair.w), 6);
+    tmp.multiplyScalar(((d - rest) * k) / d);
+    force[pair.i].add(tmp); force[pair.j].sub(tmp);
+  }
+  for (let i = 0; i < N; i++) {
+    if (!alive[i]) continue;
+    force[i].addScaledVector(pos[i], -0.018);
+    vel[i].add(force[i].multiplyScalar(0.05)).multiplyScalar(0.86);
+    if (vel[i].length() > 0.6) vel[i].setLength(0.6);
+    pos[i].add(vel[i]);
+  }
+}
+
+// ---------- camera ----------
+let azimuth = 0.7, polar = 1.15, zoom = 1, lastDrag = -1e9, dragging = false, px = 0, py = 0;
+const center = new THREE.Vector3();
+let radius = 12;
+canvas.addEventListener('pointerdown', e => { dragging = true; px = e.clientX; py = e.clientY; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointerup', e => { dragging = false; canvas.releasePointerCapture(e.pointerId); });
+canvas.addEventListener('pointermove', e => {
+  pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+  pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  pointerSeen = true;
+  if (!dragging) return;
+  azimuth -= (e.clientX - px) * 0.006;
+  polar = Math.min(2.9, Math.max(0.25, polar - (e.clientY - py) * 0.006));
+  px = e.clientX; py = e.clientY;
+  lastDrag = performance.now();
+});
+canvas.addEventListener('pointerleave', () => { pointerSeen = false; });
+canvas.addEventListener('wheel', e => { e.preventDefault(); zoom = Math.min(3, Math.max(0.3, zoom * Math.exp(e.deltaY * 0.001))); },
+                        {passive: false});
+function placeCamera(alive, dt) {
+  const c = new THREE.Vector3();
+  let n = 0;
+  for (let i = 0; i < N; i++) if (alive[i]) { c.add(pos[i]); n++; }
+  if (n) c.divideScalar(n);
+  let r = 4;
+  for (let i = 0; i < N; i++) if (alive[i]) r = Math.max(r, pos[i].distanceTo(c) + 3);
+  const ease = 1 - Math.exp(-dt * 2);
+  center.lerp(c, ease);
+  radius += (r - radius) * ease;
+  const distance = (radius / Math.sin((camera.fov * Math.PI) / 360)) * 0.95 * zoom;
+  camera.position.set(center.x + distance * Math.sin(polar) * Math.cos(azimuth),
+                      center.y + distance * Math.cos(polar),
+                      center.z + distance * Math.sin(polar) * Math.sin(azimuth));
+  camera.lookAt(center);
+}
+
+// ---------- hover ----------
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let pointerSeen = false, hovered = -1;
+function pick() {
+  if (!pointerSeen || dragging) return -1;
+  raycaster.setFromCamera(pointer, camera);
+  const hit = raycaster.intersectObjects(cores.filter(c => c.parent.visible), false)[0];
+  return hit ? hit.object.userData.agent : -1;
+}
+
+// ---------- the frame ----------
+let t = 0, playing = false, speedIndex = 1, clock = 0, last = performance.now();
+const tint = document.getElementById('tint');
+const arc = new THREE.Vector3(), up = new THREE.Vector3(), from = new THREE.Vector3(), to = new THREE.Vector3();
+
+function update(dt) {
+  const alive = S.agents.map(a => t >= a.start);
+  const rungs = S.agents.map(a => rungAt(a, t));
+  const here = S.agents.map(a => presence(a, t));
+
+  for (const pair of pairs.values()) {
+    const ij = countUpTo(pair.ij, t), ji = countUpTo(pair.ji, t);
+    pair.w = ij + ji + 2 * Math.min(ij, ji);                    // back and forth counts double
+    const n = countUpTo(pair.all, t);
+    pair.last = n ? pair.all[n - 1] : -Infinity;
+  }
+  for (let s = 0; s < 2; s++) stepLayout(alive);
+  hovered = pick();
+  const near = new Set();
+  if (hovered >= 0) {
+    near.add(hovered);
+    for (const pair of pairs.values()) if (pair.w > 0 && (pair.i === hovered || pair.j === hovered)) { near.add(pair.i); near.add(pair.j); }
+  }
+  const focus = i => (hovered < 0 || near.has(i) ? 1 : 0.18);
+
+  // Nodes: colour by rung, faded once the agent has left.
+  nodes.forEach((node, i) => {
+    const {rung, previous, since} = rungs[i];
+    const {here: h, gone} = here[i];
+    node.group.visible = alive[i];
+    if (!alive[i]) return;
+    node.group.position.copy(pos[i]);
+    const mix = smooth((t - since) / D.fade);
+    const color = RUNG_COLORS[previous].clone().lerp(RUNG_COLORS[rung], mix);
+    node.material.color.copy(color);
+    node.material.emissive.copy(color);
+    const pulse = rung >= CHEATED ? 0.5 + 0.5 * Math.sin(clock * (rung === 4 ? 5 : 3.2)) : 0;
+    node.material.emissiveIntensity = 0.18 + 0.2 * rung + 0.35 * pulse;
+    const look = 1 - 0.7 * gone;
+    node.material.opacity = (0.35 + 0.65 * look) * focus(i);
+    const scale = smooth(h) * (1 - 0.3 * gone) * (rung >= CHEATED ? 1.08 : 1);
+    node.group.scale.setScalar(Math.max(0.001, scale));
+    node.glow.material.color.copy(color);
+    node.glow.material.opacity = (0.28 + 0.1 * rung + 0.35 * pulse) * look * focus(i);
+    node.glow.scale.setScalar(3.4 + 0.75 * rung + 0.8 * pulse);
+    node.core.rotation.y += dt * 0.3;
+    if (node.cage) { node.cage.rotation.y -= dt * 0.5; node.cage.rotation.x += dt * 0.2; node.cage.material.opacity = 0.85 * look * focus(i); }
+  });
+
+  // Edges: thickness from the back and forth so far, bright for a moment after each exchange.
+  for (const pair of pairs.values()) {
+    const m = pair.mesh;
+    if (pair.w <= 0 || !alive[pair.i] || !alive[pair.j]) { m.visible = false; continue; }
+    m.visible = true;
+    from.copy(pos[pair.i]); to.copy(pos[pair.j]);
+    const length = from.distanceTo(to);
+    m.position.addVectors(from, to).multiplyScalar(0.5);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tmp.subVectors(to, from).normalize());
+    const share = Math.min(1, pair.w / W_MAX);                 // against the run's busiest pair
+    const thick = 0.03 + 0.5 * Math.pow(share, 0.85);
+    m.scale.set(thick, length, thick);
+    const fresh = Math.max(0, 1 - (t - pair.last) / (D.spark * 2.5));
+    const both = Math.min(rungs[pair.i].rung, rungs[pair.j].rung);
+    m.material.color.copy(EDGE_COLOR).lerp(EDGE_RED, both >= CHEATED ? 0.85 : 0);
+    const faded = 1 - 0.6 * Math.max(here[pair.i].gone, here[pair.j].gone);
+    const lit = hovered < 0 ? 1 : (pair.i === hovered || pair.j === hovered ? 1.3 : 0.1);
+    m.material.opacity = Math.min(1, (0.18 + 0.4 * share + 0.5 * fresh) * faded * lit);
+  }
+
+  for (const pool of pools) pool.begin();
+
+  // Sparks: each message travels along its edge, from the writer to the agent it names (a read that asks for an
+  // agent's posts travels from that agent to the reader).
+  for (const [te, a, b, kind] of windowed(talkSorted, t, D.spark)) {
+    if (!alive[a] || !alive[b]) continue;
+    const p = (t - te) / D.spark;
+    const [src, dst] = kind === ASK ? [b, a] : [a, b];
+    for (let trail = 0; trail < 4; trail++) {
+      const q = p - trail * 0.05;
+      if (q < 0) continue;
+      const s = glowPool.get();
+      s.position.lerpVectors(pos[src], pos[dst], smooth(q));
+      s.material.color.copy(kind === ASK ? ASK_COLOR : TALK_COLOR);
+      s.material.opacity = (1 - trail * 0.22) * (1 - 0.3 * p) * (hovered < 0 || near.has(src) || near.has(dst) ? 1 : 0.15);
+      s.scale.setScalar(1.1 - trail * 0.2);
+    }
+  }
+
+  // Ripples: every post spreads a ring from its writer.
+  for (const [te, a] of windowed(postsSorted, t, D.ripple)) {
+    if (!alive[a]) continue;
+    const p = (t - te) / D.ripple;
+    const r = ringPool.get();
+    r.position.copy(pos[a]);
+    r.material.color.copy(TALK_COLOR);
+    r.material.opacity = 0.45 * (1 - p) * focus(a);
+    r.scale.setScalar(2.4 + 5 * p);
+  }
+
+  // Pieces in flight: an orb leaves its holder and lands on the agent that lacked it.
+  flows.forEach(([tf, piece, src, dst], n) => {
+    const color = PIECE_COLORS[piece % PIECE_COLORS.length];
+    const start = src >= 0 ? pos[src] : farPoint(n + 1);
+    if (t >= tf && t < tf + D.flow) {
+      const p = (t - tf) / D.flow;
+      const dist = start.distanceTo(pos[dst]);
+      up.set(0, 1, 0).multiplyScalar(dist * 0.35);
+      for (let trail = 0; trail < 7; trail++) {
+        const q = smooth(p - trail * 0.03);
+        if (p - trail * 0.03 < 0) continue;
+        arc.lerpVectors(start, pos[dst], q).addScaledVector(up, Math.sin(Math.PI * q));
+        if (trail === 0) {
+          const orb = orbPool.get();
+          orb.position.copy(arc);
+          orb.scale.setScalar(0.42);
+          orb.material.color.copy(color); orb.material.emissive.copy(color); orb.material.opacity = 1;
+        }
+        const g = glowPool.get();
+        g.position.copy(arc);
+        g.material.color.copy(color);
+        g.material.opacity = 0.9 * (1 - trail / 7);
+        g.scale.setScalar(2.2 - trail * 0.22);
+      }
+      if (p < 0.35 && src >= 0) {                      // the holder lets it go
+        const r = ringPool.get();
+        r.position.copy(start); r.material.color.copy(color);
+        r.material.opacity = 0.8 * (1 - p / 0.35); r.scale.setScalar(2.5 + 8 * p);
+      }
+    }
+    const landed = t - (tf + D.flow);
+    if (landed >= 0 && landed < D.flash) {             // and it lands
+      const p = landed / D.flash;
+      const r = ringPool.get();
+      r.position.copy(pos[dst]); r.material.color.copy(color);
+      r.material.opacity = 0.9 * (1 - p); r.scale.setScalar(2.5 + 6 * p);
+    }
+  });
+
+  // The pieces each agent holds circle it; a full set lights a ring.
+  nodes.forEach((node, i) => {
+    if (!alive[i]) return;
+    const held = piecesHeld(i, t);
+    const look = 1 - 0.7 * here[i].gone;
+    const scale = node.group.scale.x;
+    held.forEach((piece, k) => {
+      const color = PIECE_COLORS[piece % PIECE_COLORS.length];
+      const angle = clock * node.spin + (k * Math.PI * 2) / held.length;
+      arc.set(Math.cos(angle) * 1.95, 0, Math.sin(angle) * 1.95).applyQuaternion(node.tilt).multiplyScalar(scale).add(pos[i]);
+      const orb = orbPool.get();
+      orb.position.copy(arc);
+      orb.scale.setScalar(0.26 * scale);
+      orb.material.color.copy(color); orb.material.emissive.copy(color);
+      orb.material.opacity = look * focus(i);
+      const g = glowPool.get();
+      g.position.copy(arc); g.material.color.copy(color);
+      g.material.opacity = 0.55 * look * focus(i); g.scale.setScalar(1.3 * scale);
+    });
+    node.complete.quaternion.copy(node.tilt).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)));
+    node.complete.material.opacity = S.pieces >= 2 && held.length >= S.pieces ? 0.55 * look * focus(i) : 0;
+  });
+
+  // A rung reached flashes a ring in its colour.
+  nodes.forEach((node, i) => {
+    if (!alive[i]) return;
+    const {rung, previous, since} = rungs[i];
+    const p = (t - since) / D.flash;
+    if (rung > previous && p >= 0 && p < 1) {
+      const r = ringPool.get();
+      r.position.copy(pos[i]); r.material.color.copy(RUNG_COLORS[rung]);
+      r.material.opacity = (rung >= CHEATED ? 1 : 0.6) * (1 - p);
+      r.scale.setScalar(2.5 + (rung >= CHEATED ? 10 : 5) * smooth(p));
+    }
+  });
+
+  // The hand-in: a wave across the swarm, red when the team cheated; the room stays red after.
+  if (S.submit) {
+    const p = (t - S.submit.t) / D.submit;
+    const color = S.submit.cheated ? EDGE_RED : new THREE.Color('#a8ffc4');
+    if (p >= 0 && p < 1) {
+      for (let wave = 0; wave < 3; wave++) {
+        const q = p - wave * 0.12;
+        if (q < 0) continue;
+        const r = ringPool.get();
+        r.position.copy(pos[S.submit.agent]); r.material.color.copy(color);
+        r.material.opacity = 0.9 * (1 - q);
+        r.scale.setScalar(3 + radius * 3.2 * smooth(q));
+      }
+    }
+    tint.style.opacity = S.submit.cheated ? String(0.9 * smooth(p * 2)) : '0';
+  }
+
+  for (const pool of pools) pool.end();
+  placeCamera(alive, dt);
+}
+
+// ---------- controls: play, timeline, speed (icons only) ----------
+const playButton = document.getElementById('play');
+const playIcon = document.getElementById('playIcon');
+const speedButton = document.getElementById('speed');
+const speedIcon = document.getElementById('speedIcon');
+const timeline = document.getElementById('timeline');
+const tctx = timeline.getContext('2d');
+let backdrop = null;
+
+function setPlaying(on) {
+  if (on && t >= T) t = 0;
+  playing = on;
+  playIcon.setAttribute('d', on ? 'M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z' : 'M7 4.5 20 12 7 19.5Z');
+}
+function drawSpeed() {
+  const n = speedIndex + 1, w = 5, gap = 1.5, total = n * w + (n - 1) * gap;
+  let html = '';
+  for (let k = 0; k < n; k++) {
+    const x = 12 - total / 2 + k * (w + gap);
+    html += `<path d="M${x} 6.5 ${x + w} 12 ${x} 17.5Z"/>`;
+  }
+  speedIcon.innerHTML = html;
+}
+playButton.addEventListener('click', () => setPlaying(!playing));
+speedButton.addEventListener('click', () => { speedIndex = (speedIndex + 1) % SPEEDS.length; drawSpeed(); });
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space') { e.preventDefault(); setPlaying(!playing); }
+  if (e.code === 'ArrowRight') t = Math.min(T, t + T / 100);
+  if (e.code === 'ArrowLeft') t = Math.max(0, t - T / 100);
+});
+
+function buildBackdrop() {
+  const dpr = Math.min(window.devicePixelRatio, 2);
+  const w = timeline.clientWidth, h = timeline.clientHeight;
+  timeline.width = w * dpr; timeline.height = h * dpr;
+  backdrop = document.createElement('canvas');
+  backdrop.width = timeline.width; backdrop.height = timeline.height;
+  const g = backdrop.getContext('2d');
+  g.scale(dpr, dpr);
+  const x = v => 8 + (v / T) * (w - 16);
+  // How busy the board is: a soft histogram of the exchanges.
+  const bins = 160, counts = new Array(bins).fill(0);
+  for (const [te] of S.talk) counts[Math.min(bins - 1, Math.floor((te / T) * bins))]++;
+  for (const [te] of S.posts) counts[Math.min(bins - 1, Math.floor((te / T) * bins))] += 0.5;
+  const top = Math.max(1, ...counts);
+  g.fillStyle = 'rgba(160,190,255,0.22)';
+  counts.forEach((c, b) => {
+    const bh = (c / top) * (h * 0.42);
+    g.fillRect(x((b / bins) * T), h / 2 - bh / 2, Math.max(1, (w - 16) / bins - 1), bh);
+  });
+  // The track.
+  g.fillStyle = 'rgba(200,215,255,0.16)';
+  g.fillRect(8, h / 2 - 1.5, w - 16, 3);
+  // Pieces passed: a dot of the piece's colour above the track.
+  for (const [tf, piece] of S.flows) {
+    g.fillStyle = '#' + PIECE_COLORS[piece % PIECE_COLORS.length].getHexString();
+    g.beginPath(); g.arc(x(tf), h * 0.2, 2.6, 0, Math.PI * 2); g.fill();
+  }
+  // Agents turning red: a red tick below the track.
+  for (const agent of S.agents) {
+    let before = 0;
+    for (const [at, value] of agent.rungs) {
+      if (value >= CHEATED && before < CHEATED) {
+        g.fillStyle = '#ff2d3d';
+        g.fillRect(x(at) - 1, h * 0.66, 2.2, h * 0.24);
+      }
+      before = value;
+    }
+  }
+  // The hand-in: a diamond.
+  if (S.submit) {
+    const sx = x(S.submit.t), sy = h / 2;
+    g.fillStyle = S.submit.cheated ? '#ff2d3d' : '#a8ffc4';
+    g.beginPath(); g.moveTo(sx, sy - 7); g.lineTo(sx + 6, sy); g.lineTo(sx, sy + 7); g.lineTo(sx - 6, sy); g.closePath(); g.fill();
+  }
+}
+function drawTimeline() {
+  if (!backdrop) buildBackdrop();
+  const dpr = timeline.width / timeline.clientWidth;
+  const w = timeline.clientWidth, h = timeline.clientHeight;
+  tctx.setTransform(1, 0, 0, 1, 0, 0);
+  tctx.clearRect(0, 0, timeline.width, timeline.height);
+  tctx.drawImage(backdrop, 0, 0);
+  tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const px = 8 + (t / T) * (w - 16);
+  tctx.fillStyle = 'rgba(230,238,255,0.75)';
+  tctx.fillRect(8, h / 2 - 1.5, px - 8, 3);
+  tctx.fillStyle = '#ffffff';
+  tctx.shadowColor = 'rgba(255,255,255,0.8)'; tctx.shadowBlur = 8;
+  tctx.beginPath(); tctx.arc(px, h / 2, 6, 0, Math.PI * 2); tctx.fill();
+  tctx.shadowBlur = 0;
+}
+let scrubbing = false;
+function scrubTo(e) {
+  const rect = timeline.getBoundingClientRect();
+  t = Math.min(T, Math.max(0, ((e.clientX - rect.left - 8) / (rect.width - 16)) * T));
+}
+timeline.addEventListener('pointerdown', e => { scrubbing = true; timeline.setPointerCapture(e.pointerId); scrubTo(e); });
+timeline.addEventListener('pointermove', e => { if (scrubbing) scrubTo(e); });
+timeline.addEventListener('pointerup', e => { scrubbing = false; timeline.releasePointerCapture(e.pointerId); });
+
+function resize() {
+  renderer.setSize(window.innerWidth, window.innerHeight, false);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  backdrop = null;
+}
+window.addEventListener('resize', resize);
+
+// A URL hash #t=0.5 opens the run halfway through, paused (for stills).
+const startAt = /t=([0-9.]+)/.exec(location.hash);
+if (startAt) t = Math.min(1, parseFloat(startAt[1])) * T;
+
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  clock += dt;
+  if (playing && !scrubbing) {
+    t += dt * SPS * SPEEDS[speedIndex];
+    if (t >= T) { t = T; setPlaying(false); }
+  }
+  if (!dragging && performance.now() - lastDrag > 2500) azimuth += dt * 0.07;
+  update(dt);
+  renderer.render(scene, camera);
+  drawTimeline();
+  requestAnimationFrame(frame);
+}
+resize();
+drawSpeed();
+// Settle the layout at the opening moment before the first frame.
+{
+  const alive = S.agents.map(a => t >= a.start);
+  for (const pair of pairs.values()) {
+    const ij = countUpTo(pair.ij, t), ji = countUpTo(pair.ji, t);
+    pair.w = ij + ji + 2 * Math.min(ij, ji);
+  }
+  for (let s = 0; s < 400; s++) stepLayout(alive);
+  placeCamera(alive, 10);
+}
+requestAnimationFrame(frame);
+if (!startAt) setTimeout(() => setPlaying(true), 900);
+window.__swarm = {setTime: v => { t = v * T; }, get t() { return t / T; }, play: setPlaying};
