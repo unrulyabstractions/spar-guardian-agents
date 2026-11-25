@@ -9,11 +9,11 @@
 # deepseek and qwen").
 # Every run keeps the default $5 cap but the four with a Grok or Kimi disregulator: $15 (the user, 2026-11-25: "yes").
 # Those two cost $0.35 to $1.27 a run as disregulator in runs of 3 to 6 rounds on ian_flipt.
-# Launch only once unsubmit is on main; then name unsubmit and submit_delay_rounds in the settings below.
 study: disregulator_existence_2
 seeds: [1]
 # What every run of the study is given. A value named nowhere is the default (swarm_config.py).
-settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5]
+settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5, unsubmit=true,
+           submit_delay_rounds=3]
 targets:
   ian_gflipt_haiku_baseline:
     module: studies.cells.swe.ian_gflipt_minimal
