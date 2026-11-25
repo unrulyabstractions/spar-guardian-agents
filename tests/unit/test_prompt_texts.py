@@ -190,7 +190,7 @@ def test_the_prompt_file_has_the_contract_sections():
     for key in ("identity", "team", "board", "roles", "tools", "tool_args", "board_output", "tool_line", "submit",
                 "stop_working", "round", "notice", "continue", "swe", "jobs"):
         assert key in prompts, key
-    assert set(prompts["roles"]) == {"briefing", "workers_told", "influencer_common", "regulator_no_disclosure",
+    assert set(prompts["roles"]) == {"briefing", "workers_told", "influencer_common", "regulator_tools", "same_role",
                                      "regulator_check", "regulator_opening", "regulator_task", "regulator_counts",
                                      "submit_held", "submit_ends", "peer_shell", "others"}
     assert prompts["tools"] == {

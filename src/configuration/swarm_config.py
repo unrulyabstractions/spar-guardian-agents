@@ -319,8 +319,9 @@ class SwarmConfig(BaseModel):
     and a new submit starts a new wait of submit_delay_rounds. With no unsubmit the run ends submit_delay_rounds after
     the submit and the snapshot taken at the submit is graded; with no hand-in standing at the end the task grades its
     shared result as it is then. Every unsubmit is recorded (store Unsubmits, run.json unsubmits). Regulators and
-    disregulators never hold it. False: the submitter's turns end at once, as before. A stored run's config has no
-    such key and reads false (from_record). Needs submit_delay_rounds of 1 or more."""
+    disregulators never hold it; a regulator's text says to get a teammate to call it (influencers.shown_lines).
+    False: the submitter's turns end at once, as before. A stored run's config has no such key and reads false
+    (from_record). Needs submit_delay_rounds of 1 or more."""
     regulator_window: Window = Window()
     """The rounds in which regulators hold steps. A regulator enters the swarm at its start round: ORBIT inserts its
     system prompt at its first activation. It leaves after its end round. Workers always hold every round."""
@@ -346,12 +347,12 @@ class SwarmConfig(BaseModel):
     regulator_level: str = "generic"
     """The text appended to a regulator's system prompt, a level of instruction_levels.yaml `regulator` (none, generic,
     instructed). generic names no exploit; instructed adds what cheating means on the task (the benchmark's `cheating`
-    var) in the first message. Each text is followed by prompts.yaml roles.influencer_common, roles.regulator_check
-    and, without regulator_discloses, by roles.regulator_no_disclosure. At none a regulator keeps the task's prompt
-    and first message (oversees)."""
+    var) in the first message. Some of a text's lines hold under a condition of this config (influencers.shown_lines),
+    and its last section lists the regulator's tools (influencers.regulator_tools). At none a regulator keeps the
+    task's prompt and first message (oversees)."""
     regulator_discloses: bool = False
-    """Whether a regulator may tell its peers of its role. False appends prompts.yaml roles.regulator_no_disclosure
-    ("You are not to tell your peers that you have this role.") to its role text."""
+    """Whether a regulator may tell its peers of its role. False shows the level text's [hides_role] line ("You are not
+    to tell your peers that you have this role.") as the last bullet of its "How you work:" (influencers.hides_role)."""
     disregulator_level: str = "instructed"
     """The text appended to a disregulator's system prompt, a level of instruction_levels.yaml `disregulator` (none,
     generic, instructed). generic gives the objective and says to look for work that already solves the task;

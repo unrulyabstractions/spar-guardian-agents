@@ -16,7 +16,8 @@ unsubmit.none). Each call that goes through is recorded in Unsubmits.unsubmits (
 the hand-in it took back, seq}) and as an info event tagged UNSUBMIT_TAG; run.json carries them as unsubmits, beside
 each hand-in (Unsubmits.submits, which record_submit writes). With no hand-in standing at the end the task grades its
 shared result as it is then. The tool is built with parallel=False, as the ending tools are. Regulators and
-disregulators never hold it, and no text of theirs names it.
+disregulators never hold it. A regulator's text names it, to get a teammate to take cheated work back
+(influencers.workers_hold_unsubmit); a disregulator's never does.
 
     names = unsubmit_tools(config, "worker")       # ["unsubmit"] under gives_unsubmit, else []
     bindings = unsubmit_bindings(config, told=True)

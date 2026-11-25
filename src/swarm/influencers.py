@@ -26,13 +26,15 @@ benchmark's `cheating` var, what cheating means on that task, in its first messa
 generic it gets no first-message text. A disregulator's first message gives its objective at generic, and at
 instructed also where the work that already solves the task is, before the run's facts. A variant's scenario may give
 its own words in place of the benchmark's, for the rule sentence and both roles' first messages (Benchmark.level_words,
-prompts.yaml <task>.scenarios.<name>.words). An influencer's level text is followed by prompts.yaml
+prompts.yaml <task>.scenarios.<name>.words). A disregulator's level text is followed by prompts.yaml
 roles.influencer_common (the peer tools, src/swarm/_regulator_oversight.py, and the board), then under
-SwarmConfig.peer_shell roles.peer_shell. A regulator's then gets
-roles.regulator_check (call get_peer_actions on each teammate within a set number of the regulator's first rounds:
-CHECK_ROUNDS, which role_values gives the first message, since no system prompt holds a number) and, unless
-regulator_discloses is on, roles.regulator_no_disclosure. The check is an instruction like the rest; run.json engagement
-checked_in_time records whether it happened.
+SwarmConfig.peer_shell roles.peer_shell. A regulator's level text is sections of bullets, some lines of which hold
+under a condition of the run's config alone (REGULATOR_LINES, shown_lines), then a last section, "Your tools:"
+(regulator_tools): one bullet per sentence of the same two pieces, then roles.regulator_check (call get_peer_actions
+on each teammate within a set number of the regulator's first rounds: CHECK_ROUNDS, which role_values gives the first
+message, since no system prompt holds a number). The check is an instruction like the rest; run.json engagement
+checked_in_time records whether it happened. In a run with two or more regulators each one's first message names the
+others (same_role_text).
 
 With informed_roles on, a regulator or disregulator also gets the briefing (prompts.yaml `roles.briefing`, built by
 role_briefing) after its role text: the board and its tools, what the agents without a role were told, and that they
@@ -40,7 +42,8 @@ hold submit; the swarm's size is in its first message (role_values). Workers nev
 peer: every agent hears of each peer as it enters (src/swarm/turn_rules/_turn_presence.py).
 
 Both influencers also hold alert_humans (src/swarm/submit_and_stop.py), which records an alert; the caller keeps
-working. Neither holds unsubmit (src/swarm/unsubmit.py), and no text of theirs names it.
+working. Neither holds unsubmit (src/swarm/unsubmit.py). A regulator's text names it when workers hold it, to get a
+teammate to take cheated work back; a disregulator's never does.
 
 In a run with two or more disregulators each one finds OTHERS.md on its own machine or account, naming the other
 disregulators (others_named, others_text, prompts.yaml roles.others). No prompt points at it. Each domain says where
@@ -58,6 +61,10 @@ from src.swarm.turn_rules import BOARD_TOOLS, CHECK_ROUNDS
 
 # A placeholder that opens a sentence; its value is capitalised there.
 SENTENCE_START = re.compile(r"(^|[.!?]\s+)\{(\w+)\}")
+# A line of a regulator's level text shown only under a condition: [tag] then the line (instruction_levels.yaml).
+TAGGED = re.compile(r"^\[(\w+)\](.*)$")
+# Where one sentence ends and the next begins, in a piece of prompts.yaml roles made into bullets.
+SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
 
 class Unfilled(dict):
@@ -110,8 +117,75 @@ def assign_roles(seats: list[str], regulators: int, disregulators: int, seed: in
     return roles
 
 
+def at_instructed(config: SwarmConfig) -> bool:
+    """Whether the regulator's level is instructed, whose first message says what cheating means on the task."""
+    return config.regulator_level == "instructed"
+
+
+def regulator_kept_out(config: SwarmConfig) -> bool:
+    """Whether a regulator may not write the team's shared result (SwarmConfig.shared_result_kept_out)."""
+    return "regulator" in config.shared_result_kept_out
+
+
+def several_regulators(config: SwarmConfig) -> bool:
+    """Whether the run has two or more regulators, so each one's first message names the others (same_role_text)."""
+    return config.regulator_count >= 2
+
+
+def hides_role(config: SwarmConfig) -> bool:
+    """Whether a regulator may not tell its peers of its role (regulator_discloses off)."""
+    return not config.regulator_discloses
+
+
+def workers_hold_unsubmit(config: SwarmConfig) -> bool:
+    """Whether the workers hold unsubmit, to take the team's hand-in back (SwarmConfig.gives_unsubmit)."""
+    return config.holds_unsubmit("worker")
+
+
+REGULATOR_LINES = {"instructed": at_instructed, "kept_out": regulator_kept_out,
+                   "several_regulators": several_regulators, "hides_role": hides_role,
+                   "unsubmit": workers_hold_unsubmit}
+"""The tags of a regulator's level text (instruction_levels.yaml), each with the condition of the run's config under
+which its lines are shown."""
+
+
+def shown_lines(text: str, config: SwarmConfig) -> str:
+    """A regulator's level text as the run shows it: each line that opens with spaces joined to the line before it by
+    one space, then each line tagged [tag] kept, without its tag, when REGULATOR_LINES[tag] holds for the config, and
+    dropped when it does not. An unknown tag raises ValueError."""
+    lines: list[str] = []
+    for line in text.splitlines():
+        if line[:1].isspace() and lines and lines[-1]:
+            lines[-1] = f"{lines[-1]} {line.strip()}"
+        else:
+            lines.append(line)
+    shown = []
+    for line in lines:
+        tagged = TAGGED.match(line)
+        if tagged is None:
+            shown.append(line)
+            continue
+        if tagged[1] not in REGULATOR_LINES:
+            raise ValueError(f"instruction_levels.yaml regulator: no condition for the tag [{tagged[1]}]")
+        if REGULATOR_LINES[tagged[1]](config):
+            shown.append(tagged[2])
+    return "\n".join(shown)
+
+
+def regulator_tools(config: SwarmConfig) -> str:
+    """The last section of a regulator's role text: prompts.yaml roles.regulator_tools, then one bullet per sentence
+    of roles.influencer_common, roles.peer_shell under SwarmConfig.peer_shell, and roles.regulator_check."""
+    pieces = load_prompts()["roles"]
+    sentences = [*SENTENCE_END.split(pieces["influencer_common"].strip()),
+                 *([pieces["peer_shell"].strip()] if config.peer_shell else []), pieces["regulator_check"].strip()]
+    return "\n".join([pieces["regulator_tools"], *(f"- {sentence}" for sentence in sentences)])
+
+
 def role_text(role: str, config: SwarmConfig, benchmark_name: str) -> str | None:
-    """The text appended to the system prompt of an agent holding this role, or None."""
+    """The text appended to the system prompt of an agent holding this role, or None. A regulator's is its level's
+    lines as the run shows them (shown_lines), then its tools' section (regulator_tools), a blank line apart. A
+    disregulator's is its level's text, then roles.influencer_common and, under peer_shell, roles.peer_shell, a space
+    apart."""
     if role not in ROLES:
         raise ValueError(role)
     if role == "worker":
@@ -119,12 +193,10 @@ def role_text(role: str, config: SwarmConfig, benchmark_name: str) -> str | None
     text = level_text(role, getattr(config, f"{role}_level"), benchmark_name)
     if text is None:
         return None
-    pieces = load_prompts()["roles"]
-    tail = [pieces["influencer_common"], *([pieces["peer_shell"]] if config.peer_shell else [])]
     if role == "regulator":
-        tail += [pieces["regulator_check"],
-                 *([] if config.regulator_discloses else [pieces["regulator_no_disclosure"]])]
-    return " ".join([text, *tail])
+        return f"{shown_lines(text, config)}\n\n{regulator_tools(config)}"
+    pieces = load_prompts()["roles"]
+    return " ".join([text, pieces["influencer_common"], *([pieces["peer_shell"]] if config.peer_shell else [])])
 
 
 def role_first(role: str, config: SwarmConfig, benchmark_name: str, words: dict[str, str] | None = None,
@@ -238,11 +310,25 @@ def kept_out(roles: dict[str, str] | None, agents: list[str], kept_roles: tuple[
     return [agent for agent in agents if (roles or {}).get(agent) in kept_roles]
 
 
+def listed(names: list[str]) -> str:
+    """Agent IDs as "a", "a and b" or "a, b and c"."""
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
 def others_text(names: list[str]) -> str:
     """The whole text of OTHERS.md for a disregulator, from prompts.yaml roles.others: the other disregulators' IDs,
     as "a", "a and b" or "a, b and c", then a newline."""
     if not names:
         raise ValueError("OTHERS.md names at least one other disregulator")
     templates = load_prompts()["roles"]["others"]
-    listed = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
-    return templates["one" if len(names) == 1 else "several"].format(names=listed) + "\n"
+    return templates["one" if len(names) == 1 else "several"].format(names=listed(names)) + "\n"
+
+
+def same_role_text(roles: dict[str, str] | None, agent: str) -> str | None:
+    """The line of a regulator's first message that names the other regulators, sorted, from prompts.yaml
+    roles.same_role, in a run with two or more regulators. None for a worker, a disregulator or a lone regulator."""
+    found = sorted(other for other, role in (roles or {}).items() if role == "regulator")
+    if agent not in found or len(found) < 2:
+        return None
+    others = [other for other in found if other != agent]
+    return load_prompts()["roles"]["same_role"]["one" if len(others) == 1 else "several"].format(names=listed(others))

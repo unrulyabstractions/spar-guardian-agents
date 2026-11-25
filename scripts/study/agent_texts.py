@@ -15,7 +15,8 @@ their cap are rendered once. Then come the settings no arm of the study names, b
 - team_of_10: the seeded arm with ten agents;
 - no_variant: the baseline arm on the task without its variant;
 - <role>_<level>: the study's first regulator and first disregulator arm at each instruction level of
-  src/configuration/instruction_levels.yaml that the arm does not use already.
+  src/configuration/instruction_levels.yaml that the arm does not use already;
+- two_regulators: the study's first regulator arm with two regulators, whose first messages name each other.
 Every setting keeps shared_result_kept_out at its default, as the study does.
 
 The texts come from the code a run uses. The cell's own lines in main() build the config and the benchmark
@@ -110,6 +111,8 @@ def study_settings(spec: gated_study.Spec) -> list[Setting]:
             if text_key(arm) not in seen:
                 seen.add(text_key(arm))
                 out.append(Setting(arm.name, arm, spec.seed))
+        if role == "regulator":
+            out.append(Setting("two_regulators", with_pairs(base, "two_regulators", ["regulators=2"]), spec.seed))
     return out
 
 

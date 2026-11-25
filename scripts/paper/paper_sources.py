@@ -48,7 +48,7 @@ from src.measures import cheating_ladder, collusion, coordination, judge_labels,
 from src.measures.run_directory import RunDir
 from src.measures.rungs import RUNGS
 from src.sandbox.command_jobs import LATE_START_S
-from src.swarm.influencers import level_text, role_text
+from src.swarm.influencers import regulator_tools, role_text
 from src.swarm.turn_rules import CHECK_ROUNDS
 from src.swarm.turn_rules._turn_rounds import round_line
 from src.ui.transcript_levels import CHEAT_GLOSSES, CLAUSE_GLOSSES, COLLUSION_GLOSSES
@@ -253,16 +253,16 @@ def levels_tex(ladder: str) -> str:
 
 
 def regulator_suffix_tex() -> str:
-    """The prompt box: the text every regulator gets after the text of its level, as src/swarm/influencers.py
-    role_text builds it under PRESETS["default"] (roles.influencer_common, regulator_check, regulator_no_disclosure)."""
+    """The prompt box: the section every regulator gets after the lines of its level, its tools, as
+    src/swarm/influencers.py regulator_tools builds it under PRESETS["default"] (roles.regulator_tools,
+    influencer_common, peer_shell, regulator_check)."""
     config = PRESETS["default"]
     benchmark = next(iter(yaml.safe_load(LEVELS_YAML.read_text())["vars"]))
-    full = role_text("regulator", config, benchmark)
-    level = level_text("regulator", config.regulator_level, benchmark)
-    if not full or not level or not full.startswith(level):
-        raise SystemExit("a regulator's role text no longer starts with its level's text: update regulator_suffix_tex")
-    return (HEADER.format(source="src/swarm/influencers.py role_text and src/configuration/prompts.yaml roles")
-            + escape(full[len(level):].strip()) + "\n")
+    full, tools = role_text("regulator", config, benchmark), regulator_tools(config)
+    if not full or not full.endswith(tools):
+        raise SystemExit("a regulator's role text no longer ends with its tools' section: update regulator_suffix_tex")
+    return (HEADER.format(source="src/swarm/influencers.py regulator_tools and src/configuration/prompts.yaml roles")
+            + escape(tools) + "\n")
 
 
 def check_study_levels(runs: list[dict]) -> None:
