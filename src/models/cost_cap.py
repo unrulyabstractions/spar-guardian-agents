@@ -16,6 +16,11 @@ cap then counts what OpenRouter bills, call for call (tests/unit/test_cost_cap.p
 pilot). The model info `register` sets is only the fallback for a model nothing hooked, and it takes the higher
 rates, so such a cap trips early, never late.
 
+Inspect's ModelCost holds one cache write rate, the five-minute one. After a gap of more than five minutes in a sample
+Inspect sends Anthropic the one-hour cache lifetime and bills those writes at CACHE_WRITE_1H_MULTIPLIER (1.6) times that
+rate. The registry's cache_write_1h is that product (tests/unit/test_label_faults_cache_write_1h.py), so the cap and
+the ledger (model_registry.cost_usd) price a one-hour write alike.
+
 Until 2026-11-22 nothing hooked any model, and the long-prompt rates priced every call: Inspect counted 1.87 times
 what OpenRouter billed on a Luna run below the line (every token class at twice its rate, output at 1.5 times) and 5
 times on Haiku, so a Luna run's $5 cap tripped once about $2.70 was spent.

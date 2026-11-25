@@ -145,11 +145,16 @@ def test_openai_lists_a_write_rate_and_batch_halves_it(entry, write):
 
 def test_an_openrouter_entry_keeps_the_long_prompt_tier_of_its_direct_entry():
     """On 2026-11-01 the OpenRouter Haiku entry lacked the tier, so its runs were billed $59.02 against a listed $17.87
-    and the dollar cap counted a fifth of what they spent."""
+    and the dollar cap counted a fifth of what they spent. The direct entry's one-hour write rate is left out: Inspect
+    asks for the one-hour cache lifetime on Anthropic's own route alone."""
+    def tier(entry: dict) -> dict | None:
+        long_prompt = entry.get("long_prompt")
+        return {k: v for k, v in long_prompt.items() if k != "cache_write_1h"} if long_prompt else None
+
     for name, entry in models.entries().items():
         direct = models.entries().get(name.removesuffix("-openrouter"))
         if name.endswith("-openrouter") and direct:
-            assert entry.get("long_prompt") == direct.get("long_prompt"), name
+            assert tier(entry) == tier(direct), name
 
 
 def test_a_prompt_over_the_line_pays_the_long_rates_on_every_token():

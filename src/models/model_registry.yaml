@@ -8,7 +8,9 @@
 # (the judge's default), candidate, or superseded (a newer model of the same provider replaces it). `usd_per_million`
 # is the provider's own list price on `as_of`, in USD per million tokens, unless `price_source` says otherwise.
 # Its `cache_write` is the shortest-lived write rate, where the provider lists one (five minutes at Anthropic and Moonshot,
-# 30 at OpenAI); an entry without it pays the input rate. `long_prompt` holds the rates of a call whose prompt, cache reads
+# 30 at OpenAI); an entry without it pays the input rate. `cache_write_1h` is Anthropic's rate for a write at the one-hour
+# lifetime, which Inspect asks for after a gap of more than five minutes in a sample; it is 1.6 times `cache_write`, the
+# multiplier Inspect bills against the cost cap. `long_prompt` holds the rates of a call whose prompt, cache reads
 # and writes included, is `over` that many tokens: every token of that call pays them.
 # Context and output limits are tokens. Mock models (`mockllm/model`) need no entry. An OpenRouter entry carries
 # `routing`, the provider routing every request pins (OpenRouter's `provider` body: the host's slug in `order`,
@@ -452,7 +454,7 @@ models:
     context: 1000000
     max_output: 128000
     reasoning: adaptive thinking, always on; effort high by default
-    usd_per_million: {input: 8.00, cached_input: 0.20, output: 40.00, cache_write: 10.00}
+    usd_per_million: {input: 8.00, cached_input: 0.20, output: 40.00, cache_write: 10.00, cache_write_1h: 16.00}
     price_note: cache writes 10.00 (5 min) and 16.00 (1 h); cache hits 0.025 times input, on the pricing page of 2026-11-25
     caching_verified: {date: "2026-11-25", inspect: "c574b6bf6", route: anthropic, entry: claude-fable-5-2}   # scripts/check_anthropic_cache.py: calls 2 and 3 each read 0.9992 of the previous prompt
     cheatbench: []
@@ -464,7 +466,7 @@ models:
     context: 1000000
     max_output: 128000
     reasoning: adaptive thinking, always on; effort high by default
-    usd_per_million: {input: 10.00, cached_input: 0.25, output: 50.00, cache_write: 12.50}
+    usd_per_million: {input: 10.00, cached_input: 0.25, output: 50.00, cache_write: 12.50, cache_write_1h: 20.00}
     price_note: cache writes 12.50 (5 min) and 20.00 (1 h)
     cheatbench: [claude-fable-5-1]
     status: candidate
@@ -475,7 +477,7 @@ models:
     context: 1000000
     max_output: 128000
     reasoning: adaptive thinking, always on; effort medium by default
-    usd_per_million: {input: 4.00, cached_input: 0.20, output: 20.00, cache_write: 5.00}
+    usd_per_million: {input: 4.00, cached_input: 0.20, output: 20.00, cache_write: 5.00, cache_write_1h: 8.00}
     price_note: cache writes 5.00 (5 min) and 8.00 (1 h)
     caching_verified: {date: "2026-11-25", inspect: "c574b6bf6", route: anthropic, entry: claude-opus-5-5}   # scripts/check_anthropic_cache.py: calls 2 and 3 each read 0.9992 of the previous prompt
     cheatbench: [claude-opus-5-5]
@@ -487,7 +489,7 @@ models:
     context: 1000000
     max_output: 128000
     reasoning: adaptive thinking; effort high by default
-    usd_per_million: {input: 2.00, cached_input: 0.10, output: 10.00, cache_write: 2.50}
+    usd_per_million: {input: 2.00, cached_input: 0.10, output: 10.00, cache_write: 2.50, cache_write_1h: 4.00}
     price_note: cache writes 2.50 (5 min) and 4.00 (1 h); cache hits 0.05 times input, on the pricing page of 2026-10-31
     caching_verified: {date: "2026-11-25", inspect: "c574b6bf6", route: anthropic, entry: claude-sonnet-5-5}   # scripts/check_anthropic_cache.py: calls 2 and 3 each read 0.9992 of the previous prompt
     cheatbench: []
@@ -498,8 +500,8 @@ models:
     context: 1000000
     max_output: 128000
     reasoning: adaptive thinking; effort medium by default
-    usd_per_million: {input: 0.10, cached_input: 0.01, output: 0.50, cache_write: 0.125}
-    long_prompt: {over: 100000, input: 0.50, cached_input: 0.05, output: 2.50, cache_write: 0.625}
+    usd_per_million: {input: 0.10, cached_input: 0.01, output: 0.50, cache_write: 0.125, cache_write_1h: 0.20}
+    long_prompt: {over: 100000, input: 0.50, cached_input: 0.05, output: 2.50, cache_write: 0.625, cache_write_1h: 1.00}
     price_note: cache writes 0.125 (5 min) and 0.20 (1 h); over 100k tokens 0.625 and 1.00
     caching_verified: {date: "2026-11-25", inspect: "c574b6bf6", route: anthropic, entry: claude-haiku-5-5}   # scripts/check_anthropic_cache.py: calls 2 and 3 each read 0.9992 of the previous prompt
     cheatbench: []

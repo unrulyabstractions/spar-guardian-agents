@@ -311,6 +311,18 @@ def billed_cost(ev) -> float | None:
     return float(cost) if isinstance(cost, (int, float)) else None
 
 
+def cache_write_1h(ev) -> int:
+    """How many of one model call's cache writes were made at the one-hour lifetime, from the raw response the log
+    kept (Anthropic's usage.cache_creation.ephemeral_1h_input_tokens); 0 when the log kept no raw response or the
+    provider reports no split. Inspect asks Anthropic for that lifetime after a gap of more than five minutes in a
+    sample, and those writes cost more."""
+    call = getattr(ev, "call", None)
+    response = getattr(call, "response", None) if call else None
+    usage = (response.get("usage") or {}) if isinstance(response, dict) else {}
+    written = (usage.get("cache_creation") or {}).get("ephemeral_1h_input_tokens")
+    return written if isinstance(written, int) else 0
+
+
 def usage_from_events(model_events) -> dict:
     """The episode's token totals, plus billed_usd and billed_calls: what the provider charged for the calls whose
     raw response the log kept (every call in a log run.run made, the first five per model in any other)."""

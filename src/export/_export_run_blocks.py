@@ -25,6 +25,7 @@ from src.export.eval_sample_view import (
     LIMIT_FAILURES,
     SampleView,
     agent_specs,
+    cache_write_1h,
     held_orbit_submit,
     roster,
     span_owners,
@@ -245,13 +246,15 @@ def validity_block(records: list[dict], submission: dict | None, access_log: dic
 
 def listed_cost(price: dict | None, calls: list[dict], usage: dict) -> float | None:
     """What an agent's calls cost at the registry's list prices, one by one since a long prompt changes a call's rates;
-    the totals at the normal rates where the log kept no call's usage. None without prices or usage."""
+    the totals at the normal rates where the log kept no call's usage. A call's cache writes at the one-hour lifetime
+    (cache_write_1h) pay their own rate. None without prices or usage."""
     if price is None or not usage:
         return None
     if not calls:
         price, calls = {k: v for k, v in price.items() if k != "long_prompt"}, [usage]
     return sum(models.cost_usd(price, call.get("input", 0), call.get("cache_read", 0), call.get("output", 0),
-                               cache_write=call.get("cache_write", 0)) for call in calls)
+                               cache_write=call.get("cache_write", 0), cache_write_1h=call.get("cache_write_1h", 0))
+               for call in calls)
 
 
 def ledger_record(model: str, events: list, usage: dict | None) -> dict:
@@ -261,7 +264,8 @@ def ledger_record(model: str, events: list, usage: dict | None) -> dict:
     usage = dict(usage or {})
     calls = len(events)
     errored = sum(1 for e in events if getattr(e, "error", None))
-    used = [usage_dict(e.output.usage) for e in events if getattr(getattr(e, "output", None), "usage", None)]
+    used = [{**usage_dict(e.output.usage), "cache_write_1h": cache_write_1h(e)}
+            for e in events if getattr(getattr(e, "output", None), "usage", None)]
     with_usage = len(used)
     price = models.usd_per_million(model)
     cost = listed_cost(price, used, usage)

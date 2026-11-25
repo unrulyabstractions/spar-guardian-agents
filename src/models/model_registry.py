@@ -238,18 +238,22 @@ def call_rates(prices: dict, prompt_tokens: int) -> dict:
 
 
 def cost_usd(prices: dict | None, input_tokens: int, cached_tokens: int, output_tokens: int,
-             cache_write: int = 0) -> float | None:
+             cache_write: int = 0, cache_write_1h: int = 0) -> float | None:
     """What one call's tokens cost at these prices (usd_per_million): cache reads at the cached rate, cache writes at
     the write rate (the input rate where the entry has none), the other input at the input rate, output at the output
-    rate. input_tokens counts the reads and the writes. A prompt over the entry's long_prompt line pays those rates on
-    every token (call_rates), so a sum of calls is priced call by call. None without prices."""
+    rate. Of the cache writes, cache_write_1h were made at the one-hour lifetime and pay the cache_write_1h rate (the
+    write rate where the entry has none). input_tokens counts the reads and the writes. A prompt over the entry's
+    long_prompt line pays those rates on every token (call_rates), so a sum of calls is priced call by call. None
+    without prices."""
     if not prices:
         return None
     prices = call_rates(prices, input_tokens)
     cached_rate = prices.get("cached_input", prices["input"])
     write_rate = prices.get("cache_write", prices["input"])
+    hour_rate = prices.get("cache_write_1h", write_rate)
     return ((input_tokens - cached_tokens - cache_write) * prices["input"] + cached_tokens * cached_rate
-            + cache_write * write_rate + output_tokens * prices["output"]) / 1_000_000
+            + (cache_write - cache_write_1h) * write_rate + cache_write_1h * hour_rate
+            + output_tokens * prices["output"]) / 1_000_000
 
 
 def rows() -> list[list[str]]:
