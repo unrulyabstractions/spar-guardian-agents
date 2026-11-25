@@ -148,9 +148,11 @@ def test_the_board_shows_the_panel_only_with_a_network_log():
     run = (STATIC / "tv_view_run.js").read_text()
     panel = (STATIC / "tv_net_panel.js").read_text()
     assert "const net = d.network && opts.netUrl ? netPanel(opts.netUrl" in board
-    # the message board stands first, above the timeline; the /tmp panel and this panel stand under the timeline
-    order = ("h('section', { class: 'card bd-board' }, boardHead, boardBox),\n"
-             "    h('section', { class: 'card bd-timeline' }, controls, lensKeyRow, svgHost, scrub, cardRow, legend),\n"
+    # the message board stands first, a slider above and below its posts; then the timeline with its own slider;
+    # the /tmp panel and this panel stand under the timeline
+    order = ("h('section', { class: 'card bd-board' }, boardHead, scrubs.boardTop.el, boardBox, scrubs.boardBottom.el),\n"
+             "    h('section', { class: 'card bd-timeline' }, controls, lensKeyRow, svgHost, scrubs.timeline.el, cardRow,"
+             " legend),\n"
              "    tmp ? tmp.el : null,\n    net ? net.el : null));")
     assert order in board
     assert "netUrl: netUrl(id)" in run

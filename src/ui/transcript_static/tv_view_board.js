@@ -232,11 +232,16 @@ export function renderBoard(el, d, opts) {
   const back = button('◀ step', 'step back (left arrow)', () => step(-1));
   const playBtn = button('▶ play', 'play or pause', () => (state.playing ? pause() : play()), 'bd-play');
   const fwd = button('step ▶', 'step forward (right arrow)', () => step(1));
-  const slider = h('input', { type: 'range', class: 'bd-slider', 'aria-label': 'position',
-    oninput: e => { pause(); moveTo(Number(e.target.value)); } });
-  // The position's readout stands in the gutter at the slider's left end, on the slider's row.
-  const posText = h('span', { class: 'bd-pos' });
-  const scrub = h('div', { class: 'bd-scrub' }, posText, slider);
+  // One slider row: the position's readout in the gutter at the slider's left end, then the slider. The tab holds
+  // three, all showing one position: above the message board, below it, and under the time axis.
+  const scrubRow = () => {
+    const slider = h('input', { type: 'range', class: 'bd-slider', 'aria-label': 'position',
+      oninput: e => { pause(); moveTo(Number(e.target.value)); } });
+    const posText = h('span', { class: 'bd-pos' });
+    return { el: h('div', { class: 'bd-scrub' }, posText, slider), slider, posText };
+  };
+  const scrubs = { boardTop: scrubRow(), boardBottom: scrubRow(), timeline: scrubRow() };
+  const eachScrub = fn => Object.values(scrubs).forEach(fn);
   const cards = { a: agentCard('a'), b: agentCard('b') };
   const cardRow = h('div', { class: 'bd-cards' }, cards.a.el, cards.b.el);
   const svgHost = h('div', { class: 'bd-svg-host' });
@@ -408,11 +413,13 @@ export function renderBoard(el, d, opts) {
     svg.appendChild(svgEl('defs', null, ...SIDES.map(s => svgEl('marker', { id: `bd-arrow-${s}-${uid}`,
       viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 8, markerHeight: 8, markerUnits: 'userSpaceOnUse',
       orient: 'auto-start-reverse' }, svgEl('path', { d: 'M0,0 L8,4 L0,8 z', class: `bd-arrowhead-${s}` })))));
-    // the slider spans the lanes: its handle's middle sits at x0 at the lowest value and at x1 at the highest
-    scrub.style.width = `${width}px`;
-    slider.style.left = `${x0 - THUMB / 2}px`;
-    slider.style.width = `${x1 - x0 + THUMB}px`;
-    posText.style.width = `${x0 - THUMB / 2 - 8}px`;
+    // each slider spans the lanes: its handle's middle sits at x0 at the lowest value and at x1 at the highest
+    eachScrub(row => {
+      row.el.style.width = `${width}px`;
+      row.slider.style.left = `${x0 - THUMB / 2}px`;
+      row.slider.style.width = `${x1 - x0 + THUMB}px`;
+      row.posText.style.width = `${x0 - THUMB / 2 - 8}px`;
+    });
 
     // lanes: the two agents and the board between them
     const laneY = { a: yA, b: yB };
@@ -768,9 +775,11 @@ export function renderBoard(el, d, opts) {
       orderKeys: order.map(i => postKeys[i]), eventKeys: events.map(x => x.key),
       stopKeys: stops.map((u, i) => (state.mode === 'time' ? u.t : i)) };
     // in step mode the cursor stands at the end of step pos, so the slider's lowest value, -1, is the lanes' start
-    slider.min = state.mode === 'time' ? '0' : '-1';
-    slider.max = String(state.mode === 'time' ? span : n - 1);
-    slider.step = state.mode === 'time' ? String(span / 2000) : '1';
+    eachScrub(({ slider }) => {
+      slider.min = state.mode === 'time' ? '0' : '-1';
+      slider.max = String(state.mode === 'time' ? span : n - 1);
+      slider.step = state.mode === 'time' ? String(span / 2000) : '1';
+    });
     shown = 0;
     latest = -1;
     hovered = -1;
@@ -782,7 +791,8 @@ export function renderBoard(el, d, opts) {
     // under All the row stays, empty and unseen, so the lanes keep their place when the lens changes
     lensKeyRow.classList.toggle('bd-key-off', state.lens === 'all');
     const at = time == null ? state.pos : state.mode === 'time' ? time : lastAtOrBefore(stops.map(u => u.t), time);
-    moveTo(at != null && Number.isFinite(at) ? Math.max(0, at) : 0);
+    // with no position asked for, the tab opens at the end: every post on the board, every call on the lanes
+    moveTo(at != null && Number.isFinite(at) ? Math.max(0, at) : Infinity);
   }
 
   // ---- moving the position
@@ -795,11 +805,15 @@ export function renderBoard(el, d, opts) {
     L.cursor.setAttribute('x2', x);
     L.shade.setAttribute('x', x);
     L.shade.setAttribute('width', Math.max(0, L.x1 - x));
-    slider.value = String(P);
-    posText.replaceChildren(...(state.mode === 'time'
+    // the readout's words, built anew for each slider row: a node stands in one place only
+    const readout = () => (state.mode === 'time'
       ? [`${timed ? fmtAt(P) : `call ${Math.floor(P) + 1}`} of ${timed ? fmtAt(L.span) : plural(L.span, 'call')}`]
       : [h('span', null, `step ${P + 1} of ${L.n}`), timed ? h('span', null, `${fmtAt(L.stops[P].t)} of ${fmtAt(d.total)}`) : null]
-        .filter(Boolean)));
+        .filter(Boolean));
+    eachScrub(row => {
+      row.slider.value = String(P);
+      row.posText.replaceChildren(...readout());
+    });
     for (const side of SIDES) {
       const i = lastAtOrBefore(L.keys[side], P);
       const c = i >= 0 ? L.calls[side][i] : null;
@@ -1094,8 +1108,8 @@ export function renderBoard(el, d, opts) {
     notes.length ? h('span', { class: 'bd-count', title: fewOf(notes).filter(Boolean).join('\n') },
       plural(notes.length, 'note')) : null);
   el.replaceChildren(h('div', { class: 'bd-tab' },
-    h('section', { class: 'card bd-board' }, boardHead, boardBox),
-    h('section', { class: 'card bd-timeline' }, controls, lensKeyRow, svgHost, scrub, cardRow, legend),
+    h('section', { class: 'card bd-board' }, boardHead, scrubs.boardTop.el, boardBox, scrubs.boardBottom.el),
+    h('section', { class: 'card bd-timeline' }, controls, lensKeyRow, svgHost, scrubs.timeline.el, cardRow, legend),
     tmp ? tmp.el : null,
     net ? net.el : null));
 
