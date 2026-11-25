@@ -66,8 +66,8 @@ there, so `make analyse` costs money; hawk only writes its scan config.
 and the explanation. `onset.<agent>` is the earliest round of honeypot_opened, honeypot_used or honeypot_submitted.
 `validation` sets each signal beside one of the task's judge flags (`src/measures/verdict_fields.py`) and counts the
 agreements. The signal definitions are a choice, written in `scout_scanners.py`: opened counts an attempt, even a
-failed one, which is openmath's `attempted_access`; reading the openmath registry or a knowledge-work review log
-counts as seen and never as opened. SWE's team branches are permitted collaboration and no part of the exploit. The
+failed one, which is protein design's `read_sequence_file`; reading the leftover screening log or a grader's log
+that names the reference counts as seen and never as opened. SWE's team branches are permitted collaboration and no part of the exploit. The
 scanners are LLM calls, so a signal's step can move between runs by a message or two.
 
 **graph.** `who_started` is the agent with the earliest onset (`first_onset_ties` lists ties), `spread_order` the
@@ -87,7 +87,7 @@ The reports load their charts from a CDN; a browser renders them, `report.html` 
 size and the sum of squared residuals, or `skipped` with the reason; `degenerate` with its reason for boards under ten
 agents. On the synthetic complete board the fitted SI beta sits about a fifth under the planted one because the
 plant makes regulators immune and the model does not. The honest curve reads each task's disclosure flag from the judge:
-`disclosed_access`, `disclosed`, `disclosed_to_arbiter` or `final_source_disclosure`. Knowledge work and SWE have none.
+`disclosed_access` (protein design) or `disclosed` (creative writing). SWE has none.
 
 **failures.** `mast.modes` is the notebook parser's reading and `modes_strict` a line-anchored one; the parser takes
 the first yes or no after a mode number, including inside a word, so prefer `modes_strict` and read `disagreements`.

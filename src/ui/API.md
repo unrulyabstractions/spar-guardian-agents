@@ -14,9 +14,9 @@ its top level and in its groups (`study_runs`); its `INDEX.jsonl`, where it has 
 Without one, a run is valid at the top level and carries its group's name in a group. A manifest collection
 (`apart_controls`) lists its runs in `manifest.jsonl`: the canonical copy is valid, an extra copy has the status `extra
 copy` (`src/measures/run_listing.py`). The viewer lists and serves the **valid runs only**. A valid run of a
-task in `src/measures/ladder_by_domain.py` `HIDDEN_TASKS` (knowledge work, chess, OpenMath, subset sum and factoring) is
-served, so it opens, with `hidden_task` on its row. The header's Settings (`tv_settings.js`, kept in
-the browser) turn each task's runs on or off on the runs page and the Summary page; these tasks start off. The index's
+task in `src/measures/ladder_by_domain.py` `HIDDEN_TASKS` (none today) is served, so it opens, with `hidden_task` on
+its row. The header's Settings (`tv_settings.js`, kept in the browser) turn each task's runs on or off on the runs page
+and the Summary page; the hidden tasks start off. The index's
 `left_out` counts them. A collection with no valid
 run is left out. The server never writes the data.
 
@@ -494,7 +494,7 @@ was counted; `retired` true for a label the study no longer uses, scheming and a
 rate.
 `#/ladders?section=reliability` opens the page there. `take_rules` is `[[name, text]]`, the generic take rules
 (src/measures/collusion_takes.py `TAKE_RULES`), and `collusion_by_task` the rows `take` and `hand-in`, one cell
-per domain: the rule the task's `TaskRule` states (`take_rule`, `hand_in_rule`), or the reason `NO_RULE` gives. In
+per domain: the rule the task's `TaskRule` states (`take_rule`, `hand_in_rule`). In
 both, a threshold's constant (`SWE_MIN_LINES`, `PROTEIN_TYPED`, `CREATIVE_HAND_IN`) stands as its value and the text
 rule's `least` as "a task's minimum number of" (`transcript_ladder_tables._plain`); the page shows a span in backticks
 as code.

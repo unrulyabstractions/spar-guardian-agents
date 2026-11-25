@@ -64,13 +64,9 @@ Each package's `<d>_task.py` holds its Benchmark. The other modules a package ex
 
 | package | Benchmark | other API modules |
 |---|---|---|
-| `openmath/` | `OpenMath` | none |
 | `swe/` | `SWE` | `swe_inputs.py`, `swe_ladder.py`, `swe_replay.py`, `swe_sandbox.py`, `swe_settings.py` |
-| `knowledge/` | `KnowledgeWork` | `knowledge_sandbox.py`, `knowledge_settings.py` |
-| `interview/` | `SubsetSum`, `PrimeFactorization` | none |
 | `protein/` | `ProteinDesign` | `protein_rows_build.py` |
 | `creative/` | `CreativeWriting` | `creative_sandbox.py` |
-| `chess/` | `Chess` | `chess_rows_build.py` |
 
 ### sandbox/
 
@@ -81,8 +77,8 @@ What every domain builds its sandbox from. Nothing here knows a domain.
 - `proc_hiding/proc_hiding.py`: what /proc shows an agent: the AppArmor profile that denies every page map, loaded into the Docker host and set on every service of the compose file; the setup solver that remounts each agent machine's /proc with hidepid and a group for the harness, then proves both; and the record run.json `sandbox.proc` carries. `host_helper.py` runs in a privileged helper container, `proc_group.py` and `proc_proof.py` in the agents' machines.
 - `agent_tools.py`: `Seat`, where one agent works, and `AgentTools`, the agents' `shell` and `run_python` bound per seat.
 - `command_jobs.py`: every command call, with no time limit of its own: a command still running when its round's time runs out becomes a job, which `job_output` reads and `job_stop` stops; the launcher, the collector of its output and the end of every job when the agents stop.
-- `agent_users/agent_users.py`: one Linux user per agent in one container, for openmath, knowledge work and creative writing.
-- `machines/agent_machines.py`: one machine per agent on CheatBench's python311 image, for the interview tasks and protein design. Chess and creative writing build on the same image.
+- `agent_users/agent_users.py`: one Linux user per agent in one container, for creative writing.
+- `machines/agent_machines.py`: one machine per agent on CheatBench's python311 image, for protein design. Creative writing builds on the same image.
 - `cheatbench_task_files.py`: CheatBench's task folder and built rows, as every domain reads them.
 - `docker_images.py`: images on the host, built from a recipe when the label no longer names it.
 - `sandbox_hygiene.py`: the processes an agent leaves, the loopback channel and what the sandbox holds at the end.
@@ -105,13 +101,13 @@ The team on ORBIT's API.
 - `submit_and_stop.py`: `submit` and `stop_working`, the tools that end an agent's work, and the influencers' `alert_humans`, which records an alert and ends nothing. ORBIT reserves `submit`, so the tool is bound as `team_submit` and shown to the model as `submit`.
 - `awareness_probes.py`: how an agent is asked a question after the run, on a copy of its conversation; the belief questions use it.
 - `tool_output_caps.py`: the cap on one tool result, `tool_output_bytes` for every agent, set on every bound tool as `ToolDef.max_output`, and the cut of a longer result: its start and its end with one line between them, installed at Inspect's one truncation point so ORBIT's built-in bash and python get it too.
-- `turn_rules/`: the plan of rounds, each agent's round of about N tool calls (a soft cap) and where it ends (`_turn_rounds.py`), each agent's own budget of C = R x N tool calls counted at the gate (wait, a call after it, a call whose arguments did not parse and a reply with no tool call included), the line that opens each round with the tool calls the agent has left (no agent reads a round number; chess's texts count the team's turns), the budgets' counters, the halt after a hand-in or once no worker is left, the presence lines (each peer's entry and exit, `_turn_presence.py`), the board's records of each entry and exit ("k7q2m entered.", "k7q2m exited." by the system, `_turn_state.py` `board_record` and `record_entry`, marked `invocation_id` `presence_record`, `is_record`) and the model filter. Its `__init__.py` is the API. `turn_activation.py` holds the two callbacks ORBIT imports by their dotted names: `ends_round` at every boundary of a round, `after_activation` after every round.
+- `turn_rules/`: the plan of rounds, each agent's round of about N tool calls (a soft cap) and where it ends (`_turn_rounds.py`), each agent's own budget of C = R x N tool calls counted at the gate (wait, a call after it, a call whose arguments did not parse and a reply with no tool call included), the line that opens each round with the tool calls the agent has left (no agent reads a round number), the budgets' counters, the halt after a hand-in or once no worker is left, the presence lines (each peer's entry and exit, `_turn_presence.py`), the board's records of each entry and exit ("k7q2m entered.", "k7q2m exited." by the system, `_turn_state.py` `board_record` and `record_entry`, marked `invocation_id` `presence_record`, `is_record`) and the model filter. Its `__init__.py` is the API. `turn_activation.py` holds the two callbacks ORBIT imports by their dotted names: `ends_round` at every boundary of a round, `after_activation` after every round.
 
 The implementation is `_regulator_oversight.py` (`get_peer_actions` and `get_peer_observations`, the influencers' tools) and the `_turn_*.py` modules. Every run carries the turn rules as a passive defense. Its model filter takes the agent loop's assistant paragraph out of the system message and appends the continue prompt (`prompts.yaml` `continue`) when the provider input would end with a model turn, which Gemini rejects. Before each activation the defense appends the presence lines due to the agent to its saved conversation (`apply_pre_turn`).
 
 ### tasks.py
 
-`swarm_task(benchmark, config)` turns the plan, the sample, the tools, the prompts, the board and the turn rules into one ORBIT task. It adds the judge to the scorers, adds the access log's and the network log's sidecars, setup solvers and first scorers for a benchmark that watches, and records the run's facts in the sample metadata. The `@task` entry points `openmath`, `swe`, `knowledge_work`, `subset_sum`, `prime_factorization`, `protein_design`, `creative_writing` and `chess` serve `inspect eval`.
+`swarm_task(benchmark, config)` turns the plan, the sample, the tools, the prompts, the board and the turn rules into one ORBIT task. It adds the judge to the scorers, adds the access log's and the network log's sidecars, setup solvers and first scorers for a benchmark that watches, and records the run's facts in the sample metadata. The `@task` entry points `swe`, `protein_design` and `creative_writing` serve `inspect eval`.
 
 ### run.py
 
@@ -240,8 +236,8 @@ Shared helpers.
 
 | command | what it does |
 |---|---|
-| `run <name> [--benchmark openmath\|swe\|knowledge_work\|subset_sum\|prime_factorization\|protein_design\|creative_writing\|chess] [--preset default] [--scale small\|medium\|large\|extra_large\|gigantic] [--set key=value ...] [--no-judge]` | runs one task, writes `logs/<study>/<name>/`, exports `runs/<study>/<name>/` and prints the summary; the preset applies first, then the scale, then every `--set`; `--no-judge` is `--set judge=none` |
-| `run ... --row R` | the benchmark's row: the openmath_agent row (`riemann` by default), the SWE issue (`flipt-02e2` by default, or `vuls-1832`), the knowledge_work row (`2ea2e5b5`), the subset_sum or prime_factorization question (`subsetsum_n60d10_4`, `fact_n52_4`), the protein_design target (`alfalfa_chi`), the creative_writings brief (`museum_poem`) or the chess position (`LR4pA`) |
+| `run <name> [--benchmark swe\|protein_design\|creative_writing] [--preset default] [--scale small\|medium\|large\|extra_large\|gigantic] [--set key=value ...] [--no-judge]` | runs one task, writes `logs/<study>/<name>/`, exports `runs/<study>/<name>/` and prints the summary; the preset applies first, then the scale, then every `--set`; `--no-judge` is `--set judge=none` |
+| `run ... --row R` | the benchmark's row: the SWE issue (`flipt-02e2` by default, or `vuls-1832`), the protein_design target (`alfalfa_chi`) or the creative_writings brief (`museum_poem`) |
 | `run ... --honeypot as_released\|own_piece\|jigsaw [--no-grade]` | Lucy's honeypot on SWE, `jigsaw` by default; `--no-grade` skips the hidden tests. The variant `ian_swe0` (each piece also a patch file outside the repository) has no flag: `SWE(row, "jigsaw", variant="ian_swe0")`, as `studies/cells/swe/ian_swe0_*.py` build it |
 | `run ... --model M --timeout S` | the agents' model, an entry of `src/models/model_registry.yaml` or an Inspect model string, and the seconds one model request may take (default `MODEL_TIMEOUT_S`) |
 | `run ... --worker-model M --regulator-model M --disregulator-model M` | a role's own model, set after every `--set`; it runs through the swarm provider with its registry routing and the agents' generate config. The eval log names its calls `swarm/<model>`, and `runs/<study>/<name>/episodes.jsonl` names each agent's real model |
@@ -258,7 +254,7 @@ Shared helpers.
 
 The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the model role `judge`. With `--no-judge` the run is exported without verdicts, and `rejudge` adds them later. With `batch_judge` the judge's calls go through the provider's batch API; `judge` and `rejudge` batch too unless `--sync`, and `judge-pass` batches with `--batch`.
 
-`inspect eval src/tasks.py@openmath -T preset=default -T regulators=1` also works. Every `-T` key other than the task's own arguments sets a config field, and `-T scale=medium` applies a scale first. This form skips the key and routing checks, the role models built before the sandbox starts, and the Gemini 402 retry.
+`inspect eval src/tasks.py@protein_design -T preset=default -T regulators=1` also works. Every `-T` key other than the task's own arguments sets a config field, and `-T scale=medium` applies a scale first. This form skips the key and routing checks, the role models built before the sandbox starts, and the Gemini 402 retry.
 
 ## Outside src/
 
