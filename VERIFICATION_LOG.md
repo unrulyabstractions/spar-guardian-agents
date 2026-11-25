@@ -4485,3 +4485,26 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - Rung words now the ladder's names (none, looked, tempted, attempted, hacked); "honest" and "cheating" were mine and
   wrong. Viewed `ian_gflipt_opus_n10_dis20_none_s2` at t=0.45: legend and tags read ATTEMPTED / TEMPTED / LOOKED.
   VERIFIED.
+
+## 2026-11-25: two figures replace the four (tmp/disregulator_study.png, tmp/regulator_study.png); tmp/ cleaned
+
+- **What.** `tmp/disregulator_study.png` and `tmp/regulator_study.png`, drawn by
+  `scripts/study/team_rung_figures.py` (182c2a85, 763247cf) from the 40 and 9 stored runs, at the user's order
+  ("clean tmp/ give me better figures, just named disregulator_study and regulator_study, less text, more
+  striking"). And the removal of `tmp/figures`, `tmp/tables`, `tmp/replay`, `tmp/transcript_viewer` and the four
+  earlier PNGs.
+- **How.** I viewed both PNGs and compared every square and tile with the table the `verifier` agent had built
+  from the run files for the four earlier figures. The `verifier` agent then built its table again from
+  cheating.json and run.json, sampled every square's colour by pixel against the legend, measured each check
+  mark, counted the team dots and the take-back dots by program and by eye. Before the removal I listed the four
+  folders (24, 23, 102 and 1 files, none but Finder's own changed since 2026-11-22), checked that the viewer on
+  port 8770 held no file under `tmp/` and that no code under `src/ui` reads it, and named the make targets that
+  rebuild them (`figures`, `tables`, `results-tables`, `paper-figures`, `replay`).
+- **Result.** VERIFIED: both figures (40 squares, 9 tiles, a check mark exactly where `passed` is true, the
+  take-back dots 1, 22, 13, 4 and 3, 2, 3, 9, the teams' dots 3+0, 3+1, 4+1, 8+2 and 10+0, 8+2, 4+6; no clipped
+  or overlapping mark). `tmp/` holds the two PNGs. UNVERIFIED: the rows and squares of the nine runs live when
+  this was written (Fable workers with the DeepSeek disregulator, Opus and Fable workers alone, three samples
+  each). Recorded: at about 10:29 PST another session in this checkout rebased main onto a teammate's seven
+  commits while those runs were live; under `src/` they add one standalone file
+  (`src/measures/regulator_baseline_measures.py`), which nothing imports, so no label code a run loads changed.
+
