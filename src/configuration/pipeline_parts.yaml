@@ -40,7 +40,7 @@ parts:
     files: [src/replay/*.py, src/domains/*/*_replay.py, scripts/study/replay_study.py]
     pins: []
     version: 2
-    fingerprint: sha256:19487508046cc92a29e6a2701e91336415e15d7fe743cee81c9b48d96af92e41
+    fingerprint: sha256:1756cee68b1db19a9f0392ca8b27359f0f00390b9156d299be88c34a8e6591c1
     log:
       1: '2026-11-22 first version: the faithful replay''s steps.jsonl and replay.json, and its tmp_snapshots.json
         of c619e3d'
@@ -57,7 +57,9 @@ parts:
         runs that record graded_at submit or shared_result; runs before record neither, so no stored byte
         changes) (re-locked 2026-11-24: The protein task reads its two folders from the run (protein.folders,
         CheatBench''s names without it); the 70 stored runs of ian_influencers_0 and ian_env_prototyping_0
-        reprocess to the same bytes)'
+        reprocess to the same bytes) (re-locked 2026-11-24: the protein and creative replays keep out
+        whom the run''s record names (shared_result.kept_out), with the gate on protein; no stored run
+        records a protein or creative shared_result)'
   judge_cheatbench:
     file: analysis/judges/cheatbench.*.jsonl
     make: null
@@ -103,7 +105,7 @@ parts:
       src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 13
-    fingerprint: sha256:5fdd730f708a492d3be8a99cd5c3ede7b7c32eb81490ddd53d88ef08500e6e73
+    fingerprint: sha256:f8ae88443cc55fef4eb8d821e98476c49579320821fba4ffdb6996e053ac1b89
     log:
       1: '2026-11-22 first version: the code record''s agent and team rows (code_ladder.signal_rows) of
         b7b1bed, and run.json''s signals block (re-locked 2026-11-22: the stored layout: the same bytes,
@@ -247,7 +249,9 @@ parts:
         own commit in the agent''s tree and that a later step proves builds'
       13: '2026-11-24 SWE: a held piece never seen needs CROSSING''s lines, ADDED_TO counts only lines
         the hand-in holds, a quiet push naming the hand-in dates it, a value named only to reject it is
-        no gift'
+        no gift (re-locked 2026-11-24: regulators kept out too; a docstring of code_ladder names an influencer''s
+        refused push; regulator_scale_1 and disregulator_existence_1 reprocessed in scratch: only versions.json
+        differ)'
   topology:
     file: processed/facts/topology.json
     make: src.measures.topology_fact:topology_part

@@ -112,6 +112,21 @@ class SwarmConfig(BaseModel):
     disregulators: int | float = 0
     """Agents given the disregulator role, an influencer hidden from the workers, as a count or a share, like
     regulators."""
+    shared_result_kept_out: tuple[Literal["regulator", "disregulator"], ...] = ("regulator", "disregulator")
+    """The roles that may not write the team's shared result, what a submit hands in (Benchmark.kept_out): such an
+    agent has to get a worker to put its work there or take it out. The default is both influencers (the user,
+    2026-11-24: "influencer should have no git to team/main"). As text: "regulator,disregulator", "disregulator" (the
+    rule of the runs before it, regulator_scale_1's among them) or "none", every agent may write. A worker is never
+    kept out, so the team can hand in. A stored run records whom it kept out (shared_result.kept_out)."""
+
+    @field_validator("shared_result_kept_out", mode="before")
+    @classmethod
+    def _parse_kept_out(cls, value):
+        if isinstance(value, str):
+            value = [] if value.strip().lower() in NONE_TEXT else [r.strip() for r in value.split(",") if r.strip()]
+        if "worker" in (value or []):
+            raise ValueError("shared_result_kept_out cannot keep out a worker: the team must be able to hand in")
+        return tuple(dict.fromkeys(value or []))
     seed: int = 0
     """Draws the agents' IDs (agent_ids) and fixes which seats get which role, with turn_order="random" the order of
     each round, and on SWE the seat the deal of the pieces starts from (SWE.deal_turn)."""

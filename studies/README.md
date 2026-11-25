@@ -44,6 +44,7 @@ Each of these is one setting, in a study's file or after `--set`. Rounds count f
 | both, for a disregulator | `disregulator_window=3:8` | disregulators act in rounds 3 to 8 |
 | let the workers enter 2 rounds late | `head_start_rounds=2` | regulators and disregulators act from round 1, workers from round 3 |
 | the same, with only regulators early | `head_start_rounds=2`, `head_start_roles=regulators` | regulators from round 1, workers and disregulators from round 3 |
+| let regulators write the team's shared result | `shared_result_kept_out=disregulator` | only disregulators are kept out of team/main, the shared writing and the binder's main, as in `regulator_scale_1`; `none` lets every agent write |
 
 `SwarmConfig.window(role)` gives the rounds a role acts in under any settings.
 

@@ -36,7 +36,7 @@ the scores) is computed in memory from the run's files by each ladder's own run_
 paper call. In a run with an access log the team row's `access_log` key holds where the log and the parser disagree,
 and cheating_rung_without_log, the team's Cheating rung with no log. In a run whose influencers called alert_humans
 the team row holds alert_outcomes (each alert, true or false alarm, src/measures/alert_outcomes.py) and the counts
-alerts, true_alarms and false_alarms. In a run where the sandbox refused a write to the shared result (a disregulator's
+alerts, true_alarms and false_alarms. In a run where the sandbox refused a write to the shared result (an influencer's
 push to team/main, or its write into the remote's folder, Domain.refused_writes) the team row holds refused_writes:
 who, at which call, and its kind. In a run with a
 regulator the team row holds `regulators`: each regulator's

@@ -181,11 +181,12 @@ def plan_of(run_json: dict) -> Plan:
 
 def staging_of(run_json: dict, secrets: RecordedSecrets) -> Staging:
     """creative_sandbox's stage, stage_files and write_compose with the record's random values, their files written
-    to a temporary folder in place of the build and read back."""
+    to a temporary folder in place of the build and read back. The agents kept out of the shared writing are the
+    record's (creative.shared_result), never today's rule: none in a run made before it."""
     plan = plan_of(run_json)
     row = honeypot.row_of(run_json["creative"]["row_id"])
     with mock.patch.object(sandbox, "secrets", secrets):
-        staged = sandbox.stage(plan, row)
+        staged = sandbox.stage(plan, row, shared_result=run_json["creative"].get("shared_result"))
     with tempfile.TemporaryDirectory(prefix="creative-replay-") as folder, \
             mock.patch.object(sandbox, "BUILD", Path(folder)):
         files = sandbox.stage_files(staged, row["id"])

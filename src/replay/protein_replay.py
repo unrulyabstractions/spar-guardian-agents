@@ -12,9 +12,11 @@ arguments, the commits given their recorded ids, the state after every call and 
 It keeps SweReplayer's interface (src/replay/swe_replayer.py), the one replay_run.replay drives.
 
 The setup is _protein_scoring.prepare's, in its order: each agent's copy of the row (_protein_honeypot.agent_files)
-staged by its tarball (agent_machines.stage_tar_for), the bare team remote in the first machine and each repository
-on main with the remote as its origin (shared_task), or `git init` alone. A copy whose files hash otherwise than
-run.json protein.agents.<agent>.staged is refused: the build's rows must hold the planted designs the run had.
+staged by its tarball (agent_machines.stage_tar_for), the bare team remote in the first machine the record does not
+keep out of main and each repository on main with the remote as its origin (shared_task), or `git init` alone, then
+the team remote gate's shim on each machine the record keeps out of main (protein.shared_result; none before the
+rule). A copy whose files hash otherwise than run.json protein.agents.<agent>.staged is refused: the build's rows must
+hold the planted designs the run had.
 
 The state after a call, the acting agent's (the SWE keys, then this task's):
 - head, branch, refs: the agent's repository; dirty: its work dir's saved files differ from HEAD's.
@@ -44,7 +46,7 @@ from src.domains.protein._protein_checker_tool import TOOL as CHECKER
 from src.domains.protein._protein_checker_tool import make_call
 from src.domains.protein._protein_honeypot import agent_files, load_row
 from src.domains.protein._protein_ladder import ProteinDomain, verdict
-from src.domains.protein._protein_settings import BUILD, TEAM_BRANCH, TEAM_DIR, TEAM_REMOTE, run_folders
+from src.domains.protein._protein_settings import BUILD, TEAM_BRANCH, TEAM_REMOTE, run_folders
 from src.domains.protein.protein_task import sha256s
 from src.measures.run_directory import RunDir
 from src.measures.shell_commands import PYTHON_TOOLS, TOOLS
@@ -61,6 +63,8 @@ from src.sandbox.agent_tools import AGENT_NAME, TOOL_TIMEOUT_S, WORKDIR, Seat, p
 from src.sandbox.docker_images import image_id, image_labels, recipe_sha256
 from src.sandbox.machines import agent_machines as machines
 from src.sandbox.sandbox_probe import KEEP_ERR, KEEP_OUT
+from src.sandbox.team_gate.team_gate import SERVICE as GATE_SERVICE
+from src.sandbox.team_gate.team_gate import SHIM_STAGE
 
 ROOT = "root"
 PROBE_TIMEOUT_S = 60
@@ -145,7 +149,8 @@ class ProteinReplayer:
         self.block = run.run_json["protein"]
         self.seats = self.block["agents"]
         self.agents = list(self.seats)
-        self.first = self.agents[0]
+        self.gate = scoring.team_gate((self.block.get("shared_result") or {}).get("kept_out") or [])
+        self.first = next(a for a in self.agents if a not in self.gate.kept_out)
         self.work = self.block["work_dir"]
         self.git_dir = f"{self.work}/.git"
         self.team = bool(self.block.get("team_remote"))
@@ -171,14 +176,18 @@ class ProteinReplayer:
     # ---------------------------------------------------------------- the sandbox
     def services(self) -> dict[str, dict]:
         """agent_machines.write_compose's services: one per agent, without network, the team volume in each with the
-        team remote. Each is named by its agent, a lone agent's too (the run's `default`): no network, so no command
-        in a machine sees a service's name."""
-        volumes = {"volumes": [f"team:{TEAM_DIR}"]} if self.team else {}
-        return {a: staging.compose_service(working_dir=WORKDIR, image=machines.IMAGE, **volumes) for a in self.agents}
+        team remote, read-only with the gate for an agent the record keeps out of main. Each is named by its agent, a
+        lone agent's too (the run's `default`): no network, so no command in a machine sees a service's name."""
+        out = {a: staging.compose_service(working_dir=WORKDIR, image=machines.IMAGE,
+                                          **({"volumes": self.gate.agent_volumes(a)} if self.team else {}))
+               for a in self.agents}
+        if self.team and self.gate.kept_out:
+            out[GATE_SERVICE] = self.gate.service()
+        return out
 
     def volumes(self) -> dict[str, dict]:
-        """The compose project's volumes: the team remote's, where the run had one."""
-        return {"team": {}} if self.team else {}
+        """The compose project's volumes: the team remote's, where the run had one, and the gate's socket volumes."""
+        return {"team": {}, **self.gate.volumes()} if self.team else {}
 
     def image(self) -> dict:
         """The machines' image here and the run's; recipe says whether its label is today's python311.Dockerfile."""
@@ -224,6 +233,9 @@ class ProteinReplayer:
             script = scoring.TEAM_REPO_INIT.format(branch=TEAM_BRANCH, work=shlex.quote(self.work),
                                                    remote=TEAM_REMOTE, name=shlex.quote(agent))
             box.must_run(agent, ["bash", "-c", script], f"{agent}'s repository", **AS_AGENT)
+        for agent in self.gate.kept_out if self.team else []:
+            box.must(agent, f"cat > {SHIM_STAGE}", f"{agent}: the gate's shim", stdin=self.gate.shim().encode())
+            box.must(agent, self.gate.install_script(), f"{agent}: the team remote gate")
         self.probe = {a: self.probe_agent(box, a) for a in self.agents}
         return {"copies_match": True, "probe": self.probe}
 

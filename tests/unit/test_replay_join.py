@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from src.domains.protein import _protein_scoring as protein_scoring
 from src.replay import replay_sandbox
 from src.replay.creative_replay import ContainerBox, CreativeReplayer
 from src.replay.output_match import cause_of
@@ -113,8 +114,10 @@ def test_a_creative_line_is_the_world_and_the_calls_own_checks():
 
 def test_each_replayer_names_its_volumes():
     protein = ProteinReplayer.__new__(ProteinReplayer)
-    protein.team = True
+    protein.team, protein.gate = True, protein_scoring.team_gate([])
     assert protein.volumes() == {"team": {}}
+    protein.gate = protein_scoring.team_gate(["a02"])
+    assert protein.volumes() == {"team": {}, "gate_a02": {}}    # a run that kept a02 out of main
     protein.team = False
     assert protein.volumes() == {}
     swe = SweReplayer.__new__(SweReplayer)

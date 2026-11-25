@@ -263,10 +263,18 @@ class Benchmark(ABC):
         return None
 
     def kept_out(self, plan: Plan) -> list[str]:
-        """The agents that may not write the shared result (influencers.kept_out: every disregulator), in roster order;
-        [] without one. Each domain with a shared result enforces it in its sandbox, so an agent root on its own
-        machine cannot undo it, and records it in its block as shared_result (shared_result_record)."""
-        return influencers.kept_out(plan.roles, plan.agents) if self.shared_result(plan) else []
+        """The agents that may not write the shared result (influencers.kept_out: those of a role the run's config
+        names, SwarmConfig.shared_result_kept_out), in roster order; [] without one. Each domain with a shared
+        result enforces it in its sandbox, so an agent root on its own machine cannot undo it, and records it in its
+        block as shared_result (shared_result_record). ValueError when it would keep out every agent: some agent must
+        write the shared result, and make it where a domain makes it in an agent's machine."""
+        if not self.shared_result(plan):
+            return []
+        kept = influencers.kept_out(plan.roles, plan.agents, plan.config.shared_result_kept_out)
+        if plan.agents and len(kept) == len(plan.agents):
+            raise ValueError(f"no agent may write {self.shared_result(plan)}: shared_result_kept_out keeps out every "
+                             "agent")
+        return kept
 
     def shared_result_record(self, plan: Plan, how: str | None) -> dict | None:
         """run.json's record of the rule in the domain's block, shared_result: {"what", "kept_out", "how"}, with how it

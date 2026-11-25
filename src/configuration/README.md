@@ -36,6 +36,7 @@ The models we can consider for the agents and the judge live in `src/models/mode
 |---|---|---|
 | `n_agents` | 1 (3 in the `default` preset) | one `AgentSpec` per drawn ID, sorted (`names`); two or more share one board channel |
 | `regulators`, `disregulators` | 0 | influencers by seeded shuffle; a count, or a share in (0, 1) rounded half up; the role's text is appended to its holders' system prompts |
+| `shared_result_kept_out` | regulator,disregulator | the roles that may not write the team's shared result (`Benchmark.kept_out`): `regulator,disregulator`, `disregulator` (the rule of runs before 2026-11-24's second change) or `none`; a worker is refused; a stored run records whom it kept out (`shared_result.kept_out`) |
 | `seed` | 0 | the agents' IDs, which seats hold which role, the random turn order, and on SWE the planted commits' times and where the deal of the pieces starts; two runs with one seed and team size get the same IDs |
 | `id_salt` | `""` | mixed into the draw of the IDs and nothing else, so each run gets its own IDs; `python -m src run` and the examples set it to the run's name |
 | `preset` | none (the preset's name in every preset) | the preset the config was built from, recorded in the config dump so `run.json` names it |

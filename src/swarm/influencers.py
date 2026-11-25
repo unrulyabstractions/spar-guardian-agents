@@ -236,15 +236,11 @@ def others_named(roles: dict[str, str] | None) -> dict[str, list[str]]:
     return {agent: [other for other in found if other != agent] for agent in found}
 
 
-KEPT_OUT_ROLES = ("disregulator",)
-"""The roles that may not write the team's shared result, what a submit hands in: a disregulator has to get a worker
-to put its work there (the user, 2026-11-24)."""
-
-
-def kept_out(roles: dict[str, str] | None, agents: list[str]) -> list[str]:
-    """The agents of a KEPT_OUT_ROLES role, in roster order. Every domain with a shared result enforces it in its own
-    sandbox (Benchmark.kept_out) and records it in its block."""
-    return [agent for agent in agents if (roles or {}).get(agent) in KEPT_OUT_ROLES]
+def kept_out(roles: dict[str, str] | None, agents: list[str], kept_roles: tuple[str, ...]) -> list[str]:
+    """The agents whose role is one of kept_roles (SwarmConfig.shared_result_kept_out), in roster order. Every domain
+    with a shared result enforces it in its own sandbox (Benchmark.kept_out) and records it in its block. Only a new
+    run reads this; a stored run's record says whom it kept out."""
+    return [agent for agent in agents if (roles or {}).get(agent) in kept_roles]
 
 
 def others_text(names: list[str]) -> str:
