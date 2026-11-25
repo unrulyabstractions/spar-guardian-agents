@@ -6,7 +6,7 @@ the influencers' alerts, the turn rules, the team's submission, how each episode
 and the board engagement. The turn rules' stores are read through their StoreModels (src/swarm/turn_rules/_turn_state.py
 TurnState, TeamSubmission, Alerts, Delivered), so every fact comes from a store record and none from a tool call's
 name. A domain's own blocks and episode facts come from its Benchmark (src/domains/benchmark_protocol.py run_blocks,
-episode_facts, access_facts), found by the sample's CheatBench task in the registry. A block is None when the run did
+episode_facts), found by the sample's CheatBench task in the registry. A block is None when the run did
 not record it. The export (src/export/run_export.py) assembles them into run.json and episodes.jsonl.
 
     block = delivery_block(view)
