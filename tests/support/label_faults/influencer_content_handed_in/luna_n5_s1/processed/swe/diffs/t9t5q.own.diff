@@ -1,0 +1,187 @@
+diff --git a/config/flipt.schema.cue b/config/flipt.schema.cue
+index b0d499b3..2fa9a40f 100644
+--- a/config/flipt.schema.cue
++++ b/config/flipt.schema.cue
+@@ -122,6 +122,9 @@ import "strings"
+ 			host?:               string | *"localhost"
+ 			port?:               int | *6379
+ 			require_tls?:        bool | *false
++			ca_cert_path?:       string
++			ca_cert_bytes?:      string
++			insecure_skip_tls?:  bool | *false
+ 			db?:                 int | *0
+ 			username?:           string
+ 			password?:           string
+diff --git a/config/flipt.schema.json b/config/flipt.schema.json
+index 3a359bee..fad2d03a 100644
+--- a/config/flipt.schema.json
++++ b/config/flipt.schema.json
+@@ -356,6 +356,16 @@
+               "type": "boolean",
+               "default": false
+             },
++            "ca_cert_path": {
++              "type": "string"
++            },
++            "ca_cert_bytes": {
++              "type": "string"
++            },
++            "insecure_skip_tls": {
++              "type": "boolean",
++              "default": false
++            },
+             "db": {
+               "type": "integer",
+               "default": 0
+diff --git a/internal/config/cache.go b/internal/config/cache.go
+index f4695b95..86d7411c 100644
+--- a/internal/config/cache.go
++++ b/internal/config/cache.go
+@@ -2,6 +2,7 @@ package config
+ 
+ import (
+ 	"encoding/json"
++	"errors"
+ 	"time"
+ 
+ 	"github.com/spf13/viper"
+@@ -22,6 +23,13 @@ type CacheConfig struct {
+ 	Redis   RedisCacheConfig  `json:"redis,omitempty" mapstructure:"redis" yaml:"redis,omitempty"`
+ }
+ 
++func (c *CacheConfig) validate() error {
++	if c.Redis.CaCertPath != "" && c.Redis.CaCertBytes != "" {
++		return errors.New("please provide exclusively one of ca_cert_bytes or ca_cert_path")
++	}
++	return nil
++}
++
+ func (c *CacheConfig) setDefaults(v *viper.Viper) error {
+ 	v.SetDefault("cache", map[string]any{
+ 		"enabled": false,
+@@ -95,6 +103,9 @@ type RedisCacheConfig struct {
+ 	Host            string        `json:"host,omitempty" mapstructure:"host" yaml:"host,omitempty"`
+ 	Port            int           `json:"port,omitempty" mapstructure:"port" yaml:"port,omitempty"`
+ 	RequireTLS      bool          `json:"requireTLS,omitempty" mapstructure:"require_tls" yaml:"require_tls,omitempty"`
++	CaCertPath      string        `json:"caCertPath,omitempty" mapstructure:"ca_cert_path" yaml:"ca_cert_path,omitempty"`
++	CaCertBytes     string        `json:"caCertBytes,omitempty" mapstructure:"ca_cert_bytes" yaml:"ca_cert_bytes,omitempty"`
++	InsecureSkipTLS bool          `json:"insecureSkipTls,omitempty" mapstructure:"insecure_skip_tls" yaml:"insecure_skip_tls,omitempty"`
+ 	Username        string        `json:"-" mapstructure:"username" yaml:"-"`
+ 	Password        string        `json:"-" mapstructure:"password" yaml:"-"`
+ 	DB              int           `json:"db,omitempty" mapstructure:"db" yaml:"db,omitempty"`
+diff --git a/internal/config/config.go b/internal/config/config.go
+index ee129d0b..2a739419 100644
+--- a/internal/config/config.go
++++ b/internal/config/config.go
+@@ -534,6 +534,7 @@ func Default() *Config {
+ 				Host:            "localhost",
+ 				Port:            6379,
+ 				RequireTLS:      false,
++				InsecureSkipTLS: false,
+ 				Password:        "",
+ 				DB:              0,
+ 				PoolSize:        0,
+diff --git a/internal/config/config_test.go b/internal/config/config_test.go
+index b06baf28..d4db4e50 100644
+--- a/internal/config/config_test.go
++++ b/internal/config/config_test.go
+@@ -312,6 +312,47 @@ func TestLoad(t *testing.T) {
+ 				return cfg
+ 			},
+ 		},
++		{
++			name: "cache redis ca path",
++			path: "./testdata/cache/redis-ca-path.yml",
++			expected: func() *Config {
++				cfg := Default()
++				cfg.Cache.Enabled = true
++				cfg.Cache.Backend = CacheRedis
++				cfg.Cache.Redis.RequireTLS = true
++				cfg.Cache.Redis.CaCertPath = "/etc/ssl/redis-ca.pem"
++				return cfg
++			},
++		},
++		{
++			name: "cache redis ca bytes",
++			path: "./testdata/cache/redis-ca-bytes.yml",
++			expected: func() *Config {
++				cfg := Default()
++				cfg.Cache.Enabled = true
++				cfg.Cache.Backend = CacheRedis
++				cfg.Cache.Redis.RequireTLS = true
++				cfg.Cache.Redis.CaCertBytes = "-----BEGIN CERTIFICATE-----\ndGVzdC1jZXJ0aWZpY2F0ZQ==\n-----END CERTIFICATE-----"
++				return cfg
++			},
++		},
++		{
++			name: "cache redis insecure tls",
++			path: "./testdata/cache/redis-tls-insecure.yml",
++			expected: func() *Config {
++				cfg := Default()
++				cfg.Cache.Enabled = true
++				cfg.Cache.Backend = CacheRedis
++				cfg.Cache.Redis.RequireTLS = true
++				cfg.Cache.Redis.InsecureSkipTLS = true
++				return cfg
++			},
++		},
++		{
++			name:    "cache redis invalid ca options",
++			path:    "./testdata/cache/redis-ca-invalid.yml",
++			wantErr: errors.New("please provide exclusively one of ca_cert_bytes or ca_cert_path"),
++		},
+ 		{
+ 			name: "cache redis with username",
+ 			path: "./testdata/cache/redis-username.yml",
+diff --git a/internal/config/testdata/cache/redis-ca-bytes.yml b/internal/config/testdata/cache/redis-ca-bytes.yml
+new file mode 100644
+index 00000000..d45e2139
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-bytes.yml
+@@ -0,0 +1,9 @@
++cache:
++  enabled: true
++  backend: redis
++  redis:
++    require_tls: true
++    ca_cert_bytes: |-
++      -----BEGIN CERTIFICATE-----
++      dGVzdC1jZXJ0aWZpY2F0ZQ==
++      -----END CERTIFICATE-----
+diff --git a/internal/config/testdata/cache/redis-ca-invalid.yml b/internal/config/testdata/cache/redis-ca-invalid.yml
+new file mode 100644
+index 00000000..d25bd4c2
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-invalid.yml
+@@ -0,0 +1,7 @@
++cache:
++  enabled: true
++  backend: redis
++  redis:
++    require_tls: true
++    ca_cert_path: /etc/ssl/redis-ca.pem
++    ca_cert_bytes: inline-cert
+diff --git a/internal/config/testdata/cache/redis-ca-path.yml b/internal/config/testdata/cache/redis-ca-path.yml
+new file mode 100644
+index 00000000..1e20aecf
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-path.yml
+@@ -0,0 +1,6 @@
++cache:
++  enabled: true
++  backend: redis
++  redis:
++    require_tls: true
++    ca_cert_path: /etc/ssl/redis-ca.pem
+diff --git a/internal/config/testdata/cache/redis-tls-insecure.yml b/internal/config/testdata/cache/redis-tls-insecure.yml
+new file mode 100644
+index 00000000..af82a6a7
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-tls-insecure.yml
+@@ -0,0 +1,6 @@
++cache:
++  enabled: true
++  backend: redis
++  redis:
++    require_tls: true
++    insecure_skip_tls: true

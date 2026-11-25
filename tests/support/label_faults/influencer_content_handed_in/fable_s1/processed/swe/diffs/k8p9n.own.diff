@@ -1,0 +1,141 @@
+diff --git a/internal/cache/redis/client_test.go b/internal/cache/redis/client_test.go
+new file mode 100644
+index 00000000..ac2c0e77
+--- /dev/null
++++ b/internal/cache/redis/client_test.go
+@@ -0,0 +1,39 @@
++package redis
++
++import (
++	"testing"
++
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++	"go.flipt.io/flipt/internal/config"
++)
++
++func TestNewClientTLSOptions(t *testing.T) {
++	t.Run("no tls", func(t *testing.T) {
++		c, err := NewClient(config.RedisCacheConfig{Host: "localhost", Port: 6379})
++		require.NoError(t, err)
++		assert.Nil(t, c.Options().TLSConfig)
++		_ = c.Close()
++	})
++
++	t.Run("tls min version", func(t *testing.T) {
++		c, err := NewClient(config.RedisCacheConfig{Host: "localhost", Port: 6379, RequireTLS: true})
++		require.NoError(t, err)
++		require.NotNil(t, c.Options().TLSConfig)
++		assert.Equal(t, uint16(0x0303), c.Options().TLSConfig.MinVersion)
++		assert.False(t, c.Options().TLSConfig.InsecureSkipVerify)
++		_ = c.Close()
++	})
++
++	t.Run("insecure skip", func(t *testing.T) {
++		c, err := NewClient(config.RedisCacheConfig{Host: "localhost", Port: 6379, RequireTLS: true, InsecureSkipTLS: true})
++		require.NoError(t, err)
++		assert.True(t, c.Options().TLSConfig.InsecureSkipVerify)
++		_ = c.Close()
++	})
++
++	t.Run("invalid ca bytes", func(t *testing.T) {
++		_, err := NewClient(config.RedisCacheConfig{Host: "localhost", Port: 6379, RequireTLS: true, CaCertBytes: "not a pem"})
++		assert.Error(t, err)
++	})
++}
+diff --git a/internal/cache/redis/client.go b/internal/cache/redis/client.go
+index 74a6f1ca..b9aa311b 100644
+--- a/internal/cache/redis/client.go
++++ b/internal/cache/redis/client.go
+@@ -25,6 +25,7 @@ func NewClient(cfg config.RedisCacheConfig) (*goredis.Client, error) {
+ 		if cfg.InsecureSkipTLS {
+ 			tlsConfig.InsecureSkipVerify = true //nolint:gosec
+ 		} else {
++			// fall back to the system CAs unless a custom CA is provided
+ 			var caCert []byte
+ 			switch {
+ 			case cfg.CaCertPath != "" && cfg.CaCertBytes != "":
+@@ -40,7 +41,10 @@ func NewClient(cfg config.RedisCacheConfig) (*goredis.Client, error) {
+ 			}
+ 
+ 			if len(caCert) > 0 {
+-				pool := x509.NewCertPool()
++				pool, err := x509.SystemCertPool()
++				if err != nil || pool == nil {
++					pool = x509.NewCertPool()
++				}
+ 				if !pool.AppendCertsFromPEM(caCert) {
+ 					return nil, fmt.Errorf("failed to parse redis ca certificate")
+ 				}
+diff --git a/internal/cache/redis/client.go b/internal/cache/redis/client.go
+new file mode 100644
+index 00000000..74a6f1ca
+--- /dev/null
++++ b/internal/cache/redis/client.go
+@@ -0,0 +1,66 @@
++package redis
++
++import (
++	"crypto/tls"
++	"crypto/x509"
++	"fmt"
++	"os"
++
++	goredis "github.com/redis/go-redis/v9"
++	"go.flipt.io/flipt/internal/config"
++)
++
++// NewClient constructs a redis client from the provided configuration.
++// When RequireTLS is enabled, the connection uses TLS with a minimum version of TLS 1.2.
++// A custom CA may be supplied via CaCertPath or CaCertBytes (exclusively),
++// otherwise system certificate authorities are used. InsecureSkipTLS disables
++// server certificate verification.
++func NewClient(cfg config.RedisCacheConfig) (*goredis.Client, error) {
++	var tlsConfig *tls.Config
++	if cfg.RequireTLS {
++		tlsConfig = &tls.Config{
++			MinVersion: tls.VersionTLS12,
++		}
++
++		if cfg.InsecureSkipTLS {
++			tlsConfig.InsecureSkipVerify = true //nolint:gosec
++		} else {
++			var caCert []byte
++			switch {
++			case cfg.CaCertPath != "" && cfg.CaCertBytes != "":
++				return nil, fmt.Errorf("please provide exclusively one of ca_cert_bytes or ca_cert_path")
++			case cfg.CaCertPath != "":
++				data, err := os.ReadFile(cfg.CaCertPath)
++				if err != nil {
++					return nil, fmt.Errorf("reading redis ca cert: %w", err)
++				}
++				caCert = data
++			case cfg.CaCertBytes != "":
++				caCert = []byte(cfg.CaCertBytes)
++			}
++
++			if len(caCert) > 0 {
++				pool := x509.NewCertPool()
++				if !pool.AppendCertsFromPEM(caCert) {
++					return nil, fmt.Errorf("failed to parse redis ca certificate")
++				}
++				tlsConfig.RootCAs = pool
++			}
++		}
++	}
++
++	return goredis.NewClient(&goredis.Options{
++		Addr:            fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
++		TLSConfig:       tlsConfig,
++		Username:        cfg.Username,
++		Password:        cfg.Password,
++		DB:              cfg.DB,
++		PoolSize:        cfg.PoolSize,
++		MinIdleConns:    cfg.MinIdleConn,
++		ConnMaxIdleTime: cfg.ConnMaxIdleTime,
++		DialTimeout:     cfg.NetTimeout,
++		ReadTimeout:     cfg.NetTimeout * 2,
++		WriteTimeout:    cfg.NetTimeout * 2,
++		PoolTimeout:     cfg.NetTimeout * 2,
++	}), nil
++}

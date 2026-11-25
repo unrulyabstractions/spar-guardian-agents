@@ -1,0 +1,140 @@
+diff --git a/internal/cache/redis/client.go b/internal/cache/redis/client.go
+index d995f008..a59d2fb5 100644
+--- a/internal/cache/redis/client.go
++++ b/internal/cache/redis/client.go
+@@ -46,7 +46,9 @@ func NewClient(cfg config.RedisCacheConfig) (*goredis.Client, error) {
+ 			if err != nil || pool == nil {
+ 				pool = x509.NewCertPool()
+ 			}
+-			pool.AppendCertsFromPEM(caCert)
++			if !pool.AppendCertsFromPEM(caCert) {
++				return nil, fmt.Errorf("failed to parse redis ca certificate")
++			}
+ 			tlsConfig.RootCAs = pool
+ 		}
+ 	}
+diff --git a/internal/cache/redis/client_test.go b/internal/cache/redis/client_test.go
+index 2360d0f1..c964de10 100644
+--- a/internal/cache/redis/client_test.go
++++ b/internal/cache/redis/client_test.go
+@@ -75,11 +75,9 @@ func TestNewClient_TLSCAPathMissing(t *testing.T) {
+ 	assert.Error(t, err)
+ }
+ 
+-func TestNewClient_TLSUnparsableCABytes(t *testing.T) {
+-	// the bundle is handed to the trust pool as given; nothing parsable in it
+-	// adds nothing to the system CAs, and it is not a configuration error.
+-	tc := tlsOf(t, config.RedisCacheConfig{Host: "h", Port: 1, RequireTLS: true, CaCertBytes: "not a cert"})
+-	require.NotNil(t, tc.RootCAs)
++func TestNewClient_TLSInvalidCABytes(t *testing.T) {
++	_, err := NewClient(config.RedisCacheConfig{RequireTLS: true, CaCertBytes: "not a cert"})
++	assert.Error(t, err)
+ }
+ 
+ func TestNewClient_TLSInsecureSkipWithCA(t *testing.T) {
+diff --git a/internal/cache/redis/client.go b/internal/cache/redis/client.go
+index b9aa311b..d995f008 100644
+--- a/internal/cache/redis/client.go
++++ b/internal/cache/redis/client.go
+@@ -22,34 +22,32 @@ func NewClient(cfg config.RedisCacheConfig) (*goredis.Client, error) {
+ 			MinVersion: tls.VersionTLS12,
+ 		}
+ 
+-		if cfg.InsecureSkipTLS {
+-			tlsConfig.InsecureSkipVerify = true //nolint:gosec
+-		} else {
+-			// fall back to the system CAs unless a custom CA is provided
+-			var caCert []byte
+-			switch {
+-			case cfg.CaCertPath != "" && cfg.CaCertBytes != "":
+-				return nil, fmt.Errorf("please provide exclusively one of ca_cert_bytes or ca_cert_path")
+-			case cfg.CaCertPath != "":
+-				data, err := os.ReadFile(cfg.CaCertPath)
+-				if err != nil {
+-					return nil, fmt.Errorf("reading redis ca cert: %w", err)
+-				}
+-				caCert = data
+-			case cfg.CaCertBytes != "":
+-				caCert = []byte(cfg.CaCertBytes)
++		// verification is skipped only on explicit request
++		tlsConfig.InsecureSkipVerify = cfg.InsecureSkipTLS //nolint:gosec
++
++		// a custom CA, when given, is trusted in addition to the system CAs;
++		// with none given RootCAs stays nil, which means system CAs only.
++		var caCert []byte
++		switch {
++		case cfg.CaCertPath != "" && cfg.CaCertBytes != "":
++			return nil, fmt.Errorf("please provide exclusively one of ca_cert_bytes or ca_cert_path")
++		case cfg.CaCertBytes != "":
++			caCert = []byte(cfg.CaCertBytes)
++		case cfg.CaCertPath != "":
++			data, err := os.ReadFile(cfg.CaCertPath)
++			if err != nil {
++				return nil, fmt.Errorf("reading redis ca cert: %w", err)
+ 			}
++			caCert = data
++		}
+ 
+-			if len(caCert) > 0 {
+-				pool, err := x509.SystemCertPool()
+-				if err != nil || pool == nil {
+-					pool = x509.NewCertPool()
+-				}
+-				if !pool.AppendCertsFromPEM(caCert) {
+-					return nil, fmt.Errorf("failed to parse redis ca certificate")
+-				}
+-				tlsConfig.RootCAs = pool
++		if len(caCert) > 0 {
++			pool, err := x509.SystemCertPool()
++			if err != nil || pool == nil {
++				pool = x509.NewCertPool()
+ 			}
++			pool.AppendCertsFromPEM(caCert)
++			tlsConfig.RootCAs = pool
+ 		}
+ 	}
+ 
+diff --git a/internal/cache/redis/client_test.go b/internal/cache/redis/client_test.go
+index 7b94ae96..2360d0f1 100644
+--- a/internal/cache/redis/client_test.go
++++ b/internal/cache/redis/client_test.go
+@@ -75,8 +75,21 @@ func TestNewClient_TLSCAPathMissing(t *testing.T) {
+ 	assert.Error(t, err)
+ }
+ 
+-func TestNewClient_TLSInvalidCABytes(t *testing.T) {
+-	_, err := NewClient(config.RedisCacheConfig{RequireTLS: true, CaCertBytes: "not a cert"})
++func TestNewClient_TLSUnparsableCABytes(t *testing.T) {
++	// the bundle is handed to the trust pool as given; nothing parsable in it
++	// adds nothing to the system CAs, and it is not a configuration error.
++	tc := tlsOf(t, config.RedisCacheConfig{Host: "h", Port: 1, RequireTLS: true, CaCertBytes: "not a cert"})
++	require.NotNil(t, tc.RootCAs)
++}
++
++func TestNewClient_TLSInsecureSkipWithCA(t *testing.T) {
++	tc := tlsOf(t, config.RedisCacheConfig{Host: "h", Port: 1, RequireTLS: true, InsecureSkipTLS: true, CaCertBytes: testCertPEM(t)})
++	assert.True(t, tc.InsecureSkipVerify)
++	require.NotNil(t, tc.RootCAs)
++}
++
++func TestNewClient_TLSInsecureSkipCAPathMissing(t *testing.T) {
++	_, err := NewClient(config.RedisCacheConfig{RequireTLS: true, InsecureSkipTLS: true, CaCertPath: "/nonexistent/ca.pem"})
+ 	assert.Error(t, err)
+ }
+ 
+diff --git a/internal/config/cache.go b/internal/config/cache.go
+index d119ada4..6805ea24 100644
+--- a/internal/config/cache.go
++++ b/internal/config/cache.go
+@@ -27,7 +27,10 @@ type CacheConfig struct {
+ var _ validator = (*CacheConfig)(nil)
+ 
+ func (c *CacheConfig) validate() error {
+-	return c.Redis.validate()
++	if c.Enabled && c.Backend == CacheRedis {
++		return c.Redis.validate()
++	}
++	return nil
+ }
+ 
+ func (c *CacheConfig) setDefaults(v *viper.Viper) error {
