@@ -116,7 +116,7 @@ targets:
 limits:
   max_runs: 10
   max_per_task: {swe: 10}
-  max_agents: 40
+  max_agents: 34
   spacing_s: 60
   needs:
     swe: {disk_gb: 2.3, memory_gb: 0.55, per: agent}
