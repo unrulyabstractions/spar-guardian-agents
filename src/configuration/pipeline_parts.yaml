@@ -19,7 +19,7 @@ parts:
     files: [src/export/*.py]
     pins: []
     version: 1
-    fingerprint: sha256:42bf51c4f5abbdc5e5679cd43f119b78e5fc49b0d8f6d02cb2116ebdd303c3a6
+    fingerprint: sha256:06838d36d264c78f96836e520cc39901346137b480ff501b8efa5beae8298dc3
     log:
       1: '2026-11-22 first version: the eval log turned into run files by src/export of c619e3d (re-locked
         2026-11-22: the stored layout: the same bytes, written under processed/ and analysis/ through
@@ -32,7 +32,9 @@ parts:
         with this code: 53 files, byte-equal but run.json, which differs only by the signals block that
         the measures add afterwards (every other key equal, in the same order)) (re-locked 2026-11-23:
         2026-11-23 legacy cleanup: docstrings only (the results browser and openmath examples dropped);
-        the module''s code without docstrings is the same AST)'
+        the module''s code without docstrings is the same AST) (re-locked 2026-11-24: the four older tasks
+        deleted, rebased on ian_gflipt: reprocess_compare on all seven stored studies shows only versions.json
+        differs)'
   replay:
     file: [processed/replay/steps.jsonl, processed/replay/replay.json, processed/tmp_snapshots.json]
     make: null
@@ -106,7 +108,7 @@ parts:
       src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 13
-    fingerprint: sha256:3af4fdc147d34ac9f6ac42c7ca1a5b18ed1dc4ce64cbf817556a6e433f155a17
+    fingerprint: sha256:633adb93c04b15c7253ed36a95edd1b0abe449302db26f93559f09a00156f814
     log:
       1: '2026-11-22 first version: the code record''s agent and team rows (code_ladder.signal_rows) of
         b7b1bed, and run.json''s signals block (re-locked 2026-11-22: the stored layout: the same bytes,
@@ -259,7 +261,9 @@ parts:
         to the same bytes) (re-locked 2026-11-24: the creative package cleaned up with no change of behaviour:
         ian_influencers_0 and ian_env_prototyping_0 reprocessed in scratch, only versions.json differs)
         (re-locked 2026-11-24: ian_gflipt (check_fix, its own values, hashed tests): every exploit takes
-        the variant''s values; seven studies reprocessed in scratch byte-equal)'
+        the variant''s values; seven studies reprocessed in scratch byte-equal) (re-locked 2026-11-24:
+        the four older tasks deleted, rebased on ian_gflipt: reprocess_compare on all seven stored studies
+        shows only versions.json differs)'
   topology:
     file: processed/facts/topology.json
     make: src.measures.topology_fact:topology_part
@@ -301,7 +305,7 @@ parts:
       src/domains/*/revealed/**/*]
     pins: []
     version: 14
-    fingerprint: sha256:2e55cf733845e7a154e1cb107dde6c847f2972ba66249d11523e929d2aebc282
+    fingerprint: sha256:82d42ab1dfedbd5c351a0855a06c86cb7c442c11e01f40c20ef5ce398c2e803a
     log:
       1: '2026-11-22 first version: the Cheating ladder with CheatBench''s labels beside its clauses,
         as the viewer keeps it, of b7b1bed (re-locked 2026-11-22: the stored layout: the same bytes, read
@@ -443,7 +447,9 @@ parts:
         to the same bytes) (re-locked 2026-11-24: the creative package cleaned up with no change of behaviour:
         ian_influencers_0 and ian_env_prototyping_0 reprocessed in scratch, only versions.json differs)
         (re-locked 2026-11-24: ian_gflipt (check_fix, its own values, hashed tests): every exploit takes
-        the variant''s values; seven studies reprocessed in scratch byte-equal)'
+        the variant''s values; seven studies reprocessed in scratch byte-equal) (re-locked 2026-11-24:
+        the four older tasks deleted, rebased on ian_gflipt: reprocess_compare on all seven stored studies
+        shows only versions.json differs)'
   coordination:
     file: analysis/labels/coordination.json
     make: src.measures.coordination:coordination_part
@@ -473,7 +479,7 @@ parts:
       src/domains/*/*_settings.py, src/domains/*/second/**/*, src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 12
-    fingerprint: sha256:fd8e868282b18ece074672be3e2d45fcaf43442e2d14091efd5ea2a7164123a0
+    fingerprint: sha256:109fcc1d1e4a136c9f08d4aedbec769cc4da5a17b2e456b7335ed152dd8aa2a2
     log:
       1: '2026-11-22 first version: the Collusion ladder as the viewer keeps it, of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -604,7 +610,8 @@ parts:
         cleaned up with no change of behaviour: ian_influencers_0 and ian_env_prototyping_0 reprocessed
         in scratch, only versions.json differs) (re-locked 2026-11-24: ian_gflipt (check_fix, its own
         values, hashed tests): every exploit takes the variant''s values; seven studies reprocessed in
-        scratch byte-equal)'
+        scratch byte-equal) (re-locked 2026-11-24: the four older tasks deleted, rebased on ian_gflipt:
+        reprocess_compare on all seven stored studies shows only versions.json differs)'
   judged:
     file: analysis/labels/judged.json
     make: src.ui.viewer_parts:judged_part
@@ -613,7 +620,7 @@ parts:
       src/judging/verdict_files.py, src/ui/viewer_parts.py]
     pins: []
     version: 1
-    fingerprint: sha256:8f023f083e12ac3765c1af1d81b1fe70ddd3284d87e10286661dc81c7f1c40da
+    fingerprint: sha256:6a5ba66b670d3cb9aa7970f15cfec40dbf0c3b55d0f08c28c97ac5db96bf9881
     log:
       1: '2026-11-22 first version: the judge labels and CheatBench''s verdicts, of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -623,7 +630,8 @@ parts:
         code (5998980) and one by this, are byte-equal but the parts'' stamps in versions.json) (re-locked
         2026-11-23: the probed clause and the creative judge row probed or tampered: ian_influencers_0
         copied to scratch and reprocessed with judged forced by this code holds byte-equal judged.json
-        in all 61 runs)'
+        in all 61 runs) (re-locked 2026-11-24: the four older tasks deleted, rebased on ian_gflipt: reprocess_compare
+        on all seven stored studies shows only versions.json differs)'
   disregulator_roles:
     file: analysis/labels/disregulator_roles.json
     make: src.measures.disregulator_roles:disregulator_part
@@ -635,7 +643,7 @@ parts:
       src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 4
-    fingerprint: sha256:909cf241d856e1a0de456176ea58dc8aae3640522d20ec20a91b470d27e47622
+    fingerprint: sha256:30def26d648d0a4378f6abbdc518209b0b40f1c832d2304da67c5b5f140dd913
     log:
       1: '2026-11-23 first version: what each disregulator did with its role (carried_out, filtered, refused,
         dropped, unknown), with mode, disclosed and the evidence, by code from the board, the code record''s
@@ -723,7 +731,8 @@ parts:
         cleaned up with no change of behaviour: ian_influencers_0 and ian_env_prototyping_0 reprocessed
         in scratch, only versions.json differs) (re-locked 2026-11-24: ian_gflipt (check_fix, its own
         values, hashed tests): every exploit takes the variant''s values; seven studies reprocessed in
-        scratch byte-equal)'
+        scratch byte-equal) (re-locked 2026-11-24: the four older tasks deleted, rebased on ian_gflipt:
+        reprocess_compare on all seven stored studies shows only versions.json differs)'
   row:
     file: analysis/row.json
     make: src.ui.viewer_parts:row_part
@@ -732,7 +741,7 @@ parts:
       src/ui/transcript_index.py, src/ui/transcript_levels.py, src/ui/transcript_presence.py, src/ui/viewer_parts.py]
     pins: []
     version: 9
-    fingerprint: sha256:b973e823a581b21805066fa597957e7d6f57d6e9a891c70b2b1926f5613ccf5d
+    fingerprint: sha256:1894eba6a1c4108adbafa0ae7b17eb43bbb10418896b77f4fe24392af7c0357a
     log:
       1: '2026-11-22 first version: the runs page''s row (transcript_index.build_row) of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -770,4 +779,6 @@ parts:
         calls and how many the Cheating ladder calls true and false alarms, from run.json signals; the
         runs page''s Alerts column and the Summary''s row A read it'
       8: 2026-11-24 reads the new Cheating, Collusion and alert outcomes (signals v11)
-      9: 2026-11-24 reads the Cheating, Collusion and alert outcomes of signals v13
+      9: '2026-11-24 reads the Cheating, Collusion and alert outcomes of signals v13 (re-locked 2026-11-24:
+        the four older tasks deleted, rebased on ian_gflipt: reprocess_compare on all seven stored studies
+        shows only versions.json differs)'
