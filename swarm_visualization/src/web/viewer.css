@@ -55,3 +55,43 @@ html, body {
   height: 40px;
   cursor: pointer;
 }
+
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color: #e6eeff; }
+#labels { position: fixed; inset: 0; pointer-events: none; }
+.tag {
+  position: absolute;
+  transform: translate(-50%, 0);
+  text-align: center;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1.25;
+  text-shadow: 0 1px 3px #000, 0 0 8px #000;
+}
+.tag b { font-weight: 650; letter-spacing: 0.02em; }
+.tag .model { color: #9fb3d9; }
+.tag .rung { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+#header { position: fixed; left: 22px; top: 18px; pointer-events: none; }
+#cast { font-size: 17px; font-weight: 650; }
+#runName { font-size: 11px; color: #7f90b3; margin-top: 3px; }
+#clock {
+  position: fixed; right: 22px; top: 18px; font-size: 15px; font-variant-numeric: tabular-nums;
+  color: #c8d6f5; pointer-events: none;
+}
+#feed {
+  z-index: 2;
+  position: fixed; right: 22px; top: 52px; width: min(400px, 34vw);
+  display: flex; flex-direction: column; gap: 6px; pointer-events: none;
+}
+.event {
+  font-size: 12.5px; line-height: 1.35; padding: 7px 10px; border-radius: 8px;
+  background: rgba(14, 19, 32, 0.94); border-left: 3px solid #8fb3ff;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+.event .when { color: #7f90b3; font-variant-numeric: tabular-nums; margin-right: 6px; }
+.event .quote { color: #b9c7e6; font-style: italic; }
+#legend {
+  position: fixed; left: 22px; bottom: 90px; font-size: 11.5px; line-height: 1.6; color: #b9c7e6;
+  background: rgba(14, 19, 32, 0.6); padding: 9px 12px; border-radius: 10px; pointer-events: none;
+}
+#legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin: 0 4px 0 8px; vertical-align: -1px; }
+#legend .sw.first { margin-left: 0; }

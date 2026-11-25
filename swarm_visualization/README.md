@@ -1,6 +1,6 @@
 # Swarm visualization
 
-One run of the swarm as a 3D picture with a time slider. It draws no text.
+One run of the swarm as a 3D picture with a time slider, with short labels that say what is happening.
 
 ```
 python swarm_visualization/visualize_swarm.py ian_flipt_deepseek_n10_reg0_revealing_s1
@@ -31,6 +31,9 @@ WebGL.
 | A coloured orb flying between nodes | a piece reaching an agent that did not hold it |
 | A white ring around a node | the agent holds every piece |
 | A wave across the swarm | the team's hand-in; red when the team cheated, and the room stays red after it |
+| A tag under a node | the agent's label (W1 worker, R1 regulator, D1 disregulator), its model, its rung now |
+| The feed at the right | the last six events: posts with their opening words, rungs reached, pieces passed, the hand-in |
+| Top left, top right | the cast (models and roles), the run's name; the clock |
 
 The bar at the bottom: play or pause, the timeline and the speed (one to four chevrons). The timeline shows how busy
 the board is, a dot of the piece's colour where a piece was passed, a red tick where an agent began to cheat and a
@@ -49,6 +52,7 @@ pauses and the arrow keys step. `#t=0.5` at the end of the URL opens the run hal
 | pieces received | `analysis/signals.jsonl` `pieces_seen_at`: the call at which the agent first saw each piece |
 | rungs | `analysis/labels/cheating.json` `agents.<agent>.timeline.after` after every call, then the final rung at the run's end |
 | hand-in | `processed/run.json` `team_submission`, and the team's rung |
+| models | `processed/run.json` `ledger.agents.<agent>.model`, then `role_models`, then `model` |
 
 No file records who passed a piece. A flying orb starts at the holder of that piece the receiver had talked with most,
 then the holder who posted last, then the first holder. An orb from outside the swarm is a piece no agent held.
