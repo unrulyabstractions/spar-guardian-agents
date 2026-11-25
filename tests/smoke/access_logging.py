@@ -296,7 +296,7 @@ def scenario_count_only() -> dict:
 
 def scenario_sweep() -> dict:
     commands = [f"grep -c '>' {KEY}", f"wc -l {KEY}", f"cat {KEY} | wc -l", f"sha256sum {KEY}",
-                f"grep -rn --include='*.fasta' nothing_here_at_all {PurePosixPath(KEY).parent}"]
+                "grep -rn --include='*.fasta' nothing_here_at_all /home/user/work"]
     script = {"a01": [sh(command, f"s{k}", "bash") for k, command in enumerate(commands)]}
     run = logged("sweep", ProteinDesign(TARGET), lone(len(commands)), script)
     access = run.agents["a01"]["access_log"]
@@ -568,7 +568,7 @@ def scenario_git_gc() -> dict:
     run = logged("git_gc", benchmark, lone(4), script, status="partial")
     assert "object_gone" in gap_rows(run) and run.block["gone"], run.block
     assert run.block["control"]["end"]["missing"] == [], run.block["control"]
-    objects = {f"default:{row['object']}" for row in run.opens(call_id="c1")}
+    objects = {f"{row['machine']}:{row['object']}" for row in run.opens(call_id="c1")}
     assert objects & set(run.block["gone"]), objects
     gone = set(run.block["gone"])
     paths = {obj["path"] for obj in run.sample.store[STORE]["objects"] if f"{obj['machine']}:{obj['object']}" in gone}

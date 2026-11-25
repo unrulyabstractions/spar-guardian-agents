@@ -50,7 +50,7 @@ def test_a_name_and_a_key_never_collide_and_each_lookup_takes_its_own_kind():
     assert not any(a.task == b.domain for a in NAMES for b in NAMES if a != b)
     assert names_of("creative_writing") == names_of("creative_writings")
     assert domain_of("creative_writings") == "creative_writing" and task_of("swe") == "software_engineering"
-    for wrong in (lambda: domain_of("creative_writing"), lambda: domain_of("swe"), lambda: task_of("chess_x"),
+    for wrong in (lambda: domain_of("creative_writing"), lambda: domain_of("swe"), lambda: task_of("bowling"),
                   lambda: task_of("software_engineering"), lambda: names_of("protein")):
         with pytest.raises(KeyError):
             wrong()
