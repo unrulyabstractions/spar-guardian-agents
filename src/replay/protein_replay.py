@@ -44,10 +44,17 @@ from src.domains.protein import ProteinDesign
 from src.domains.protein import _protein_scoring as scoring
 from src.domains.protein._protein_checker_tool import TOOL as CHECKER
 from src.domains.protein._protein_checker_tool import make_call
-from src.domains.protein._protein_honeypot import agent_files, load_row
+from src.domains.protein._protein_honeypot import agent_files
 from src.domains.protein._protein_ladder import ProteinDomain, verdict
-from src.domains.protein._protein_settings import BUILD, TEAM_BRANCH, TEAM_REMOTE, run_folders
-from src.domains.protein.protein_task import sha256s
+from src.domains.protein._protein_rows import load_row, sha256s, staged_mtimes
+from src.domains.protein._protein_settings import (
+    BUILD,
+    PROBE_ROOTS,
+    TEAM_BRANCH,
+    TEAM_LOG_LIMIT,
+    TEAM_REMOTE,
+    folders_of,
+)
 from src.measures.run_directory import RunDir
 from src.measures.shell_commands import PYTHON_TOOLS, TOOLS
 from src.replay.commit_dates import RecordedIds, find_date, renamed_text, reparent, retime
@@ -56,7 +63,6 @@ from src.replay.output_match import mask
 from src.replay.recorded_calls import NEVER_RAN, RecordedCall, ReplayRefused
 from src.replay.replay_jobs import JobPlayer, Place
 from src.replay.replay_sandbox import ReplaySandbox
-from src.sandbox import cheatbench_task_files as task_files
 from src.sandbox import sandbox_hygiene as hygiene
 from src.sandbox import staging
 from src.sandbox.agent_tools import AGENT_NAME, TOOL_TIMEOUT_S, WORKDIR, Seat, python_command
@@ -68,7 +74,7 @@ from src.sandbox.team_gate.team_gate import SHIM_STAGE
 
 ROOT = "root"
 PROBE_TIMEOUT_S = 60
-TEAM_LOG = f"git --git-dir={TEAM_REMOTE} log --all -n{scoring.LOG_LIMIT} '--format=%h %an <%ae> [%D] %s'"
+TEAM_LOG = f"git --git-dir={TEAM_REMOTE} log --all -n{TEAM_LOG_LIMIT} '--format=%h %an <%ae> [%D] %s'"
 """The team remote's log as team_record reads it."""
 NEW_COMMITS = ("git rev-list --topo-order --reverse --all --not {tips} 2>/dev/null | head -500 | "
                "while read -r c; do echo \"NEW $c $(git log -1 --format=%cn \"$c\")\"; done")
@@ -154,7 +160,7 @@ class ProteinReplayer:
         self.work = self.block["work_dir"]
         self.git_dir = f"{self.work}/.git"
         self.team = bool(self.block.get("team_remote"))
-        self.row = load_row(self.block["row_id"], run_folders(self.block))     # its paths where the run staged them
+        self.row = load_row(self.block["row_id"], folders_of(self.block))      # its paths where the run staged them
         self.domain = ProteinDomain(run.run_json)
         n = self.block.get("n_pieces") or 0
         self.pieces = [f"{ProteinDesign.piece_stem}{k}" for k in range(1, n + 1)] if self.domain.split else ["whole"]
@@ -217,10 +223,8 @@ class ProteinReplayer:
             raise ReplayRefused("the staged files differ from the recorded ones: " + "; ".join(problems))
         if not self.image()["recipe"]:
             raise ReplayRefused(f"{machines.IMAGE}'s label is not the sha256 of today's python311.Dockerfile")
-        mtimes = task_files.row_mtimes(self.row)
         for agent, files in copies.items():
-            tar = machines.stage_tar_for(BUILD, self.row["id"], files, mtimes={
-                d: mtimes.get(d, mtimes.get(self.row["payload_file"])) for d in files})
+            tar = machines.stage_tar_for(BUILD, self.row["id"], files, mtimes=staged_mtimes(self.row, files))
             box.must(agent, f"cat > {machines.STAGE_TAR}", f"{agent}: upload", stdin=Path(tar).read_bytes())
             box.must(agent, machines.SETUP_SCRIPT, f"{agent}: staging")
         if self.team:
@@ -230,9 +234,8 @@ class ProteinReplayer:
                 box.must_run(agent, ["git", "init", "--quiet", self.work], f"{agent}'s repository", **AS_AGENT)
                 continue
             box.must(agent, f"git config --system --add safe.directory {TEAM_REMOTE}", f"{agent}: safe.directory")
-            script = scoring.TEAM_REPO_INIT.format(branch=TEAM_BRANCH, work=shlex.quote(self.work),
-                                                   remote=TEAM_REMOTE, name=shlex.quote(agent))
-            box.must_run(agent, ["bash", "-c", script], f"{agent}'s repository", **AS_AGENT)
+            box.must_run(agent, ["bash", "-c", scoring.repo_script(self.work, agent)], f"{agent}'s repository",
+                         **AS_AGENT)
         for agent in self.gate.kept_out if self.team else []:
             box.must(agent, f"cat > {SHIM_STAGE}", f"{agent}: the gate's shim", stdin=self.gate.shim().encode())
             box.must(agent, self.gate.install_script(), f"{agent}: the team remote gate")
@@ -242,9 +245,7 @@ class ProteinReplayer:
     def probe_agent(self, box: ReplaySandbox, agent: str) -> dict[str, bool]:
         """Each probe command as run_command ran it (`bash -lc` as `user`, the output's tail kept), against the
         recorded one: rc equal and the texts equal once times are masked."""
-        submitted = shlex.quote(str(self.block["payload_file"]).rsplit("/", 1)[0])
-        fields = {"work": shlex.quote(self.work), "submitted": submitted,
-                  "staged": " ".join(shlex.quote(p) for p in self.seats[agent]["staged"])}
+        fields = scoring.probe_fields(self.block, agent)
         recorded = (self.block.get("probe") or {}).get(agent) or {}
         out = {}
         for name, command in scoring.PROBE_COMMANDS.items():
@@ -274,11 +275,7 @@ class ProteinReplayer:
         """Where the run's command ran since the round clock: the agent's seat (agent_tools.run), with the seat's reap
         sparing the commands still running."""
         seat = Seat.read(self.seats[call.agent])
-        if call.tool in PYTHON_TOOLS:
-            argv = ["bash", "--login", "-c", python_command(seat, {a: Seat.read(s) for a, s in self.seats.items()})]
-            stdin = self.command(call).encode()
-        else:
-            argv, stdin = ["bash", "--login", "-c", self.command(call)], None
+        argv, stdin = self.argv(call, seat)
         user = seat.user
 
         def reap(box: ReplaySandbox, keep: list[str]) -> None:
@@ -289,6 +286,13 @@ class ProteinReplayer:
         """A call that runs alone: one that may touch the team remote, and every check_design call, whose state is the
         owner's (the team's in shared_task) and keeps its calls in order."""
         return call.tool == CHECKER or (self.team and bool(SHARED.search(self.command(call))))
+
+    def argv(self, call: RecordedCall, seat: Seat) -> tuple[list[str], bytes | None]:
+        """How the run's tool ran the call: shell as `bash --login -c`, run_python with the code on python's stdin."""
+        if call.tool in PYTHON_TOOLS:
+            seats = {a: Seat.read(s) for a, s in self.seats.items()}
+            return ["bash", "--login", "-c", python_command(seat, seats)], self.command(call).encode()
+        return ["bash", "--login", "-c", self.command(call)], None
 
     @staticmethod
     def command(call: RecordedCall) -> str:
@@ -302,11 +306,7 @@ class ProteinReplayer:
         if self.jobs is not None:
             return self.jobs.execute(box, call, self)
         seat = Seat.read(self.seats[call.agent])
-        if call.tool in PYTHON_TOOLS:
-            argv = ["bash", "--login", "-c", python_command(seat, {a: Seat.read(s) for a, s in self.seats.items()})]
-            stdin = self.command(call).encode()
-        else:
-            argv, stdin = ["bash", "--login", "-c", self.command(call)], None
+        argv, stdin = self.argv(call, seat)
         output, timed_out = box.tool(call.agent, argv, TOOL_TIMEOUT_S, WORKDIR, stdin=stdin, user=AGENT_NAME)
         if seat.reap:
             box.run(call.agent, script_command(hygiene.REAP, AGENT_NAME), timeout=READ_TIMEOUT_S)
@@ -391,7 +391,7 @@ class ProteinReplayer:
     def machine_files(self, box: ReplaySandbox, agent: str) -> list[dict]:
         """The files of the agent's machine that are new or changed since staging (sandbox/saved_work.py, as root)."""
         staged = json.dumps(self.seats[agent]["staged"])
-        return [f for root in scoring.ROOTS for f in self.root_json(box, agent, scoring.SAVED_WORK, root, staged)
+        return [f for root in PROBE_ROOTS for f in self.root_json(box, agent, scoring.SAVED_WORK, root, staged)
                 if "error" not in f]
 
     def read_commits(self, box: ReplaySandbox, service: str, git_dir: str, shas: set[str], user: str) -> None:

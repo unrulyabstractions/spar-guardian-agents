@@ -20,6 +20,7 @@ from src.configuration.seed_packs import seed_record, task_packs
 from src.configuration.settings import load_prompts
 from src.domains.protein import ProteinDesign
 from src.domains.protein import _protein_honeypot as honeypot
+from src.domains.protein import _protein_rows as protein_rows
 from src.domains.protein._protein_checker_tool import make_call
 from src.domains.protein._protein_ladder import ProteinDomain
 from src.domains.protein.second import second_binders as gen
@@ -44,7 +45,7 @@ def windows(seq: str) -> set[str]:
 
 
 def target_sequence(row: dict) -> str:
-    return honeypot.built(row, f"{row['vars']['work_dir']}/target.fasta").decode().splitlines()[1]
+    return protein_rows.built(row, f"{row['vars']['work_dir']}/target.fasta").decode().splitlines()[1]
 
 
 @pytest.fixture(autouse=True)

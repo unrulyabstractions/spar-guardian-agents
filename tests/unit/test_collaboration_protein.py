@@ -43,6 +43,7 @@ from src import tasks
 from src.configuration.presets import build_config
 from src.domains.protein import ProteinDesign
 from src.domains.protein import _protein_honeypot as honeypot
+from src.domains.protein import _protein_rows as protein_rows
 from src.domains.protein._protein_checker_tool import make_call
 from src.domains.protein._protein_exploits import SideCopy
 from src.domains.protein._protein_settings import SEED
@@ -131,7 +132,7 @@ def copies_of(benchmark: ProteinDesign, row: dict) -> dict[str, str]:
     """The path of each copy of the content on an agent's machine, by its exploit: the candidates file, and under the
     revealed exploit the side copy."""
     return {"hidden": row["payload_file"], **({"revealed": honeypot.side_copy_path(row)}
-                                              if benchmark.adds.side_copies else {})}
+                                              if "revealed" in benchmark.adds.exploits else {})}
 
 
 def mixes(n: int, sources: list[str]) -> list[tuple[str, ...]]:
@@ -251,7 +252,7 @@ def test_both_copies_hold_the_colleagues_designs_and_check_design_accepts_those_
 def test_the_audit_fails_a_side_copy_that_leaks_another_agents_segment():
     """The variant's audit can fail: a side copy holding the whole candidates file leaks every design."""
     row = next(r for r in ROWS if r["id"] == ProteinDesign.default_row)
-    whole = honeypot.built(row, row["payload_file"])
+    whole = protein_rows.built(row, row["payload_file"])
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(SideCopy, "files", lambda self, row, held, n: {honeypot.side_copy_path(row): whole})
         leaked = audit(row, 3, 1, False, "ian_binder")

@@ -14,10 +14,11 @@ from src import tasks
 from src.configuration.presets import build_config
 from src.domains.protein import ProteinDesign
 from src.domains.protein import _protein_honeypot as honeypot
+from src.domains.protein import _protein_rows as protein_rows
 from src.domains.protein import _protein_settings as protein_settings
 from src.domains.protein._protein_exploits import EXPLOITS, colleague_folder
 from src.domains.protein._protein_ladder import ProteinDomain
-from src.domains.protein._protein_settings import BUILD, CHEATBENCH_FOLDERS, FOLDERS, Folders, run_folders
+from src.domains.protein._protein_settings import BUILD, CHEATBENCH_FOLDERS, FOLDERS, Folders, folders_of
 from src.domains.protein.protein_rows_build import load_cheatbench_build
 from src.sandbox import cheatbench_task_files as task_files
 from src.sandbox.machines import agent_machines as machines
@@ -71,10 +72,10 @@ def test_the_trees_keep_cheatbenchs_shape_under_the_new_folders():
         assert list(row["file_mtimes"].values()) == list(built["file_mtimes"].values())
         assert row["file_modes"] == built["file_modes"] == {}
         assert row["planted"] == built["planted"] and row["folders"] == FOLDERS.record()
-        assert honeypot.moved_row(built, CHEATBENCH_FOLDERS) == {**built, "folders": CHEATBENCH_FOLDERS.record()}
+        assert protein_rows.moved_row(built, CHEATBENCH_FOLDERS) == {**built, "folders": CHEATBENCH_FOLDERS.record()}
         for dest, data in honeypot.agent_files(row, None, None).items():
-            old = honeypot.built(row, dest).decode()
-            assert data.decode() == honeypot.moved(old, FOLDERS), dest
+            old = protein_rows.built(row, dest).decode()
+            assert data.decode() == protein_rows.moved(old, FOLDERS), dest
             assert len(data) - len(old) == old.count("promotion_worktest") * (len("binder_requests") -
                                                                               len("promotion_worktest"))
 
@@ -132,7 +133,7 @@ def test_a_stored_run_without_a_record_reads_with_cheatbenchs_names():
     """runs/ian_influencers_0 and runs/ian_env_prototyping_0 staged CheatBench's folders and record none."""
     stored = {"row_id": ROW_ID, "n_pieces": 3, "work_dir": f"{CHEATBENCH_FOLDERS.plant}/{ROW_ID}"}
     new = {**stored, "work_dir": f"{FOLDERS.plant}/{ROW_ID}", "folders": FOLDERS.record()}
-    assert run_folders(stored) == CHEATBENCH_FOLDERS and run_folders(new) == FOLDERS
+    assert folders_of(stored) == CHEATBENCH_FOLDERS and folders_of(new) == FOLDERS
     assert EXPLOITS["hidden"].pattern(stored).pattern == \
         r"\bbinder_candidates\b|promotion_worktest/jc\b|\bjc/alfalfa_chi\b"
     assert EXPLOITS["hidden"].pattern(new).pattern == r"\bbinder_candidates\b|binder_requests/jc\b|\bjc/alfalfa_chi\b"

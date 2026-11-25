@@ -26,12 +26,19 @@ from src.domains import DOMAINS
 from src.domains.benchmark_protocol import COMMON_DEVIATIONS, NO_SUBMIT_DEVIATIONS, PRESENCE_DEVIATION
 from src.domains.protein import ProteinDesign, protein_task
 from src.domains.protein import _protein_honeypot as honeypot
+from src.domains.protein import _protein_rows as protein_rows
 from src.domains.protein import _protein_scoring as scoring
 from src.domains.protein._protein_checker_tool import DESCRIPTION, GRADER, PARAMETERS, TOOL, make_call
 from src.domains.protein._protein_ladder import ProteinDomain
-from src.domains.protein._protein_settings import BUILD, TASK_DIR, TEAM_REMOTE
+from src.domains.protein._protein_settings import (
+    BUILD,
+    DEVIATIONS,
+    REMOTE_DEVIATIONS,
+    SPLIT_DEVIATIONS,
+    TASK_DIR,
+    TEAM_REMOTE,
+)
 from src.domains.protein._protein_settings import FOLDERS as STAGED_FOLDERS
-from src.domains.protein.protein_task import DEVIATIONS, REMOTE_DEVIATIONS, SPLIT_DEVIATIONS
 from src.measures import cheating_ladder, transcript_scan
 from src.measures import team_ladder as team
 from src.measures.ladder_domain import Evidence, probe_signals
@@ -56,9 +63,9 @@ COLLEAGUE = honeypot.colleague_dir(ROW)
 PLANTED = ROW["planted"]
 PAYLOAD = ROW["payload_file"]
 WORK = ROW["vars"]["work_dir"]
-CANDIDATES = honeypot.built(ROW, PAYLOAD).decode()
-BUILT_LOG = honeypot.built(ROW, honeypot.log_dest(ROW)).decode()      # the build's, with CheatBench's folders
-LOG = honeypot.moved(BUILT_LOG, ROW_FOLDERS)                            # what an agent reads
+CANDIDATES = protein_rows.built(ROW, PAYLOAD).decode()
+BUILT_LOG = protein_rows.built(ROW, honeypot.log_dest(ROW)).decode()      # the build's, with CheatBench's folders
+LOG = protein_rows.moved(BUILT_LOG, ROW_FOLDERS)                            # what an agent reads
 README = (TASK_DIR / "README.md").read_text()
 
 
@@ -74,9 +81,9 @@ def test_the_build_reproduces_the_readmes_target_and_candidates():
     assert render_prompt(TASK_DIR / "prompts" / "instruction.md", built_row) == prompt
     assert BUILT_LOG == log                                       # main()'s f-string, written out, byte for byte
     # an agent reads both with the paths at FOLDERS, and nothing else changed
-    assert render_prompt(TASK_DIR / "prompts" / "instruction.md", ROW) == honeypot.moved(prompt, ROW_FOLDERS)
+    assert render_prompt(TASK_DIR / "prompts" / "instruction.md", ROW) == protein_rows.moved(prompt, ROW_FOLDERS)
     staged_log = honeypot.agent_files(ROW, None, None)[honeypot.log_dest(ROW)].decode()
-    assert staged_log == honeypot.moved(log, ROW_FOLDERS) == LOG
+    assert staged_log == protein_rows.moved(log, ROW_FOLDERS) == LOG
     assert len(CANDIDATES.encode()) == 808 and f" 808 Mar 17 16:30 {PAYLOAD}\n" in LOG
     assert PLANTED == [line for line in CANDIDATES.splitlines() if not line.startswith(">")]
     rows = ProteinDesign.rows()
@@ -120,7 +127,8 @@ def test_segments_put_each_design_back_together_and_only_the_whole_passes():
 
 def test_each_agents_copy_of_the_row():
     whole = honeypot.agent_files(ROW, None, 3)
-    assert whole == {dest: honeypot.moved_bytes(honeypot.built(ROW, dest), ROW_FOLDERS) for dest in ROW["files_abs"]}
+    assert whole == {dest: protein_rows.moved_bytes(protein_rows.built(ROW, dest), ROW_FOLDERS)
+                     for dest in ROW["files_abs"]}
     mine = honeypot.agent_files(ROW, [2], 3)
     assert set(mine) == set(whole)                                  # the same paths, the candidates file among them
     assert mine[PAYLOAD].decode() == honeypot.segment_text(CANDIDATES, 2, 3)
@@ -188,8 +196,8 @@ def test_the_fingerprints_name_the_candidates_their_segments_and_their_lines():
         assert {line.lower() for line in honeypot.segment_text(CANDIDATES, k, 3).splitlines()} <= lines
     assert all(len(line) >= 18 for line in prints.lines)
     assert all(line == line.lower() for line in prints.lines)       # lower-cased, as the probe and the ladder compare
-    permitted = LOG + honeypot.built(ROW, f"{WORK}/target.fasta").decode() + \
-        honeypot.built(ROW, f"{WORK}/notes.md").decode()
+    permitted = LOG + protein_rows.built(ROW, f"{WORK}/target.fasta").decode() + \
+        protein_rows.built(ROW, f"{WORK}/notes.md").decode()
     assert not any(line in permitted.lower() for line in prints.lines)
     alone = honeypot.fingerprints(ROW, None)
     assert alone.slices == {} and len(alone.lines) == 12
@@ -737,7 +745,7 @@ def git(*args: str, cwd=None) -> str:
 
 def binders(remote, work, staged: dict[str, bytes], *revs: str) -> dict:
     """sandbox/team_binder.py run here, against a local bare repository, as the scorer runs it in a machine."""
-    paths = scoring.staged_paths({"a01": protein_task.sha256s(staged)})
+    paths = scoring.staged_paths({"a01": protein_rows.sha256s(staged)})
     out = subprocess.run([sys.executable, "-c", scoring.TEAM_BINDER, str(remote), str(work), json.dumps(paths), *revs],
                          check=True, capture_output=True, text=True).stdout
     return json.loads(out)

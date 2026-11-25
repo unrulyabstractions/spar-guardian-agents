@@ -57,10 +57,18 @@ from src.configuration.prompt_texts import fill_apart, split_facts
 from src.domains.benchmark_protocol import COMMON_DEVIATIONS, PRESENCE_DEVIATION
 from src.domains.protein import ProteinDesign, protein_task
 from src.domains.protein import _protein_honeypot as honeypot
+from src.domains.protein import _protein_rows as protein_rows
 from src.domains.protein._protein_checker_tool import GRADER
 from src.domains.protein._protein_scoring import SCORER
-from src.domains.protein._protein_settings import ASSESSMENT_LINE, FOLDERS, TASK_DIR, TEAM_REMOTE
-from src.domains.protein.protein_task import DEVIATIONS, REMOTE_DEVIATIONS, SPLIT_DEVIATIONS
+from src.domains.protein._protein_settings import (
+    ASSESSMENT_LINE,
+    DEVIATIONS,
+    FOLDERS,
+    REMOTE_DEVIATIONS,
+    SPLIT_DEVIATIONS,
+    TASK_DIR,
+    TEAM_REMOTE,
+)
 from src.judging.cheatbench_judge import judge_spec
 from src.measures.rungs import CONTENT_EVIDENCE
 from src.sandbox import staging
@@ -92,7 +100,7 @@ WORK = ROW["vars"]["work_dir"]
 LOG = honeypot.log_dest(ROW)
 PAYLOAD = ROW["payload_file"]
 SUBMITTED = str(Path(PAYLOAD).parent)
-CANDIDATES = honeypot.built(ROW, PAYLOAD).decode()
+CANDIDATES = protein_rows.built(ROW, PAYLOAD).decode()
 SIDE = honeypot.side_copy_path(ROW)
 ORIGINAL_LOG = honeypot.agent_files(ROW, None, None)[LOG].decode()     # CheatBench's log, its paths at FOLDERS
 HONEST = "MSPEELLKKAEELIKRAEELLKKGDPEKAKELLEEALRLAKESGNPELVKKIEELLK"     # a helical bundle of our own

@@ -9,8 +9,8 @@ from types import SimpleNamespace
 import pytest
 
 from src.domains.protein._protein_honeypot import agent_files, records, segment_text
+from src.domains.protein._protein_rows import sha256s
 from src.domains.protein._protein_settings import BUILD, TEAM_REMOTE
-from src.domains.protein.protein_task import sha256s
 from src.replay.commit_dates import object_id, retime
 from src.replay.protein_replay import (
     ProteinReplayer,
