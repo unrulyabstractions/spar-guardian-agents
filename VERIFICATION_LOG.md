@@ -4275,3 +4275,27 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **What.** `scripts/box/` runs a plan with the Mac's launcher. `fleet plan` assigns targets to boxes (`fleet_plan.py`), `create` records each box's study, plan, spec, targets, agents at once, runs, caps and commit, `box_run.sh` starts `run_study <plan> --yes [--gates] --only <targets> --limit max_agents=<N> [--mock]`, `box_probe.py` reads the launcher and its cells for `.claude/box_progress.sh` and `watch.sh`, and the capture puts the launcher's log and plan copy under `logs/<study>/boxes/<id>/` and refuses a run of a name held here from another run. The old study's `study_table.py`, `box_runner.py`, `gate_readout.py` and their tests are gone; `study_index.py` moved to `scripts/study/` without the table's join.
 - **How.** Ran the box, index, sort, SWE task, task names, run study, run directory, network and live cost tests on the branch and the same files on main, failing ids compared. Printed `fleet plan` for disregulator_existence_2 on 2 boxes and regulator_scale_1 with its spec on 4 and read both. Ran `create --dry-run` against the tests' fake vast.ai with no guard daemon and read the calls it sent. Ran `.claude/box_progress.sh` against a python:3.12-slim container (256 MB, removed after) through a stand-in ssh, with stand-in processes named as the launcher and a cell, and read each line. Counted the runs main's `runs/` holds of each plan.
 - **Result.** VERIFIED: 323 tests pass on the branch, 443 on main, no failing id on either. The assignments keep every gated chain on one box (12 chains of 3 or 2, 40 targets each once) at 115, 115, 110 and 110 agents, $500 at the caps; disregulator_existence_2 splits 5 and 5 runs, $45 each. The dry run sent three reads (instances, credit, offers) and no write, printed two rent requests and wrote no registry. In the container the adapter read `progress 2` (busy), `progress 4` (launcher dead, cell alive), `ended launcher-ended` (both gone), `progress 1` then `progress 66` (a launcher alive that writes nothing, its age from its start), `unreachable wrong-box 8`, `ended no-clone-on-the-box`. main's `runs/` holds 29 of regulator_scale_1's 40 runs, so `create` refuses that plan there; disregulator_existence_2 holds none. UNVERIFIED: anything on a real box (setup, build of ian_gflipt and its checker, the launcher under bash on Linux, capture and destroy); `create` against the real API; builder A's `--only` and `--limit` as this side calls them; no independent verifier agent was run.
+
+## 2026-11-25: the box tools and the launcher joined (branch vast-studies, not landed)
+
+- **What.** vast-launcher and vast-boxes on one branch from main's tip. `fleet run-args` checked against run_study's
+  argparse; under `--mock` it drops `--gates` (the launcher refuses the two together) and names only the box's targets
+  the plan holds now. `BOX_KEY` is host_facts' `KEY` and the mock suffix is run_study's. The runbook in
+  `scripts/box/README.md` gives the main key (`--main-key`), the spend check, `live_cost --save` then `--since`, the
+  full retry `create` and the image the network check needs on a SWE box.
+- **How.** run-args' output parsed by `run_study.parse_arguments` in test_box_fleet, for a plain box and a gated
+  regulator_scale_1 box with and without `--mock`. In `python:3.12-slim` (3 GiB, 2 CPUs, removed after) with this
+  worktree read-only at /root/work: the box's .venv built as box_setup_remote.sh does (Python 3.11.13 by uv 0.8.15,
+  main's `uv pip freeze` with `--no-deps`, ORBIT editable, the freeze diffed, the import check), then the remote
+  launcher script of box_run.sh, cut from the file unchanged, with box 1's run-args of `fleet plan
+  studies/plans/disregulator_existence_2.yaml --boxes 2` plus `--dry-run`. `tests/unit -k "box or fleet or study or
+  plan or gate or capture or host"` here and on main; ruff; `pipeline status`; `agent_texts --check`. Every runbook
+  command's `--help` read against its argparse or its shell parsing.
+- **Result.** VERIFIED: on Linux 6.8.0 the launcher started under `nohup setsid` (pid 969 after 2 s) and printed the
+  study, 5 cells, 0 done, at most $45.00 at caps of $5 and $15, each cell's `STUDY=disregulator_existence_2 exec uv run
+  python -m studies.cells.swe.ian_gflipt_minimal ...` command, memory 85% free and `max_agents` 44 in its limits. The
+  selection: 582 passed, 10 skipped here; main 668 passed, 1 failed (test_every_study_folder_has_an_entry, which reads
+  main's runs/), so no failing id is new. Ruff clean, 12 pipeline parts locked, 156 agent texts equal the golden ones.
+  UNVERIFIED: anything on a real box; Docker's disk on Linux (the slim image has no docker CLI and printed `None`); a
+  paid run on Linux; `fleet offers`, `create --dry-run`, `status`, the guard's commands and box_key against their
+  services, which this branch was not allowed to call. No independent verifier agent was run.
