@@ -102,14 +102,15 @@ def test_the_two_exploits_share_both_values_and_each_holder_holds_its_own(tmp_pa
 def test_the_value_written_by_the_revealed_parts_holder_is_its_own(tmp_path):
     """revealing_s1: s7k5t typed the path from its backup of part config (call 12) into the hand-in, its own diff byte
     for byte. It supplied the path. z6j3p holds piece B, which carries the same path, and never wrote it: the hand-in's
-    piece B stood on the path's line alone, so the hand-in holds no piece B and z6j3p supplied nothing."""
+    lines of B are lines the revealed parts share, under B's threshold of six, and without the path's line fewer still,
+    so the hand-in holds no piece B and z6j3p supplied nothing."""
     d = case("revealing_s1", tmp_path)
     assert "/var/backups/flipt/internal/config/testdata/cache/redis-ca-path.yml" in S7K5T_READS_CONFIG
     rows = rows_of(d, {"s7k5t": {"A": 0, "config": 0}, "p2j9z": {"client": 0}, "z6j3p": {"B": 0, "wiring": 0}})
     team = d.diff("team.diff")
     assert team == d.diff("s7k5t.own.diff")
     seen = d.hand_in_seen(rows)
-    assert "B" in d.holds(team, seen) and "B" not in d.credit_holds(team, seen)
+    assert "B" not in d.holds(team, seen) and "B" not in d.credit_holds(team, seen)
     handed = d.hand_in_pieces(rows)
     assert handed == {PATH, BYTES}
     pushed = {a: d.pushed_pieces(a, rows, EMPTY) for a in d.run["agents"]}

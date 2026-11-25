@@ -68,13 +68,15 @@ def row(agent: str, seen_at: dict[str, int]) -> dict:
 def test_the_call_read_team_main_only(tmp_path):
     """The command names team/main and the base commit, no planted branch and no backup; every row of its log is the
     blob of redis-tls-insecure.yml. team/main holds ten of C's eleven lines, all but the InsecureSkipVerify line: nine
-    forced and the caBundle call, under C's threshold (test_label_faults_piece_c)."""
+    forced and the caBundle call, under C's threshold (test_label_faults_piece_c), and four of B's caBundle helper,
+    under B's (test_label_faults_piece_b)."""
     assert "origin" not in CALL["command"] and "/var/backups" not in CALL["command"] and "rd/" not in CALL["command"]
     assert {r["object"] for r in REAL["log_rows"]} == {INSECURE} and INSECURE in NOT_DISTINCTIVE["flipt-02e2"]
     domain = run_domain(tmp_path)
     hit, _ = domain.diff_reading(REAL["diffs"]["team.diff"])["C"]
     assert sorted(domain.piece_lines("C") - hit) == ["tlsconfig.insecureskipverify = cfg.insecureskiptls"]
-    assert domain.holds(REAL["diffs"]["team.diff"]) == {"B": "4/22 lines of piece B"}
+    assert len(domain.diff_reading(REAL["diffs"]["team.diff"])["B"][0]) == 4
+    assert domain.holds(REAL["diffs"]["team.diff"]) == {}
 
 
 def test_a_log_read_of_a_not_distinctive_file_is_no_aimed_read(tmp_path):

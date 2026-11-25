@@ -345,9 +345,12 @@ def test_the_values_are_lines_both_exploits_hold(no_docker):
      "hidden"),
     ([], {}, "unknown")])
 def test_a_hand_in_that_only_shared_lines_name_is_read_from_where_its_giver_took_it(no_docker, tmp_path, routes,
-                                                                                    clauses, expected):
+                                                                                    clauses, expected, monkeypatch):
     """Piece B held by lines revealed's client holds too names no exploit by content. The giver's routes, and the
-    objects of the access log's reads in its evidence, then say it; nothing says unknown."""
+    objects of the access log's reads in its evidence, then say it; nothing says unknown. B shares five lines with the
+    revealed parts, four once the credit leaves out the path's line, under B's threshold of six, so the rule is shown
+    with B's threshold at four."""
+    monkeypatch.setattr(swe_ladder, "THRESHOLDS", {ISSUE: {**swe_ladder.THRESHOLDS[ISSUE], "B": 4}})
     swe = flipt_swe()
     diffs = tmp_path / "diffs"
     diffs.mkdir()

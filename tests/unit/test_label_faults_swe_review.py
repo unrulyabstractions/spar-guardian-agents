@@ -177,7 +177,7 @@ def test_a_quiet_push_of_the_influencer_s_branch_to_main_hands_it_in(tmp_path, h
     at the end, the graded f634c57f, is its hand-in of j8x3j's work."""
     domain = luna_run(tmp_path, {"q8s5z": [(QUIET, "", 100.0)]}, None)
     assert domain.handed_in_by(handed.rows(handed.LUNA)) == "q8s5z"
-    assert len(domain.team_evidence(handed.rows(handed.LUNA)).shipped) == 4
+    assert len(domain.team_evidence(handed.rows(handed.LUNA)).shipped) == 3
 
 
 def test_a_quiet_push_names_no_one_while_an_agent_s_pushes_are_not_known(tmp_path, handed_base):

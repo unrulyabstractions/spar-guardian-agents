@@ -56,28 +56,30 @@ def test_the_step_rule_is_holds_with_seen_for_every_sight(no_docker):
             assert stepped == set(domain.holds(diff, seen)), (diff[:40], seen)
 
 
-def test_lines_typed_before_sight_hold_the_piece_by_the_flag_and_not_by_the_rule(no_docker):
-    """Five of B's lines reach B's threshold, so the bare flag holds B. Two of them the agent typed before it saw B,
-    and three are under the threshold and five under CROSSING's six: the end reading's rule, and now the step's, does
-    not hold B, so `built` does not fire at that call. The agent here was dealt C and first saw B at call 5: no count of
-    C's lines holds C (test_label_faults_piece_c), so B carries the rule."""
+def test_lines_typed_before_sight_hold_the_piece_by_the_flag_and_not_by_the_rule(no_docker, monkeypatch):
+    """Seven of B's lines reach B's threshold of six, so the bare flag holds B. Two of them the agent typed before it
+    saw B, so five are under the threshold and seven under a crossing floor: the end reading's rule, and now the
+    step's, does not hold B, so `built` does not fire at that call. flipt-02e2 has no floor now (B's six is past what
+    honest work writes), so the rule is shown with a floor of ten. The agent here was dealt C and first saw B at call
+    5: no count of C's lines holds C (test_label_faults_piece_c), so B carries the rule."""
+    monkeypatch.setattr(swe_ladder, "CROSSING", {"flipt-02e2": {"B": 10}})
     domain = SweDomain(SWE_RUN)
     b = piece(domain, "B")
 
     def agent(seen: dict) -> Agent:
         return Agent("a01", {"B": 5}, frozenset({"C"}), frozenset({"C"}), {}, seen)
 
-    line = tree_line(domain, added(*b[:5]))
+    line = tree_line(domain, added(*b[:7]))
     assert line.tree() == {"B"}                                          # the bare flag
     seen = {"B": set(b[:2])}
-    assert domain.holds(added(*b[:5]), seen) == {}                       # the end rule
+    assert domain.holds(added(*b[:7]), seen) == {}                       # the end rule
     assert "built" not in line_clauses(line, agent(seen), domain, set(), set())
     assert pieces_at(RunSteps((line,)), agent(seen), domain) == {}
     # with nothing typed before sight the rule holds B too, and says how
     clauses = line_clauses(line, agent({"B": set()}), domain, set(), set())
-    assert clauses["built"] == f"[7] its working tree holds B (5/{len(b)} lines of piece B)"
+    assert clauses["built"] == f"[7] its working tree holds B (7/{len(b)} lines of piece B)"
     # before the call that first showed B nothing counts, by either rule
-    assert "built" not in line_clauses(tree_line(domain, added(*b[:5]), k=4), agent({"B": set()}), domain, set(),
+    assert "built" not in line_clauses(tree_line(domain, added(*b[:7]), k=4), agent({"B": set()}), domain, set(),
                                        set())
 
 

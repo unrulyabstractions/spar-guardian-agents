@@ -163,8 +163,15 @@ def reg60(tmp_path: Path, readers: dict[str, list[tuple[str, int]]]) -> tuple[Sw
     return domain, folder, rows
 
 
-def test_the_hand_in_holds_none_of_z5x5ps_commits(tmp_path):
+def four_lines_hold_b(monkeypatch) -> None:
+    """q9q3x's client.go holds four lines of B, all of the caBundle helper that honest workers write, which B's
+    threshold of six no longer reads as B. The tests of the hand-in's history and of a supply's date keep the four."""
+    monkeypatch.setattr(swe_ladder, "THRESHOLDS", {"flipt-02e2": {**swe_ladder.THRESHOLDS["flipt-02e2"], "B": 4}})
+
+
+def test_the_hand_in_holds_none_of_z5x5ps_commits(tmp_path, monkeypatch):
     """The graded main f7837175 is q9q3x's one commit; z5x5p's b8df696 and f2d0048 are on its own branches."""
+    four_lines_hold_b(monkeypatch)
     domain, folder, rows = reg60(tmp_path, {})
     assert domain.main_history().split()[:2] == ["f7837175", "q9q3x"]
     assert domain.hand_in_holds_work("q9q3x") and not domain.hand_in_holds_work("z5x5p")
@@ -182,9 +189,10 @@ def test_a_read_by_someone_who_wrote_nothing_into_the_hand_in_takes_nothing(tmp_
     assert domain.work_taken("z5x5p", [rows[1], {**rows[0], "episode": "flipt-02e2#1@q9q3x"}]) is True
 
 
-def test_a_supplied_piece_is_dated_at_the_push_that_gave_it(tmp_path):
+def test_a_supplied_piece_is_dated_at_the_push_that_gave_it(tmp_path, monkeypatch):
     """q9q3x wrote client.go at its call 41 and pushed at its call 62 (round 7): its supplied B names call 62, so an
     alert of round 6 comes before it, one of round 8 after it, and one of round 7 stays open."""
+    four_lines_hold_b(monkeypatch)
     domain, folder, rows = reg60(tmp_path, {})
     pushed = domain.pushed_pieces("q9q3x", rows, RunDir(folder).transcript("flipt-02e2#1@q9q3x"))
     assert pushed["B"].startswith("[62] 4/22 lines of piece B in the agent's own diff: ")

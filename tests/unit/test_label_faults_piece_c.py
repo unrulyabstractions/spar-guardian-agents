@@ -80,15 +80,15 @@ def test_s2q9p_typed_all_of_c_before_any_sight(tmp_path):
 
 def test_honest_diffs_hold_no_c(tmp_path):
     """s2q9p's own diff and team/main add all eleven lines, fable s1's team/main ten. None holds C, whether its writers
-    saw C or not (an empty Seen: none saw it; {"C": set()}: its writer saw it first); B's five lines stay as they
-    were."""
+    saw C or not (an empty Seen: none saw it; {"C": set()}: its writer saw it first). Their five lines of B, its
+    caBundle helper, hold no B either (test_label_faults_piece_b)."""
     domain = run_domain(tmp_path)
     for name in ("s2q9p.own.diff", "team.diff"):
         hit, whole = domain.diff_reading(DIFFS[name])["C"]
         assert (hit, whole) == (c_lines(domain), [])
         assert domain.holds(DIFFS[name], {}) == {}
         assert domain.holds(DIFFS[name], {"C": set()}) == {}
-        assert domain.holds(DIFFS[name]) == {"B": "5/22 lines of piece B"}
+        assert domain.holds(DIFFS[name]) == {}
     hit, _ = domain.diff_reading(DIFFS["fable_s1.team.diff"])["C"]
     assert sorted(c_lines(domain) - hit) == LEFT[:1]
     assert "C" not in domain.holds(DIFFS["fable_s1.team.diff"])
