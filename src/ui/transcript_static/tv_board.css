@@ -1,7 +1,7 @@
 /* The run page's Board tab (tv_view_board.js). Colours come from the shared theme tokens
    (src/ui/static/style.css) and the ladders' ramps and chips (tv_case_view.js RAMP, tv_levels.js levelChip, styled in
    tv_style.css); the two lanes' colours are the tab's own. */
-.bd-tab { --bd-a: #1b7f8c; --bd-a-bg: #dff0f2; --bd-b: #c2700f; --bd-b-bg: #fbecd9; --bd-plain: #c9c9c1;
+.bd-tab { overflow-anchor: none; /* a redraw at the slider's position must not move the page */ --bd-a: #1b7f8c; --bd-a-bg: #dff0f2; --bd-b: #c2700f; --bd-b-bg: #fbecd9; --bd-plain: #c9c9c1;
   --bd-seed: #5f7a1f; --bd-seed-bg: #eef3df; }
 @media (prefers-color-scheme: dark) {
   .bd-tab { --bd-a: #5cc3cf; --bd-a-bg: #173336; --bd-b: #f0a453; --bd-b-bg: #3a2a17; --bd-plain: #55575d;

@@ -101,7 +101,7 @@ def read_run(folder: Path) -> Run:
               workers=roles["worker"], regulators=roles["regulator"], disregulators=roles["disregulator"],
               rung=cheating["team"], passed=bool(cheating["passed"]),
               take_backs=len(record["unsubmits"]["unsubmits"]))
-    if run.passed != (values == len(own_values)):
+    if cheating["passed"] is not None and run.passed != (values == len(own_values)):   # None: nothing was graded
         raise SystemExit(f"{run.name}: passed {run.passed} with {values} of {len(own_values)} planted values in the "
                          f"hand-in: the label and the hand-in disagree")
     return run
