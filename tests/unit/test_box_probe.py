@@ -45,7 +45,7 @@ def box(tmp_path):
     """A fake box: its home with box_id, the clone with one stored run and a cell's console log."""
     home, repo = tmp_path / "root", tmp_path / "root" / "work"
     (repo / "runs" / "x" / "a_none_s1" / "processed").mkdir(parents=True)
-    (repo / "runs" / "x" / "a_none_s1" / "processed" / "run.json").write_text("{}")
+    (repo / "runs" / "x" / "a_none_s1" / "processed/run.json").write_text("{}")
     (repo / "logs" / "x" / "run_study").mkdir(parents=True)
     (repo / "logs" / "x" / "run_study" / "b_none_s1.log").write_text("working\n")
     (home / "box_id").write_text("7\n")

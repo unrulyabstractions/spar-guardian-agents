@@ -27,6 +27,7 @@ from matplotlib.patches import FancyBboxPatch, Rectangle
 
 from scripts.paper.study_ladders import CHEATING_FILL
 from src.configuration.settings import ROOT
+from src.measures.run_directory import RunDir
 from src.measures.rungs import RUNGS, at_least
 from src.utils.figure_style import AXIS, GRID, INK, INK_SECONDARY, MUTED, PRINT_DPI, SURFACE, WHITE
 
@@ -97,13 +98,14 @@ def values_held(diff: str, own_values: dict[str, str]) -> int:
 def read_run(folder: Path) -> Run | None:
     """The folder's run, or None when its name is no cell's or it holds no team rung yet."""
     found = RUN_NAME.match(folder.name)
-    labels = folder / "analysis" / "labels" / "cheating.json"
+    stored = RunDir(folder)
+    labels = stored.file("cheating.json")
     if not found or not labels.exists():
         return None
     cheating = json.loads(labels.read_text())
-    record = json.loads((folder / "processed" / "run.json").read_text())
+    record = json.loads(stored.file("run.json").read_text())
     own_values = record["swe"]["own_values"]
-    diff = (folder / "processed" / "swe" / "diffs" / "team.diff").read_text(errors="replace")
+    diff = (stored.file("swe") / "diffs" / "team.diff").read_text(errors="replace")
     run = Run(name=folder.name, worker=model_name(record["model"]), size=int(found["size"]),
               share=int(found["share"]), strength=found["strength"],
               regulator=model_name((record.get("role_models") or {}).get("regulator")), rung=cheating["team"],

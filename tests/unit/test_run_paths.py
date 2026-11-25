@@ -17,8 +17,8 @@ from src.configuration import settings
 from src.measures.run_directory import FILES
 
 FOLDERS_SCANNED = ("src", "scripts", "tools", "examples", "studies", "tests")
-EXEMPT = {"src/measures/run_directory.py", "tests/unit/test_run_paths.py"}
-"""The path table itself and this test."""
+EXEMPT = {"src/measures/run_directory.py", "tests/unit/test_run_paths.py", "scripts/box/box_probe.py"}
+"""The path table itself, this test, and the probe a box runs from standard input without the repository."""
 OLDER = ("judge.jsonl", "ladder.jsonl", "ladder_actions.jsonl", "rungs.json", "smoke_results.json")
 """The archive's older ladders' files, which no code reads any more."""
 DOTTED = {name for name in FILES if "." in name} | set(OLDER)
@@ -38,6 +38,7 @@ ALLOWED = {
     ("scripts/paper/fig_scripted_teammates.py", "figures"),
     ("scripts/paper/figures.py", "figures"),
     ("scripts/paper/paper_sources.py", "figures"),
+    ("scripts/study/regulator_scale_figure.py", "figures"),   # tmp/figures/
     ("tools/scout/scout_scanners.py", "swe"),          # src/domains/swe/harness/
     ("tests/unit/test_launch_command.py", "swe"),      # examples/swe/
     ("tests/unit/test_swe_task.py", "swe"),

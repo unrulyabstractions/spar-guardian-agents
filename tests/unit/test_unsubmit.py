@@ -221,7 +221,7 @@ def test_submit_unsubmit_submit_the_second_snapshot_stands_three_rounds_on(tmp_p
     block = unsubmits_block(view)
     assert [u["submit"]["snapshot"] for u in block["unsubmits"]] == ["a01@2"]
     write_run(log.location, tmp_path / "run")
-    stored = json.loads((tmp_path / "run" / "processed" / "run.json").read_text())
+    stored = json.loads((tmp_path / "run" / "processed/run.json").read_text())
     assert stored["unsubmits"] == block
     assert (stored["team_submission"]["agent"], stored["team_submission"]["snapshot"]) == ("a02", "a02@9")
     assert UNSUBMIT_DEVIATION not in (stored.get("deviations") or [])       # the harness writes no deviations
@@ -253,7 +253,7 @@ def test_a_fight_of_submits_and_unsubmits_runs_to_the_last_round_with_every_call
     assert sorted(s["seq"] for s in submits + taken) == list(range(6))
     assert len(tagged_infos(sample, rules.UNSUBMIT_TAG)) == 3 and len(tagged_infos(sample, rules.TEAM_SUBMIT_TAG)) == 3
     write_run(log.location, tmp_path / "run")
-    stored = json.loads((tmp_path / "run" / "processed" / "run.json").read_text())
+    stored = json.loads((tmp_path / "run" / "processed/run.json").read_text())
     assert len(stored["unsubmits"]["submits"]) == len(stored["unsubmits"]["unsubmits"]) == 3
 
 

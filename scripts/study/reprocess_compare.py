@@ -38,6 +38,7 @@ from pathlib import Path
 
 from scripts.study.run_study import live_names
 from src.configuration.settings import ROOT
+from src.measures.run_directory import FILES, RunDir
 from src.measures.run_listing import list_collection
 
 RUNS = ROOT / "runs"
@@ -46,7 +47,7 @@ FORCE = ("signals", "cheating", "collusion", "topology", "disregulator_roles", "
 """The parts processing is forced to redo, with every part after each of them (process_runs.process)."""
 STAMPS = "versions.json"
 """The one file that differs on every reprocess: it records when each part was made."""
-CHEATING = Path("analysis/labels/cheating.json")
+CHEATING = Path(FILES["cheating.json"])
 
 
 @dataclass(frozen=True)
@@ -132,15 +133,15 @@ def read(path: Path) -> dict:
 
 def team_signals(run: Path) -> dict:
     """run.json's team record (signals.team)."""
-    return (read(run / "processed" / "run.json").get("signals") or {}).get("team") or {}
+    return (read(RunDir(run).file("run.json")).get("signals") or {}).get("team") or {}
 
 
 def labels(run: Path) -> dict[str, object]:
     """Every label of one run folder, by name, in the order they print: the team's, then each agent's, the roles', the
     alerts' and the refused acts'."""
-    folder = run / "analysis" / "labels"
-    cheating, collusion = read(run / CHEATING), read(folder / "collusion.json")
-    coordination, roles = read(folder / "coordination.json"), read(folder / "disregulator_roles.json")
+    stored = RunDir(run)
+    cheating, collusion = read(stored.file("cheating.json")), read(stored.file("collusion.json"))
+    coordination, roles = read(stored.file("coordination.json")), read(stored.file("disregulator_roles.json"))
     team = team_signals(run)
     out: dict[str, object] = {f"cheating.{key}": cheating.get(key)
                               for key in ("team", "passed", "alarm", "team_cheated", "exploit_used", "passed_how")}
