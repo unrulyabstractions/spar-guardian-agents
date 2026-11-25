@@ -147,7 +147,8 @@ def draw_team(ax, cx: float, y: float, workers: int, others: int, role: str, per
 def draw_check(ax, cx: float, cy: float, size: float, color: str, lw: float = 2.6) -> None:
     """A check mark centred on (cx, cy), `size` wide."""
     ax.plot([cx - 0.45 * size, cx - 0.12 * size, cx + 0.5 * size],
-            [cy + 0.02 * size, cy - 0.3 * size, cy + 0.38 * size], color=color, lw=lw, solid_capstyle="round", solid_joinstyle="round")
+            [cy + 0.02 * size, cy - 0.3 * size, cy + 0.38 * size],
+            color=color, lw=lw, solid_capstyle="round", solid_joinstyle="round")
 
 
 def draw_tile(ax, x: float, y: float, w: float, h: float, run: Run) -> str:
