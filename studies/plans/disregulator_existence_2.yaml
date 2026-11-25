@@ -114,9 +114,9 @@ targets:
 # 9.5 GiB). The ten runs hold 36 agents in all; 24 at once take 13.2 GB, and the launcher starts a run only while the
 # Mac keeps 40% of its memory free.
 limits:
-  max_runs: 8
-  max_per_task: {swe: 8}
-  max_agents: 30
+  max_runs: 10
+  max_per_task: {swe: 10}
+  max_agents: 40
   spacing_s: 60
   needs:
     swe: {disk_gb: 2.3, memory_gb: 0.55, per: agent}

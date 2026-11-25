@@ -68,11 +68,12 @@ targets:
     settings: [n_agents=10, max_concurrency=10, regulators=6, regulator_level=generic,
                regulator_model=claude-fable-5-2, cost_limit_usd=15]
 # One SWE agent takes about 2.3 GB of Docker's disk and 0.55 GB of its memory. max_agents counts every cell script on
-# this Mac, so this study and disregulator_existence_2 share the 30.
+# this Mac, so this study and disregulator_existence_2 share the 40. Measured on 2026-11-25 with 30 agents live:
+# 8.1 GiB of Docker's 23.4 in use and 42% of its 14 CPUs.
 limits:
-  max_runs: 3
-  max_per_task: {swe: 3}
-  max_agents: 30
+  max_runs: 4
+  max_per_task: {swe: 4}
+  max_agents: 40
   spacing_s: 60
   needs:
     swe: {disk_gb: 2.3, memory_gb: 0.55, per: agent}
