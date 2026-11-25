@@ -78,6 +78,13 @@ test-tools:  ## offline unit tests of the analysis tools, in their own environme
 lint:  ## ruff over src, tests, examples, studies, scripts and tools (ruff.toml: 120 columns, sorted imports)
 	@$(STEPS) "Lint (ruff)" --summary "lint clean" --step ruff "uvx ruff check src tests examples studies scripts tools"
 
+.PHONY: texts reprocess-check
+texts:  ## write every agent's system prompt, first message and tools to tests/golden/agent_texts/ (CHECK=1 writes nothing, fails on a difference)
+	@$(PY) -m scripts.study.agent_texts $(if $(CHECK),--check)
+
+reprocess-check:  ## reprocess a copy of each study's stored runs and list every label that changes (STUDY="<study> ...", default every study; EXPECT=<file> of the intended changes; RUNS=<main checkout>/runs from a worktree)
+	@$(PY) -m scripts.study.reprocess_compare $(STUDY) $(if $(EXPECT),--expect $(EXPECT)) $(if $(RUNS),--runs $(RUNS))
+
 .PHONY: study-readmes
 study-readmes:  ## write each study's runs/<study>/README.md from its own files and the code (CHECK=1 writes nothing, fails when one is stale)
 	@$(PY) -m scripts.study.study_readme --all $(if $(CHECK),--check)
