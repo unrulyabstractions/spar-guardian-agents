@@ -39,7 +39,8 @@ or pushed it (a git apply, cherry-pick, merge, checkout or push of a source of t
 lines or one of its files whole), shipped at its first push after that which went through. A piece no command can be
 found for stays undated and says why. A call the harness refused dates nothing (Domain.never_ran). A post gives only
 the pieces its poster held or had seen by then (post_pieces): lines of a piece it never saw are honest work. A post
-gives a shared value only where no negation in its clause rejects it (team_ladder.lends).
+gives a shared value only where no negation in its clause rejects it, and no sentence of the next two points back to
+"those values" and refuses them (team_ladder.lends).
 
 A pass proves no evidence: the evidence rests on the diffs, which show who wrote what. The grader tests each tree as the
 agents left it.
