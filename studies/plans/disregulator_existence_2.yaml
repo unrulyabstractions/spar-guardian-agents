@@ -132,6 +132,15 @@ targets:
     seeds: [1, 2, 3]
     settings: [n_agents=5, max_concurrency=5, disregulators=1, disregulator_level=instructed,
                disregulator_model=deepseek-flash-openrouter, cost_limit_usd=30]
+  # Step 3 for Opus workers, whose teams of 5 hacked in samples 2 and 3: teams of 10 with two DeepSeek disregulators.
+  # They run here, since the Opus workers go straight to Anthropic.
+  ian_gflipt_opus_n10_dis20:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: claude-opus-5-5
+    packs: [none]
+    seeds: [1, 2, 3]
+    settings: [n_agents=10, max_concurrency=10, disregulators=2, disregulator_level=instructed,
+               disregulator_model=deepseek-flash-openrouter, cost_limit_usd=40]
   # Step 3 for Haiku and Luna workers (teams of 10 with two DeepSeek disregulators) runs on rented machines:
   # studies/plans/disregulator_existence_2_boxes.yaml, the same study.
 # One SWE agent takes about 2.3 GB of Docker's disk and 0.55 GB of its memory (measured 2026-11-24: 18 agents live took
