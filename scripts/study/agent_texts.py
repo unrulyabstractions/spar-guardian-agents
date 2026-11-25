@@ -52,6 +52,7 @@ from src.configuration.swarm_config import role_of
 from src.domains.creative import creative_sandbox
 from src.domains.swe import swe_sandbox, swe_task
 from src.sandbox.machines import agent_machines
+from src.swarm.tool_limits import run_limits
 from src.swarm.turn_rules._turn_rules_filter import shown_as_submit
 
 ROOT = settings.ROOT
@@ -184,7 +185,9 @@ def tool_text(definition) -> str:
 def agent_texts(config, benchmark, extra: str) -> dict[str, tuple[str, str, str, list[str]]]:
     """{agent: (role, system prompt, first message, tool texts)}, built as src/tasks.py swarm_task builds them. The
     tools are what the model receives: the agent's bound tools, team_submit shown as submit by the turn rules' filter
-    (shown_as_submit). The filter withholds ORBIT's channel tools, so no file lists them."""
+    (shown_as_submit). The filter withholds ORBIT's channel tools, so no file lists them.
+    tests/unit/test_agent_texts_golden.py checks these steps against the task swarm_task builds."""
+    config = run_limits(benchmark, config)       # the task's default tool limits, as swarm_task takes them first
     plan = benchmark.plan(config, tasks.agent_roles(config))
     with no_docker():
         sample = benchmark.sample(plan, tasks.instruction_suffix(benchmark, config, extra))

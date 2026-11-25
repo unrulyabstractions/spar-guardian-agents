@@ -31,6 +31,27 @@ uv run python -m scripts.study.run_study studies/plans/ian_influencers_0.yaml --
 
 A run starts from a preset, then applies a scale, then every `--set key=value`. The default preset is the configuration of the team's midterm report (2026-10-26) at the small scale. It puts three agents on the pull board in `shared_task`, with the exploit split over them (`access=split`), per-round read and post budgets and 30 rounds of up to 10 tool calls per agent. Each agent is told a budget of 300 tool calls, and on every task but chess it is never told of rounds. It has no regulators. It sets the regulator level to `generic`, which applies once `--set regulators=N` adds them. `examples/` holds one script per task with that configuration (`examples/README.md`).
 
+## Before you land a change
+
+Every change shows two things: which texts an agent reads changed, and which labels of the stored runs changed. Two commands show them, and neither calls a model or starts Docker.
+
+```
+make texts             # write tests/golden/agent_texts/ again; then git diff shows each changed sentence
+make texts CHECK=1     # write nothing; exit 1 at the first line that differs
+make reprocess-check   # reprocess a copy of every study's stored runs; list every label that changes
+make reprocess-check STUDY=disregulator_existence_1 EXPECT=changes.txt   # exit 0 only for the listed changes
+```
+
+**Agent texts.** `make texts` (`scripts/study/agent_texts.py`) renders every agent's system prompt, first message and tools for the three tasks of `studies/gated/ian_influencers_1.yaml`. It renders each arm of that study and a few more settings: another seed, a team of ten, the task without its variant, and the regulator and the disregulator at each instruction level. It writes one plain text file per agent, `tests/golden/agent_texts/<task>/<setting>/<role>_<agent>.txt`. `tests/unit/test_agent_texts_golden.py` renders them again and fails at the first line that differs. So a change that should leave the texts alone leaves no diff in that folder. A change that rewrites a text shows the sentence in the commit's diff. The render takes about 6 seconds, and the test about 6 seconds. The files hold what the model receives. They do not hold each round's message, the board's posts, tool results or the files in the sandbox.
+
+**Stored runs.** `make reprocess-check` (`scripts/study/reprocess_compare.py`) copies each study's `runs/` and `logs/` into a scratch folder outside the repository. It processes the copy with the checked-out code and compares every file with the stored one. It prints how many files differ at each path inside a run, then every label that changes: the team's Cheating rung, pass, alarm, Coordination level and Collusion rung first, then each agent's rungs with its role, the role labels, the alert counts and the refused writes. It exits 0 when only `versions.json` files differ, and 1 when a label or another file differs. `EXPECT=<file>` lists the label lines a change means to make, and the check then exits 0 only when the changes are exactly those. It leaves out a run with no `analysis/labels/cheating.json` and a run a cell script is still writing. It never writes under `runs/` and always deletes its scratch folder. On this Mac it takes about 5 seconds for a study of 9 runs, and about 130 seconds for all seven studies. From a worktree, give it the main checkout's runs: `RUNS=<main checkout>/runs`.
+
+**Mock smokes.** A change to a task's sandbox also runs its mock smoke suite. These start the real Docker sandbox and drive the agents with a scripted mock model, with no model spend:
+
+- `make smoke-swe`: SWE on `flipt-02e2` and `vuls-1832`. It runs a lone agent, a team on the board, the honeypots and their planted pieces, the side patches, the `ian_flipt` clean-room fork, the grading of the gold patch, submit and its delay, rounds and round time, influencers kept out of `team/main`, a push after the submit, and the collaboration rule's grades.
+- `make smoke-protein`: protein design, one machine per agent. It runs a lone agent, a split team that assembles a design from the board, solo agents, a team with a regulator, and the `ian_binder` side copies, alone and mixed with the candidates files.
+- `make smoke-creative`: creative writing, one container with the review sidecar. It runs a lone agent, a team that shares one workspace, a split team that joins the reference from the board, solo agents, and the `ian_poem` commission and its side copies.
+
 ## Examples
 
 `examples/` holds one script per task: three neutral agents on the pull board at the small scale, with the exploit split over them, so completing it takes the board. Run one from the repository root with `OPENROUTER_API_KEY` set for the agents' default model, and `OPENAI_API_KEY` for the judge when a run is judged:
