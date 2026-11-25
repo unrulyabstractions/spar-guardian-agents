@@ -162,9 +162,8 @@ def first_messages(sample: Sample, plan: Plan, benchmark: Benchmark) -> dict[str
     else its input): with what its role's level says there (roles.role_first) on its own paragraph after the task, and
     its values in its facts block (agent_values, prompt_texts.with_facts). A regulator's that oversees is
     roles.oversight_first_message around the task without its facts, then how to read the team's work
-    (Benchmark.oversight_note), its role's text and, in a run with two or more regulators, the line naming the others
-    (roles.same_role_text), each a paragraph, then its facts block: what counts for its teammates
-    (Benchmark.oversight_facts), its own facts and its values. None when no agent oversees and none has a
+    (Benchmark.oversight_note) and its role's text, each a paragraph, then its facts block: what counts for its
+    teammates (Benchmark.oversight_facts), its own facts and its values. None when no agent oversees and none has a
     role text or a value."""
     first = sample.metadata["cheatbench"].get("first_message") or dict.fromkeys(plan.agents, sample.input)
     overseers = {a for a in plan.agents if plan.config.oversees(role_of(plan.roles, a))}
@@ -181,7 +180,7 @@ def first_messages(sample: Sample, plan: Plan, benchmark: Benchmark) -> dict[str
             return with_facts(first[agent], values[agent], note=text)
         task, facts = split_facts(first[agent])
         parts = [roles_module.oversight_first_message(task.strip("\n")).rstrip(),
-                 benchmark.oversight_note(plan, agent), text, roles_module.same_role_text(plan.roles, agent)]
+                 benchmark.oversight_note(plan, agent), text]
         return with_facts("\n\n".join(p for p in parts if p),
                           [*benchmark.oversight_facts(plan, agent), *facts, *values[agent]])
 

@@ -33,8 +33,8 @@ under a condition of the run's config alone (REGULATOR_LINES, shown_lines), then
 (regulator_tools): one bullet per sentence of the same two pieces, then roles.regulator_check (call get_peer_actions
 on each teammate within a set number of the regulator's first rounds: CHECK_ROUNDS, which role_values gives the first
 message, since no system prompt holds a number). The check is an instruction like the rest; run.json engagement
-checked_in_time records whether it happened. In a run with two or more regulators each one's first message names the
-others (same_role_text).
+checked_in_time records whether it happened. In a run with two or more regulators each one is told of the others as
+they enter (prompts.yaml presence.regulator_one), and its role text says to work with them.
 
 With informed_roles on, a regulator or disregulator also gets the briefing (prompts.yaml `roles.briefing`, built by
 role_briefing) after its role text: the board and its tools, what the agents without a role were told, and that they
@@ -128,7 +128,7 @@ def regulator_kept_out(config: SwarmConfig) -> bool:
 
 
 def several_regulators(config: SwarmConfig) -> bool:
-    """Whether the run has two or more regulators, so each one's first message names the others (same_role_text)."""
+    """Whether the run has two or more regulators, each told of the others as they enter."""
     return config.regulator_count >= 2
 
 
@@ -322,13 +322,3 @@ def others_text(names: list[str]) -> str:
         raise ValueError("OTHERS.md names at least one other disregulator")
     templates = load_prompts()["roles"]["others"]
     return templates["one" if len(names) == 1 else "several"].format(names=listed(names)) + "\n"
-
-
-def same_role_text(roles: dict[str, str] | None, agent: str) -> str | None:
-    """The line of a regulator's first message that names the other regulators, sorted, from prompts.yaml
-    roles.same_role, in a run with two or more regulators. None for a worker, a disregulator or a lone regulator."""
-    found = sorted(other for other, role in (roles or {}).items() if role == "regulator")
-    if agent not in found or len(found) < 2:
-        return None
-    others = [other for other in found if other != agent]
-    return load_prompts()["roles"]["same_role"]["one" if len(others) == 1 else "several"].format(names=listed(others))
