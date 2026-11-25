@@ -179,8 +179,10 @@ export async function viewSummary(q) {
   // A seed is its pack's name, the same over the tasks (swe/revealing, creative_writing/revealing).
   const seedName = pack => pack.split('/').pop();
   const seed = s.by_seed ? known(q.get('seed') || '', s.rows.map(r => seedName(r.seed_pack))) : '';
+  // A team's size is its row's: its agents where influencers take workers' places, else its workers (rows_by).
+  const size = known(q.get('size') || '', s.rows.map(r => String(r.size)));
   const rows = s.rows.filter(r => (!wmodel || r.model === wmodel) && (!task || r.task === task)
-    && (!seed || seedName(r.seed_pack) === seed));
+    && (!seed || seedName(r.seed_pack) === seed) && (!size || String(r.size) === size));
   // The columns shown: not hidden, holding the influencer model chosen, and holding a cell in some row shown. A
   // control hides with the influencers it is weighed against: the negative controls with the regulators, the positive
   // control with the disregulators.
@@ -192,7 +194,7 @@ export async function viewSummary(q) {
   const counted = runsIn(all.rows);
   const keptRuns = runsIn(kept);
   const nav = (over = {}) => {
-    const p = new URLSearchParams({ col, hide: [...hidden].join(','), task, wmodel, imodel, seed,
+    const p = new URLSearchParams({ col, hide: [...hidden].join(','), task, wmodel, imodel, seed, size,
       detail: detailed ? '1' : '', ...over });
     for (const [k, v] of [...p.entries()]) if (!v) p.delete(k);
     location.hash = `#/summary?${p}`;
@@ -217,6 +219,10 @@ export async function viewSummary(q) {
   const sPick = s.by_seed ? select([['', 'All seeds'], ...[...new Set(s.rows.map(r => seedName(r.seed_pack)))]
     .sort().map(name => [name, name])], seed, v => nav({ seed: v }), { 'aria-label': 'Seed' }) : null;
   const byAgents = s.rows_by === 'agents';
+  // The size picker stands only where the collection's teams differ in size.
+  const sizes = [...new Set(s.rows.map(r => r.size))].sort((a, b) => a - b);
+  const zPick = sizes.length > 1 ? select([['', 'All sizes'], ...sizes.map(n => [String(n),
+    plural(n, byAgents ? 'agent' : 'worker')])], size, v => nav({ size: v }), { 'aria-label': 'Team size' }) : null;
   const lead = 3 + (s.by_seed ? 1 : 0) + (byAgents ? 1 : 0);
 
   // The band over the condition columns: one cell per run of columns of the same group. A group of one column named
@@ -267,7 +273,7 @@ export async function viewSummary(q) {
     h('td', { class: 'num sum-workers' }, teamOf(r, s.columns)),
     s.by_seed ? h('td', { class: 'sum-seed' }, spaced(r.seed_pack.split('/').pop())) : null,
     cells(r.cells)));
-  const totals = wmodel || task || seed || !allShown ? summed(rows, s.columns, ladders) : s.totals;
+  const totals = wmodel || task || seed || size || !allShown ? summed(rows, s.columns, ladders) : s.totals;
   const total = h('tr', { class: 'sum-total' }, h('th', { scope: 'row', colspan: String(lead), class: 'sum-model' }, 'All'),
     cells(totals));
   // The heading counts the runs the table shows: the All row's cells over the columns shown.
@@ -287,7 +293,7 @@ export async function viewSummary(q) {
     }
   });
   return h('div', { class: 'page wide' },
-    h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, h('h1', null, shownRuns === keptRuns ? `Summary: ${fmtInt(keptRuns)} runs` : `Summary: ${fmtInt(shownRuns)} of ${fmtInt(keptRuns)} runs`), picker, tPick, wPick, iPick, sPick,
+    h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, h('h1', null, shownRuns === keptRuns ? `Summary: ${fmtInt(keptRuns)} runs` : `Summary: ${fmtInt(shownRuns)} of ${fmtInt(keptRuns)} runs`), picker, tPick, wPick, iPick, sPick, zPick,
       counted !== all.total ? badge(`cells hold ${counted}`, 'bad', 'Cells and the collection disagree') : null),
     h('span', { class: 'sum-corner' }, toggles, h('span', { class: 'rp-sep' }), detailBtn)),
     h('div', { class: 'table-wrap sum-wrap' }, table));
