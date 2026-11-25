@@ -102,9 +102,10 @@ PLAN_KEYS = {"study", "seeds", "targets", "settings", "limits", "closed"}
 """closed: true marks a study that is over: its plan is kept as a record, lists its cells with --dry-run and never
 launches (its runs may be named after packs that were renamed since)."""
 TARGET_KEYS = {"module", "model", "packs"}
-TARGET_OPTIONAL = {"settings", "stage"}
+TARGET_OPTIONAL = {"settings", "stage", "seeds"}
 """settings: the target's own --set pairs, after the plan's (a rule level, a regulator's model). stage: an integer,
-0 by default; the queue launches the lower stages first."""
+0 by default; the queue launches the lower stages first. seeds: the target's own seeds, in place of the plan's (one
+target of a study run three times, the others once)."""
 NAME = re.compile(r"[a-z0-9_]+")
 
 
@@ -156,9 +157,11 @@ def load_plan(path: Path) -> dict:
     plan = yaml.safe_load(path.read_text()) or {}
     if set(plan) - PLAN_KEYS or not {"study", "seeds", "targets"} <= set(plan):
         raise ValueError(f"{path}: a plan takes {sorted(PLAN_KEYS)} and needs study, seeds and targets")
-    if not plan["seeds"] or not all(isinstance(s, int) for s in plan["seeds"]):
+    if not is_seeds(plan["seeds"]):
         raise ValueError(f"{path}: seeds is a list of integers")
     for target, spec in plan["targets"].items():
+        if "seeds" in spec and not is_seeds(spec["seeds"]):
+            raise ValueError(f"{path}: {target}'s seeds is a list of integers")
         if not NAME.fullmatch(target) or not TARGET_KEYS <= set(spec) <= TARGET_KEYS | TARGET_OPTIONAL:
             raise ValueError(f"{path}: target {target!r} needs a name of a-z, 0-9 and _, and {sorted(TARGET_KEYS)} "
                              f"(and may take {sorted(TARGET_OPTIONAL)})")
@@ -200,11 +203,20 @@ def check_time_limit(path: Path, plan: dict) -> None:
                              f"time_limit_s={rounds * round_s} to the plan's settings")
 
 
+def is_seeds(seeds: object) -> bool:
+    """Whether this is a seeds list: one integer or more."""
+    return isinstance(seeds, list) and bool(seeds) and all(isinstance(seed, int) for seed in seeds)
+
+
 def cells(plan: dict) -> list[Cell]:
-    """Every cell of the plan: seed by seed, target by target in the plan's order, pack by pack."""
+    """Every cell of the plan: seed by seed, target by target in the plan's order, pack by pack. A target runs the
+    seeds it states, else the plan's; the seeds go in the plan's order, then the targets' own further ones."""
     out = []
-    for seed in plan["seeds"]:
+    seeds_of = {target: spec.get("seeds", plan["seeds"]) for target, spec in plan["targets"].items()}
+    for seed in dict.fromkeys([*plan["seeds"], *(seed for seeds in seeds_of.values() for seed in seeds)]):
         for target, spec in plan["targets"].items():
+            if seed not in seeds_of[target]:
+                continue
             tasks = {pack_task(p, plan) for p in spec["packs"] if p != "none"}
             task = next(iter(tasks), None) or module_task(spec["module"])
             own = tuple(spec.get("settings") or ())

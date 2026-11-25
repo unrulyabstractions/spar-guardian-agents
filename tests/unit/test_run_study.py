@@ -498,3 +498,21 @@ def test_every_study_file_states_what_its_runs_were_given():
         spec = gs.load_spec(path)
         plan = seed_study.load_plan(PLANS / path.name)
         assert list(spec.settings) == plan["settings"] and spec.settings, path.name
+
+
+def test_a_target_may_state_its_own_seeds(tmp_path):
+    """One target of a study run three times and the others once: the target's seeds stand in place of the plan's."""
+    plan_file = tmp_path / "plan.yaml"
+    plan_file.write_text(PLAN.replace("study: study_x\nseeds: [1, 2]", "study: study_x\nseeds: [1]"))
+    plan = seed_study.load_plan(plan_file)
+    first = next(iter(plan["targets"]))
+    once = [(c.target, c.seed) for c in seed_study.cells(plan)]
+    plan["targets"][first]["seeds"] = [1, 2, 3]
+    more = [(c.target, c.seed) for c in seed_study.cells(plan)]
+    assert more[:len(once)] == once                                        # seed 1 first, as before
+    assert {seed for target, seed in more if target == first} == {1, 2, 3}
+    assert {seed for target, seed in more if target != first} == {1}
+    plan_file.write_text(plan_file.read_text().replace("    packs:", "    seeds: [one]\n    packs:", 1))
+    with pytest.raises(ValueError, match="seeds is a list of integers"):
+        seed_study.load_plan(plan_file)
+

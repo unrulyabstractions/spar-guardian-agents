@@ -39,6 +39,7 @@ targets:
     module: studies.cells.swe.ian_gflipt_minimal
     model: claude-haiku-5-5-openrouter
     packs: [none]
+    seeds: [1, 2, 3]          # the user, 2026-11-25: "Do 3 sampls each (so add 2 more for haiku)"
     settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
                disregulator_model=deepseek-flash-openrouter]
   ian_gflipt_haiku_disregulator_strong:
