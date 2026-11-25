@@ -96,7 +96,7 @@ import yaml
 from inspect_ai._util.appdirs import inspect_data_dir
 
 from scripts.study import gated_study
-from scripts.study.host_facts import HOST
+from scripts.study.host_facts import HOST, KEY
 from src.configuration import seed_packs, settings
 from src.configuration.presets import build_config
 from src.configuration.swarm_config import ROLES
@@ -132,7 +132,7 @@ TARGET_OPTIONAL = {"settings", "stage", "seeds"}
 0 by default; the queue launches the lower stages first. seeds: the target's own seeds, in place of the plan's (one
 target of a study run three times, the others once)."""
 NAME = re.compile(r"[a-z0-9_]+")
-OPENROUTER_KEY = "OPENROUTER_API_KEY"
+OPENROUTER_KEY = KEY
 """The variable every OpenRouter model's key is read from (src/models/model_registry.yaml)."""
 KEY_ENV = re.compile(r"[A-Z][A-Z0-9_]*")
 """A variable's name, as --openrouter-key-env takes it."""
@@ -661,6 +661,8 @@ def parse_arguments(argv: list[str] | None) -> argparse.Namespace:
     args = options.parse_args(argv)
     if args.openrouter_key_env and not KEY_ENV.fullmatch(args.openrouter_key_env):
         options.error("--openrouter-key-env takes a variable's name, such as OPENROUTER_API_KEY_OWN")
+    if args.openrouter_key_env and args.mock:
+        options.error("--mock reads no key, so it takes no --openrouter-key-env")
     return args
 
 
@@ -730,7 +732,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.yes:
         print("a launch makes paid model calls: add --yes, or --dry-run to look", file=sys.stderr)
         return 2
-    if not args.mock and (why := HOST.key_problem()):
+    if not args.mock and (why := HOST.key_problem(args.openrouter_key_env or OPENROUTER_KEY)):
         print(why, file=sys.stderr)
         return 2
     study_dir = RUNS / study

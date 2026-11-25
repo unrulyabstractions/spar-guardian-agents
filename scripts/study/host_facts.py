@@ -6,7 +6,7 @@
     HOST.docker_disk()                # (size, free) in GB of the disk that holds Docker's data
     HOST.process_lines()              # the command line of every process
     HOST.cell_process(line, mock)     # (argv, env) that run one cell's shell line
-    HOST.key_problem()                # why a paid launch would find no key, or None
+    HOST.key_problem(variable)        # why a paid launch would find no key in the variable, or None
     HOST.grow_disk(size, grow, free)  # the line that says how Docker's disk grows to `grow` GB
 
     python -m scripts.study.host_facts   # print this host's facts
@@ -29,8 +29,9 @@ from pathlib import Path
 GB = 2 ** 30
 KEY = "OPENROUTER_API_KEY"
 """The key a paid launch on Linux takes from its own environment."""
-KEY_SUFFIX = "_API_KEY"
-"""A variable whose name ends so is a key; a mock launch passes none to its cells."""
+KEY_MARK = "_API_KEY"
+"""A variable whose name holds this is a key (OPENROUTER_API_KEY, OPENROUTER_API_KEY_OWN); a mock launch passes none to
+its cells."""
 COLIMA_DOCKER_ROOT = "/var/lib/docker"
 """Docker's data root inside Colima's VM."""
 PROC = Path("/proc")
@@ -80,7 +81,7 @@ def cmdline_text(raw: bytes) -> str:
 
 def keyless(env: dict[str, str]) -> dict[str, str]:
     """The environment without any key."""
-    return {name: value for name, value in env.items() if not name.endswith(KEY_SUFFIX)}
+    return {name: value for name, value in env.items() if KEY_MARK not in name}
 
 
 class Host:
@@ -116,7 +117,7 @@ class Mac(Host):
     def keyed_argv(self, line: str) -> list[str]:
         return ["zsh", "-lic", line]
 
-    def key_problem(self) -> str | None:
+    def key_problem(self, variable: str = KEY) -> str | None:
         return None                                     # `zsh -lic` reads the key from ~/.zshrc
 
     def grow_disk(self, size: int, grow: int, host_free_gb: float) -> str:
@@ -153,9 +154,9 @@ class Linux(Host):
     def keyed_argv(self, line: str) -> list[str]:
         return ["bash", "-c", line]
 
-    def key_problem(self) -> str | None:
-        return None if os.environ.get(KEY) else f"{KEY} is not set: a launch on Linux takes the key from its own " \
-            "environment (or add --mock, which reads no key)"
+    def key_problem(self, variable: str = KEY) -> str | None:
+        return None if os.environ.get(variable) else f"{variable} is not set: a launch on Linux takes the key from " \
+            "its own environment (or add --mock, which reads no key)"
 
     def grow_disk(self, size: int, grow: int, host_free_gb: float) -> str:
         return f"this host's disk of {size} GB does not grow here: launch on a host with {grow} GB or more"

@@ -531,6 +531,8 @@ def test_a_launch_may_name_the_openrouter_key_it_pays_with(tmp_path, capsys):
     assert 'OPENROUTER_API_KEY="${OPENROUTER_API_KEY_OWN}" STUDY=' in capsys.readouterr().out
     with pytest.raises(SystemExit):
         seed_study.main([str(plan_file), "--dry-run", "--openrouter-key-env", "sk-or-not-a-name"])
+    with pytest.raises(SystemExit):                                         # a mock launch reads no key
+        seed_study.main([str(plan_file), "--dry-run", "--mock", "--openrouter-key-env", "OPENROUTER_API_KEY_OWN"])
 
 
 # ---------------------------------------------------------------- --only, --limit and --mock

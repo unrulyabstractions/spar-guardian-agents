@@ -64,21 +64,26 @@ def test_linux_reads_each_processs_command_line_from_proc(tmp_path, monkeypatch)
 def test_a_paid_cell_takes_the_hosts_key_and_a_mock_cell_none(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "k1")
     monkeypatch.setenv("BOX_OPENROUTER_API_KEY", "k2")
+    monkeypatch.setenv("OPENROUTER_API_KEY_OWN", "k3")
     monkeypatch.setenv("PATH", "/usr/bin")
     assert host_facts.Mac().cell_process("x", False) == (["zsh", "-lic", "x"], None)
     assert host_facts.Linux().cell_process("x", False) == (["bash", "-c", "x"], None)
     for host in (host_facts.Mac(), host_facts.Linux()):
         argv, env = host.cell_process("x", True)
         assert argv == ["bash", "-c", "x"] and env["PATH"] == "/usr/bin"
-        assert not [name for name in env if name.endswith("_API_KEY")]
+        assert not [name for name in env if "_API_KEY" in name]
 
 
 def test_linux_refuses_a_paid_launch_without_the_key_and_the_mac_reads_it_from_zshrc(monkeypatch):
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY_OWN", raising=False)
     assert "OPENROUTER_API_KEY is not set" in host_facts.Linux().key_problem()
     assert host_facts.Mac().key_problem() is None
     monkeypatch.setenv("OPENROUTER_API_KEY", "k")
     assert host_facts.Linux().key_problem() is None
+    assert "OPENROUTER_API_KEY_OWN is not set" in host_facts.Linux().key_problem("OPENROUTER_API_KEY_OWN")
+    monkeypatch.setenv("OPENROUTER_API_KEY_OWN", "k")
+    assert host_facts.Linux().key_problem("OPENROUTER_API_KEY_OWN") is None
 
 
 def test_the_host_is_picked_from_the_platform_and_says_how_its_disk_grows():
