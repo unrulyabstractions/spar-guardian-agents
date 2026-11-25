@@ -140,6 +140,28 @@ def test_a_user_steps_presence_events_in_both_shapes():
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node runs the page's own functions")
+def test_agents_that_entered_together_share_one_chip():
+    """Four or more agents entering in one round share a chip that counts them and names them on hover (nine names,
+    then the rest as a number); fewer keep a chip each, and so does every other event."""
+    source = (STATIC / "tv_presence.js").read_text()
+    consts = "\n".join(re.search(rf"^(export )?const {name} = .*?;$", source, flags=re.S | re.M).group(0)
+                       for name in ("WHY_WORDS", "EVENT_WORDS", "ENTERED_TOGETHER", "HOVER_NAMES"))
+    entered = [{"agent": f"a{i:02d}", "kind": "entered", "round": 1} for i in range(1, 13)]
+    late = [{"agent": "b01", "kind": "entered", "round": 4}, {"agent": "a03", "kind": "exited", "why": "stop",
+                                                              "round": 4}]
+    script = "\n".join([
+        "const h = (tag, attrs, ...kids) => ({title: attrs && attrs.title, words: kids.filter(k => typeof k === "
+        "'string').join('')});",
+        consts.replace("export ", ""), js_function("presenceChip"), js_function("presenceChips"),
+        f"console.log(JSON.stringify(presenceChips({json.dumps(entered + late)}).filter(Boolean)));"])
+    done = subprocess.run(["node", "-e", script], capture_output=True, text=True, timeout=60)
+    assert done.returncode == 0, done.stderr
+    assert json.loads(done.stdout) == [
+        {"title": "a01, a02, a03, a04, a05, a06, a07, a08, a09 +3", "words": "12 agents entered"},
+        {"title": "round 4", "words": "b01 entered"}, {"title": "round 4", "words": "a03 exited · stop"}]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node runs the page's own functions")
 def test_the_chips_of_a_rounds_message_say_what_the_agent_read():
     """The board chip's hover fits where it stands: "posts on the board" on a first board part, the change since the
     agent was last told later. An entry folded into its exit gets no chip; a notice at the end of a result gets one."""

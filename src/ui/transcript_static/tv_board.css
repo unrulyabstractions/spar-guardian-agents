@@ -227,6 +227,11 @@
 .tmp-mhead { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--panel-2);
   border-bottom: 1px solid var(--border); font-size: 12.5px; }
 .tmp-machine { font-family: var(--mono); }
+/* A machine's head shows and hides its tree; a machine whose tree is hidden is its head alone. */
+.tmp-mhead { cursor: pointer; }
+.tmp-closed .tmp-mhead { border-bottom: 0; }
+/* A folded directory's number of entries, beside its name. */
+.tmp-inside { margin-left: 6px; }
 .tmp-machine-name { color: var(--text); font-weight: 600; }
 .tmp-gone-chip { cursor: pointer; font-family: inherit; line-height: inherit; background: none; }
 .tmp-gone-chip.tmp-off { opacity: 0.55; text-decoration: line-through; }

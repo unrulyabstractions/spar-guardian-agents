@@ -7,9 +7,16 @@
  *   panel.pair(a, b);            // the two agents in the lanes, whose names take the lanes' colours
  *   panel.at(t, tPrev);          // the position: the state at t, and what changed after tPrev up to t
  *
- * A machine's tree lists every entry, a directory before its entries and foldable by a click; an entry changed in the
+ * Each machine has a head: its name, its entries' number and what changed in the window. A click on the head shows or
+ * hides the machine's tree. Until the reader chooses, the trees shown are those of the lanes' two agents' own
+ * machines, and every machine's while the run has OPEN_ALL machines or fewer: a run of 20 machines holds some 25,000
+ * rows, too many to build at each position. While the position moves the panel redraws at most once in REDRAW_MS.
+ * A machine's tree lists every entry, a directory before its entries and foldable by a click; a directory under a
+ * listed folder with more than FOLD_OVER entries starts folded, with their number and a dot when one of them changed
+ * in the window. An entry changed in the
  * window is marked added, changed or removed, with the call that changed it; a path removed earlier stays as a faint
- * row (a chip in the machine's head hides them). Each row gives the entry's owner, the agents who can read it
+ * row (a chip in the machine's head hides them, and they start hidden past GONE_SHOWN). Each row gives the entry's
+ * owner, the agents who can read it
  * (readersOf: mode, group and POSIX ACL; the lanes' two in their colours) and a file's size; `+` after a mode marks
  * an ACL, as `ls -l` does. A click on a file shows its text, when the snapshot captured it, beside the trees. The
  * panel carries no sentence: labels, values, chips and short hovers. */
@@ -23,6 +30,12 @@ const KIND_TIP = { added: 'added since the previous stop', changed: 'changed sin
   removed: 'removed since the previous stop' };
 const GONE_TIP = 'removed before the previous stop';
 const READERS_SHOWN = 2;
+const OPEN_ALL = 4;        // with this many machines or fewer, every machine's tree is shown
+const FOLD_OVER = 30;      // a directory with more entries under it starts folded
+const GONE_SHOWN = 30;     // a machine with more earlier removed paths starts with them hidden
+const INSIDE_TIP = 'entries inside';
+const CHANGED_INSIDE_TIP = 'changed inside since the previous stop';
+const REDRAW_MS = 150;     // the least time between two redraws while the position moves
 const modeText = e => (e.mode ? `${e.mode}${e.acl ? '+' : ''}` : '');
 
 const fmtBytes = n => (n == null ? '' : n < 1024 ? `${n} B` : n < 1 << 20 ? `${(n / 1024).toFixed(1)} KiB`
@@ -42,8 +55,11 @@ export function tmpPanel(url, opts) {
   let drawn = null;        // [c0, c1] last drawn
   let at = [0, -Infinity];
   let selected = null;     // {machine, path}
-  const folded = new Set();
-  const hideGone = new Set();   // machines whose earlier removed paths are hidden
+  const folded = new Map();     // "machine\npath" -> whether the directory is folded, once the reader clicked it
+  const goneHidden = new Map(); // machine -> whether its earlier removed paths are hidden, once the reader clicked
+  const chosen = new Map();     // machine -> whether its tree is shown, once the reader clicked its head
+  let timer = null;             // the redraw that waits, while the position moves
+  let drewAt = -Infinity;
 
   fetch(url).then(async r => {
     const doc = await r.json();
@@ -96,6 +112,39 @@ export function tmpPanel(url, opts) {
     showFile(now, before, changes, gone);
   }
 
+  // Whether a machine's tree is shown: the reader's choice, else the lanes' two agents' machines, and every machine
+  // of a small run.
+  const shows = m => (chosen.has(m) ? chosen.get(m) : tl.machines.length <= OPEN_ALL || m === pair.a || m === pair.b);
+  // Whether a machine's earlier removed paths are hidden: the reader's choice, else when there are many.
+  const hidesGone = (m, earlier) => (goneHidden.has(m) ? goneHidden.get(m) : earlier > GONE_SHOWN);
+  // The entries under each directory of a tree's rows, and how many of them changed in the window.
+  const insideOf = rows => {
+    const inside = new Map();
+    const open = [];
+    for (const r of rows) {
+      while (open.length && !r.path.startsWith(`${open[open.length - 1]}/`)) open.pop();
+      for (const dir of open) {
+        const x = inside.get(dir);
+        x.n += 1;
+        if (r.change) x.changed += 1;
+      }
+      if ((r.entry || {}).type === 'dir') {
+        inside.set(r.path, { n: 0, changed: 0 });
+        open.push(r.path);
+      }
+    }
+    return inside;
+  };
+  // The redraw for a new position: at once when REDRAW_MS have passed since the last one, else when they have.
+  function drawSoon() {
+    if (timer != null) return;
+    timer = setTimeout(() => {
+      timer = null;
+      drewAt = performance.now();
+      draw(false);
+    }, Math.max(0, drewAt + REDRAW_MS - performance.now()));
+  }
+
   // The last step that ran in the machine among the first c1, or null.
   const lastIn = (m, c1) => {
     for (let i = c1 - 1; i >= 0; i -= 1) if (tl.steps[i].machine === m) return tl.steps[i];
@@ -104,23 +153,37 @@ export function tmpPanel(url, opts) {
 
   function machineTree(m, now, before, changes, gone, c1) {
     const earlier = Object.keys(gone || {}).filter(p => !(changes || {})[p]).length;
-    const rows = treeRows(tl.dirs, now, changes, before, hideGone.has(m) ? {} : gone);
+    const shown = shows(m);
     const last = lastIn(m, c1);
+    const changed = { added: 0, changed: 0, removed: 0 };
+    for (const c of Object.values(changes || {})) changed[c.kind] += 1;
     const agents = tl.agents[m] || [];
     const users = agentUsers(tl, m);
     const people = Object.keys(users).length;
-    const goneChip = earlier ? h('button', { type: 'button', class: ['bd-count', 'tmp-gone-chip',
-      hideGone.has(m) && 'tmp-off'], title: hideGone.has(m) ? 'show removed paths' : 'hide removed paths',
-    onclick: () => { if (hideGone.has(m)) hideGone.delete(m); else hideGone.add(m); draw(true); } },
-    `${earlier} removed`) : null;
-    const mHead = h('div', { class: 'tmp-mhead' }, h('span', { class: 'small muted' }, 'machine'), machineName(m),
-      agents.length > 1 ? h('span', { class: 'bd-count', title: agents.join(' ') }, plural(agents.length, 'agent'))
-        : null,
-      h('span', { class: 'bd-count', title: 'entries now' }, plural(Object.keys(now || {}).length, 'entry', 'entries')),
-      goneChip,
-      h('span', { class: 'spacer' }),
-      last ? h('span', { class: 'small muted', title: 'last call run in this machine' }, 'after ', callLink(last))
-        : h('span', { class: 'bd-count', title: 'before the machine\'s first call' }, 'baseline'));
+    const noGone = hidesGone(m, earlier);
+    const goneChip = earlier ? h('button', { type: 'button', class: ['bd-count', 'tmp-gone-chip', noGone && 'tmp-off'],
+      title: noGone ? 'show removed paths' : 'hide removed paths',
+      onclick: () => { goneHidden.set(m, !noGone); draw(true); } }, `${earlier} removed`) : null;
+    const mHead = h('div', { class: 'tmp-mhead', title: shown ? 'hide files' : 'show files',
+      onclick: ev => {
+        if (ev.target.closest('a, button')) return;
+        chosen.set(m, !shown);
+        draw(true);
+      } },
+    h('span', { class: 'tmp-fold' }, shown ? '▾' : '▸'), h('span', { class: 'small muted' }, 'machine'),
+    machineName(m),
+    agents.length > 1 ? h('span', { class: 'bd-count', title: agents.join(' ') }, plural(agents.length, 'agent'))
+      : null,
+    h('span', { class: 'bd-count', title: 'entries now' }, plural(Object.keys(now || {}).length, 'entry', 'entries')),
+    ...Object.entries(changed).filter(([, n]) => n).map(([kind, n]) =>
+      h('span', { class: ['bd-count', `tmp-c-${kind}`], title: KIND_TIP[kind] }, `${MARK[kind]}${n}`)),
+    goneChip,
+    h('span', { class: 'spacer' }),
+    last ? h('span', { class: 'small muted', title: 'last call run in this machine' }, 'after ', callLink(last))
+      : h('span', { class: 'bd-count', title: 'before the machine\'s first call' }, 'baseline'));
+    if (!shown) return h('div', { class: ['tmp-machine-box', 'tmp-closed'] }, mHead);
+    const rows = treeRows(tl.dirs, now, changes, before, noGone ? {} : gone);
+    const inside = insideOf(rows);
     const list = h('div', { class: ['tmp-rows', people && 'tmp-has-readers'], role: 'tree' });
     let hideUnder = null;
     for (const r of rows) {
@@ -129,7 +192,9 @@ export function tmpPanel(url, opts) {
       const e = r.entry || {};
       const dir = e.type === 'dir';
       const key = `${m}\n${r.path}`;
-      const isFolded = dir && folded.has(key);
+      const within = dir ? inside.get(r.path) : null;
+      const isFolded = dir && (folded.has(key) ? folded.get(key) : r.depth > 0 && within.n > FOLD_OVER);
+      const dot = isFolded && !r.change && within.changed > 0;
       if (isFolded) hideUnder = r.path;
       const sel = selected && selected.machine === m && selected.path === r.path;
       const name = dir ? `${r.name}${r.depth === 0 ? '' : '/'}` : e.type === 'link' ? `${r.name} → ${e.target}` : r.name;
@@ -139,10 +204,11 @@ export function tmpPanel(url, opts) {
       // its mode, owner and size in a tip above the row, so it never covers the rows or the panel under it
       const row = withTipAbove(h('div', { class: ['tmp-row', `tmp-t-${e.type || 'other'}`, r.change && `tmp-${r.change.kind}`,
         r.gone && 'tmp-gone', sel && 'tmp-sel'], role: 'treeitem' },
-      h('span', { class: 'tmp-mark', title: r.change ? KIND_TIP[r.change.kind] : r.gone ? GONE_TIP : null },
-        r.change ? MARK[r.change.kind] : r.gone ? '×' : ''),
+      h('span', { class: 'tmp-mark', title: r.change ? KIND_TIP[r.change.kind] : r.gone ? GONE_TIP
+        : dot ? CHANGED_INSIDE_TIP : null }, r.change ? MARK[r.change.kind] : r.gone ? '×' : dot ? '•' : ''),
       h('span', { class: 'tmp-name', style: `padding-left:${r.depth * 14}px` },
-        dir ? h('span', { class: 'tmp-fold' }, isFolded ? '▸' : '▾') : h('span', { class: 'tmp-fold' }), name),
+        dir ? h('span', { class: 'tmp-fold' }, isFolded ? '▸' : '▾') : h('span', { class: 'tmp-fold' }), name,
+        isFolded ? h('span', { class: ['bd-count', 'tmp-inside'], title: INSIDE_TIP }, String(within.n)) : null),
       agentName(e.owner || '', 'tmp-owner'),
       people ? (here ? readersChip(readersOf(now, r.path, users), people) : h('span', { class: 'tmp-readers' }))
         : null,
@@ -153,7 +219,7 @@ export function tmpPanel(url, opts) {
       row.addEventListener('click', ev => {
         if (ev.target.closest('a')) return;
         if (dir) {
-          if (folded.has(key)) folded.delete(key); else folded.add(key);
+          folded.set(key, !isFolded);
         } else selected = sel ? null : { machine: m, path: r.path };
         draw(true);
       });
@@ -196,7 +262,7 @@ export function tmpPanel(url, opts) {
   return {
     el,
     pair(a, b) { pair = { a, b }; draw(true); },
-    at(t, tPrev) { at = [t, tPrev]; draw(false); },
+    at(t, tPrev) { at = [t, tPrev]; drawSoon(); },
   };
 }
 

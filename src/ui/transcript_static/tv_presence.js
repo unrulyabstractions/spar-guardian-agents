@@ -72,6 +72,29 @@ export function presenceChip(p) {
   title: p.round != null ? `round ${p.round}` : null }, words, p.round != null ? h('span', { class: 'pr-round' }, `r${p.round}`) : null);
 }
 
+/** The fewest agents entering in one round that share one chip. */
+const ENTERED_TOGETHER = 4;
+/** The names a chip's hover lists before it counts the rest. */
+const HOVER_NAMES = 9;
+/** A step's presence events as its header's chips: one chip an event, but four or more agents that entered in one
+ * round share a chip ("19 agents entered"), whose hover names them. */
+export function presenceChips(events) {
+  const said = events.filter(p => p && p.kind && !p.folded);
+  const together = new Map();
+  for (const p of said) if (p.kind === 'entered') together.set(p.round, [...(together.get(p.round) || []), p.agent]);
+  const drawn = new Set();
+  return said.map(p => {
+    const agents = p.kind === 'entered' ? together.get(p.round) : [];
+    if (agents.length < ENTERED_TOGETHER) return presenceChip(p);
+    if (drawn.has(p.round)) return null;
+    drawn.add(p.round);
+    const names = agents.slice(0, HOVER_NAMES).join(', ')
+      + (agents.length > HOVER_NAMES ? ` +${agents.length - HOVER_NAMES}` : '');
+    return h('span', { class: ['pr-chip', 'pr-chip-in'], title: names }, `${agents.length} agents entered`,
+      p.round != null ? h('span', { class: 'pr-round' }, `r${p.round}`) : null);
+  });
+}
+
 /** A round's message's round chip (its extra.swarm_round). A run from ec68304 tags the agent's own budget: the chip
  * is the run's round and its hover the calls the agent has left of its budget. An older run tags rounds: the round of
  * R, its rounds left and calls on hover. */

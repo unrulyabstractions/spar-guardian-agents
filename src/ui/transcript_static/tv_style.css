@@ -467,16 +467,19 @@ table.sum-table td.sum-cell { min-width: 130px; }
 /* The runs table's team score: the chip on its column's middle, a mislead mark hanging at its right out of the flow. */
 table.idx-table .sc-team { position: relative; }
 table.idx-table .sc-team .sc-mislead { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); margin-left: 3px; }
-/* The Influencers band with two influencers: each level on one line with its role's mark, as high as the influencer's
-   block in the Influencers cell (.idx-influencer), the blocks the same gap apart. */
+/* The Influencers band: one line per role and level, with the role's mark and, where several influencers share a
+   level, their number. */
 .lv-influencers { display: inline-flex; flex-direction: column; gap: 3px; vertical-align: middle; }
 .lv-influencers .lv-influencer-row { flex-direction: row; align-items: center; justify-content: center; gap: 4px; margin: 0; }
-.lv-influencers.is-pair .lv-influencer-row { height: 57px; }
-/* With two influencers the levels stand in a grid: the R and D marks in one column, each chip from one left edge
-   beside them, the block on the cell's middle. */
-.lv-influencers.is-pair { display: inline-grid; grid-template-columns: auto auto; grid-auto-rows: 57px; column-gap: 4px;
-  row-gap: 3px; align-items: center; justify-items: start; }
-.lv-influencers.is-pair .lv-influencer-row { display: contents; }
+/* With several influencers the lines stand in a grid: the R and D marks in one column, the numbers in the next, each
+   chip from one left edge beside them, the block on the cell's middle. */
+.lv-influencers.is-many { display: inline-grid; grid-template-columns: auto auto; column-gap: 4px; row-gap: 3px;
+  align-items: center; justify-items: start; }
+.lv-influencers.is-many.has-count { grid-template-columns: auto auto auto; }
+.lv-influencers.is-many .lv-influencer-row { display: contents; }
+.lv-influencers .lv-count { justify-self: end; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* One line per influencer block of the Influencers cell (.idx-influencer): as high as the block, the same gap apart. */
+.lv-influencers.is-pair { grid-auto-rows: 57px; }
 .role-chip.role-mark { padding: 0 4px; letter-spacing: 0; }
 /* The Run column: wide enough that a name breaks at an underscore at most once or twice; on one line in a wide window. */
 table.idx-table td.wrap:first-child { min-width: 20ch; max-width: 34ch; }

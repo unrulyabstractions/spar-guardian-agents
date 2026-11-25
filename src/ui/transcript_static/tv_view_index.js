@@ -100,6 +100,26 @@ const influencersCell = r => (r.influencer_conditioning.length
       x.level ? h('span', { class: ['level-chip', `level-chip-${x.role}`] }, x.level) : null))))
   : none());
 
+/** A role's mark beside a level in the Influencers band. */
+const ROLE_MARK = { regulator: 'R', disregulator: 'D' };
+/** The influencers' levels on one ladder ([{agent, role, level}]) as one line per role and level: the roles in the
+ * Influencers cell's order, a role's levels from the highest down, each with the agents that hold it. */
+const influencerGroups = (r, all, rankOf) => {
+  const at = x => r.influencer_conditioning.findIndex(c => c.role === x.role);
+  const groups = new Map();
+  for (const x of all) {
+    const key = `${x.role}|${x.level}`;
+    if (!groups.has(key)) groups.set(key, { role: x.role, level: x.level, agents: [] });
+    groups.get(key).agents.push(x.agent);
+  }
+  return [...groups.values()].sort((a, b) => at(a) - at(b) || rankOf(b) - rankOf(a));
+};
+/** A line's tooltip: its role, and for several agents how many and who (nine names at most). */
+const TITLE_NAMES = 9;
+const groupTitle = g => (g.agents.length === 1 ? g.role
+  : `${g.agents.length} ${g.role}s: ${g.agents.slice(0, TITLE_NAMES).join(', ')}`
+    + (g.agents.length > TITLE_NAMES ? ` +${g.agents.length - TITLE_NAMES}` : ''));
+
 /** A name that may break after each underscore (and at a space, unless the space is a no-break one). */
 const breakable = name => String(name).split('_').flatMap((part, i) => (i ? ['_', h('wbr'), part] : [part]));
 
@@ -149,13 +169,18 @@ function columns(d) {
     sort: r => Math.max(-1, ...r.levels[`${L}_influencers`].map(x => rank(L, x.level))),
     empty: r => !r.levels[`${L}_influencers`].length,
     cell: r => {
-      // in the Influencers cell's order, so each level stands level with its influencer
-      const at = x => r.influencer_conditioning.findIndex(c => c.role === x.role);
-      const xs = r.levels[`${L}_influencers`].slice().sort((a, b) => at(a) - at(b));
-      if (!xs.length) return none();
-      return h('span', { class: ['lv-influencers', xs.length > 1 && 'is-pair'] }, xs.map(x => h('div', { class: 'lv-influencer-row', title: x.role },
-        xs.length > 1 ? h('span', { class: ['role-chip', 'role-mark', `role-chip-${x.role}`] }, x.role === 'regulator' ? 'R' : 'D') : null,
-        levelChip(L, lad(L), x.level, false))));
+      const all = r.levels[`${L}_influencers`];
+      if (!all.length) return none();
+      const rows = influencerGroups(r, all, x => rank(L, x.level));
+      const many = all.length > 1;
+      const counted = rows.some(g => g.agents.length > 1);
+      // one line per influencer block of the Influencers cell stands level with its block
+      const level = rows.length > 1 && rows.length === r.influencer_conditioning.length;
+      return h('span', { class: ['lv-influencers', many && 'is-many', counted && 'has-count', level && 'is-pair'] },
+        rows.map(g => h('div', { class: 'lv-influencer-row', title: groupTitle(g) },
+          many ? h('span', { class: ['role-chip', 'role-mark', `role-chip-${g.role}`] }, ROLE_MARK[g.role]) : null,
+          counted ? h('span', { class: 'lv-count' }, g.agents.length > 1 ? `${g.agents.length}\u00d7` : '') : null,
+          levelChip(L, lad(L), g.level, false))));
     } });
   const about = d.judge_labels;
   const label = k => ({ key: k, label: about.labels[k].name, group: 'labels',
