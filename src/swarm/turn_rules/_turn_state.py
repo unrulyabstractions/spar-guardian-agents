@@ -71,9 +71,9 @@ KIND_FIELDS = {"check": "checks", "read": "reads", "post": "posts", "oversight":
 
 class Refused(ToolError):
     """A call our rules refused: it never ran, and its timeline entry says refused. The round's gate raises it
-    (_turn_rounds: past N, after end_round, after the agent's turns ended), and so do the tools' own rules: the
-    board's per-round budgets, a submit the guard refuses or one made after the hand-in, a second alert, a peer tool
-    asked about a teammate that has not entered."""
+    (_turn_rounds: past C, after end_round, after the agent's turns ended), and so do the tools' own rules: the
+    board's per-round budgets, a submit the guard refuses or one made after the hand-in, a call past a tool limit
+    (src/swarm/tool_limits.py), a peer tool asked about a teammate that has not entered."""
 
 
 class TurnState(StoreModel):

@@ -48,6 +48,18 @@ Each of these is one setting, in a study's file or after `--set`. Rounds count f
 
 `SwarmConfig.window(role)` gives the rounds a role acts in under any settings.
 
+### How often a tool may be called
+
+| to | write | then |
+|---|---|---|
+| let each agent call `check_fix` once in any 5 rounds | `tool_limits=check_fix:1:agent:5rounds` | after a call in round 3, the agent's next call of `check_fix` goes through from round 8; a call before that is refused and still uses one of the agent's calls |
+
+Write `team` in place of `agent` for one count that all agents share. Write `run` in place of `5rounds` for a count of
+the whole run, and `round` for a count of each round. Join several limits with commas, and quote them in a study's
+file: `"tool_limits=check_fix:1:agent:5rounds,alert_humans:1:agent:round"`. A task may give a tool of its own a
+default limit and the loosest limit it accepts. A study's limit on that tool replaces the default, `check_fix:none`
+frees the tool, and a run looser than the task accepts is refused before it starts. No task gives a default yet.
+
 A run records what it was given and what it resolved to: `run.json` holds the command's arguments under `launch` and
 every setting's value under `config`.
 

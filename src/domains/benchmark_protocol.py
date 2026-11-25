@@ -163,6 +163,13 @@ class Benchmark(ABC):
     the rounds' rules then name the jobs (board.round_rules). Chess holds none."""
     harness_reads: tuple[str, ...] = ()
     """How each command starts that the harness itself runs once the agents have begun and that opens content."""
+    tool_limits: tuple[str, ...] = ()
+    """Default limits on the task's own tools, in SwarmConfig.tool_limits' text form, like check_fix:1:agent:10rounds.
+    A study's limit on such a tool replaces the default for that tool (src/swarm/tool_limits.py run_limits)."""
+    tool_limit_bounds: tuple[str, ...] = ()
+    """The loosest limit the task accepts on a tool of its own, in the same form, like check_fix:1:agent:round. A run
+    whose limits on the tool allow more calls in some stretch of rounds, or that frees the tool, is refused when the
+    task is built."""
 
     def __init__(self, row: str | None = None) -> None:
         self.row = row or self.default_row

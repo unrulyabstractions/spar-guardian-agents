@@ -34,6 +34,7 @@ from src.swarm.board import board_communication, board_execution, board_schedule
 from src.swarm.end_round import end_round_bindings
 from src.swarm.submit_and_stop import Deliverable, ending_tools, submit_bindings
 from src.swarm.submit_hold import hold_bindings, hold_tools
+from src.swarm.tool_limits import limited_bindings
 from src.swarm.tool_output_caps import capped_bindings
 from tests.support.mock_model import MODEL, calls, fresh, text
 
@@ -188,7 +189,7 @@ def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | Non
                time_limit_s: int | None = None, round_end=None, team_head=None) -> Task:
     """The test task; on a pull board each agent also gets the board tools, and every agent submit and stop_working as
     it holds them and end_round, bound as src/tasks.py binds them, each with the run's cap
-    (tool_output_caps.capped_bindings).
+    (tool_output_caps.capped_bindings) and the run's tool limits (tool_limits.limited_bindings).
     `missing` is submit's guard (Benchmark.gradable); `groups` are ORBIT's agent groups (first messages);
     time_limit_s is the turn rules' time limit."""
     names = config.names
@@ -201,12 +202,11 @@ def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | Non
     task = multi_agent_task(
         name="turn_rules_test",
         setup=SetupConfig(agents=agents),
-        tool_bindings=capped_bindings({"work": ToolFactory(lambda ctx: work(ctx.agent_name)),
-                                       **board.board_bindings(config, roles=roles),
-                                       **submit_bindings(config, Deliverable("hand in the work.", missing,
-                                                                             nothing_missing, True)),
-                                       **hold_bindings(config), **end_round_bindings(config.knows_team)},
-                                      config),
+        tool_bindings=limited_bindings(capped_bindings(
+            {"work": ToolFactory(lambda ctx: work(ctx.agent_name)), **board.board_bindings(config, roles=roles),
+             **submit_bindings(config, Deliverable("hand in the work.", missing, nothing_missing, True)),
+             **hold_bindings(config), **end_round_bindings(config.knows_team)}, config),
+            config, {agent.name: agent.tools for agent in agents}),
         communication=board_communication(names, max_message_chars=config.max_message_chars) if config.board else None,
         execution=board_execution(plan=rules.schedule(config, names, roles), agent_groups=groups,
                                   initial_context="sample_input"),

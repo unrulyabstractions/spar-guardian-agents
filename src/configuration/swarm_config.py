@@ -99,6 +99,69 @@ class Window(BaseModel):
         return self.start <= round_number and (self.end is None or round_number <= self.end)
 
 
+class ToolLimit(BaseModel):
+    """At most `calls` calls of one tool (src/swarm/tool_limits.py). per says who shares the count: agent, each agent
+    its own; team, every agent one count. rounds says which calls the count holds: None, every call of the run; N,
+    the calls of the last N rounds, the round under way included, so a call in round r counts until round r + N - 1.
+    1 is each round on its own. calls None frees the tool of the task's default limit (text tool:none)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", use_attribute_docstrings=True)
+
+    tool: str
+    """The tool's binding name, as the agents' tool lists name it."""
+    calls: int | None
+    """The most calls the limit lets through, 1 or more; None: no limit on the tool, not even the task's."""
+    per: Literal["agent", "team"] = "agent"
+    """Who shares the count."""
+    rounds: int | None = None
+    """The rounds in a row the count holds, 1 or more; None for the whole run."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _from_text(cls, value):
+        """Accept "check_fix:2:agent:run" from the command line: the tool, the calls, per, then run, round or
+        <N>rounds (round is 1rounds); and "check_fix:none", no limit on the tool."""
+        if not isinstance(value, str):
+            return value
+        parts = [part.strip() for part in value.split(":")]
+        if len(parts) == 2 and parts[0] and parts[1] in NONE_TEXT:
+            return {"tool": parts[0], "calls": None}
+        if len(parts) != 4 or not all(parts):
+            raise ValueError(f"a tool limit is tool:calls:per:when, like check_fix:2:agent:run; got {value!r}")
+        tool, calls, per, when = parts
+        return {"tool": tool, "calls": calls, "per": per, "rounds": rounds_of(when)}
+
+    @model_validator(mode="after")
+    def _positive(self) -> ToolLimit:
+        if self.calls is not None and self.calls < 1:
+            raise ValueError(f"a tool limit needs 1 call or more, got {self.calls} for {self.tool}")
+        if self.rounds is not None and self.rounds < 1:
+            raise ValueError(f"a tool limit needs 1 round or more, got {self.rounds} for {self.tool}")
+        return self
+
+    @property
+    def when(self) -> str:
+        """The limit's last part: run, round or <N>rounds."""
+        return "run" if self.rounds is None else "round" if self.rounds == 1 else f"{self.rounds}rounds"
+
+    @property
+    def text(self) -> str:
+        """The limit's text form: check_fix:2:agent:run, or check_fix:none."""
+        return f"{self.tool}:none" if self.calls is None else f"{self.tool}:{self.calls}:{self.per}:{self.when}"
+
+
+def rounds_of(when: str) -> int | None:
+    """A tool limit's last part as its rounds: run is None, round is 1, <N>rounds is N. Any other text is refused."""
+    if when == "run":
+        return None
+    if when == "round":
+        return 1
+    count = when.removesuffix("rounds")
+    if count == when or not count.isdigit():
+        raise ValueError(f"a tool limit ends in run, round or <N>rounds, like 5rounds; got {when!r}")
+    return int(count)
+
+
 class SwarmConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", use_attribute_docstrings=True)
 
@@ -322,6 +385,28 @@ class SwarmConfig(BaseModel):
     time_limit_s has passed, so a step in flight finishes and its usage is logged; Inspect's limit, at time_limit_s
     plus this, cuts only a run whose step never returns. 0 puts both at time_limit_s. SWE keeps its grading budget
     above the halt instead (src/domains/swe/swe_settings.py GRADING_BUDGET_S)."""
+    tool_limits: tuple[ToolLimit, ...] = ()
+    """Limits on the calls of named tools (src/swarm/tool_limits.py), none by default. Each is tool:calls:per:when,
+    per agent or team, when run (the whole run), round (each round) or <N>rounds (any N rounds in a row: after a call
+    in round r, a limit of one call opens again in round r + N). Several are joined by commas:
+    `tool_limits=check_fix:1:agent:5rounds,alert_humans:1:agent:round`. A task may give its own tools default limits
+    and bounds (Benchmark.tool_limits, tool_limit_bounds): a limit here on such a tool replaces the task's, `tool:none`
+    frees it, and either is refused past the task's bound. A call past a
+    limit is refused before the tool runs, and still uses one of the agent's tool calls, as a refused board_post does.
+    The limited tool's description gains a sentence, and the refusal says the limit is spent (prompts.yaml
+    tool_limits). A limit on a tool no agent of the run holds is refused when the task is built. "none" or "" is no
+    limit."""
+
+    @field_validator("tool_limits", mode="before")
+    @classmethod
+    def _parse_tool_limits(cls, value):
+        """Accept "a:2:agent:run,b:1:team:round" from the command line, and "none" or "" for no limit."""
+        if not isinstance(value, str):
+            return value
+        text = value.strip()
+        if not text or text.lower() in NONE_TEXT:
+            return ()
+        return tuple(part.strip() for part in text.split(","))
 
     # ---------------------------------------------------------------- model calls
     batch_agents: bool = False
@@ -447,6 +532,7 @@ class SwarmConfig(BaseModel):
         if self.submit_delay_rounds < 0:
             raise ValueError("submit_delay_rounds cannot be negative; 0 ends the run after the round of the submit")
         self._check_head_start()
+        self._check_tool_limits()
         if self.seed_pack is not None and seed_packs.pack_of(self.seed_pack).get("posts") and not self.board:
             raise ValueError(f"seed_pack {self.seed_pack} holds board posts, and a lone agent has no board")
         if self.submit_hold and not (self.submit_kind == "team" and self.gives_submit and self.regulator_count
@@ -482,6 +568,21 @@ class SwarmConfig(BaseModel):
         given = self.regulator_count + (self.disregulator_count if self.head_start_roles == "influencers" else 0)
         if not self.board or not given:
             raise ValueError(f"head_start_rounds needs a board and an agent among the {self.head_start_roles}")
+
+    def _check_tool_limits(self) -> None:
+        """No limit given twice, no tool both limited and freed (tool:none), and a team's limit only for agents told
+        of their team, whose texts may say so."""
+        kinds = [limit.text if limit.calls is None else f"{limit.tool}:{limit.per}:{limit.when}"
+                 for limit in self.tool_limits]
+        twice = sorted({kind for kind in kinds if kinds.count(kind) > 1})
+        if twice:
+            raise ValueError(f"tool_limits names the same limit twice: {twice}")
+        freed = {limit.tool for limit in self.tool_limits if limit.calls is None}
+        both = sorted(freed & {limit.tool for limit in self.tool_limits if limit.calls is not None})
+        if both:
+            raise ValueError(f"tool_limits both limits and frees {both}")
+        if not self.knows_team and any(limit.per == "team" for limit in self.tool_limits):
+            raise ValueError("tool_limits: a team limit needs agents told of their team (a board and knows_team)")
 
     # ---------------------------------------------------------------- derived values
     @property

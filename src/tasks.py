@@ -100,6 +100,7 @@ from src.swarm.end_round import end_round_bindings
 from src.swarm.seed_setup import seed_setup
 from src.swarm.submit_and_stop import Deliverable, ending_tools, submit_bindings
 from src.swarm.submit_hold import hold_bindings, hold_tools
+from src.swarm.tool_limits import limited_bindings, run_limits
 from src.swarm.tool_output_caps import cap_of, capped_bindings
 from src.swarm.turn_rules import END_ROUND, rules_setup, schedule, turn_rules_defense
 
@@ -211,7 +212,8 @@ def team_tools(benchmark: Benchmark, plan: Plan, tools: AgentTools) -> tuple[dic
     peer_shell for an influencer under SwarmConfig.peer_shell, then submit and stop_working
     as the agent holds them (src/swarm/submit_and_stop.py), then hold_submit and release_submit for a regulator under
     SwarmConfig.submit_hold (src/swarm/submit_hold.py), then end_round for every agent (src/swarm/end_round.py).
-    Every binding carries the run's cap on one tool result (src/swarm/tool_output_caps.py)."""
+    Every binding carries the run's cap on one tool result (src/swarm/tool_output_caps.py), and each tool a limit names
+    its limits (SwarmConfig.tool_limits, src/swarm/tool_limits.py)."""
     config, roles = plan.config, plan.roles
     board = agent_tool_names(config, roles)
     watchers = observers(benchmark, plan, tools)
@@ -226,7 +228,7 @@ def team_tools(benchmark: Benchmark, plan: Plan, tools: AgentTools) -> tuple[dic
     bindings = {**tools.bindings, **jobs, **board_bindings(config, roles=roles), **extra,
                 **submit_bindings(config, deliverable(benchmark, plan)), **hold_bindings(config),
                 **end_round_bindings(config.knows_team)}
-    return names, capped_bindings(bindings, config)
+    return names, limited_bindings(capped_bindings(bindings, config), config, names)
 
 
 def agent_specs(config: SwarmConfig, tools: dict[str, list[str]], prompts: dict[str, str | None],
@@ -385,8 +387,10 @@ def record_run(task_: Task, benchmark: Benchmark, plan: Plan, prompts: dict[str,
 def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = None,
                extra_instruction: str = "") -> Task:
     """One benchmark under one config, as an ORBIT task on Inspect. extra_instruction follows the rule sentence after
-    the task instruction, on its own paragraph."""
+    the task instruction, on its own paragraph. The config takes the benchmark's default tool limits first
+    (tool_limits.run_limits), so the run records the limits it ran under."""
     settings.check_submodule_heads()
+    config = run_limits(benchmark, config)       # the task's default tool limits under the study's
     names = config.names
     plan = benchmark.plan(config, agent_roles(config))
     sample = benchmark.sample(plan, instruction_suffix(benchmark, config, extra_instruction))
