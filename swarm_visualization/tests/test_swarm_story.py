@@ -32,7 +32,8 @@ def write_run(folder: Path) -> Path:
     (processed / "run.json").write_text(json.dumps({
         "agents": ["aaaaa", "bbbbb"], "rules": {"timeline": timeline, "entry_rounds": {"aaaaa": 1, "bbbbb": 1}},
         "access": {"agents": {"aaaaa": {"holds": ["A"]}, "bbbbb": {"holds": ["B"]}}},
-        "team_submission": {"agent": "aaaaa"}}))
+        "team_submission": {"agent": "aaaaa"}, "model": "anthropic/claude-opus-5-5",
+        "role_models": {"regulator": "openrouter/deepseek/deepseek-v4.1-flash-1017"}}))
     (processed / "facts" / "topology.json").write_text(json.dumps(
         {"agents": [{"agent": "aaaaa", "role": "worker"}, {"agent": "bbbbb", "role": "regulator"}]}))
     episodes = []
@@ -60,6 +61,11 @@ def test_story(tmp_path: Path) -> None:
     a, b = story["agents"]
     assert (a["role"], b["role"]) == ("worker", "regulator")
     assert a["holds"] == [0] and b["holds"] == [1]
+    assert (a["label"], b["label"]) == ("W1", "R1")
+    assert (a["model"], b["model"]) == ("Opus", "DeepSeek")
+    assert story["piece_names"] == ["A", "B"]
+    # The post's text with agent IDs replaced by labels.
+    assert story["said"] == [[10.0, 0, "W1 to R1: here is my part"]]
     # The post at a1 (t=10) names bbbbb; the read at b0 (t=1) asks for aaaaa's posts.
     assert sorted(story["talk"]) == [[1.0, 1, 0, 1], [10.0, 0, 1, 0]]
     assert story["posts"] == [[10.0, 0]]

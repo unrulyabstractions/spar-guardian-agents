@@ -148,6 +148,108 @@ const nodes = S.agents.map((agent, i) => {
 });
 const cores = nodes.map(n => n.core);
 
+// ---------- words: a tag under each agent, the cast, the clock, a feed of events, a legend ----------
+const RUNG_WORDS = ['honest', 'looked', 'tempted', 'cheating', 'hacked'];
+const RUNG_EVENTS = ['', 'looks at the exploit', 'is tempted to use it', 'tries the exploit', 'hacks: the exploit works'];
+const ROLE_WORDS = {worker: 'worker', regulator: 'regulator', disregulator: 'disregulator'};
+const ROLE_ACCENT = {worker: '#8fb3ff', regulator: '#7fe8ff', disregulator: '#ff9de2'};
+const esc = text => String(text).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const hex = color => '#' + color.getHexString();
+const nameOf = i => (i >= 0 ? `<b style="color:${ROLE_ACCENT[S.agents[i].role] || '#fff'}">${esc(S.agents[i].label)}</b>` : 'outside');
+const clockText = v => { const s = Math.max(0, Math.round(v)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+
+const labelsBox = document.getElementById('labels');
+const tags = S.agents.map(agent => {
+  const el = document.createElement('div');
+  el.className = 'tag';
+  // A big swarm gets short tags (label and rung); the header already names the models and roles.
+  el.innerHTML = N > 8
+    ? `<b style="color:${ROLE_ACCENT[agent.role] || '#fff'}">${esc(agent.label)}</b> <span class="rung"></span>`
+    : `<b style="color:${ROLE_ACCENT[agent.role] || '#fff'}">${esc(agent.label)}</b> <span class="model">${esc(agent.model || '')} ${ROLE_WORDS[agent.role] || agent.role}</span><br><span class="rung"></span>`;
+  labelsBox.appendChild(el);
+  return {el, rung: el.querySelector('.rung'), shown: -1};
+});
+{
+  const groups = new Map();
+  for (const a of S.agents) {
+    const key = `${a.model} ${a.role}`;
+    groups.set(key, (groups.get(key) || 0) + 1);
+  }
+  document.getElementById('cast').textContent = [...groups].map(([k, n]) => `${n} ${k}${n > 1 ? 's' : ''}`).join(' · ');
+  document.getElementById('runName').textContent = S.run;
+  const shapes = [['worker', '● worker'], ['regulator', '◎ regulator'], ['disregulator', '✶ disregulator']]
+    .filter(([role]) => S.agents.some(a => a.role === role)).map(([, word]) => word).join('&nbsp;&nbsp;');
+  const swatches = RUNG_WORDS.map((w, k) => `<span class="sw${k ? '' : ' first'}" style="background:${hex(RUNG_COLORS[k])}"></span>${w}`).join('');
+  const line = '<span class="line"></span>talk';
+  const orb = S.pieces ? `<span class="sw" style="background:${hex(PIECE_COLORS[0])}"></span>piece` : '';
+  document.getElementById('legend').innerHTML = `${shapes}<br>${swatches}<br>${line}${orb}`;
+}
+const events = [];
+for (const [te, a, text] of S.said || []) {
+  events.push({t: te, accent: ROLE_ACCENT[S.agents[a].role], html: `${nameOf(a)} posts <span class="quote">“${esc(text)}”</span>`});
+}
+S.agents.forEach((agent, i) => {
+  let before = 0;
+  for (const [at, value] of agent.rungs) {
+    if (value > before) {
+      const atEnd = at >= T - 1e-6;
+      events.push({t: at, accent: hex(RUNG_COLORS[value]),
+                   html: `${nameOf(i)} ${RUNG_EVENTS[value]}${atEnd ? ' (final grade)' : ''}`});
+    }
+    before = value;
+  }
+});
+for (const [tf, piece, src, dst] of S.flows) {
+  const name = (S.piece_names || [])[piece] ?? piece;
+  events.push({t: tf, accent: hex(PIECE_COLORS[piece % PIECE_COLORS.length]),
+               html: `${nameOf(dst)} gets piece <b>${esc(name)}</b> of the exploit${src >= 0 ? ` from ${nameOf(src)}` : ''}`});
+}
+if (S.submit) {
+  events.push({t: S.submit.t, accent: S.submit.cheated ? '#ff2d3d' : '#a8ffc4',
+               html: `${nameOf(S.submit.agent)} hands in the team's fix: <b>${S.submit.passed ? 'passed' : 'failed'}</b>` +
+                     `${S.submit.cheated ? ', <b style="color:#ff5a6a">by cheating</b>' : ', honestly'}`});
+}
+events.sort((a, b) => a.t - b.t);
+const feed = document.getElementById('feed');
+const clockEl = document.getElementById('clock');
+const FEED_SIZE = 4;
+let feedShown = -2;
+function drawWords(rungs, here, alive, focus) {
+  clockEl.textContent = `${clockText(t)} / ${clockText(T)}`;
+  let last = -1;
+  while (last + 1 < events.length && events[last + 1].t <= t) last++;
+  if (last !== feedShown) {
+    feedShown = last;
+    const rows = [];
+    for (let k = last; k >= 0 && k > last - FEED_SIZE; k--) {
+      const e = events[k], age = last - k;
+      rows.push(`<div class="event" style="border-left-color:${e.accent};opacity:${1 - age * 0.13}">` +
+                `<span class="when">${clockText(e.t)}</span>${e.html}</div>`);
+    }
+    feed.innerHTML = rows.join('');
+  }
+  camera.updateMatrixWorld();
+  const w = window.innerWidth, h = window.innerHeight;
+  nodes.forEach((node, i) => {
+    const tag = tags[i];
+    if (!alive[i] || here[i].here < 0.5) { tag.el.style.display = 'none'; return; }
+    tmp.copy(pos[i]).project(camera);
+    if (tmp.z > 1) { tag.el.style.display = 'none'; return; }
+    const lift = 1.9 * node.group.scale.x;
+    const below = new THREE.Vector3().copy(pos[i]).addScaledVector(camera.up, -lift).project(camera);
+    tag.el.style.display = '';
+    tag.el.style.left = `${(tmp.x * 0.5 + 0.5) * w}px`;
+    tag.el.style.top = `${(-below.y * 0.5 + 0.5) * h + 4}px`;
+    tag.el.style.opacity = String((1 - 0.6 * here[i].gone) * (focus(i) < 1 ? 0.25 : 1));
+    const rung = rungs[i].rung;
+    if (tag.shown !== rung) {
+      tag.shown = rung;
+      tag.rung.textContent = RUNG_WORDS[rung];
+      tag.rung.style.color = hex(RUNG_COLORS[rung]);
+    }
+  });
+}
+
 // ---------- edges ----------
 const pairs = new Map();
 for (const [t, from, to, kind] of S.talk) {
@@ -490,6 +592,7 @@ function update(dt) {
 
   for (const pool of pools) pool.end();
   placeCamera(alive, dt);
+  drawWords(rungs, here, alive, focus);
 }
 
 // ---------- controls: play, timeline, speed (icons only) ----------

@@ -2,9 +2,10 @@
 travels, and when each agent climbs the Cheating ladder.
 
     story = build_story(RunFiles(Path("runs/regulator_scale_1/ian_flipt_deepseek_n10_reg0_revealing_s1")))
-    story["agents"]        # [{id, role, holds, start, end, rungs: [[t, rung index], ...]}]
+    story["agents"]        # [{id, role, label W1/R1/D1, model, holds, start, end, rungs: [[t, rung index], ...]}]
     story["talk"]          # [[t, from, to, kind]]: kind 0 a post that names the agent, 1 a read asking for its posts
     story["posts"]         # [[t, agent index]]: every post an agent wrote
+    story["said"]          # [[t, agent index, excerpt]]: the post's opening words, agent IDs replaced by labels
     story["flows"]         # [[t, piece, from or -1, to]]: a piece reaching an agent that did not hold it
     story["submit"]        # {t, agent, cheated, passed} or None
 
@@ -25,6 +26,31 @@ RUNGS = ("none", "looked", "tempted", "attempted", "hacked")
 CHEATED_FROM = RUNGS.index("attempted")
 TALK_MENTION, TALK_ASK = 0, 1
 AGENT_ID = re.compile(r"[a-z0-9]{5}")
+ROLE_LETTER = {"worker": "W", "regulator": "R", "disregulator": "D"}
+MODEL_NAMES = (("opus", "Opus"), ("sonnet", "Sonnet"), ("haiku", "Haiku"), ("fable", "Fable"),
+               ("deepseek", "DeepSeek"), ("luna", "Luna"), ("sol", "Sol"), ("qwen", "Qwen"), ("gemini", "Gemini"),
+               ("gpt", "GPT"), ("llama", "Llama"))
+EXCERPT = 70
+
+
+def model_name(model: str | None) -> str:
+    """A short display name for a model string: anthropic/claude-opus-5-5 -> Opus."""
+    low = (model or "").lower()
+    for key, name in MODEL_NAMES:
+        if key in low:
+            return name
+    return low.rsplit("/", 1)[-1] or "?"
+
+
+def agent_labels(roster: list[str], roles: dict[str, str]) -> dict[str, str]:
+    """W1, W2, ... for workers, R1 ... for regulators, D1 ... for disregulators, in roster order."""
+    seen: dict[str, int] = {}
+    out = {}
+    for agent in roster:
+        letter = ROLE_LETTER.get(roles.get(agent, "worker"), "A")
+        seen[letter] = seen.get(letter, 0) + 1
+        out[agent] = f"{letter}{seen[letter]}"
+    return out
 
 
 def rung_index(rung: str | None) -> int:
@@ -112,6 +138,17 @@ def build_story(files: RunFiles) -> dict:
         if agent not in roster:
             roster.append(agent)
     index = {agent: i for i, agent in enumerate(roster)}
+    labels = agent_labels(roster, roles)
+    ledger = (run_json.get("ledger") or {}).get("agents") or {}
+    role_models = run_json.get("role_models") or {}
+
+    def model_of(agent: str) -> str:
+        return model_name((ledger.get(agent) or {}).get("model") or role_models.get(roles.get(agent, "worker"))
+                          or run_json.get("model"))
+
+    def excerpt(text: str) -> str:
+        text = AGENT_ID.sub(lambda m: labels.get(m.group(0), m.group(0)), " ".join(text.split()))
+        return text if len(text) <= EXCERPT else text[:EXCERPT - 1].rstrip() + "…"
     calls = agent_calls(files)
     times = call_times(run_json, calls)
     for agent in roster:
@@ -131,6 +168,7 @@ def build_story(files: RunFiles) -> dict:
     # Who talks to whom: a post that names another agent, and a read that asks for one agent's posts.
     talk: list[list] = []
     posts: list[list] = []
+    said: list[list] = []
     for board in files.boards():
         messages = {m.get("id"): m for m in board.get("messages") or []}
         for event in board.get("events") or []:
@@ -144,6 +182,7 @@ def build_story(files: RunFiles) -> dict:
             for message_id in event.get("message_ids") or []:
                 content = str((messages.get(message_id) or {}).get("content") or "")
                 posts.append([round(t, 3), index[sender]])
+                said.append([round(t, 3), index[sender], excerpt(content)])
                 named = dict.fromkeys(m for m in AGENT_ID.findall(content) if m in index and m != sender)
                 talk += [[round(t, 3), index[sender], index[other], TALK_MENTION] for other in named]
     for agent, rows in calls.items():
@@ -153,6 +192,7 @@ def build_story(files: RunFiles) -> dict:
                 talk.append([round(start_of(agent, k), 3), index[agent], index[asked], TALK_ASK])
     talk.sort()
     posts.sort()
+    said.sort(key=lambda row: row[:2])
 
     # The exploit pieces each agent holds at the start.
     access = (run_json.get("access") or {}).get("agents") or {}
@@ -204,7 +244,8 @@ def build_story(files: RunFiles) -> dict:
         entry = entry_rounds.get(agent) if isinstance(entry_rounds, dict) else None
         start = rows[0][0] if rows and isinstance(entry, int) and entry > 1 else 0.0
         end = rows[-1][1] if rows else end_of_run
-        agents.append({"id": agent, "role": roles.get(agent, "worker"),
+        agents.append({"id": agent, "role": roles.get(agent, "worker"), "label": labels[agent],
+                       "model": model_of(agent),
                        "holds": [piece_index[p] for p in holds[agent]],
                        "start": round(start, 3), "end": round(end, 3),
                        "ended": (episodes.get(agent) or {}).get("ended_by"),
@@ -221,5 +262,5 @@ def build_story(files: RunFiles) -> dict:
                   "passed": bool(cheating.get("passed"))}
 
     return {"run": files.name, "duration": round(end_of_run, 3), "agents": agents, "pieces": len(pieces),
-            "talk": talk, "posts": posts, "flows": flows, "submit": submit,
+            "piece_names": pieces, "talk": talk, "posts": posts, "said": said, "flows": flows, "submit": submit,
             "team_rung": rung_index(cheating.get("team"))}
