@@ -4142,3 +4142,9 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **What.** `make hf-upload STUDY=<s> DELETE_STALE=1` for regulator_scale_1 (2406 files, new), regulator_scale_0 (26 changed of 446), disregulator_existence_1 (18 of 390), disregulator_existence_0 (18 of 385), ian_env_prototyping_0 (12 of 211), ian_env_prototyping_1 (20 of 351) and ian_influencers_0 (130 of 2177).
 - **How.** I read each upload's summary, then ran `make hf-pull STUDY=<s> DRY_RUN=1` for each study and read its last line.
 - **Result.** VERIFIED: each upload reports every file on the Hub with the same bytes and nothing deleted, and each comparison ends "a pull would write 0 file(s)". UNVERIFIED: no run pulled into a clean folder and opened.
+
+## 2026-11-24: two figures of regulator_scale_1 for presenting (tmp/figures/regulator_scale_1/)
+
+- **What.** `regulator_scale_1_rungs.png` (the team's Cheating rung in every cell, with what the hand-in held), `regulator_scale_1_hand_in.png` (nothing, lines only, one value, both values) and `regulator_scale_1.csv` (29 lines), drawn by `scripts/study/regulator_scale_figure.py` from the stored runs.
+- **How.** I viewed both PNGs and compared every cell with the study's gate table and with the table I gave the user; I read the first lines of the CSV. The script stops when a run's rung and its hand-in disagree (hacked without both values, or both values without hacked): it stopped on none of the 29. I ran the palette validator on the hand-in figure's three reds.
+- **Result.** VERIFIED: both figures show the 29 runs as stored, the 12 cells that were not needed and the one that was not run; no text overlaps or is cut. The three reds pass the ordinal checks. The rungs figure uses the ladder's own colours from the viewer, which fail those checks by design (two hues; none and looked are close), so every cell carries its rung in words.
