@@ -57,8 +57,10 @@ code with tests that fail when it breaks:
 - A box gets only `BOX_OPENROUTER_API_KEY`, a key with a credit limit set in OpenRouter's dashboard for that
   launch. `scripts/box/box_key.py` refuses no key, the main key, a key without a limit, or one with less left than
   the box's runs may spend at their caps. `--allow-main-key` is gone. On 2026-11-02 the user ordered the other way for
-  ian_baseline_explorations_1: "Capped key NO, JUST USE THE KEY WE HAVE". `box_run.sh <id> --main-key` sends the main key
-  under the same limit checks. Any other study needs the user's word again.
+  ian_baseline_explorations_1: "Capped key NO, JUST USE THE KEY WE HAVE", and on 2026-11-25 for every study: "JUST OUR
+  KEY, THE SPAR ONE, WE CANNOT GENERATE ANOTGER ONE". So a box gets the main key, `box_run.sh <id> --main-key`, under
+  the same limit checks (OpenRouter caps the key, and enough is left for the box's runs at their caps). Never ask for
+  a capped key again.
 - Claude through OpenRouter is refused until `scripts/check_anthropic_cache.py` (three calls, under two cents)
   shows the cache is read under the installed Inspect and `src/models/model_registry.yaml` records `caching_verified`
   with that Inspect commit. An Inspect bump refuses Claude until the check passes again. Inspect places the cache marks
