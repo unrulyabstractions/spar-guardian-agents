@@ -18,8 +18,8 @@ parts:
     needs: []
     files: [src/export/*.py]
     pins: []
-    version: 1
-    fingerprint: sha256:8fc506fb6fa79ee59be527bcece519dc080499a1e893e920604512a9edc16708
+    version: 2
+    fingerprint: sha256:6dea64263f574780bd050766c2a1a22f7ee713acfe3ebf2802e23dfd7173c285
     log:
       1: '2026-11-22 first version: the eval log turned into run files by src/export of c619e3d (re-locked
         2026-11-22: the stored layout: the same bytes, written under processed/ and analysis/ through
@@ -36,6 +36,9 @@ parts:
         deleted, rebased on ian_gflipt: reprocess_compare on all seven stored studies shows only versions.json
         differs) (re-locked 2026-11-25: unsubmit: run.json gains an unsubmits block only for a run with
         the option; every stored run re-exports to the same run.json and episodes.jsonl bytes as main)'
+      2: 2026-11-25 the ledger prices a cache write at Anthropic's one-hour lifetime at its own rate,
+        as Inspect counts it against the cap; the eleven stored runs with such writes keep the ledgers
+        they were exported with (scripts/study/priced_calls.py prices a stored run call by call)
   replay:
     file: [processed/replay/steps.jsonl, processed/replay/replay.json, processed/tmp_snapshots.json]
     make: null
@@ -112,8 +115,8 @@ parts:
       src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*,
       src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
-    version: 14
-    fingerprint: sha256:b6954496492315880edb80c7d0295b78dd182f50e2f588536b1b651692af7f06
+    version: 15
+    fingerprint: sha256:013358108f5b3b7f3ed9d7626b1992cb1bc7d5fd180b709658c8f4477b4270fe
     log:
       1: '2026-11-22 first version: the code record''s agent and team rows (code_ladder.signal_rows) of
         b7b1bed, and run.json''s signals block (re-locked 2026-11-22: the stored layout: the same bytes,
@@ -275,6 +278,11 @@ parts:
         machine does not hold is no read; an influencer''s left branches are its own work; reverts hold
         no work; a worker''s hand-in of an influencer''s content is the team''s shipped; a value the next
         sentences refuse is no gift'
+      15: '2026-11-25 SWE: a log read of a file whose body the requirements fix reads no piece; a hand-in
+        whose own grading gave no result has the grade of an agent''s graded tree with its bytes; a post
+        that holds every line of a piece''s whole file gives the piece; a unit no push carried is not
+        given; a worker''s hand-in of an influencer''s content needs no worker to have opened it; an influencer''s
+        left branch is left out as a place; a sentence that only describes those values refuses nothing'
   topology:
     file: processed/facts/topology.json
     make: src.measures.topology_fact:topology_part
@@ -315,8 +323,8 @@ parts:
       src/domains/*/_*_honeypot.py, src/domains/*/*_settings.py, src/domains/*/second/**/*, src/domains/*/*_exploits.py,
       src/domains/*/revealed/**/*]
     pins: []
-    version: 15
-    fingerprint: sha256:02516f8abc25d9db9bbff13f76820fb1f02d5dba8ed19f023f6217f778a5cba8
+    version: 16
+    fingerprint: sha256:680393f840e804fe35840680a5a3b407ad642203d711aa889a91c04b0dc56baa
     log:
       1: '2026-11-22 first version: the Cheating ladder with CheatBench''s labels beside its clauses,
         as the viewer keeps it, of b7b1bed (re-locked 2026-11-22: the stored layout: the same bytes, read
@@ -467,6 +475,11 @@ parts:
         machine does not hold is no read; an influencer''s left branches are its own work; reverts hold
         no work; a worker''s hand-in of an influencer''s content is the team''s shipped; a value the next
         sentences refuse is no gift'
+      16: '2026-11-25 SWE: a log read of a file whose body the requirements fix reads no piece; a hand-in
+        whose own grading gave no result has the grade of an agent''s graded tree with its bytes; a post
+        that holds every line of a piece''s whole file gives the piece; a unit no push carried is not
+        given; a worker''s hand-in of an influencer''s content needs no worker to have opened it; an influencer''s
+        left branch is left out as a place; a sentence that only describes those values refuses nothing'
   coordination:
     file: analysis/labels/coordination.json
     make: src.measures.coordination:coordination_part
@@ -495,8 +508,8 @@ parts:
       src/ui/transcript_levels.py, src/ui/viewer_parts.py, src/domains/*/*_ladder.py, src/domains/*/_*_honeypot.py,
       src/domains/*/*_settings.py, src/domains/*/second/**/*, src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
-    version: 13
-    fingerprint: sha256:cced46ceed32787484ed2d0f6107d1622ddf4eef7029eb016592c186b5ce345d
+    version: 14
+    fingerprint: sha256:1ed6bc30f0767c494b072e0ea9227874999ce5ee6fe2d3f9b97a754b90368591
     log:
       1: '2026-11-22 first version: the Collusion ladder as the viewer keeps it, of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -635,6 +648,11 @@ parts:
         machine does not hold is no read; an influencer''s left branches are its own work; reverts hold
         no work; a worker''s hand-in of an influencer''s content is the team''s shipped; a value the next
         sentences refuse is no gift'
+      14: '2026-11-25 SWE: a log read of a file whose body the requirements fix reads no piece; a hand-in
+        whose own grading gave no result has the grade of an agent''s graded tree with its bytes; a post
+        that holds every line of a piece''s whole file gives the piece; a unit no push carried is not
+        given; a worker''s hand-in of an influencer''s content needs no worker to have opened it; an influencer''s
+        left branch is left out as a place; a sentence that only describes those values refuses nothing'
   judged:
     file: analysis/labels/judged.json
     make: src.ui.viewer_parts:judged_part
@@ -666,7 +684,7 @@ parts:
       src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 4
-    fingerprint: sha256:1c19edafdfb2b5b37df8f5e81f0993cebc48a19b06b6c6a82a119c46a506d1cb
+    fingerprint: sha256:a27bfed1830e9f54c7d75a60353c749f7133713f4611123dcb07b8929832d445
     log:
       1: '2026-11-23 first version: what each disregulator did with its role (carried_out, filtered, refused,
         dropped, unknown), with mode, disclosed and the evidence, by code from the board, the code record''s
@@ -757,7 +775,9 @@ parts:
         scratch byte-equal) (re-locked 2026-11-24: the four older tasks deleted, rebased on ian_gflipt:
         reprocess_compare on all seven stored studies shows only versions.json differs) (re-locked 2026-11-25:
         the six SWE label rules of 2026-11-25 change which evidence a rung rests on, not the disregulators''
-        role labels (checked by reprocess_compare on both studies))'
+        role labels (checked by reprocess_compare on both studies)) (re-locked 2026-11-25: the label rules
+        of 2026-11-25, second round, change which evidence a rung rests on, not the disregulators'' role
+        labels (checked by reprocess_compare on both studies))'
   row:
     file: analysis/row.json
     make: src.ui.viewer_parts:row_part
