@@ -17,11 +17,14 @@
 # (measured 2026-10-28). A run refuses an OpenRouter model without a routing (model_registry.check_routing).
 #
 # Keys. A provider's key comes from the environment, in any one of its `key_env` variables. A provider that names a
-# `key_file` takes its key from that file instead, when the file exists: its one line is the key, exported in the
-# first `key_env` variable over the environment's value (model_registry.prepare_env). The file must be readable by its
-# owner alone (chmod 600); an empty file, or one whose key has whitespace inside it, is refused. A run on Claude at
-# Anthropic thus spends the key in ~/.config/spar-guardian-agents/anthropic_key, not the ANTHROPIC_API_KEY that
-# ~/.zshrc exports. `shadow_env` names variables Inspect would send in place of the key; a run refuses while one is set.
+# `key_file` takes its key from that file alone, never from the environment: a run on it is refused while the file is
+# missing. The file's one line is the key ([A-Za-z0-9_-]+), exported in the first `key_env` variable
+# (model_registry.prepare_env); the file must be readable by its owner alone (chmod 600). A run on Claude at Anthropic
+# thus spends the key in ~/.config/spar-guardian-agents/anthropic_key, never the older ANTHROPIC_API_KEY that ~/.zshrc
+# exports. Beside it, an optional `<key_file>.workspace` holds a workspace ID (wrkspc_...) on one line, under the same
+# permission rule; when it exists every request carries it in the `workspace_header` (a key not scoped to a workspace
+# is refused without it). `shadow_env` names variables Inspect would send in place of the key, and `pinned_base_url`
+# is the one value `base_url_env` may hold, so the key reaches no other host; a run refuses otherwise.
 
 as_of: 2026-10-27
 
@@ -59,8 +62,10 @@ providers:
     inspect_prefix: anthropic
     key_env: [ANTHROPIC_API_KEY]
     key_file: ~/.config/spar-guardian-agents/anthropic_key
+    workspace_header: anthropic-workspace-id
     shadow_env: [ANTHROPIC_AUTH_TOKEN]
     base_url_env: ANTHROPIC_BASE_URL
+    pinned_base_url: https://api.anthropic.com
     batch_discount: 0.5
     docs: https://platform.claude.com/docs/en/about-claude/pricing
     notes: >-
@@ -237,7 +242,7 @@ models:
     reasoning: adaptive thinking; effort high by default
     usd_per_million: {input: 2.00, cached_input: 0.10, output: 10.00, cache_write: 2.50}
     price_source: OpenRouter's Anthropic endpoint on 2026-11-01, the host the routing pins
-    caching_verified: {date: "2026-11-21", inspect: "c574b6bf6"}   # scripts/check_anthropic_cache.py: calls 2 and 3 each read 0.9992 of the previous prompt
+    caching_verified: {date: "2026-11-21", inspect: "c574b6bf6", route: openrouter, entry: claude-sonnet-5-5-openrouter}   # scripts/check_anthropic_cache.py: calls 2 and 3 each read 0.9992 of the previous prompt
     cheatbench: []
     status: candidate
     notes: The direct claude-sonnet-5-5 through OpenRouter, so a box of ian_baseline_explorations_1 holds one key.
@@ -251,7 +256,7 @@ models:
     usd_per_million: {input: 0.10, cached_input: 0.01, output: 0.50, cache_write: 0.125}
     long_prompt: {over: 100000, input: 0.50, cached_input: 0.05, output: 2.50, cache_write: 0.625}
     price_source: OpenRouter's Anthropic endpoint on 2026-11-02, the host the routing pins, with its 100,000-token override
-    caching_verified: {date: "2026-11-21", inspect: "c574b6bf6"}   # scripts/check_anthropic_cache.py: calls 2 and 3 each read 0.9992 of the previous prompt
+    caching_verified: {date: "2026-11-21", inspect: "c574b6bf6", route: openrouter, entry: claude-haiku-5-5-openrouter}   # scripts/check_anthropic_cache.py: calls 2 and 3 each read 0.9992 of the previous prompt
     cheatbench: []
     status: candidate
     notes: The direct claude-haiku-5-5 through OpenRouter, so a box of ian_baseline_explorations_1 holds one key.
@@ -264,7 +269,7 @@ models:
     reasoning: adaptive thinking, always on; effort medium by default
     usd_per_million: {input: 4.00, cached_input: 0.20, output: 20.00, cache_write: 5.00}
     price_source: OpenRouter's Anthropic endpoint on 2026-11-01, the host the routing pins, unchanged on 2026-11-23
-    caching_verified: {date: "2026-11-23", inspect: "c574b6bf6"}   # scripts/check_anthropic_cache.py: calls 2 and 3 each read 0.9992 of the previous prompt
+    caching_verified: {date: "2026-11-23", inspect: "c574b6bf6", route: openrouter, entry: claude-opus-5-5-openrouter}   # scripts/check_anthropic_cache.py: calls 2 and 3 each read 0.9992 of the previous prompt
     cheatbench: []
     status: candidate
     notes: >-

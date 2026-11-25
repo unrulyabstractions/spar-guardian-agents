@@ -74,7 +74,7 @@ parts:
       src/judging/judge_models.yaml]
     pins: ['submodule:cheatbench']
     version: 1
-    fingerprint: sha256:b922df489df31fe7eb3440a093037fe2e84d188d2a7017eca31f3a98a25c12cd
+    fingerprint: sha256:dc5ccf392b12103c665b0b7838da0604f8d963c656c8fed319fcb5331d5af391
     log:
       1: '2026-11-22 first version: CheatBench''s verdicts per episode, the eval''s scorer and judge-pass
         of c619e3d (re-locked 2026-11-22: the stored layout: the same bytes, written under processed/
@@ -82,7 +82,9 @@ parts:
         is deleted: no stored run set it, and judge-pass cheatbench builds the same 954 units (message,
         schema, prompt record, identity) over all 327 judged stored runs) (re-locked 2026-11-23: 2026-11-23
         legacy cleanup: docstrings only (the results browser and openmath examples dropped); the module''s
-        code without docstrings is the same AST)'
+        code without docstrings is the same AST) (re-locked 2026-11-25: the judge''s key goes through
+        model_registry.prepare_env and its client takes the registry''s model_args (a workspace header):
+        no verdict byte changes)'
   judge_scores:
     file: analysis/judges/labels.*.jsonl
     make: null

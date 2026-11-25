@@ -231,8 +231,8 @@ def test_run_refuses_a_role_model_before_the_eval(monkeypatch, tmp_path, capsys,
 def test_run_prints_the_models_and_hands_the_agents_config_to_the_provider(monkeypatch, tmp_path, capsys):
     config = build_config("default", "small", ["regulators=1", "regulator_model=mockllm/regulator", "judge=none",
                                                "reasoning_effort=low", "tool_output_bytes=4096"])
-    line = "== models worker=(run model) regulator=mockllm/regulator disregulator=(run model)"
-    assert run.models_line(config) == line
+    line = "== models run=mockllm/model worker=(run model) regulator=mockllm/regulator disregulator=(run model)"
+    assert run.models_line(config, "mockllm/model") == line
     seen: dict = {}
 
     class Started(Exception):

@@ -4,9 +4,10 @@
     task = swarm_task(ProteinDesign(None), config, name="protein_cheat", extra_instruction=CHEAT)
     inspect eval src/tasks.py@protein_design -T preset=default -T regulators=1
 
-The last form skips what `python -m src run` adds: the key and routing checks, the role models built before the
-sandbox starts, and the Gemini 402 retry (src/models/gemini_402_retry.py). A role model still gets the eval's generate
-config there through the swarm model provider.
+The last form skips what `python -m src run` adds: the key and routing checks, the cache gate, the dollar cap, the
+role models built before the sandbox starts, and the Gemini 402 retry (src/models/gemini_402_retry.py). It therefore
+runs mock models alone: a paid model, the judge's included, is refused (refuse_paid_models). A role model still gets
+the eval's generate config there through the swarm model provider.
 
 What comes from where:
   * the benchmark's plan (Benchmark.plan: the mode, the access and what each agent holds) is fixed once, and the
@@ -57,7 +58,8 @@ from pathlib import Path
 
 from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
-from inspect_ai.model import GenerateConfig
+from inspect_ai.model import GenerateConfig, model_roles
+from inspect_ai.model._model import active_model  # the eval's model while Inspect builds a task: no public accessor
 from inspect_ai.solver import Solver, TaskState
 from inspect_ai.util import SandboxEnvironmentSpec
 from orbit.configs.execution import AgentGroup
@@ -72,7 +74,8 @@ from src.configuration.seed_packs import seed_record
 from src.configuration.swarm_config import SwarmConfig, role_of
 from src.domains import DOMAINS
 from src.domains.benchmark_protocol import Benchmark, Plan
-from src.judging.cheatbench_judge import cheatbench_judge
+from src.judging.cheatbench_judge import cheatbench_judge, judge_model_config
+from src.models import cost_cap
 from src.models import swarm_model_provider as provider  # importing it registers the "swarm" provider
 from src.sandbox import command_jobs, peer_shell
 from src.sandbox.access_log.access_monitor import access_capture, capture, start_access_monitor, with_monitor
@@ -428,12 +431,29 @@ def swarm_task(benchmark: Benchmark, config: SwarmConfig, *, name: str | None = 
     return task_
 
 
+def refuse_paid_models(config: SwarmConfig) -> None:
+    """Raise ValueError when a task built for `inspect eval src/tasks.py@...` would call a paid model
+    (cost_cap.is_paid): the eval's, a model role's bound on the command line, a role model of the config or the
+    judge's. That form skips the checks run.run makes before any paid call (the key, the cache gate, the dollar cap),
+    so it runs mock models alone."""
+    bound = [m for value in model_roles().values() for m in (value if isinstance(value, list) else [value])]
+    named = [str(m) for m in [active_model(), *bound] if m is not None]
+    named += [m for m in config.role_models().values() if m]
+    named += [judge_model_config(config.judge)[0]] if config.judge else []
+    if paid := sorted({m for m in named if cost_cap.is_paid(m)}):
+        raise ValueError(f"refused: {', '.join(paid)} is paid, and `inspect eval src/tasks.py@...` runs mock models "
+                         "alone (-T judge=none drops the judge). Run a paid model with `python -m src run ...` "
+                         "(run.run), which checks its key, its cache and its dollar cap first.")
+
+
 def benchmark_task(key: str, preset_name: str, row: str | None, overrides: dict) -> Task:
     """The registry's benchmark for one row under a preset: the benchmark's options (Benchmark.options) come out of
-    the -T pairs, and every other pair sets a config field (presets.with_overrides; scale=<name> first)."""
+    the -T pairs, and every other pair sets a config field (presets.with_overrides; scale=<name> first). A paid model
+    is refused (refuse_paid_models)."""
     cls = DOMAINS[key]
     options = {name: overrides.pop(name) for name in cls.options if name in overrides}
     config = with_overrides(preset(preset_name), [f"{k}={v}" for k, v in overrides.items()])
+    refuse_paid_models(config)
     return swarm_task(cls(row, **options), config)
 
 

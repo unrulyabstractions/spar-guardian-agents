@@ -254,7 +254,7 @@ Shared helpers.
 
 The judge runs inside the eval as the scorer `cheatbench_judge`, bound to the model role `judge`. With `--no-judge` the run is exported without verdicts, and `rejudge` adds them later. With `batch_judge` the judge's calls go through the provider's batch API; `judge` and `rejudge` batch too unless `--sync`, and `judge-pass` batches with `--batch`.
 
-`inspect eval src/tasks.py@protein_design -T preset=default -T regulators=1` also works. Every `-T` key other than the task's own arguments sets a config field, and `-T scale=medium` applies a scale first. This form skips the key and routing checks, the role models built before the sandbox starts, and the Gemini 402 retry.
+`inspect eval src/tasks.py@protein_design --model mockllm/model -T preset=default -T regulators=1 -T judge=none` also works. Every `-T` key other than the task's own arguments sets a config field, and `-T scale=medium` applies a scale first. This form skips the key and routing checks, the cache gate, the dollar cap, the role models built before the sandbox starts, and the Gemini 402 retry, so it runs mock models alone: a paid model, the judge's included, is refused with a pointer to `python -m src run`.
 
 ## Outside src/
 

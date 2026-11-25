@@ -121,11 +121,10 @@ def require_role_model(model: str) -> None:
 
 def require_judge_key(judge_name: str, code: int) -> None:
     """The judge's key, named by its src/judging/judge_models.yaml entry (OPENAI_API_KEY for gpt-6-luna), taken from
-    its provider's key file where one exists (model_registry.prepare_env)."""
+    its provider's key file where one names it (judging.require_judge_key)."""
     try:
-        models.prepare_env(judging.judge_model_config(judge_name)[0])
         judging.require_judge_key(judge_name)
-    except (RuntimeError, ValueError) as error:
+    except RuntimeError as error:
         raise Refusal(f"{error} for the judge", code) from error
 
 
@@ -141,8 +140,8 @@ def judge_role_model(config: SwarmConfig) -> Model | None:
         return None
     judge_model, _ = judging.judge_model_config(config.judge)
     # each call priced at the rate it is billed, batch prices with batch_judge (cost_cap.price_calls)
-    return cost_cap.price_calls(get_model(judge_model, config=GenerateConfig(batch=config.batch_judge)),
-                                batch=bool(config.batch_judge))
+    return cost_cap.price_calls(get_model(judge_model, config=GenerateConfig(batch=config.batch_judge),
+                                          **models.model_args(judge_model)), batch=bool(config.batch_judge))
 
 
 def agent_generate_config(config: SwarmConfig) -> dict:
@@ -207,9 +206,19 @@ def access_line(task) -> str:
     return f"== access {access['policy']}: {held}"
 
 
-def models_line(config: SwarmConfig) -> str:
-    """One line on each role's model; "(run model)" where the role runs the eval's model."""
-    return "== models " + " ".join(f"{role}={model or '(run model)'}" for role, model in config.role_models().items())
+def with_key_source(model: str) -> str:
+    """The model, and for a paid one where its key comes from: a key file's path or a variable's name, never the
+    key."""
+    source = models.key_source(models.resolve(model))
+    return f"{model} [key {source}]" if source else model
+
+
+def models_line(config: SwarmConfig, model: str) -> str:
+    """One line on the run's model, each role's model ("(run model)" where the role runs the eval's model) and the
+    judge's, each paid one with where its key comes from."""
+    roles = [f"{role}={with_key_source(m) if m else '(run model)'}" for role, m in config.role_models().items()]
+    judge = [f"judge={with_key_source(judging.judge_model_config(config.judge)[0])}"] if config.judge else []
+    return " ".join(["== models", f"run={with_key_source(model)}", *roles, *judge])
 
 
 @command
@@ -249,7 +258,7 @@ def run(name: str, benchmark: Benchmark, config: SwarmConfig, model: str, timeou
     judged = f"judge={config.judge}" if judge_model is not None else "not judged"
     print(f"== eval {benchmark.name} n_agents={config.n_agents} {judged} -> {log_dir}", flush=True)
     print(access_line(task), flush=True)
-    print(models_line(config), flush=True)
+    print(models_line(config, model), flush=True)
     print(f"== cost cap ${cost_limit:.2f} for the whole run" if cost_limit else "== no cost cap: mock models only",
           flush=True)
     generate = agent_generate_config(config)

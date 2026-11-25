@@ -53,7 +53,7 @@ from openai.lib._parsing._completions import type_to_response_format_param
 from src.configuration import settings
 from src.export.atif_transcripts import episode_transcript
 from src.export.eval_sample_view import SampleView, agent_messages, roster, usage_dict
-from src.models.model_registry import cost_usd, entry_of, usd_per_million
+from src.models.model_registry import cost_usd, entry_of, model_args, prepare_env, usd_per_million
 from src.sandbox.staging import write_atomic
 from src.utils.cheatbench_core import judge as cb_judge
 
@@ -82,7 +82,12 @@ def judge_prices(name: str, batch: bool = False) -> dict | None:
 
 
 def require_judge_key(name: str) -> None:
-    """Refuse a judge entry whose credential variable is unset."""
+    """Refuse a judge entry without its key: model_registry.prepare_env (a provider's key file, which alone holds its
+    key, or the route's variables), then the entry's credential variable."""
+    try:
+        prepare_env(judge_model_config(name)[0])
+    except ValueError as error:
+        raise RuntimeError(f"judge {name}: {error}") from None
     key_env = judge_entry(name).get("api_key_env")
     if key_env and not os.environ.get(key_env):
         raise RuntimeError(f"judge {name}: {key_env} must be set")
@@ -106,7 +111,8 @@ class Judge:
         """The entry called through `model`, or through a fresh client of its model on the batch API or the normal
         one. A fresh client, since a memoized one belongs to the event loop that first used it."""
         model_name, config = judge_model_config(name)
-        model = model or get_model(model_name, config=GenerateConfig(batch=batch), memoize=False)
+        model = model or get_model(model_name, config=GenerateConfig(batch=batch), memoize=False,
+                                   **model_args(model_name))
         registry = entry_of(model_name) or {}
         return cls(name, model, config, judge_prices(name, batch=batch), judge_entry(name), registry.get("max_output"))
 
@@ -343,7 +349,8 @@ def cheatbench_judge(task_name: str, task_root: str, judge: str = settings.JUDGE
         view = SampleView.from_state(state, inspect_transcript().events)
         if JUDGE_ROLE not in model_roles():
             require_judge_key(judge)
-        client = Judge.of(judge, batch=batch, model=get_model(role=JUDGE_ROLE, default=judge_model_config(judge)[0]))
+        default = judge_model_config(judge)[0]
+        client = Judge.of(judge, batch=batch, model=get_model(role=JUDGE_ROLE, default=default, **model_args(default)))
         verdicts = await judge_sample(view, spec, client)
         parsed = [v for v in verdicts.values() if v["parse_ok"]]
         metadata = {"judge": judge, "model": str(client.model), "spec": spec_record(spec), "verdicts": verdicts,

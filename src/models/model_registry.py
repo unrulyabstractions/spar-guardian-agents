@@ -10,8 +10,10 @@
     model_args("deepseek-flash-openrouter")  -> {"provider": {"order": ["deepinfra/fp8"], ...}, "strict_tools": False}
     check_routing("openrouter/x/y")          -> ValueError: an OpenRouter model without a `routing`
     prepare_env("deepseek/deepseek-v4-pro")  -> ValueError unless DEEPSEEK_API_KEY is set; sets DEEPSEEK_BASE_URL
-    prepare_env("anthropic/claude-opus-5-5") -> ANTHROPIC_API_KEY set from the provider's key_file when it exists
-    key_source("anthropic/claude-opus-5-5")  -> "the key file /Users/me/.config/spar-guardian-agents/anthropic_key"
+    prepare_env("anthropic/claude-opus-5-5") -> ANTHROPIC_API_KEY from the provider's key_file; ValueError without it
+    key_source("anthropic/claude-opus-5-5")  -> "/Users/me/.config/spar-guardian-agents/anthropic_key"
+    model_args("claude-opus-5-5")            -> {"default_headers": {"anthropic-workspace-id": "wrkspc_..."}} with a
+                                                workspace file beside the key file, {} without one
     render()                                 -> the table `python -m src models` prints
 """
 from __future__ import annotations
@@ -82,12 +84,17 @@ def routing(name: str) -> dict | None:
 
 
 def model_args(name: str) -> dict:
-    """The model arguments get_model takes for this model beyond its name, nothing outside OpenRouter. On OpenRouter:
-    the routing, and tools sent without `strict`. Inspect's OpenRouter route marks every tool strict by default, and
-    OpenAI then refuses a tool with an optional parameter (board_read's `latest`), which the direct OpenAI route never
-    marks."""
+    """The model arguments get_model takes for this model beyond its name. On OpenRouter: the routing, and tools sent
+    without `strict`. Inspect's OpenRouter route marks every tool strict by default, and OpenAI then refuses a tool
+    with an optional parameter (board_read's `latest`), which the direct OpenAI route never marks. On a provider with
+    a workspace file: the header that carries the workspace ID on every request (workspace_id). Nothing otherwise."""
     pin = routing(name)
-    return {"provider": pin, "strict_tools": False} if pin else {}
+    if pin:
+        return {"provider": pin, "strict_tools": False}
+    entry = entry_of(name)
+    provider = provider_of(entry["inspect"] if entry else name)
+    workspace = workspace_id(provider) if provider else None
+    return {"default_headers": {providers()[provider]["workspace_header"]: workspace}} if workspace else {}
 
 
 def check_routing(model: str) -> None:
@@ -98,55 +105,104 @@ def check_routing(model: str) -> None:
                          "an OpenRouter model runs only pinned to one host")
 
 
+KEY_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
+WORKSPACE_PATTERN = re.compile(r"wrkspc_[A-Za-z0-9]+")
+WORKSPACE_SUFFIX = ".workspace"
+"""The file beside a key file that holds a workspace ID."""
+
+
 def key_path(provider: str) -> Path | None:
     """The file the provider's `key_file` names, with ~ expanded, or None for a provider without one."""
     name = providers()[provider].get("key_file")
     return Path(name).expanduser() if name else None
 
 
+def workspace_path(provider: str) -> Path | None:
+    """The workspace file beside the provider's key file, or None for a provider without a workspace header."""
+    path = key_path(provider)
+    if path is None or not providers()[provider].get("workspace_header"):
+        return None
+    return path.with_name(path.name + WORKSPACE_SUFFIX)
+
+
+def read_one_line(path: Path, pattern: re.Pattern, what: str) -> str:
+    """The value a private file holds on its one line, the final newline stripped. Raises ValueError naming the file
+    and the fix, never its content: for a file group or others may open, one that cannot be read (a folder
+    included), or one whose line is not `pattern` in ASCII."""
+    try:
+        if path.stat().st_mode & (stat.S_IRWXG | stat.S_IRWXO):
+            raise ValueError(f"{path} is open to group or others: chmod 600 {path}")
+        value = path.read_bytes().decode("ascii").removesuffix("\n")
+    except (OSError, UnicodeDecodeError):
+        raise ValueError(f"{path} cannot be read as one line of ASCII: write {what} to it (chmod 600)") from None
+    if not pattern.fullmatch(value):
+        raise ValueError(f"{path} must hold {what} alone on one line ({pattern.pattern})")
+    return value
+
+
 def read_key_file(path: Path) -> str:
-    """The key a key file holds on its one line. Raises ValueError, naming the file and the fix but never its content,
-    for a file group or others may open, an empty file, or a key with whitespace inside it."""
-    if path.stat().st_mode & (stat.S_IRWXG | stat.S_IRWXO):
-        raise ValueError(f"{path} is open to group or others: chmod 600 {path}")
-    key = path.read_text().strip()
-    if not key:
-        raise ValueError(f"{path} is empty: write the key on its one line")
-    if re.search(r"\s", key):
-        raise ValueError(f"{path} must hold the key alone on one line, with no whitespace inside it")
-    return key
+    """The key a key file holds (read_one_line, [A-Za-z0-9_-]+)."""
+    return read_one_line(path, KEY_PATTERN, "the key")
+
+
+def workspace_id(provider: str) -> str | None:
+    """The workspace ID in the provider's workspace file (read_one_line, wrkspc_...), or None when no file or link is
+    there."""
+    path = workspace_path(provider)
+    if path is None or not (path.exists() or path.is_symlink()):
+        return None
+    return read_one_line(path, WORKSPACE_PATTERN, "the workspace ID")
 
 
 def key_source(model: str) -> str | None:
-    """Where prepare_env takes the model's key from, never the key: its provider's key file when the file exists, else
-    the first of its key variables that is set. None outside the registry or when no key is found."""
+    """Where prepare_env takes the model's key from, never the key: its provider's key file, else the first of its key
+    variables that is set. None outside the registry or when no key variable is set."""
     provider = provider_of(model)
     if provider is None:
         return None
     path = key_path(provider)
-    if path is not None and path.exists():
-        return f"the key file {path}"
+    if path is not None:
+        return str(path)
     return next((name for name in key_env(model) if os.environ.get(name)), None)
 
 
+def refuse_redirects(model: str, route: dict) -> None:
+    """Raise ValueError while a variable would send the key elsewhere: one of the route's `shadow_env`, which Inspect
+    sends in place of the key, or a `base_url_env` that holds another host than the route's `pinned_base_url`."""
+    if shadows := [name for name in route.get("shadow_env", []) if os.environ.get(name)]:
+        raise ValueError(f"unset {' and '.join(shadows)} for {model}: Inspect would send it in place of the key")
+    pinned, url = route.get("pinned_base_url"), os.environ.get(route["base_url_env"])
+    if pinned and url and url.rstrip("/") != pinned:
+        raise ValueError(f"unset {route['base_url_env']} for {model} (or set it to {pinned}): the key would go to "
+                         "that host")
+
+
+def file_key(model: str, path: Path) -> str:
+    """The key in a provider's key file, refused when the file is missing, a dangling link or a folder: no fallback to
+    the environment's key."""
+    if not path.is_file():
+        raise ValueError(f"{model} takes its key from its key file alone: write the key to {path} (chmod 600)")
+    return read_key_file(path)
+
+
 def prepare_env(model: str) -> None:
-    """Raise ValueError unless the model's route has a key, then export what Inspect reads. The key of a provider
-    whose key file exists is that file's (read_key_file), set in its first key variable over the environment's value;
-    any other route needs one of its key variables set. A variable of the route's `shadow_env`, which Inspect would
-    send in place of the key, is refused. A Gemini key given as GEMINI_API_KEY is also exported as GOOGLE_API_KEY, and
-    an openai-api route gets its base URL. A model outside the registry (mockllm) needs nothing. The key is never
-    printed or returned."""
+    """Raise ValueError unless the model's route has a key and nothing would send it elsewhere (refuse_redirects),
+    then export what Inspect reads. A provider that names a key file takes that file's key (file_key), set in its first
+    key variable over the environment's value; any other route needs one of its key variables set. A provider's
+    workspace file is checked too (workspace_id). A Gemini key given as GEMINI_API_KEY is also exported as
+    GOOGLE_API_KEY, and an openai-api route gets its base URL. A refused call changes no variable. A model outside the
+    registry (mockllm) needs nothing. The key is never printed or returned."""
     provider = provider_of(model)
     if provider is None:
         return
     names, route, path = key_env(model), providers()[provider], key_path(provider)
-    if path is not None and path.exists():
-        os.environ[names[0]] = read_key_file(path)
-    elif not any(os.environ.get(name) for name in names):
-        raise ValueError(f"{' or '.join(names)} must be set for {model}"
-                         + (f", or its key written to {path} (chmod 600)" if path else ""))
-    if shadows := [name for name in route.get("shadow_env", []) if os.environ.get(name)]:
-        raise ValueError(f"unset {' and '.join(shadows)} for {model}: Inspect would send it in place of the key")
+    refuse_redirects(model, route)
+    key = file_key(model, path) if path is not None else None
+    workspace_id(provider)
+    if key is None and not any(os.environ.get(name) for name in names):
+        raise ValueError(f"{' or '.join(names)} must be set for {model}")
+    if key is not None:
+        os.environ[names[0]] = key
     if "GOOGLE_API_KEY" in names and os.environ.get("GEMINI_API_KEY"):
         os.environ.setdefault("GOOGLE_API_KEY", os.environ["GEMINI_API_KEY"])
     if route["inspect_prefix"].startswith("openai-api/") and route.get("base_url"):

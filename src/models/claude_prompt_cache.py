@@ -1,10 +1,12 @@
 """Prompt caching for Claude, on both routes a run can take to it: where the cache marks go, and a refusal until a paid
 check proves the cache is read under the Inspect that is installed.
 
-    claude_route("claude-opus-5-5-openrouter")   -> "openrouter"
-    claude_route("claude-opus-5-5")              -> "anthropic"
-    claude_route("gpt-6-luna-openrouter")        -> None
+    claude_route("claude-opus-5-5-openrouter")     -> "openrouter"
+    claude_route("claude-opus-5-5")                -> "anthropic"
+    claude_route("gpt-6-luna-openrouter")          -> None
     require_proven(["anthropic/claude-opus-5-5"])  -> ValueError until its entry records caching_verified
+    stamp("claude-opus-5-5", "2026-11-25")         -> 'caching_verified: {date: "2026-11-25", inspect: "c574b6bf6",
+                                                       route: anthropic, entry: claude-opus-5-5}'
 
 Where the marks go. Anthropic caches a request's prefix up to a block marked with cache_control, and it refuses a
 request with more than four marks (HTTP 400, "A maximum of 4 blocks with cache_control may be provided. Found 5.",
@@ -32,8 +34,9 @@ block lets the next call read all of it. Other families get no marks; their host
 Why a paid check. A unit test can count the marks in a request built offline, and tests/unit/test_claude_prompt_cache.py
 does. Only a paid call shows that Anthropic reads the cache. `require_proven` refuses a run that puts a Claude model on
 either route until model_registry.yaml records, for that entry, `caching_verified` with the Inspect commit the check
-ran under. An Inspect bump therefore refuses Claude until scripts/check_anthropic_cache.py (about a cent per model,
-only with the user's yes) passes again.
+ran under, its route and its entry, so a stamp copied to another entry or route proves nothing. An Inspect bump
+therefore refuses Claude until scripts/check_anthropic_cache.py (about a cent per model, only with the user's yes)
+passes again.
 """
 from __future__ import annotations
 
@@ -96,6 +99,13 @@ def installed_inspect() -> str:
     return match.group(1) if match else inspect_ai.__version__
 
 
+def stamp(model: str, date: str) -> str:
+    """The caching_verified line a passing check prints for the model's entry in model_registry.yaml: the date, the
+    installed Inspect, the route and the entry, all of which require_proven checks."""
+    return (f'caching_verified: {{date: "{date}", inspect: "{installed_inspect()}", route: {claude_route(model)}, '
+            f"entry: {models.entry_name(_inspect_name(model))}}}")
+
+
 def same_commit(a: str, b: str) -> bool:
     """Two abbreviations of one commit: the shorter is a prefix of the longer (builds abbreviate hashes to different
     lengths). A release version must match exactly."""
@@ -104,19 +114,24 @@ def same_commit(a: str, b: str) -> bool:
 
 
 def require_proven(run_models: list[str | None]) -> None:
-    """Raise ValueError when a Claude model, on either route, runs before a paid check proved, under the installed
-    Inspect, that its cache is read."""
+    """Raise ValueError when a Claude model, on either route, runs before a paid check proved, for its own entry on its
+    own route and under the installed Inspect, that its cache is read (stamp)."""
     installed = installed_inspect()
     for model in filter(None, run_models):
         route = claude_route(model)
         if route is None:
             continue
         refused = f"{model}: {ROUTE_NAMES[route]} is refused until scripts/check_anthropic_cache.py"
+        entry = models.entry_name(_inspect_name(model))
         verified = (models.entry_of(_inspect_name(model)) or {}).get("caching_verified") or {}
-        recorded = str(verified.get("inspect", "")) if isinstance(verified, dict) else ""
+        verified = verified if isinstance(verified, dict) else {}
+        recorded = str(verified.get("inspect", ""))
         if not recorded:
             raise ValueError(f"{refused} (a paid check of about a cent) shows its cache is read and "
                              "model_registry.yaml records caching_verified")
+        if (verified.get("route"), verified.get("entry")) != (route, entry):
+            raise ValueError(f"{refused} passes for this entry: caching_verified names route {verified.get('route')} "
+                             f"and entry {verified.get('entry')}, and {model} is entry {entry} on route {route}")
         if not same_commit(recorded, installed):
             raise ValueError(f"{refused} passes again: caching_verified names Inspect {recorded}, and Inspect "
                              f"{installed} is installed (a paid check of about a cent)")

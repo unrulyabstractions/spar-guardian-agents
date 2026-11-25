@@ -5,6 +5,7 @@ Claude refused on either route until a paid check under the installed Inspect is
 nothing without --yes."""
 from __future__ import annotations
 
+import datetime as dt
 import os
 
 import pytest
@@ -129,18 +130,51 @@ def test_claude_is_refused_on_either_route_until_a_check_under_the_installed_ins
     recorded("2026-11-02")   # the older form, from before the Inspect commit was recorded
     with pytest.raises(ValueError, match="refused until"):
         cache.require_proven([opus])
-    recorded({"date": "2026-11-02", "inspect": "c060c201c"})
+    own = {"route": cache.claude_route(entry), "entry": entry}
+    recorded({"date": "2026-11-02", "inspect": "c060c201c", **own})
     with pytest.raises(ValueError, match=f"names Inspect c060c201c, and Inspect {cache.installed_inspect()} is"):
         cache.require_proven([opus])
-    recorded({"date": "2026-11-22", "inspect": cache.installed_inspect()})
+    recorded({"date": "2026-11-22", "inspect": cache.installed_inspect(), **own})
     cache.require_proven([opus])
 
 
-def test_every_recorded_check_names_its_date_and_inspect_commit():
-    for name in CLAUDE + DIRECT:
-        verified = models.entries()[name].get("caching_verified")
-        if verified is not None:
-            assert set(verified) == {"date", "inspect"}, name
+@pytest.mark.parametrize("entry", ["claude-opus-5-5-openrouter", "claude-opus-5-5"])
+def test_a_stamp_proves_only_its_own_route_and_entry(monkeypatch, entry):
+    other_route = {"openrouter": "anthropic", "anthropic": "openrouter"}[cache.claude_route(entry)]
+    other_entry = entry.replace("opus", "haiku")
+    unproven = {k: v for k, v in models.entry_of(entry).items() if k != "caching_verified"}
+    inspect = {"date": "2026-11-25", "inspect": cache.installed_inspect()}
+    for stamp in ({**inspect, "route": other_route, "entry": entry},
+                  {**inspect, "route": cache.claude_route(entry), "entry": other_entry},
+                  inspect):           # the form of before 2026-11-25, with neither
+        monkeypatch.setattr(cache.models, "entry_of", lambda name, stamp=stamp: dict(unproven, caching_verified=stamp))
+        with pytest.raises(ValueError, match="passes for this entry: caching_verified names route"):
+            cache.require_proven([f"swarm/{entry}"])
+    monkeypatch.setattr(cache.models, "entry_of", lambda name: dict(
+        unproven, caching_verified={**inspect, "route": cache.claude_route(entry), "entry": entry}))
+    cache.require_proven([f"swarm/{entry}", models.resolve(entry)])
+
+
+def test_every_recorded_check_names_its_date_inspect_route_and_entry_and_no_direct_entry_has_one():
+    stamped = {name for name in CLAUDE + DIRECT if models.entries()[name].get("caching_verified") is not None}
+    assert stamped == set(CLAUDE)
+    for name in stamped:
+        verified = models.entries()[name]["caching_verified"]
+        assert set(verified) == {"date", "inspect", "route", "entry"}, name
+        assert (verified["route"], verified["entry"]) == ("openrouter", name)
+        assert cache.same_commit(str(verified["inspect"]), cache.installed_inspect()), name
+    cache.require_proven(CLAUDE)          # the three OpenRouter stamps still pass
+    for name in DIRECT:
+        with pytest.raises(ValueError, match="Claude at Anthropic is refused until"):
+            cache.require_proven([name])
+
+
+def test_the_stamp_line_names_the_models_route_and_entry():
+    assert cache.stamp("claude-haiku-5-5", "2026-11-25") == (
+        f'caching_verified: {{date: "2026-11-25", inspect: "{cache.installed_inspect()}", route: anthropic, '
+        "entry: claude-haiku-5-5}")
+    assert cache.stamp("anthropic/claude-haiku-5-5", "2026-11-25") == cache.stamp("claude-haiku-5-5", "2026-11-25")
+    assert "route: openrouter, entry: claude-opus-5-5-openrouter}" in cache.stamp("claude-opus-5-5-openrouter", "d")
 
 
 def test_one_commit_abbreviated_to_two_lengths_is_the_same_inspect():
@@ -176,10 +210,13 @@ def test_the_check_of_a_direct_entry_sends_nothing_without_yes(monkeypatch, caps
         raise AssertionError("a call was sent")
 
     monkeypatch.setattr(check, "paid_calls", no_call)
+    os.environ["ANTHROPIC_API_KEY"] = "sk-ant-the-environments-older-key"
     assert check.main(["--model", "claude-opus-5-5"]) == 2
     out = capsys.readouterr().out
-    assert "nothing sent" in out and f"with the key from the key file {key_file}" in out
-    assert "sk-ant-made-up-key" not in out and os.environ["ANTHROPIC_API_KEY"] == "sk-ant-made-up-key"
+    assert out.count("marks: ['top-level', 'system', 'tool bash',") == 3
+    assert "nothing sent" in out and f"with the key from {key_file}; no workspace header" in out
+    # without --yes the key file is not even read
+    assert "sk-ant-made-up-key" not in out and os.environ["ANTHROPIC_API_KEY"] == "sk-ant-the-environments-older-key"
 
 
 def test_the_check_of_a_direct_entry_passes_and_prints_its_caching_verified_line(monkeypatch, capsys, key_file):
@@ -190,7 +227,8 @@ def test_the_check_of_a_direct_entry_passes_and_prints_its_caching_verified_line
     monkeypatch.setattr(check, "paid_calls", calls)
     assert check.main(["--model", "claude-haiku-5-5", "--yes"]) == 0
     out = capsys.readouterr().out
-    assert "PASS" in out and f'inspect: "{cache.installed_inspect()}"' in out
+    assert "PASS" in out and cache.stamp("claude-haiku-5-5", dt.date.today().isoformat()) in out.splitlines()
+    assert os.environ["ANTHROPIC_API_KEY"] == "sk-ant-made-up-key"
 
 
 def test_the_check_of_a_direct_entry_fails_when_a_later_call_reads_too_little(monkeypatch, capsys, key_file):
@@ -210,7 +248,8 @@ def test_the_check_of_a_direct_entry_refuses_without_its_key_file(monkeypatch, c
     key_file.unlink()
     os.environ["ANTHROPIC_API_KEY"] = "sk-ant-the-environments-older-key"
     assert check.main(["--model", "claude-haiku-5-5", "--yes"]) == 2
-    assert f"refused: {key_file} does not exist" in capsys.readouterr().out
+    assert f"write the key to {key_file} (chmod 600)" in capsys.readouterr().out
+    assert os.environ["ANTHROPIC_API_KEY"] == "sk-ant-the-environments-older-key"
 
 
 def test_the_check_refuses_a_model_that_is_not_claude(capsys):

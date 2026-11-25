@@ -10,8 +10,10 @@
 ORBIT builds an agent's model from AgentSpec.model with a bare get_model(spec.model). That call passes no model
 arguments, so an OpenRouter string there would run unpinned. Inspect also merges the eval's generate config into the
 eval's own model only. This provider handles both. `swarm/<entry or Inspect string>` builds the model the registry
-names with its model arguments, its OpenRouter routing among them. Every call of that model carries the eval's
-generate config and the agents' generate config (AGENT_CONFIG, set by run.run) beneath the call's own settings.
+names with its key (models.prepare_env: a provider's key file, never the environment's older key) and its model
+arguments, its OpenRouter routing and a workspace header among them, on every path that builds a role model. Every
+call of that model carries the eval's generate config and the agents' generate config (AGENT_CONFIG, set by run.run)
+beneath the call's own settings.
 The eval's config also reaches a role model under `inspect eval src/tasks.py@...`, where AGENT_CONFIG stays empty. An
 OpenRouter model whose entry pins no host is refused (models.check_routing).
 
@@ -98,8 +100,9 @@ def forwarding(cls: type[ModelAPI]) -> type[ModelAPI]:
 
 @forwarding
 class RegistryModelAPI(ModelAPI):
-    """swarm/<entry or Inspect string>: the model the registry names, built with its model arguments (its OpenRouter
-    routing) and the agents' generate config, behind a bare per-agent model string."""
+    """swarm/<entry or Inspect string>: the model the registry names, with its key (models.prepare_env, unless the
+    caller passes one), its model arguments (its OpenRouter routing, a workspace header) and the agents' generate
+    config, behind a bare per-agent model string."""
 
     forwarded: list[str] = []
     """The ModelAPI methods this class forwards to the inner API, set by `forwarding`."""
@@ -110,6 +113,8 @@ class RegistryModelAPI(ModelAPI):
                  config: GenerateConfig = GenerateConfig(), **model_args: Any) -> None:
         inner_name = models.resolve(model_name)
         models.check_routing(inner_name)
+        if api_key is None:     # a caller's own key (an offline client's) is left alone
+            models.prepare_env(inner_name)
         inner = get_model(inner_name, config=config, base_url=base_url, api_key=api_key, memoize=False,
                           **{**models.model_args(inner_name), **model_args})
         self.inner = inner.api
