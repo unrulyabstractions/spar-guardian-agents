@@ -751,8 +751,8 @@ parts:
     files: [src/measures/stored_json.py, src/measures/ladder_by_domain.py, src/measures/run_listing.py,
       src/ui/transcript_index.py, src/ui/transcript_levels.py, src/ui/transcript_presence.py, src/ui/viewer_parts.py]
     pins: []
-    version: 9
-    fingerprint: sha256:1894eba6a1c4108adbafa0ae7b17eb43bbb10418896b77f4fe24392af7c0357a
+    version: 10
+    fingerprint: sha256:1509c4ce2fa726533517fd92daf2133fe364fefbaba225bd3723a67d21088a9f
     log:
       1: '2026-11-22 first version: the runs page''s row (transcript_index.build_row) of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -793,3 +793,5 @@ parts:
       9: '2026-11-24 reads the Cheating, Collusion and alert outcomes of signals v13 (re-locked 2026-11-24:
         the four older tasks deleted, rebased on ian_gflipt: reprocess_compare on all seven stored studies
         shows only versions.json differs)'
+      10: 2026-11-25 a model has one key whatever its route (Anthropic's own claude-opus-5-5 reads claude-opus-5.5,
+        as OpenRouter's does)

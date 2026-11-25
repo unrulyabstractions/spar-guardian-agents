@@ -9,7 +9,7 @@ import pytest
 
 from src.configuration.settings import ROOT
 from src.ui import transcript_summary as ts
-from src.ui.transcript_index import alerts_shown, build_index
+from src.ui.transcript_index import MODELS, alerts_shown, build_index, model_rank, short_model
 
 COL = "study_x"
 
@@ -303,3 +303,21 @@ def test_the_page_filters_rows_by_team_size():
     assert "(!size || String(r.size) === size)" in page and "nav({ size: v })" in page
     assert "sizes.length > 1 ? select([['', 'All sizes']" in page
 
+
+
+def test_a_model_has_one_key_whatever_its_route_and_tables_go_by_strength():
+    """Anthropic's own id of a Claude model and OpenRouter's give one key, so a model is one row and one menu entry;
+    the summary's rows and its columns within one share of influencers go weakest first (transcript_index.MODELS)."""
+    assert short_model("anthropic/claude-opus-5-5") == "claude-opus-5.5"
+    assert short_model("openrouter/anthropic/claude-opus-5.5") == "claude-opus-5.5"
+    assert short_model("anthropic/claude-fable-5-2") == "claude-fable-5.2"
+    assert short_model("openrouter/deepseek/deepseek-v4.1-flash-1017") == "deepseek-v4.1-flash"
+    claude = ["claude-haiku-5.5", "claude-sonnet-5.5", "claude-opus-5.5", "claude-fable-5.2"]
+    assert sorted(reversed(claude), key=model_rank) == claude and all(m in MODELS for m in claude)
+    assert sorted(["zzz", "claude-fable-5.2", "aaa"], key=model_rank) == ["claude-fable-5.2", "aaa", "zzz"]
+    rows = [row(f"r{k}", model="deepseek-v4.1-flash", workers=4, influencers=[("regulator", "generic", m)])
+            for k, m in enumerate(reversed(claude))]
+    rows += [row("o", model="claude-opus-5.5"), row("h", model="claude-haiku-5.5")]
+    s = ts.summary(rows, COL)
+    assert [x["model"] for c in s["columns"] for x in c["influencers"]] == claude
+    assert [r["model"] for r in s["rows"]] == ["deepseek-v4.1-flash", "claude-haiku-5.5", "claude-opus-5.5"]

@@ -16,11 +16,21 @@ export function setCollections(list) {
 }
 export const collectionOf = key => COLLECTIONS[key] || { key, label: key, tag: '', about: '' };
 
-// A model by the last part of its model string (src/ui/transcript_viewer.py short_model).
-export const MODELS = {
-  'deepseek-v4.1-flash': 'DeepSeek V4.1 Flash', 'gpt-5-mini': 'GPT-5 mini', 'claude-haiku-5.5': 'Claude Haiku 5.5',
-  'claude-haiku-5-5': 'Claude Haiku 5.5', 'gpt-6-luna': 'GPT-6 Luna', 'qwen3.8-27b': 'Qwen3.8 27B',
-  'claude-sonnet-5.5': 'Claude Sonnet 5.5', 'claude-opus-5.5': 'Claude Opus 5.5', 'gemini-4-argon': 'Gemini 4 Argon',
+// Each model's name by its key, weakest first, from the index (src/ui/transcript_index.py MODELS, short_model).
+export const MODELS = {};
+export const MODEL_ORDER = [];
+
+/** Fill MODELS from the index's list, in its order. */
+export function setModels(list) {
+  for (const m of list || []) {
+    if (!(m.key in MODELS)) MODEL_ORDER.push(m.key);
+    MODELS[m.key] = m.name;
+  }
+}
+/** Sort models by strength, MODEL_ORDER's; a model the list lacks comes after them, by its key. */
+export const byStrength = (a, b) => {
+  const rank = m => (MODEL_ORDER.includes(m) ? MODEL_ORDER.indexOf(m) : MODEL_ORDER.length);
+  return rank(a) - rank(b) || String(a).localeCompare(String(b));
 };
 
 // CheatBench's judge: the eval's own verdicts and the judge passes' (judges/cheatbench.<judge>.jsonl), both read

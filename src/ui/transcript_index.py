@@ -37,7 +37,7 @@ from src.ui import transcript_levels, transcript_presence
 SKIP = ("study_smoke", "study_orbit2_check", "apart_controls")
 """Folders under runs/ the viewer never lists: mock smokes, a port check and the apart controls, whose runs are all
 single agents."""
-SERVED = ("built_at", "build_seconds", "pipeline", "collections", "errors", "rows", "left_out")
+SERVED = ("built_at", "build_seconds", "pipeline", "collections", "models", "errors", "rows", "left_out")
 """The index's keys /api/index answers; the index also keeps each run's measures and folder (entries)."""
 LABELS = {"cheating": "cheating", "coordination": "coordination", "collusion": "collusion", "judged": "judged"}
 """The label parts the run page reads (stored_measures), by part name."""
@@ -210,12 +210,33 @@ def label_summary(labels: dict, roles: dict[str, str | None]) -> dict:
 
 
 # ------------------------------------------------------------------------------------------------------- the rows
+MODELS = {
+    "hy4-flash": "HY4 Flash", "qwen3.8-27b": "Qwen 3.8 27B", "qwen3.8-flash": "Qwen 3.8 Flash",
+    "deepseek-v4.1-flash": "DeepSeek V4.1 Flash", "muse-ember": "Muse Ember", "gpt-5-mini": "GPT-5 mini",
+    "gpt-6-luna": "GPT-6 Luna", "claude-haiku-5.5": "Claude Haiku 5.5", "grok-4.7": "Grok 4.7", "kimi-k3": "Kimi K3",
+    "gpt-6.1-terra": "GPT-6.1 Terra", "claude-sonnet-5.5": "Claude Sonnet 5.5", "gemini-4-argon": "Gemini 4 Argon",
+    "claude-opus-5.5": "Claude Opus 5.5", "claude-fable-5.2": "Claude Fable 5.2",
+}
+"""Every model's name on the pages by its key (short_model), weakest first: the order of the summary's rows, of its
+columns within one share of influencers, and of the model menus (the user, 2026-11-25: "name cases not same? also
+within %, not ordered by model strength??"). The index carries it to the page (tv_labels.js setModels)."""
+CLAUDE_DIRECT = re.compile(r"^(claude-[a-z]+-\d+)-(\d+)$")
+"""Anthropic's own id of a Claude model, whose version OpenRouter writes with a dot."""
+
+
 def short_model(model: str | None) -> str | None:
-    """A model string's last part without a date suffix: openrouter/deepseek/deepseek-v4.1-flash-1017 gives
-    deepseek-v4.1-flash."""
+    """A model's key: its string's last part without a date suffix, the same for every route to the model.
+    openrouter/deepseek/deepseek-v4.1-flash-1017 gives deepseek-v4.1-flash; anthropic/claude-opus-5-5 gives
+    claude-opus-5.5, as openrouter/anthropic/claude-opus-5.5 does."""
     if not model:
         return None
-    return re.sub(r"-\d{4}$", "", model.split("/")[-1])
+    return CLAUDE_DIRECT.sub(r"\1.\2", re.sub(r"-\d{4}$", "", model.split("/")[-1]))
+
+
+def model_rank(model: str | None) -> tuple[int, str]:
+    """A model's place by strength, MODELS' order; a model the table lacks comes after them, by its key."""
+    keys = list(MODELS)
+    return (keys.index(model) if model in MODELS else len(keys), model or "")
 
 
 @dataclass
@@ -514,6 +535,7 @@ def build_index(runs: Path) -> dict:
     return {"runs": str(runs), "built_at": time.strftime("%Y-%m-%d %H:%M:%S %Z"),
             "build_seconds": round(time.time() - t0, 2), "pipeline": pipeline_counts(entries),
             "collections": collections_out, "errors": errors, "rows": rows,
+            "models": [{"key": key, "name": name} for key, name in MODELS.items()],
             "left_out": {"tasks": sorted(HIDDEN_TASKS), "runs": left_out, "single_agent": single},
             "entries": entries}
 

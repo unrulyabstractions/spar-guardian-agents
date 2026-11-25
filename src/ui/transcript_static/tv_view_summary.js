@@ -11,7 +11,7 @@ import { fmtInt, h, plural } from '/static/app/dom.js';
 import { badge, muted, select } from '/static/app/components.js';
 import { RAMP, inkOn } from './tv_case_view.js';
 import { loadLadders } from './tv_view_index.js';
-import { COLLECTION_ORDER, collectionOf, modelLabel } from './tv_labels.js';
+import { COLLECTION_ORDER, byStrength, collectionOf, modelLabel } from './tv_labels.js';
 import { taskShown } from './tv_settings.js';
 
 const SUMMARIES = new Map();
@@ -208,7 +208,7 @@ export async function viewSummary(q) {
       both: 'regulator and disregulator together' }[g],
     onclick: () => { const next = new Set(hidden); if (next.has(g)) next.delete(g); else next.add(g); nav({ hide: [...next].join(',') }); } },
     label)));
-  const uniqueModels = list => [...new Set(list)].sort((a, b) => modelLabel({ model: a }).localeCompare(modelLabel({ model: b })));
+  const uniqueModels = list => [...new Set(list)].sort(byStrength);
   const tPick = select([['', 'All tasks'], ...[...new Set(s.rows.map(r => r.task))].sort().map(t => [t, t])],
     task, v => nav({ task: v }), { 'aria-label': 'Task' });
   const wPick = select([['', 'All workers\' models'], ...uniqueModels(s.rows.map(r => r.model)).map(m => [m, modelLabel({ model: m })])],

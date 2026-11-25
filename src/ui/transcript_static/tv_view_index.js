@@ -19,7 +19,7 @@ import { enc, fmtInt, h, plural } from '/static/app/dom.js';
 import { badge, muted, select } from '/static/app/components.js';
 import { taskShown } from './tv_settings.js';
 import { cheatbenchTeam, cheatingCell, levelChip, lineMark, teamScore } from './tv_levels.js';
-import { COLLECTION_ORDER, collectionOf, conditioningChip, conditioningLabel, modelLabel, setCollections, taskLabel } from './tv_labels.js';
+import { COLLECTION_ORDER, byStrength, collectionOf, conditioningChip, conditioningLabel, modelLabel, setCollections, setModels, taskLabel } from './tv_labels.js';
 
 let INDEX = null;
 export async function loadIndex() {
@@ -28,6 +28,7 @@ export async function loadIndex() {
     if (!r.ok) throw new Error(`index: HTTP ${r.status}`);
     INDEX = await r.json();
     setCollections(INDEX.collections);
+    setModels(INDEX.models);
   }
   return INDEX;
 }
@@ -275,7 +276,8 @@ function filters(d) {
       options: rows => uniq(rows.map(r => r.seed_pack || 'none')).sort((a, b) => (b === 'none') - (a === 'none') || a.localeCompare(b)).map(x => [x, x]),
       test: (r, v) => (r.seed_pack || 'none') === v },
     { key: 'col', label: 'Collection', group: 'run', options: () => COLLECTION_ORDER.map(c => [c, collectionOf(c).label]), test: (r, v) => r.col === v },
-    { key: 'model', label: 'Workers\' model', group: 'who', options: rows => uniq(rows.map(modelLabel)).sort().map(x => [x, x]), test: (r, v) => modelLabel(r) === v },
+    { key: 'model', label: 'Workers\' model', group: 'who', options: rows => { const key = new Map(rows.map(r => [modelLabel(r), r.model])); return [...key.keys()].sort((a, b) => byStrength(key.get(a), key.get(b))).map(x => [x, x]); },
+      test: (r, v) => modelLabel(r) === v },
     { key: 'worker', label: 'Worker conditioning', group: 'who', options: rows => uniq(rows.map(r => r.worker_conditioning)).sort((a, b) => (b === 'baseline') - (a === 'baseline') || a.localeCompare(b)).map(x => [x, x.split('; ').map(conditioningLabel).join('; ')]),
       test: (r, v) => r.worker_conditioning === v },
     { key: 'influencer', label: 'Influencer', group: 'who', title: 'Which influencers the run holds',

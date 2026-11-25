@@ -23,6 +23,7 @@ from collections import Counter
 
 from src.configuration.settings import load_instruction_levels
 from src.ui import transcript_levels
+from src.ui.transcript_index import model_rank
 
 INFLUENCERS = ("regulator", "disregulator")
 SETS = ("regulator", "disregulator", "both")
@@ -88,14 +89,15 @@ def swarms_keep_their_size(rows: list[dict]) -> bool:
 
 
 def influencers_of(row: dict) -> tuple[tuple, ...]:
-    """The run's influencers as (role, level, model, share), regulators first, each role by level and model. share is
+    """The run's influencers as (role, level, model, share), regulators first, each role by level and by its model's
+    strength (transcript_index.model_rank). share is
     the percent of the team the influencers of that role, level and model make up (the user, 2026-11-25: "what % of
     swarm they represent so they are comparable across sizes"): 1 regulator of 5 agents and 4 of 20 are both 20."""
     team = team_size(row)
     xs = [(x["role"], x["level"], x.get("model") or "", round(100 * x.get("n", 1) / team))
           for x in row["influencer_conditioning"]]
     return tuple(sorted(xs, key=lambda x: (INFLUENCERS.index(x[0]) if x[0] in INFLUENCERS else len(INFLUENCERS), x[0],
-                                           level_rank(x[0], x[1]), x[2], x[3])))
+                                           level_rank(x[0], x[1]), model_rank(x[2]), x[3])))
 
 
 def share_words(role: str, share: int) -> str:
@@ -146,11 +148,11 @@ def column_of(worker: str, influencers: tuple) -> dict:
 
 def column_order(c: dict) -> tuple:
     """A column's place: its band's place in PLACE, then within an influencer band its influencers' levels, their
-    share of the team and their models (every 20% column before the first 60% one), within a control band COLUMNS'
-    order, and the other conditions by key."""
+    share of the team and their models, weakest first (every 20% column before the first 60% one, and within a share
+    Haiku before Opus), within a control band COLUMNS' order, and the other conditions by key."""
     band = PLACE.index(c["group"])
     if c["group"] in SETS:
-        return (band, tuple((level_rank(x["role"], x["level"]), x["share"], x["model"] or "")
+        return (band, tuple((level_rank(x["role"], x["level"]), x["share"], model_rank(x["model"]))
                             for x in c["influencers"]))
     if c["group"] in ("baseline", "positive", "negative"):
         return (band, (COLUMNS.index(next(x for x in COLUMNS if x["key"] == c["key"])),))
@@ -259,7 +261,8 @@ def summary(rows: list[dict], col: str) -> dict:
         groups.setdefault(key, {}).setdefault(key_of[condition_of(r)], []).append(r)
     out_rows = []
     for (model, task, size, pack), by_col in sorted(
-            groups.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[0][2], kv[0][3] != "none", kv[0][3] or "")):
+            groups.items(), key=lambda kv: (model_rank(kv[0][0]), kv[0][1], kv[0][2], kv[0][3] != "none",
+                                            kv[0][3] or "")):
         where = {"task": task, "model": model, **({"workers": str(size)} if rows_by == "workers" else {}),
                  **({"seed_pack": pack} if by_seed else {})}
         task_name = next(r for rs in by_col.values() for r in rs).get("task_name")
