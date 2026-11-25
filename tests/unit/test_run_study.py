@@ -18,6 +18,7 @@ PLANS = settings.ROOT / "studies" / "plans"
 PACK = "swe/revealing"
 PLAN = f"""study: study_x
 seeds: [1, 2]
+settings: [time_limit_s=18000, cost_limit_usd=5]
 targets:
   swe_deepseek:
     module: examples.swe.flipt_minimal
@@ -46,15 +47,18 @@ def test_a_plans_cells_go_seed_by_seed_target_by_target_pack_by_pack(plan_file):
     assert len(set(names)) == 8
 
 
-def test_a_cell_runs_the_pilots_command(plan_file):
-    """launch.sh of the pilot: the model, no judge, the name, the seed, the five settings, the salt, then the pack."""
+def test_a_cell_runs_one_command_with_the_plans_settings_and_no_other(plan_file):
+    """The model, no judge, the name, the seed, the plan's settings, the salt, then the pack. The launcher adds no
+    setting of its own, so a value the plan leaves out is the default."""
     plan = seed_study.load_plan(plan_file)
     cell = next(c for c in seed_study.cells(plan) if c.name == "swe_deepseek_revealing_s1")
+    assert seed_study.command(cell, "study_x", plan["settings"], False) == (
+        "STUDY=study_x exec uv run python -m examples.swe.flipt_minimal --model deepseek-flash-openrouter --no-judge "
+        "--name swe_deepseek_revealing_s1 --set seed=1 --set time_limit_s=18000 --set cost_limit_usd=5 "
+        "--set id_salt=swe_deepseek_s1 --set seed_pack=swe/revealing")
     assert seed_study.command(cell, "study_x", [], False) == (
         "STUDY=study_x exec uv run python -m examples.swe.flipt_minimal --model deepseek-flash-openrouter --no-judge "
-        "--name swe_deepseek_revealing_s1 --set seed=1 --set rounds=30 --set calls_per_round=10 "
-        "--set round_time_s=600 --set time_limit_s=18000 --set cost_limit_usd=5 --set id_salt=swe_deepseek_s1 "
-        "--set seed_pack=swe/revealing")
+        "--name swe_deepseek_revealing_s1 --set seed=1 --set id_salt=swe_deepseek_s1 --set seed_pack=swe/revealing")
     control = next(c for c in seed_study.cells(plan) if c.name == "swe_deepseek_none_s1")
     assert "seed_pack" not in seed_study.command(control, "s", [], False)
     assert "--replace" in control.argv([], True)
@@ -280,6 +284,7 @@ def test_a_run_that_wrote_nothing_for_ten_minutes_is_a_stall(tmp_path, monkeypat
 GATED = """study: study_x
 seed: 1
 pack: revealing
+settings: [time_limit_s=18000]
 tasks:
   flipt: {cell: examples.swe.flipt_minimal, cheat: examples.swe.flipt_minimal_cheat}
 workers:
@@ -330,7 +335,7 @@ def test_with_gates_the_launcher_opens_the_next_arm_as_soon_as_a_run_ends(tmp_pa
     out = capsys.readouterr().out
     assert [re.search(r"--name (\S+)", line)[1] for line in FakeRun.launched] == \
         ["flipt_a_baseline_none_s1", "flipt_a_seeded_revealing_s1"]
-    assert all("--set cost_limit_usd=5" in line for line in FakeRun.launched)
+    assert all("--set seed=1 --set time_limit_s=18000 --set id_salt=" in line for line in FakeRun.launched)
     assert "QUEUE  flipt_a_seeded_revealing_s1 (opened by its gate)" in out
     assert out.count(" GATES  ") == 3 and "stray_target" not in out
     assert "positive_control" not in out
@@ -356,7 +361,7 @@ def test_without_gates_the_launcher_writes_no_plan(plan_file, tmp_path, monkeypa
 # ---------------------------------------------------------------- runs counted by their agents, and the stages
 SIZED = f"""study: study_x
 seeds: [1]
-settings: [n_agents=4]
+settings: [n_agents=4, time_limit_s=18000]
 targets:
   team_default:
     module: {SWE}
@@ -383,11 +388,12 @@ def test_a_cells_agents_and_cap_are_the_last_settings_that_name_them(tmp_path):
     small, big = seed_study.cells(plan)
     assert (small.n_agents, small.stage, small.cap_usd(plan["settings"])) == (4, 0, 5.0)
     assert (big.n_agents, big.stage, big.cap_usd(plan["settings"])) == (20, 1, 20.0)
-    assert "--set cost_limit_usd=5" in seed_study.command(big, "s", plan["settings"], False)
+    assert "--set seed=1 --set n_agents=4 --set time_limit_s=18000 --set n_agents=20" in seed_study.command(
+        big, "s", plan["settings"], False)
     assert seed_study.command(big, "s", plan["settings"], False).endswith(
         "--set n_agents=20 --set max_concurrency=20 --set cost_limit_usd=20 --set id_salt=swarm_20_s1 "
         "--set seed_pack=swe/revealing")
-    path.write_text(SIZED.replace("settings: [n_agents=4]\n", ""))
+    path.write_text(SIZED.replace("settings: [n_agents=4, time_limit_s=18000]\n", "settings: [time_limit_s=18000]\n"))
     assert seed_study.cells(seed_study.load_plan(path))[0].n_agents == seed_study.DEFAULT_AGENTS == 3
 
 
@@ -468,3 +474,27 @@ def test_the_live_runs_carry_their_agents(monkeypatch):
     monkeypatch.setattr(seed_study.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": ps})())
     assert seed_study.live_runs() == {"big_s1": 20, "team_s1": 3}
     assert seed_study.live_names() == {"big_s1", "team_s1"}
+
+
+def test_an_open_plan_that_would_inherit_too_short_a_time_limit_is_refused(tmp_path):
+    """The default time limit is the scale's and is shorter than the default rounds allow, so an open plan names
+    time_limit_s, for the study or for a target. A closed plan is a record and is read as it is."""
+    path = tmp_path / "plan.yaml"
+    path.write_text(PLAN.replace("settings: [time_limit_s=18000, cost_limit_usd=5]\n", ""))
+    with pytest.raises(ValueError, match="names no time_limit_s.*add time_limit_s=18000"):
+        seed_study.load_plan(path)
+    path.write_text(PLAN.replace("time_limit_s=18000, cost_limit_usd=5", "rounds=5"))
+    assert seed_study.load_plan(path)["settings"] == ["rounds=5"]          # 5 rounds of 600 s fit the default
+    path.write_text(PLAN.replace("settings: [time_limit_s=18000, cost_limit_usd=5]\n", "") + "closed: true\n")
+    assert seed_study.load_plan(path)["settings"] == []
+
+
+def test_every_study_file_states_what_its_runs_were_given():
+    """Each plan and each gated spec of the repository names its own settings, and a plan written from a spec
+    carries the spec's."""
+    for path in sorted(PLANS.glob("*.yaml")):
+        assert seed_study.setting(seed_study.load_plan(path)["settings"], "time_limit_s") == "18000", path.name
+    for path in sorted((settings.ROOT / "studies" / "gated").glob("*.yaml")):
+        spec = gs.load_spec(path)
+        plan = seed_study.load_plan(PLANS / path.name)
+        assert list(spec.settings) == plan["settings"] and spec.settings, path.name

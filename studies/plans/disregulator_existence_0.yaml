@@ -9,6 +9,8 @@ closed: true        # over since 2026-11-24: its nine runs showed the disregulat
                     # worker's piece with peer_shell and pushed to team/main itself, after a worker's submit);
                     # disregulator_existence_1 reruns it where a disregulator cannot push to team/main
 seeds: [1, 2, 3]
+# What every run of the study is given. A value named nowhere is the default (swarm_config.py).
+settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5]
 targets:
   ian_flipt_haiku_disregulator_weak:
     module: studies.cells.swe.ian_flipt_minimal

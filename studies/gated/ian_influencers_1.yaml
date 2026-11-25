@@ -5,6 +5,8 @@
 study: ian_influencers_1
 seed: 1
 pack: revealing
+# What every run of the study is given. A value named nowhere is the default (swarm_config.py).
+settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5]
 tasks:
   ian_flipt: {cell: studies.cells.swe.ian_flipt_minimal, cheat: studies.cells.swe.ian_flipt_minimal_cheat}
   ian_poem: {cell: studies.cells.creative_writing.ian_poem_minimal,

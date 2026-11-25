@@ -13,7 +13,7 @@ packs:
         module: studies.cells.protein_design.ian_binder_minimal
         model: gpt-6-luna-openrouter
         packs: [none, protein_design/revealing]   # "none" is the unseeded control
-    settings: []                                     # more --set pairs after PILOT_SETTINGS
+    settings: [time_limit_s=18000]                   # the study's own --set pairs, for every target
     limits: {max_runs: 10, max_per_task: {swe: 4}, spacing_s: 60}
 
 The launcher takes the first queued cell with room: a cell whose task is full (max_per_task) is passed over, so light
@@ -30,12 +30,16 @@ with one GATES line each time. It queues no cell outside the spec. A live run wh
 Inspect sample buffer have not changed for STALL_MINUTES is printed once as `STALL <name> <minutes>`; nothing is
 killed.
 
-Each cell runs the pilot's command (the scratchpad's launch.sh of 2026-11-22), under `zsh -lic` so the key comes from
-~/.zshrc and never from a command line:
+Each cell runs one command, under `zsh -lic` so the key comes from ~/.zshrc and never from a command line:
 
     STUDY=<study> uv run python -m <module> --model <model> --no-judge --name <target>_<pack>_s<seed>
-        --set seed=<seed> --set rounds=30 --set calls_per_round=10 --set round_time_s=600 --set time_limit_s=18000
-        --set cost_limit_usd=5 --set id_salt=<target>_s<seed> [--set seed_pack=<task>/<pack>]
+        --set seed=<seed> [--set <each of the plan's settings>] [--set <each of the target's settings>]
+        --set id_salt=<target>_s<seed> [--set seed_pack=<task>/<pack>]
+
+The launcher adds no setting of its own. A value that neither the plan's `settings` nor the target's names is the
+default: SwarmConfig's (src/configuration/swarm_config.py: rounds, calls_per_round, round_time_s, cost_limit_usd) at
+the default preset and scale (time_limit_s). So a study's file says everything its runs change. A plan whose runs
+would inherit a time limit shorter than their rounds allow is refused until it names time_limit_s.
 
 id_salt is the target's and the seed's, not the pack's, so every pack of a target and seed draws the same IDs, roles and
 deal as its control. A cell whose runs/<study>/<name>/run.json exists is skipped (--replace runs it again and sets the
@@ -72,11 +76,10 @@ from inspect_ai._util.appdirs import inspect_data_dir
 
 from scripts.study import gated_study
 from src.configuration import seed_packs, settings
+from src.configuration.presets import build_config
 from src.measures.run_directory import RunDir
 from src.models.cost_cap import DEFAULT_CAP_USD
 
-PILOT_SETTINGS = ["rounds=30", "calls_per_round=10", "round_time_s=600", "time_limit_s=18000", "cost_limit_usd=5"]
-"""The pilot's settings, after the seed and before the salt and the pack."""
 MIN_FREE_MEMORY_PCT = 40
 MIN_FREE_DISK_GB = 10
 LIMITS = {"max_runs": 10, "max_per_task": {}, "spacing_s": 60, "min_disk_gb": {}, "needs": {}, "max_agents": None}
@@ -122,18 +125,19 @@ class Cell:
         return f"{self.target}_{self.pack.split('/')[-1]}_s{self.seed}"
 
     def argv(self, extra: list[str], replace: bool) -> list[str]:
-        """The example's arguments, in the pilot's order."""
+        """The cell script's arguments: the model, the name, the seed, the plan's settings (`extra`), the target's,
+        the salt, then the pack. Nothing else is set, so every other value is the default."""
         out = ["--model", self.model, "--no-judge", "--name", self.name, *(["--replace"] if replace else []),
                "--set", f"seed={self.seed}"]
-        for pair in [*PILOT_SETTINGS, *extra, *self.settings, f"id_salt={self.target}_s{self.seed}"]:
+        for pair in [*extra, *self.settings, f"id_salt={self.target}_s{self.seed}"]:
             out += ["--set", pair]
         if self.pack != "none":
             out += ["--set", f"seed_pack={self.pack}"]
         return out
 
     def cap_usd(self, extra: list[str]) -> float:
-        """The run's dollar cap: the last cost_limit_usd of the pilot's, the plan's and the target's settings."""
-        return float(setting([*PILOT_SETTINGS, *extra, *self.settings], "cost_limit_usd") or DEFAULT_CAP_USD)
+        """The run's dollar cap: the last cost_limit_usd of the plan's and the target's settings, else the default."""
+        return float(setting([*extra, *self.settings], "cost_limit_usd") or DEFAULT_CAP_USD)
 
 
 def setting(pairs: list[str] | tuple[str, ...], key: str) -> str | None:
@@ -173,7 +177,27 @@ def load_plan(path: Path) -> dict:
             raise ValueError(f"{path}: needs of {task} take {sorted(NEED_KEYS)}, per being one of {PER}")
     if limits["max_agents"] is not None and (not isinstance(limits["max_agents"], int) or limits["max_agents"] < 1):
         raise ValueError(f"{path}: max_agents is a positive integer")
-    return {**plan, "settings": list(plan.get("settings") or []), "limits": limits}
+    out = {**plan, "settings": [str(pair) for pair in plan.get("settings") or []], "limits": limits}
+    if not out.get("closed"):
+        check_time_limit(path, out)
+    return out
+
+
+def check_time_limit(path: Path, plan: dict) -> None:
+    """Refuse an open plan with a target that would inherit a time limit shorter than its rounds allow. A run of R
+    rounds of round_time_s each may last R x round_time_s; the default limit is the scale's and is shorter than the
+    default rounds. A target whose settings, or the plan's, name time_limit_s is taken at its word."""
+    default = build_config("default")
+    for target, spec in plan["targets"].items():
+        pairs = [*plan["settings"], *(str(pair) for pair in spec.get("settings") or [])]
+        if setting(pairs, "time_limit_s") is not None:
+            continue
+        rounds = int(setting(pairs, "rounds") or default.rounds)
+        round_s = int(setting(pairs, "round_time_s") or default.round_time_s)
+        if default.time_limit_s < rounds * round_s:
+            raise ValueError(f"{path}: {target} names no time_limit_s, and the default {default.time_limit_s} s is "
+                             f"less than its {rounds} rounds of {round_s} s ({rounds * round_s} s): add "
+                             f"time_limit_s={rounds * round_s} to the plan's settings")
 
 
 def cells(plan: dict) -> list[Cell]:
@@ -456,7 +480,7 @@ def main(argv: list[str] | None = None) -> int:
         done = RunDir(RUNS / study / cell.name).is_run()
         (skipped if done and not args.replace else todo).append(cell)
     caps = sorted({cell.cap_usd(plan["settings"]) for cell in todo}) or \
-        [float(setting([*PILOT_SETTINGS, *plan["settings"]], "cost_limit_usd") or DEFAULT_CAP_USD)]
+        [float(setting(plan["settings"], "cost_limit_usd") or DEFAULT_CAP_USD)]
     print(f"plan {args.plan}: study {study}, {len(todo) + len(skipped)} cells, {len(skipped)} done already, "
           f"{len(todo)} to run; at most ${sum(cell.cap_usd(plan['settings']) for cell in todo):.2f} at the runs' "
           f"caps of {' and '.join(f'${cap:.2f}' for cap in caps)}")

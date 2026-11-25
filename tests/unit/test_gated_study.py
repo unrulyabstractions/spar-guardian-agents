@@ -24,6 +24,7 @@ RECORD = settings.ROOT / "studies" / "gated" / "ian_influencers_0.yaml"
 SPEC = """study: study_g
 seed: 1
 pack: revealing
+settings: [time_limit_s=18000]
 tasks:
   flipt: {cell: examples.swe.flipt_minimal, cheat: examples.swe.flipt_minimal_cheat}
 workers:
@@ -412,8 +413,9 @@ SHARES = {5: {"0": 0, "20": 1, "60": 3}, 10: {"0": 0, "20": 2, "60": 6}, 20: {"0
 SCALE_ARMS = [a.name for a in gs.load_spec(SCALE).arms]
 
 
-def built(cell, monkeypatch):
-    """The config, model and task the cell module's own main() builds on the plan's arguments, run.run stubbed."""
+def built(cell, monkeypatch, study_settings=()):
+    """The config, model and task the cell module's own main() builds on the plan's arguments (the study's settings,
+    then the target's), run.run stubbed."""
     module = importlib.import_module(cell.module)
     seen = {}
 
@@ -423,7 +425,7 @@ def built(cell, monkeypatch):
 
     monkeypatch.setattr(src.run, "run", run)
     monkeypatch.setattr(launch_command, "_LAUNCH", None)
-    monkeypatch.setattr(sys, "argv", [module.__file__, *cell.argv([], False)])
+    monkeypatch.setattr(sys, "argv", [module.__file__, *cell.argv(list(study_settings), False)])
     assert module.main() == 1 and seen["name"] == cell.name
     return seen
 
@@ -463,8 +465,8 @@ def test_each_scale_arm_builds_its_swarm(at, monkeypatch):
     spec = gs.load_spec(SCALE)
     arm, worker = spec.arms[at], list(spec.workers)[at % len(spec.workers)]
     name, target = spec.target("ian_flipt", worker, arm)
-    cell = run_study.cells({"seeds": [1], "settings": [], "targets": {name: target}})[0]
-    seen = built(cell, monkeypatch)
+    cell = run_study.cells({"seeds": [1], "settings": list(spec.settings), "targets": {name: target}})[0]
+    seen = built(cell, monkeypatch, spec.settings)
     config, cb = seen["config"], seen["task"].dataset[0].metadata["cheatbench"]
     pairs = dict(pair.split("=", 1) for pair in arm.settings)
     size, regulators = int(pairs["n_agents"]), int(pairs.get("regulators", 0))

@@ -11,6 +11,7 @@ from scripts.study import run_study as rs
 SWE, POEM = "studies.cells.swe.ian_flipt_minimal", "studies.cells.creative_writing.ian_poem_minimal"
 PLAN = f"""study: study_p
 seeds: [1]
+settings: [time_limit_s=18000]
 targets:
   swe_qwen: {{module: {SWE}, model: qwen3.8-flash-openrouter, packs: [none, swe/revealing]}}
   swe_luna: {{module: {SWE}, model: gpt-6-luna-openrouter, packs: [none, swe/revealing]}}
@@ -136,6 +137,7 @@ def test_the_command_fails_when_the_peak_passes_dockers_memory(tmp_path, machine
     plan = tmp_path / "plan.yaml"
     plan.write_text(f"""study: study_p
 seeds: [1]
+settings: [time_limit_s=18000]
 targets:
   big: {{module: {SWE}, model: qwen3.8-flash-openrouter, packs: [none], settings: [n_agents=20]}}
   small: {{module: {SWE}, model: qwen3.8-flash-openrouter, packs: [none], settings: [n_agents=4]}}

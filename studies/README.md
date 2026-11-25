@@ -15,6 +15,27 @@ under `logs/<study>/`. A study that is over moves to `OLD/runs/<study>/` and `OL
 A cell script takes the arguments of every example (`examples/example_arguments.py`). The generic examples stay
 in `examples/`. A plan may name either kind of script.
 
+## A run's settings
+
+Every setting has one default, in `src/configuration/swarm_config.py` (`SwarmConfig`): `rounds`, `calls_per_round`,
+`round_time_s`, `cost_limit_usd` and the rest. Change a default there and every run that names no value of its own
+follows.
+
+A run names its own values in three places, later ones winning:
+
+| where | how | holds for |
+|---|---|---|
+| a study's file | `settings: [time_limit_s=18000, calls_per_round=5]` at the top of `plans/<study>.yaml` or `gated/<study>.yaml` | every run of the study |
+| a target or an arm | `settings: [n_agents=10, regulators=2]` under it | that target's runs |
+| the command line | `--set calls_per_round=5`, repeated | one run of a cell or an example script |
+
+The launcher adds no setting of its own, so a study's file shows everything its runs change. A study names its
+`time_limit_s`: the default limit is shorter than the default rounds allow, and the launcher refuses a plan that would
+inherit it.
+
+A run records what it was given and what it resolved to: `run.json` holds the command's arguments under `launch` and
+every setting's value under `config`.
+
 ## The studies
 
 | study | plan | status | tasks | cells | runs |
@@ -241,7 +262,7 @@ uv run python -m scripts.study.run_study studies/plans/ian_influencers_0.yaml --
 
 With `--gates`, the launcher decides the gates and writes the plan at its start and after each run ends. It queues
 the newly open cells at once and prints one `GATES` line each time. It queues no cell outside the spec. Each cell
-keeps its arm's settings and the pilot's dollar cap. Without `--gates` the launcher writes nothing.
+keeps the spec's settings and its arm's. Without `--gates` the launcher writes nothing.
 
 ## Add a study
 

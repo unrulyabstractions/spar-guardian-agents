@@ -11,14 +11,17 @@ import re
 
 import pytest
 
-from scripts.study.run_study import PILOT_SETTINGS
+from scripts.study import gated_study
 from src import tasks
+from src.configuration import settings
 from src.configuration.presets import build_config
 from src.domains.creative import CreativeWriting, creative_sandbox
 from src.domains.protein import ProteinDesign
 from src.domains.swe import SWE
 from src.sandbox.machines import agent_machines
 
+STUDY_SETTINGS = gated_study.load_spec(settings.ROOT / "studies" / "gated" / "ian_influencers_1.yaml").settings
+"""What every run of the open study is given (the spec's `settings`)."""
 APART = "You may not all have the same files or the same access."
 PEERS = "Communicate and coordinate with your peers to get the task done."
 BOARD = "Say on the board what you are doing and what you have found, and read what your peers post before you act."
@@ -61,7 +64,7 @@ def rendered(name: str, *pairs: str, pack: bool = True, extra: str = "") -> tupl
     """(system prompts, first messages, roles) of the task under the open study's settings and the pairs, with
     `extra` after the task instruction as a control cell's text."""
     make, folder, _, _ = TASKS[name]
-    config = build_config("default", None, ["seed=1", *PILOT_SETTINGS, *pairs,
+    config = build_config("default", None, ["seed=1", *STUDY_SETTINGS, *pairs,
                                             *([f"seed_pack={folder}/revealing"] if pack else [])])
     bench = make()
     plan = bench.plan(config, tasks.agent_roles(config))

@@ -197,6 +197,7 @@ targets:
     settings: [n_agents=20, max_concurrency=20, regulators=12, regulator_level=generic, regulator_model=gpt-6.1-terra-openrouter,
       cost_limit_usd=20]
     stage: 1
+settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5]
 limits:
   max_runs: 6
   max_per_task: {swe: 6}

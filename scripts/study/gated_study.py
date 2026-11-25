@@ -21,6 +21,7 @@ arms in order:
       negative_control: {settings: [rule_level=generic], when: {seeded: cheated}}
       positive_control: {cell: cheat, when: {seeded: not_cheated}}
       larger: {settings: [n_agents=10], stage: 1}
+    settings: [time_limit_s=18000]                                    # optional, the plan's: for every target
     limits: {max_runs: 4, max_per_task: {swe: 3}, spacing_s: 30}      # optional, the plan's
 
 A **cell** is a task and a worker. An arm's target for a cell is named `<stem>_<worker>_<arm>`, and run_study names its
@@ -68,7 +69,7 @@ from src.models import model_registry as models
 from src.utils.json_files import read_json
 
 SPEC_KEYS = {"study", "seed", "pack", "tasks", "workers", "arms"}
-SPEC_OPTIONAL = {"limits", "closed"}
+SPEC_OPTIONAL = {"settings", "limits", "closed"}
 """closed: true marks a study that is over: the spec is kept as a record, its pack may have been renamed since, and
 the plan written from it is closed, so nothing launches from it (run_study)."""
 TASK_KEYS = {"cell", "cheat"}
@@ -122,6 +123,7 @@ class Spec:
     limits: dict | None
     closed: bool = False              # a record of a finished study
     worker_packs: dict[str, str] = field(default_factory=dict)   # short name -> its own pack, for those that name one
+    settings: tuple[str, ...] = ()    # the study's own settings, for every target (the plan's `settings`)
 
     def pack_of(self, worker: str) -> str:
         """The worker's seed pack name: its own, else the spec's. "none" is no pack."""
@@ -197,13 +199,7 @@ def load_spec(path: Path) -> Spec:
         stage = arm.get("stage", 0)
         if not isinstance(stage, int) or stage < 0:
             raise refuse(f"arm {name}: stage is an integer of 0 or more")
-        pairs = [str(pair) for pair in arm.get("settings") or []]
-        for pair in pairs:
-            key, sep, value = pair.partition("=")
-            if not sep or key not in SwarmConfig.model_fields:
-                raise refuse(f"arm {name}: a setting is a SwarmConfig field as key=value, got {pair!r}")
-            if key.endswith("_model"):
-                models.resolve(value)
+        pairs = checked_pairs(arm.get("settings"), f"arm {name}", refuse)
         when = dict(arm.get("when") or {})
         earlier = {a.name for a in arms}
         for other, condition in when.items():
@@ -212,7 +208,20 @@ def load_spec(path: Path) -> Spec:
                              f"{sorted(CONDITIONS)}, got {other}: {condition}")
         arms.append(Arm(name, arm.get("pack") != "none", "cell" in arm, tuple(pairs), when, stage))
     return Spec(Path(path), raw["study"], raw["seed"], raw["pack"], raw["tasks"], workers, arms,
-                raw.get("limits"), bool(raw.get("closed")), worker_packs)
+                raw.get("limits"), bool(raw.get("closed")), worker_packs,
+                tuple(checked_pairs(raw.get("settings"), "the spec", refuse)))
+
+
+def checked_pairs(raw: list | None, where: str, refuse) -> list[str]:
+    """A list of settings as "key=value" strings: every key a SwarmConfig field, every model a known one."""
+    pairs = [str(pair) for pair in raw or []]
+    for pair in pairs:
+        key, sep, value = pair.partition("=")
+        if not sep or key not in SwarmConfig.model_fields:
+            raise refuse(f"{where}: a setting is a SwarmConfig field as key=value, got {pair!r}")
+        if key.endswith("_model"):
+            models.resolve(value)
+    return pairs
 
 
 @dataclass(frozen=True)
@@ -331,6 +340,8 @@ def plan(gates: Gates) -> dict:
                     name, target = spec.target(stem, worker, arm)
                     targets[name] = target
     out = {"study": spec.study, "seeds": [spec.seed], "targets": targets}
+    if spec.settings:
+        out["settings"] = list(spec.settings)
     if spec.limits:
         out["limits"] = spec.limits
     if spec.closed:
