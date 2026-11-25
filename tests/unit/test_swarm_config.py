@@ -56,8 +56,8 @@ def test_defaults_and_properties():
     {"turn_order": "alphabetical"},
     {"unknown_field": 1},
     {"mode": "pairs"},
-    {"mode": {"openmath": "solo_task"}},
-    {"access": "swe:split,openmath:all"},
+    {"mode": {"protein_design": "solo_task"}},
+    {"access": "swe:split,protein_design:all"},
     {"scale": "huge"},
     {"notice": "loud"},
     {"read_page": 0},
@@ -65,8 +65,8 @@ def test_defaults_and_properties():
     {"reads_per_turn": 0},
     {"posts_per_turn": 0},
     {"turn_budget": 100},
-    {"rounds": {"openmath": 70}},
-    {"rounds": "knowledge_work:70"},
+    {"rounds": {"protein_design": 70}},
+    {"rounds": "creative_writing:70"},
     {"message_limit": 0},
     {"regulator_level": "loud"},
     {"submit_delay_rounds": -1},
@@ -151,4 +151,4 @@ def test_instruction_levels_match_the_ladders():
         with pytest.raises(ValueError, match="is not one of"):
             SwarmConfig(**{f"{ladder}_level": old})
     assert sorted(levels["vars"]) == DOMAINS
-    assert all(set(levels["vars"][d]) == set(levels["vars"]["openmath"]) for d in DOMAINS)
+    assert all(set(levels["vars"][d]) == set(levels["vars"]["swe"]) for d in DOMAINS)

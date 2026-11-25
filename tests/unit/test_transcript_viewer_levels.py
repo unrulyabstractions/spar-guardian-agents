@@ -576,14 +576,14 @@ def test_a_timeline_read_after_every_call_puts_each_collusion_rung_at_its_call()
 
 
 def test_a_task_without_a_take_rule_is_not_applicable_with_the_measures_reason(tmp_path):
-    reason = cm.not_applicable("knowledge_work", 3)
+    reason = cm.not_applicable("no_such_task", 3)
     lv = tl.compute({}, episodes(AGENTS, WORKERS), [], WORKERS,
                     measures(WORKERS, collusion={"applicable": False, "reason": reason}))
     assert {c["collusion"]["level"] for c in lv["agents"].values()} == {tl.NA}
     assert lv["team"]["collusion"]["evidence"] == reason and lv["collusion"]["reason"] == reason
     ix = tl.index_levels(lv, WORKERS)
     assert ix["team"]["collusion"] == tl.NA and ix["collusion_influencers"] == []
-    run = write_run(tmp_path / "kw", WORKERS, {}, {}, "m", task="knowledge_work")
+    run = write_run(tmp_path / "kw", WORKERS, {}, {}, "m", task="no_such_task")
     assert vp.collusion_part(job_of(run)) == {"applicable": False, "reason": reason}
 
 
@@ -699,8 +699,7 @@ def test_the_ladders_page_has_the_cheating_table_the_collusion_take_rules_and_th
 
 
 def test_swe_is_the_first_column_and_the_tasks_the_study_does_not_read_have_none():
-    """Every by-task table opens with SWE and has the three tasks the study reads. Knowledge work, chess, OpenMath and
-    the two interview tasks have no column, and the index neither measures nor lists their runs."""
+    """Every by-task table opens with SWE and has the three tasks the study reads, and a column for each."""
     payload = tables.ladders_payload(tl.LADDERS, tl.ORDER, tl.label_about())
     assert payload["domains"] == ["SWE", "Protein design", "Creative writing"] == list(ladder_by_domain.DOMAINS)
     assert payload["left_out_tasks"] == sorted(ladder_by_domain.HIDDEN_TASKS)
@@ -1009,44 +1008,50 @@ def processed(runs: Path) -> list[str]:
     return sorted(job.run.name for job in jobs)
 
 
-def test_the_index_lists_valid_runs_only_and_marks_the_tasks_it_does_not_read(tmp_path, stood_in):
+def test_the_index_lists_valid_runs_only_and_marks_the_tasks_it_does_not_read(tmp_path, stood_in, monkeypatch):
     """study_x's INDEX.jsonl marks one run invalid: it is neither processed nor listed. Every valid run is served from
-    its stored files, so each opens; the chess and knowledge work runs carry hidden_task, are counted in `left_out`
-    and in the collection's other_tasks, not its runs. A collection with no valid run is left out."""
+    its stored files, so each opens; the runs of a task the study does not read (here protein design and SWE, by
+    HIDDEN_TASKS) carry hidden_task, are counted in `left_out` and in the collection's other_tasks, not its runs. A
+    collection with no valid run is left out."""
+    hidden = frozenset({"protein_design", "software_engineering"})
+    monkeypatch.setattr(ladder_by_domain, "HIDDEN_TASKS", hidden)
+    monkeypatch.setattr(ti, "HIDDEN_TASKS", hidden)
     study = tmp_path / "runs" / "study_x"
     for name, task in (("poem_minimal_luna1", "creative_writings"), ("poem_minimal_luna2", "creative_writings"),
-                       ("game_minimal_luna1", "chess"), ("worktime_minimal_luna1", "knowledge_work")):
+                       ("binder_minimal_luna1", "protein_design"), ("flipt_minimal_luna1", "software_engineering")):
         write_run(study / name, WORKERS, {}, {}, "openrouter/openai/gpt-6-luna", task=task)
     study.joinpath("INDEX.jsonl").write_text("".join(json.dumps({"path": n, "valid": n != "poem_minimal_luna2"}) + "\n"
                                                      for n in ("poem_minimal_luna1", "poem_minimal_luna2",
-                                                               "game_minimal_luna1", "worktime_minimal_luna1")))
+                                                               "binder_minimal_luna1", "flipt_minimal_luna1")))
     write_run(tmp_path / "runs" / "study_y" / "poem_minimal_luna1", WORKERS, {}, {}, "m", task="creative_writings")
     tmp_path.joinpath("runs", "study_y", "INDEX.jsonl").write_text(
         json.dumps({"path": "poem_minimal_luna1", "valid": False}) + "\n")
-    assert processed(tmp_path / "runs") == ["game_minimal_luna1", "poem_minimal_luna1", "worktime_minimal_luna1"]
+    assert processed(tmp_path / "runs") == ["binder_minimal_luna1", "flipt_minimal_luna1", "poem_minimal_luna1"]
     assert not RunDir(study / "poem_minimal_luna2").versions()["analysis"].exists()
     idx = ti.build_index(tmp_path / "runs")
     assert {row["run"]: row["hidden_task"] for row in idx["rows"]} == \
-        {"poem_minimal_luna1": False, "game_minimal_luna1": True, "worktime_minimal_luna1": True}
+        {"poem_minimal_luna1": False, "binder_minimal_luna1": True, "flipt_minimal_luna1": True}
     assert len(idx["entries"]) == 3 and idx["pipeline"]["not_processed"] == idx["pipeline"]["behind"] == 0
-    assert idx["left_out"] == {"tasks": sorted(ladder_by_domain.HIDDEN_TASKS), "runs": 2, "single_agent": 0}
+    assert idx["left_out"] == {"tasks": sorted(hidden), "runs": 2, "single_agent": 0}
     assert idx["entries"]["study_x/poem_minimal_luna1"]["dir"] == str(study / "poem_minimal_luna1")
     assert [(c["key"], c["runs"], c["other_tasks"]) for c in idx["collections"]] == [("study_x", 1, 2)]
 
 
-def test_a_run_of_a_task_the_study_does_not_read_opens_and_its_summary_row_names_its_task(tmp_path, stood_in):
+def test_a_run_of_a_task_the_study_does_not_read_opens_and_its_summary_row_names_its_task(tmp_path, stood_in,
+                                                                                           monkeypatch):
     """The viewer serves a hidden_task run's page; its Summary holds every task, each row naming its task, so the
     page leaves out the tasks its Settings turn off (tv_settings.js; the hidden ones by default)."""
+    monkeypatch.setattr(ladder_by_domain, "HIDDEN_TASKS", frozenset({"protein_design"}))
     study = tmp_path / "runs" / "study_x"
     write_run(study / "poem_minimal_luna1", WORKERS, {}, {}, "openrouter/openai/gpt-6-luna", task="creative_writings")
-    write_run(study / "sum_minimal_luna1", WORKERS, {}, {}, "openrouter/openai/gpt-6-luna", task="subset_sum")
+    write_run(study / "binder_minimal_luna1", WORKERS, {}, {}, "openrouter/openai/gpt-6-luna", task="protein_design")
     processed(tmp_path / "runs")
     viewer = tv.Viewer(ti.build_index(tmp_path / "runs"))
-    assert set(viewer.rows) == {"study_x/poem_minimal_luna1", "study_x/sum_minimal_luna1"}
-    assert viewer.dirs["study_x/sum_minimal_luna1"] == study / "sum_minimal_luna1"
+    assert set(viewer.rows) == {"study_x/poem_minimal_luna1", "study_x/binder_minimal_luna1"}
+    assert viewer.dirs["study_x/binder_minimal_luna1"] == study / "binder_minimal_luna1"
     s = viewer.summaries["study_x"]
     assert s == tv.transcript_summary.summary(list(viewer.rows.values()), "study_x")
-    assert sorted(r["task_name"] for r in s["rows"]) == ["creative_writings", "subset_sum"]
+    assert sorted(r["task_name"] for r in s["rows"]) == ["creative_writings", "protein_design"]
 
 
 def test_the_index_leaves_out_single_agent_runs_and_the_apart_controls(tmp_path, stood_in):

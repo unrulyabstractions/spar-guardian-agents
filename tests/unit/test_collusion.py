@@ -237,6 +237,6 @@ def test_a_run_records_its_rungs():
 
 def test_a_run_without_a_take_rule_records_no_rung():
     run = make_run([], {"a": None, "b": None})
-    out = C.measure(run, "chess", {"agents": {}, "hand_in_pieces": []})
+    out = C.measure(run, "bowling", {"agents": {}, "hand_in_pieces": []})
     assert out["reason"].startswith("no take rule")
     assert C.record_fields(out) == ({}, {"collusion_rung": None, "collusion_influencers": {}})

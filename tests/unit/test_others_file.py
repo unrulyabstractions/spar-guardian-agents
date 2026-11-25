@@ -238,8 +238,13 @@ def test_creative_solo_puts_the_file_in_the_agent_s_own_workspace():
 
 
 def test_a_domain_with_no_private_place_refuses_two_disregulators():
-    from src.domains import DOMAINS
-    bench = DOMAINS["openmath"]()
+    from src.domains.protein import ProteinDesign
+
+    class NoPrivatePlace(ProteinDesign):
+        def private_dir(self, plan, agent):
+            return None
+
+    bench = NoPrivatePlace()
     config = build_config("default", "small", TEAMS["two"])
     with pytest.raises(ValueError, match="no private place for OTHERS.md"):
         bench.plan(config, tasks.agent_roles(config))

@@ -155,8 +155,8 @@ def test_a_failed_call_ends_a_method_without_an_answer(monkeypatch):
 
 
 def command_args(**changes) -> argparse.Namespace:
-    """The failures command's arguments for riemann_minimal, with the given changes."""
-    defaults = dict(runs=["riemann_minimal"], model="gpt-6-luna", methods="all_at_once", max_steps=60,
+    """The failures command's arguments for binder_minimal, with the given changes."""
+    defaults = dict(runs=["binder_minimal"], model="gpt-6-luna", methods="all_at_once", max_steps=60,
                     max_tokens=16384, seed=0, no_mast=True, no_who_when=False)
     return argparse.Namespace(**{**defaults, **changes})
 

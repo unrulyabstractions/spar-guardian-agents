@@ -23,7 +23,7 @@ from inspect_ai.model._providers.openrouter import OpenRouterAPI
 from src import run
 from src.configuration.presets import PRESETS, build_config, with_overrides
 from src.configuration.swarm_config import ROLES, SwarmConfig
-from src.domains.openmath import OpenMath
+from src.domains.protein import ProteinDesign
 from src.export.atif_transcripts import episode_model, episode_transcript, model_key
 from src.export.eval_sample_view import SampleView
 from src.models import model_registry as models
@@ -223,7 +223,7 @@ def test_run_refuses_a_role_model_before_the_eval(monkeypatch, tmp_path, capsys,
     monkeypatch.setattr(run.inspect_ai, "eval", forbidden_eval)
     monkeypatch.setattr(run.settings, "LOGS", tmp_path)
     config = build_config("default", "small", ["regulators=1", pair])
-    assert run.run("x", OpenMath(), config, "mockllm/model", None) == 1
+    assert run.run("x", ProteinDesign(), config, "mockllm/model", None) == 1
     assert reason in capsys.readouterr().err
     assert not list(tmp_path.iterdir())
 
@@ -248,7 +248,7 @@ def test_run_prints_the_models_and_hands_the_agents_config_to_the_provider(monke
     monkeypatch.setattr(run.gemini_402_retry, "install", lambda: True)
     monkeypatch.setattr(run, "access_line", lambda task: "== access")
     with pytest.raises(Started):
-        run.run("x", OpenMath(), config, "mockllm/model", None, task=object())    # a built task, never read
+        run.run("x", ProteinDesign(), config, "mockllm/model", None, task=object())    # a built task, never read
     assert seen["agent_config"] == GenerateConfig(**run.agent_generate_config(config))
     assert seen["agent_config"].reasoning_effort == seen["reasoning_effort"] == "low"
     assert seen["agent_config"].max_tool_output == seen["max_tool_output"] == 4096

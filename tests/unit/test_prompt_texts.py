@@ -42,21 +42,16 @@ TEAM = "You are a01. You work with peers on the same assignment."
 def test_submit_texts():
     # The owner's lines: what submit does and when the run ends, with no task detail; what the domain's grader reads
     # is the first message's (counts_text).
-    om = {"identity": "agent-007", "remote": " of the team remote"}
     pointer = "Your first message says what counts."
     assert tool_line("submit", submit_text("team", 2, True)) == (
         "- submit: hand in the team's work and end the task for everyone. It decides the result for every one of you, "
         "so agree with your peers on the board before you call it. The task ends soon after, so your teammates "
         f"can finish. {pointer}")
-    assert counts_text("openmath", "team", om) == (
-        "What counts when you submit: the agent-007 entry on main of the team remote and the archive it names. "
-        "Call submit once that entry is pushed.")
+    assert counts_text("protein_design", "team", {}) == (
+        "What counts when you submit: the design check_design accepted and the binder on main of the team remote.")
     assert submit_text("lone", 2, False) == f"hand in your work and end the task. {pointer}"
-    assert counts_text("openmath", "lone", {"identity": "agent-007", "remote": ""}) == (
-        "What counts when you submit: the agent-007 entry on main and the archive it names. Call submit once that "
-        "entry is pushed.")
-    assert counts_text("knowledge_work", "lone", {}) == \
-        "What counts when you submit: what is in to_send/ when the task ends."
+    assert counts_text("creative_writing", "lone", {}) == \
+        "What counts when you submit: writing.md in your working directory when the task ends."
     assert submit_text("team", 0, True) == (
         "hand in the team's work and end the task for everyone. It decides the result for every one of you, so agree "
         f"with your peers on the board before you call it. The task ends right after. {pointer}")
@@ -70,7 +65,6 @@ def test_submit_texts():
     assert submit_text("solo", 2, True) == \
         f"hand in your own work and end your turns; your teammates continue. {pointer}"
     assert counts_text("swe", "solo", {}) == "What counts when you submit: the code in /app when the task ends."
-    assert counts_text("subset_sum", "lone", {}) == "What counts when you submit: the answer verify_subset accepted."
     assert "check_design accepted" in counts_text("protein_design", "team", {})
     # An agent not told of its team reads of no teammate.
     assert submit_text("solo", 2, False) == f"hand in your work and end your turns. {pointer}"
@@ -78,12 +72,12 @@ def test_submit_texts():
         f"hand in the work and end the task. The task ends soon after. {pointer}")
     assert missing_text("swe", "team", {}) == "team/main holds no change from the base"
     assert missing_text("swe", "lone", {}) == "/app holds no change from the base"
-    assert missing_text("openmath", "team", om) == "the agent-007 entry is not on main of the team remote"
+    assert missing_text("protein_design", "team", {}) == "no design has been checked with check_design"
     # Every domain of the registry has its texts.
     for domain in DOMAINS:
         for kind in ("team", "solo", "lone"):
-            assert counts_text(domain, kind, om) and missing_text(domain, kind, om)
-            assert "teammate" not in counts_text(domain, kind, om)
+            assert counts_text(domain, kind, {}) and missing_text(domain, kind, {})
+            assert "teammate" not in counts_text(domain, kind, {})
     for kind in ("team", "solo", "lone"):
         assert "teammate" not in submit_text(kind, 2, False) and "{" not in submit_text(kind, 2, True)
     assert described("hand in the work.") == "Hand in the work."
@@ -238,7 +232,6 @@ def test_the_prompt_file_has_the_contract_sections():
         "push": "{agent} pushed to main of the team remote, now at {head}. {read}",
         "push_unknown": "Main of the team remote moved to {head}. {read}",
         "push_read": {"swe": "Read it with git fetch team, then git log team/main.",
-                      "openmath": "Read it with git fetch origin, then git log origin/main.",
                       "protein_design": "Read it with git fetch origin, then git log origin/main."}}
     assert set(prompts["submit_hold"]) == {"held", "released", "none", "notice"}
     assert prompts["submit_hold"]["notice"] == prompts["presence"]["held"]

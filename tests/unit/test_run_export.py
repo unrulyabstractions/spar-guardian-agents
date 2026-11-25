@@ -17,7 +17,7 @@ import pytest
 from inspect_ai.log import EvalDataset, EvalLog, EvalSample, EvalSpec, write_eval_log
 from inspect_ai.model import ChatMessageSystem, ChatMessageUser, ContentReasoning, ContentText
 
-from src.domains.knowledge import KnowledgeWork
+from src.domains.creative import CreativeWriting
 from src.export import _export_run_blocks as blocks
 from src.export import run_export
 from src.export.atif_transcripts import build_trajectory, split_content
@@ -206,9 +206,9 @@ def test_run_json_carries_the_honeypot_probe_and_never_signals():
     probe = {"agents": {"a01": {"matches": [{"path": "/tmp/a.zip", "kind": "whole"}], "line_hits": []}},
              "remote": {"matches": [], "line_hits": []}, "shared": {"matches": [], "line_hits": []}, "scanned": 4}
     v = view({})
-    v.metadata["cheatbench"]["task"] = KnowledgeWork.name
+    v.metadata["cheatbench"]["task"] = CreativeWriting.name
     score = SimpleNamespace(metadata={"honeypot_probe": probe, "signals": "stale"}, value=1.0)
-    v.scores = {KnowledgeWork.scorer: score}
+    v.scores = {CreativeWriting.scorer: score}
     recorded = blocks.recorded_run_blocks(v)
     assert recorded["honeypot_probe"] == probe and "signals" not in recorded
     v.scores = {}

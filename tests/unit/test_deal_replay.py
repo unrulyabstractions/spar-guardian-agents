@@ -89,4 +89,4 @@ def test_the_replay_deals_with_the_options_the_block_records():
 
 
 def test_a_task_the_replay_does_not_cover_gives_none():
-    assert replay({"task": "chess", "config": {}}) is None
+    assert replay({"task": "bowling", "config": {}}) is None

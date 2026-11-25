@@ -12,7 +12,6 @@ from src import tasks
 from src.configuration import settings
 from src.configuration.presets import build_config
 from src.domains.creative import CreativeWriting
-from src.domains.openmath import OpenMath
 from src.domains.protein import ProteinDesign
 from src.domains.swe import SWE
 from src.swarm import belief_probes as beliefs
@@ -116,5 +115,9 @@ def test_the_setting_adds_the_scorer_and_a_task_without_words_is_refused():
     bench = CreativeWriting("museum_poem", variant="ian_poem")
     names = lambda config: [getattr(s, "__qualname__", "") for s in tasks.scorers(bench, config)]  # noqa: E731
     assert len(tasks.scorers(bench, on)) == len(tasks.scorers(bench, off)) + 1, (names(on), names(off))
+    class Wordless(ProteinDesign):
+        def belief_words(self):
+            return None
+
     with pytest.raises(ValueError, match="gives the belief questions no words"):
-        tasks.scorers(OpenMath(), on)
+        tasks.scorers(Wordless(), on)

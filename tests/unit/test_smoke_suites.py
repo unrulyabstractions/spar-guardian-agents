@@ -21,7 +21,7 @@ from inspect_ai.model import ChatMessageTool
 from src.configuration import settings
 from src.domains.creative._creative_ladder import CreativeDomain
 from src.domains.creative._creative_settings import PLANT_ROOT
-from src.domains.openmath import OpenMath
+from src.domains.protein import ProteinDesign
 from src.judging.cheatbench_judge import judge_spec
 from src.measures import code_ladder
 from src.swarm.turn_rules._turn_state import HALT_TAG
@@ -48,10 +48,8 @@ from tests.support.run_builder import write_run_dir, write_verdicts
 from tests.support.stub_ladder import OPENS, make_run
 from tests.support.turn_rules_harness import build_task, pull
 
-FOLDERS = {"access_logging": "smoke_access", "chess": "smoke_chess", "creative": "smoke_creative",
-           "interview": "smoke_interview", "knowledge": "smoke_kw", "network_logging": "smoke_network",
-           "openmath": "smoke_openmath", "protein": "smoke_protein", "seeded_runs": "smoke_seeds",
-           "swe": "smoke_swe"}
+FOLDERS = {"access_logging": "smoke_access", "creative": "smoke_creative", "network_logging": "smoke_network",
+           "protein": "smoke_protein", "seeded_runs": "smoke_seeds", "swe": "smoke_swe"}
 """Each suite module's folder under runs/study_smoke/ and logs/study_smoke/."""
 STAMP = "20990101T000000Z"
 
@@ -193,7 +191,7 @@ def suite_in(tmp_path, spec=None) -> Suite:
 
 def test_a_scenario_runs_exports_and_reads_back(tmp_path, monkeypatch):
     monkeypatch.setattr(common, "run_signals", lambda run_dir: [])      # the stand-in task has no ladder
-    suite = suite_in(tmp_path, judge_spec(OpenMath.task_dir, OpenMath.name))
+    suite = suite_in(tmp_path, judge_spec(ProteinDesign.task_dir, ProteinDesign.name))
     script = {"a01": [call("work", {"item": "x"}, "c1"), call("submit", {"answer": "done"}, "c2")]}
     recorder: list[dict] = []
     log, _, records = suite.run("one", build_task(pull(n_agents=1, rounds=2)), scripted(script, recorder))
@@ -386,11 +384,11 @@ def test_the_docs_give_the_combined_runs_folder_and_how_to_browse_a_smoke_run():
 
 def test_the_examples_readme_reads_the_summary_from_the_study():
     readme = (settings.ROOT / "examples" / "README.md").read_text()
-    assert re.findall(r"python -m src summary (\S+)`", readme) == ["runs/<study>/riemann_minimal"]
+    assert re.findall(r"python -m src summary (\S+)`", readme) == ["runs/<study>/binder_minimal"]
 
 
 def test_a_run_whose_log_did_not_work_fails_unless_the_scenario_says_so(tmp_path):
-    suite = suite_in(tmp_path, judge_spec(OpenMath.task_dir, OpenMath.name))
+    suite = suite_in(tmp_path, judge_spec(ProteinDesign.task_dir, ProteinDesign.name))
     script = {"a01": [call("submit", {"answer": "done"}, "c1")]}
 
     def export(eval_path, run_dir):
@@ -407,7 +405,7 @@ def test_a_run_whose_log_did_not_work_fails_unless_the_scenario_says_so(tmp_path
 def test_a_scenario_records_the_three_ladders_as_a_real_run_does(tmp_path, key_task):
     """smoke_swe's board scenario: a run fresh from the suite must carry the ladders that src/run.py's run writes after
     the export (code_ladder.run_signals), so swe_measures.summarize and every reader of the recorded rungs reads it."""
-    suite = suite_in(tmp_path, judge_spec(OpenMath.task_dir, OpenMath.name))
+    suite = suite_in(tmp_path, judge_spec(ProteinDesign.task_dir, ProteinDesign.name))
     script = {"a01": [call("submit", {"answer": "done"}, "c1")]}
 
     def export(eval_path, run_dir):

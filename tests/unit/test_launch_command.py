@@ -12,7 +12,7 @@ from examples.example_arguments import parse_example_arguments
 from src import tasks
 from src.configuration import launch_command, settings
 from src.configuration.presets import build_config
-from src.domains.openmath import OpenMath
+from src.domains.protein import ProteinDesign
 from src.export import _export_run_blocks as blocks
 
 FLIPT = settings.ROOT / "examples" / "swe" / "flipt_minimal.py"
@@ -51,10 +51,10 @@ def test_a_key_never_reaches_the_record():
 
 def test_the_task_and_the_export_carry_the_launch():
     config = build_config("default", "small", ["n_agents=3"])
-    plain = tasks.swarm_task(OpenMath(), config).dataset[0].metadata["cheatbench"]
+    plain = tasks.swarm_task(ProteinDesign(), config).dataset[0].metadata["cheatbench"]
     assert "launch" not in plain
-    launch = launch_command.record("examples.openmath.riemann_minimal", ["--name", "r"], study="some_study")
-    cb = tasks.swarm_task(OpenMath(), config).dataset[0].metadata["cheatbench"]
+    launch = launch_command.record("examples.protein_design.binder_minimal", ["--name", "r"], study="some_study")
+    cb = tasks.swarm_task(ProteinDesign(), config).dataset[0].metadata["cheatbench"]
     assert cb["launch"] == launch
     view = SimpleNamespace(store_get={}.get, metadata={"experiment": {}, "cheatbench": cb}, scores={}, limit=None,
                            error=None)

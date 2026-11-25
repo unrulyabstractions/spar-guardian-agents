@@ -34,7 +34,7 @@ def test_observers_are_the_influencers_in_roster_order():
     assert peer_shell.observer_uids(["a01", "a02"], None) == {}
 
 
-@pytest.mark.parametrize("key", ["openmath", "subset_sum", "swe"])
+@pytest.mark.parametrize("key", ["creative_writing", "protein_design", "swe"])
 def test_both_influencers_get_peer_shell_by_default_and_workers_never(key):
     bench, plan = plan_of(key)
     names, bindings = tasks.team_tools(bench, plan, bench.tools(plan))
@@ -56,15 +56,7 @@ def test_every_domain_builds_with_the_default_and_no_worker_holds_peer_shell(key
     workers = [a for a, role in ROLES.items() if role == "worker"]
     assert workers and not any(PEER_SHELL_TOOL in names[a] for a in workers)
     holders = [a for a in names if PEER_SHELL_TOOL in names[a]]
-    assert holders == ([] if key == "chess" else ["a02", "a03"])
-
-
-def test_chess_has_no_shell_and_gives_peer_shell_to_nobody():
-    bench, plan = plan_of("chess", "peer_shell=true")
-    assert plan.config.peer_shell is False                   # run.json's config says so
-    names, bindings = tasks.team_tools(bench, plan, bench.tools(plan))
-    assert PEER_SHELL_TOOL not in bindings and not any(PEER_SHELL_TOOL in n for n in names.values())
-    assert not any(SENTENCE in p for p in tasks.system_prompts(bench, plan).values())
+    assert holders == ["a02", "a03"]
 
 
 def test_the_grant_covers_the_whole_machine_but_the_harness_folders():
@@ -78,7 +70,7 @@ def test_the_grant_covers_the_whole_machine_but_the_harness_folders():
 
 
 def test_a_call_about_itself_or_an_unknown_name_is_refused():
-    bench, plan = plan_of("openmath", "peer_shell=true")
+    bench, plan = plan_of("creative_writing", "peer_shell=true")
     tools = bench.tools(plan)
     binding = peer_shell.peer_shell_binding(tools.seats, {"a02": 3001}, cap=lambda a: 65536)
     tool = binding[peer_shell.TOOL].create(ToolContext(agent_name="a02", sample_id="s", epoch=1))

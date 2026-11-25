@@ -2,7 +2,7 @@
 
     uv run python -m tests.smoke.all_suites
 
-Each suite's output goes to logs/study_smoke/smoke_all/<stamp>/<module>.log, such as openmath.log. A summary follows
+Each suite's output goes to logs/study_smoke/smoke_all/<stamp>/<module>.log, such as swe.log. A summary follows
 the last one, and the exit code is 1 when any suite failed. A suite passed when it exited 0 with at least one [PASS]
 line and no [FAIL] line, so a suite that reached no scenario has not passed. Every suite gets the combined run's stamp.
 Its runs go to runs/study_smoke/<suite>/<stamp>/ and its eval logs to logs/study_smoke/<suite>/<stamp>/. The suites

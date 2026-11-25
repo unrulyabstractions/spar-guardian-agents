@@ -13,7 +13,7 @@ from scripts.study import screen
 from src.configuration import settings
 from tests.support.run_files import write_text
 
-CELL = "openmath.riemann_minimal"
+CELL = "protein_design.binder_minimal"
 
 
 @pytest.fixture
@@ -39,9 +39,9 @@ def left(folder: Path, *, signals: bool, log: Path | None = None) -> Path:
 
 
 def test_a_finished_run_in_a_group_is_skipped_and_an_unfinished_one_set_aside_before_it_runs(study, monkeypatch):
-    left(study / "runs" / "study_x" / "invalid" / "riemann_minimal_t1", signals=True)
-    left(study / "runs" / "study_x" / "riemann_minimal_t2", signals=False,
-         log=study / "logs" / "study_x" / "riemann_minimal_t2" / "a.eval")
+    left(study / "runs" / "study_x" / "invalid" / "binder_minimal_t1", signals=True)
+    left(study / "runs" / "study_x" / "binder_minimal_t2", signals=False,
+         log=study / "logs" / "study_x" / "binder_minimal_t2" / "a.eval")
     seen = []
 
     def run(command, **kwargs):
@@ -51,22 +51,22 @@ def test_a_finished_run_in_a_group_is_skipped_and_an_unfinished_one_set_aside_be
 
     monkeypatch.setattr(screen.subprocess, "run", run)
     assert screen.main(["--cells", CELL, "--samples", "2", "--suffix", "t", "--jobs", "1"]) == 0
-    assert seen == [("riemann_minimal_t2", False, False)]
-    attempt = study / "runs" / "study_x" / "attempts" / "riemann_minimal_t2.1"
-    assert json.loads((attempt / "processed/run.json").read_text())["eval_id"] == "riemann_minimal_t2"
-    assert (study / "logs" / "study_x" / "attempts" / "riemann_minimal_t2.1" / "a.eval").read_text() == "earlier"
+    assert seen == [("binder_minimal_t2", False, False)]
+    attempt = study / "runs" / "study_x" / "attempts" / "binder_minimal_t2.1"
+    assert json.loads((attempt / "processed/run.json").read_text())["eval_id"] == "binder_minimal_t2"
+    assert (study / "logs" / "study_x" / "attempts" / "binder_minimal_t2.1" / "a.eval").read_text() == "earlier"
 
 
 def test_a_run_of_one_name_in_two_folders_is_refused_before_anything_starts(study, monkeypatch):
-    left(study / "runs" / "study_x" / "riemann_minimal_t1", signals=True)
-    left(study / "runs" / "study_x" / "mock" / "riemann_minimal_t1", signals=True)
+    left(study / "runs" / "study_x" / "binder_minimal_t1", signals=True)
+    left(study / "runs" / "study_x" / "mock" / "binder_minimal_t1", signals=True)
     monkeypatch.setattr(screen.subprocess, "run", lambda *a, **k: pytest.fail("a run started"))
-    with pytest.raises(ValueError, match="2 folders hold a run named riemann_minimal_t1"):
+    with pytest.raises(ValueError, match="2 folders hold a run named binder_minimal_t1"):
         screen.main(["--cells", CELL, "--samples", "1", "--suffix", "t", "--jobs", "1"])
 
 
 def test_the_summary_reads_a_finished_run_in_its_group(study, capsys):
-    left(study / "runs" / "study_x" / "set_aside" / "riemann_minimal_t1", signals=True)
+    left(study / "runs" / "study_x" / "set_aside" / "binder_minimal_t1", signals=True)
     assert screen.main(["--cells", CELL, "--samples", "1", "--suffix", "t", "--summary-only"]) == 0
-    line = next(line for line in capsys.readouterr().out.splitlines() if line.startswith("riemann_minimal_t1"))
+    line = next(line for line in capsys.readouterr().out.splitlines() if line.startswith("binder_minimal_t1"))
     assert "team:tempted" in line and "(no ledger)" in line

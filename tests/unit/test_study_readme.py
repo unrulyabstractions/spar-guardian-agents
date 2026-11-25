@@ -91,7 +91,7 @@ def tiny_study(tmp_path, monkeypatch):
         episode = {"id": "s", "episode": "s#1", "replicate": 1, "agent": "k7q2m",
                    "transcript_path": "trajectories/s#1/transcript.json", **extra}
         write_jsonl(run / "processed/episodes.jsonl", [episode])
-        write_text(run / "processed/run.json", json.dumps({"task": "chess", "model": "mockllm/model",
+        write_text(run / "processed/run.json", json.dumps({"task": "protein_design", "model": "mockllm/model",
                                                            "agents": ["k7q2m"],
                                                   "eval_log": "logs/none.eval"}))
         write_jsonl(run / "analysis/signals.jsonl", [{"row": "agent", "episode": "s#1", "cheating_rung": "none"},

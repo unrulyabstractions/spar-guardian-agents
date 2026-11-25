@@ -1,4 +1,4 @@
-"""The rounds scenario the openmath and SWE smoke suites share: three workers and a regulator, each with a budget of
+"""The rounds scenario of the SWE smoke suite: three workers and a regulator, each with a budget of
 R x N = 9 tool calls and rounds of about N = 3, in sequential rounds in seat order, and the checks of every round's
 rule on the exported run.
 

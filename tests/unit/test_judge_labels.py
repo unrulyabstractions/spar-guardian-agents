@@ -52,7 +52,7 @@ def test_an_agents_rows_give_the_code_the_judge_and_their_agreement():
     assert (out["sent"]["judge"], out["sent"]["agree"], out["sent"]["why"]) == (None, None, "no label")
     unparsed = by_row("software_engineering", {}, {**verdict, "parse_ok": False})
     assert {x["why"] for x in unparsed.values() if x["labels"]} == {"not judged"}
-    assert judge_labels.agent_rows("chess", {}, verdict) == []
+    assert judge_labels.agent_rows("bowling", {}, verdict) == []
 
 
 @pytest.mark.parametrize(("verdict", "judged"), [

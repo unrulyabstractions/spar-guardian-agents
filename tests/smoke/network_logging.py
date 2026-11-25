@@ -1,19 +1,19 @@
 """Mock-model smoke scenarios for the network log on the real sandbox. No model spend.
 
-    uv run python -m tests.smoke.network_logging [--only observer_connect,observer_protein,swe_http,openmath_workers,
-                                                         procnet,monitor_killed,network_off]
+    uv run python -m tests.smoke.network_logging [--only observer_connect,swe_http,creative_workers,procnet,
+                                                         monitor_killed,network_off]
 
 Every scenario starts the real sandbox with the access log's sidecar, drives ORBIT with Inspect's mockllm scripted per
 agent, exports the log with src.export.run_export.write_run and reads network.jsonl and run.json back. Each check is
 an assertion; a failing scenario exits non-zero. Results go to runs/study_smoke/smoke_network/<stamp>/ and
 logs/study_smoke/smoke_network/<stamp>/, a fresh directory per invocation. One sample runs at a time.
 
-  observer_connect  a subset_sum team with a regulator under peer_shell: a worker's call serves once on loopback while
+  observer_connect  a protein design team with a regulator under peer_shell: a worker's call serves once on loopback
+                    while
                     the regulator's peer_shell call connects to it from the worker's machine as the observer uid. The
                     rows name the worker's listen and accept, the regulator's connect by its observer, each one's call
                     and the other end, and run.json "network" lists the connection as cross-agent and connected, by
                     ebpf
-  observer_protein  the same on a protein design team, a task the transcript viewer lists
   swe_http          a SWE team (flipt-02e2, one machine per agent): a worker runs `python3 -m http.server` in the
                     foreground, which outlives its round's time and becomes a job (SWE's round reap spares jobs), then
                     writes to it through bash's /dev/tcp from a child shell that exits at once, and in a later round
@@ -22,7 +22,7 @@ logs/study_smoke/smoke_network/<stamp>/, a fresh directory per invocation. One s
                     observer's connects named as the regulator with the worker at the other end and established (curl
                     does not wait: its socket's state change settles it), the connected cross-agent entry, the counts
                     by agent and both controls on every machine
-  openmath_workers  two workers in openmath's one shared container (split layout): one serves http.server in the
+  creative_workers  two workers in creative writing's one shared container (split layout): one serves http.server in the
                     background while the other runs curl to it in the same round. The loopback guard refuses every
                     connect, none is accepted, each connect reads refused, and each one after the listen names both
                     workers and reads as an attempted cross-agent call, none connected
@@ -39,8 +39,7 @@ from inspect_ai.util import sandbox, store
 
 from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import SwarmConfig
-from src.domains.interview import SubsetSum
-from src.domains.openmath import OpenMath
+from src.domains.creative import CreativeWriting
 from src.domains.protein import ProteinDesign
 from src.domains.swe import SWE
 from src.judging.cheatbench_judge import judge_spec
@@ -53,7 +52,7 @@ from src.utils.json_files import read_jsonl
 from tests.smoke.common import Suite, assert_ok, by_agent, load_transcript, main, results_of, small
 from tests.support.mock_model import call, scripted
 
-SUITE = Suite("smoke_network", judge_spec(SubsetSum.task_dir, SubsetSum.name))
+SUITE = Suite("smoke_network", judge_spec(ProteinDesign.task_dir, ProteinDesign.name))
 PORT = 8123
 TARGET = "alfalfa_chi"
 # The worker's server: one accept within the call, a reply, a moment held open so a read of the tables sees it.
@@ -100,7 +99,7 @@ class Networked:
 
 
 def network_run(name: str, config: SwarmConfig, script: dict, *, damaged: bool = False, benchmark=None) -> Networked:
-    benchmark = benchmark or SubsetSum()
+    benchmark = benchmark or ProteinDesign(TARGET)
     suite = SUITE.with_spec(judge_spec(benchmark.task_dir, benchmark.name))
     log, _, records = suite.run(name, swarm_task(benchmark, config), scripted(script), damaged_log=damaged)
     return Networked(assert_ok(log), RunDir(suite.runs / name), records)
@@ -162,13 +161,6 @@ def scenario_observer_connect() -> dict:
     out = assert_connection(run, worker, regulator, "ebpf")
     assert all(r["source"] == "ebpf" for r in run.own() if not r["at_start"]), run.rows
     return out
-
-
-def scenario_observer_protein() -> dict:
-    config = team_config()
-    script, worker, regulator = observer_script(config)
-    run = network_run("observer_protein", config, script, benchmark=ProteinDesign(TARGET))
-    return assert_connection(run, worker, regulator, "ebpf")
 
 
 def tool_result(run: Networked, agent: str, index: int) -> str:
@@ -241,13 +233,14 @@ def scenario_swe_http() -> dict:
             "agents": agents, "control": run.block["control"]}
 
 
-def scenario_openmath_workers() -> dict:
-    """Two workers in openmath's one container: one serves, the other's curl is refused by the loopback guard."""
+def scenario_creative_workers() -> dict:
+    """Two workers in creative writing's one container: one serves, the other's curl is refused by the loopback
+    guard."""
     config = small("n_agents=2", "judge=none", "rounds=3")
     server, client = config.names
     script = {server: [call("shell", {"command": HTTP_HOLD}, "serve"), call("stop_working", {}, "s-stop")],
               client: [call("shell", {"command": CURL}, "reach"), call("stop_working", {}, "c-stop")]}
-    run = network_run("openmath_workers", config, script, benchmark=OpenMath())
+    run = network_run("creative_workers", config, script, benchmark=CreativeWriting())
     assert run.block["status"] == "valid" and run.block["method"] == "ebpf", run.block
     assert "held" in tool_result(run, server, 0)
     reached = tool_result(run, client, 0)
@@ -328,8 +321,8 @@ def scenario_network_off() -> dict:
     return {"block": run.block}
 
 
-SCENARIOS = {"observer_connect": scenario_observer_connect, "observer_protein": scenario_observer_protein,
-             "swe_http": scenario_swe_http, "openmath_workers": scenario_openmath_workers,
+SCENARIOS = {"observer_connect": scenario_observer_connect,
+             "swe_http": scenario_swe_http, "creative_workers": scenario_creative_workers,
              "procnet": scenario_procnet,
              "monitor_killed": scenario_monitor_killed, "network_off": scenario_network_off}
 

@@ -44,8 +44,6 @@ REGULATED = modules("*/*_minimal_regulated.py")
 DISREGULATED = modules("*/*_minimal_disregulated.py")
 # The cell with both roles: five agents on the split, one a hidden regulator and one a hidden disregulator.
 CONTESTED = modules("*/*_minimal_regulated_disregulated.py")
-# The team with no split, on the domains that have one: three neutral agents that each hold everything.
-NO_SPLIT = modules("*/*_minimal_all.py")
 EVERY_SCRIPT = modules("*/*.py")
 # A variant of an SWE issue (swe_settings.VARIANTS; ian_swe0's scripts are named ian_swe0_<cell>) has its example, its
 # team told to cheat and its regulated cell, and no solo cell. A creative-writing variant (_creative_settings.VARIANTS)
@@ -76,7 +74,7 @@ def test_every_domain_has_its_example_and_cells():
     assert {"studies.cells.swe.ian_swe0_minimal_regulated", "studies.cells.swe.ian_flipt_minimal_regulated"} <= \
         set(REGULATED)
     assert len(CELL_SCRIPTS) == len(CELLS) * (len(EXAMPLES) - len(VARIANTS)) + len(VARIANT_CELLS)
-    assert {*EXAMPLES, *CELL_SCRIPTS, *REGULATED, *NO_SPLIT} <= set(EVERY_SCRIPT)
+    assert {*EXAMPLES, *CELL_SCRIPTS, *REGULATED} <= set(EVERY_SCRIPT)
 
 
 def test_the_study_cells_live_in_studies_and_the_examples_are_generic():
@@ -181,12 +179,12 @@ def test_each_script_runs_three_neutral_agents_on_the_default_preset(name, monke
     assert module.main() == 3 and len(plotted) == 2
 
 
-def test_the_openmath_example_task_records_its_plan():
-    module = importlib.import_module("examples.openmath.riemann_minimal")
-    args = parse_example_arguments(script_of("examples.openmath.riemann_minimal"), None, [])
+def test_the_protein_example_task_records_its_plan():
+    module = importlib.import_module("examples.protein_design.binder_minimal")
+    args = parse_example_arguments(script_of("examples.protein_design.binder_minimal"), None, [])
     config = build_config(args.preset, args.scale, args.settings)
-    task = swarm_task(module.OpenMath("riemann"), config)
-    assert access_line(task) == "== access split: a01 slice1, a02 slice2, a03 slice3"
+    task = swarm_task(module.ProteinDesign("alfalfa_chi"), config)
+    assert access_line(task) == "== access split: a01 segment1, a02 segment2, a03 segment3"
 
 
 @pytest.mark.parametrize("name", CELL_SCRIPTS)
@@ -219,32 +217,8 @@ def test_each_cell_script_sets_its_agents_and_its_cheat_text(name, monkeypatch):
         assert plan.holds == {"a01": benchmark.whole_access()}
 
 
-def test_knowledge_work_has_a_team_cell_with_no_split():
-    assert "examples.knowledge_work.worktime_minimal_all" in NO_SPLIT
-
-
-@pytest.mark.parametrize("name", NO_SPLIT)
-def test_each_no_split_cell_gives_every_neutral_agent_everything(name, monkeypatch):
-    module = importlib.import_module(name)
-    script = script_of(name)
-    calls = []
-    monkeypatch.setattr(run, "run", lambda *args, **kwargs: calls.append((args, kwargs)) or 0)
-    monkeypatch.setattr(plots, "plot_run", lambda run_dir, out_dir: [])
-    monkeypatch.setattr("sys.argv", [script.name])
-    assert module.main() == 0
-    [(args, kwargs)] = calls
-    run_name, benchmark, config, model, timeout = args
-    assert kwargs == {"replace": False} and not hasattr(module, "CHEAT")
-    assert (run_name, model, config.judge) == (script.stem, models.resolve(settings.DEFAULT_MODEL), None)
-    assert (config.n_agents, config.regulator_count, config.disregulator_count) == (3, 0, 0)
-    assert config.preset == "default" and config.access == "all" and (config.rounds, config.calls_per_round) == (30, 10)
-    plan = benchmark.plan(config)
-    assert plan.access == "all" and not plan.split and plan.team and plan.mode == "shared_task"
-    assert plan.holds == {a: benchmark.whole_access() for a in config.names}
-
-
-def test_knowledge_work_swe_and_protein_design_have_a_regulated_cell():
-    assert {"knowledge_work", "swe", "protein_design"} <= {task_of(name) for name in REGULATED}
+def test_swe_and_protein_design_have_a_regulated_cell():
+    assert {"swe", "protein_design"} <= {task_of(name) for name in REGULATED}
 
 
 @pytest.mark.parametrize("name", REGULATED)

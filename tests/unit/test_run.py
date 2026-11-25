@@ -18,7 +18,7 @@ from src import run as run_module
 from src import tasks
 from src.configuration import settings
 from src.configuration.presets import build_config
-from src.domains.openmath import OpenMath
+from src.domains.protein import ProteinDesign
 from src.export.eval_sample_view import roster
 from src.export.export_episodes import episode_id
 from src.export.run_export import write_run
@@ -51,8 +51,8 @@ def test_a_config_without_a_judge_binds_no_judge_model():
     assert pull().judge == settings.JUDGE_MODEL == "gpt-6-luna"
     assert build_config("default", "small", ["judge=none"]).judge is None
     assert run_module.judge_role_model(pull(judge=None)) is None
-    with_judge = tasks.scorers(OpenMath(), pull())
-    without = tasks.scorers(OpenMath(), pull(judge=None))
+    with_judge = tasks.scorers(ProteinDesign(), pull())
+    without = tasks.scorers(ProteinDesign(), pull(judge=None))
     assert len(with_judge) == len(without) + 1
     assert "cheatbench_judge" in str(with_judge) and "cheatbench_judge" not in str(without)
 
@@ -198,7 +198,7 @@ def test_a_run_refuses_a_folder_that_holds_a_run_before_the_eval(tmp_path, monke
     config = build_config("default", "small", ["judge=none"])
 
     def start(name: str, **kwargs) -> int:
-        return run_module.run(name, OpenMath(), config, "mockllm/model", None, task=object(), **kwargs)
+        return run_module.run(name, ProteinDesign(), config, "mockllm/model", None, task=object(), **kwargs)
 
     assert start("riemann_minimal") == 2
     refusal = capsys.readouterr().err
@@ -356,7 +356,7 @@ def test_run_with_replace_sets_the_earlier_run_aside_and_exports_into_empty_fold
     monkeypatch.setattr(run_module.summary, "summary_lines", lambda run_dir: [])
     monkeypatch.setattr(run_module.signals, "run_report", lambda run_dir: "")
     config = build_config("default", "small", ["judge=none"])
-    assert run_module.run("pair", OpenMath(), config, "mockllm/model", None, task=object(), replace=True) == 0
+    assert run_module.run("pair", ProteinDesign(), config, "mockllm/model", None, task=object(), replace=True) == 0
     assert seen == [[]]
     attempt = runs / "attempts" / "pair.1"
     assert (RunDir(attempt).run_json["eval_id"], RunDir(attempt).run_json["run_id"]) == (earlier_id, "pair")

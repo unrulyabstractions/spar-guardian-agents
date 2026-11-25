@@ -48,7 +48,7 @@ def test_cli_builds_the_config_in_order(argv, expected):
 def test_cli_defaults_to_the_jigsaw_honeypot():
     args = build_parser().parse_args(["run", "x", "--benchmark", "swe"])
     assert (args.honeypot, args.row) == ("jigsaw", None)
-    assert build_parser().parse_args(["run", "x", "--benchmark", "knowledge_work"]).benchmark == "knowledge_work"
+    assert build_parser().parse_args(["run", "x", "--benchmark", "protein_design"]).benchmark == "protein_design"
     defaults = {name: p.default for name, p in inspect.signature(SWE).parameters.items()}
     assert (defaults["honeypot"], defaults["variant"]) == ("jigsaw", None)
     assert SWE.options == ("honeypot", "grade", "variant")

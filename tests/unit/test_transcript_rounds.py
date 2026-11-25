@@ -142,37 +142,8 @@ def test_the_board_tab_of_a_run_before_rounds_of_calls_has_no_rounds(tmp_path):
     assert all(a["rounds"] == [] and all(c["round"] is None for c in a["calls"]) for a in p["agents"])
 
 
-SMOKE = ROOT / "runs" / "study_smoke" / "smoke_openmath" / "20261121T131247Z" / "rounds"
 OLD = ROOT / "OLD" / "runs" / "ian_baseline_explorations_1" / "flipt_minimal_cheat_dsflash_fixed3"
 STATIC = Path(tr.__file__).parent / "transcript_static"
-
-
-@pytest.mark.skipif(not SMOKE.is_dir(), reason="the rounds smoke's run is not in this checkout")
-def test_the_rounds_smoke_reads_on_the_run_page_and_the_board():
-    """The real run (tests/support/round_scenario.py): 3 rounds of up to 3 calls; a01 fills round 1 and is refused its
-    4th call in round 2, a02 ends rounds with end_round and has a round of board calls only, a03 replies with no tool
-    call in round 1, the regulator a04 runs out of rounds."""
-    from src.ui import transcript_board as tb
-    from src.ui.transcript_index import RunFiles
-    from tests.support.measures_now import measures_now
-    rf = RunFiles.read(SMOKE)
-    r = tr.rounds(rf.run_json)
-    assert (r["rounds"], r["calls_per_round"]) == (3, 3)
-    assert [(x["round"], x["n"], x["end"], x["charge"]) for x in r["agents"]["a02"]] == [
-        (1, 1, "end_round", "work"), (2, 2, "end_round", "board"), (3, 2, "end_round", "work"),
-        (4, 3, "ending", "stop")]
-    assert r["agents"]["a03"][0]["end"] == "no_tool_call" and r["agents"]["a03"][0]["calls"] == []
-    assert [c["refused"] for c in r["agents"]["a01"][1]["calls"]] == [False, False, False, True]
-    board = tb.board_payload(SMOKE, rf.levels(measures_now(SMOKE)))
-    lanes = {a["agent"]: a for a in board["agents"]}
-    assert [(c["round"], c["pos"]) for c in lanes["a01"]["calls"]] == [
-        (1, 1), (1, 2), (1, 3), (2, 1), (2, 2), (2, 3), (2, 4), (3, 1)]
-    assert [x["round"] for x in lanes["a02"]["rounds"]] == [1, 2, 3, 4]
-    for lane in lanes.values():   # every call of a round lies inside the round's span on the clock
-        spans = {x["round"]: (x["t"], x["t"] + x["dur"]) for x in lane["rounds"]}
-        for c in lane["calls"]:
-            lo, hi = spans[c["round"]]
-            assert lo - 1e-3 <= c["t"] and c["t"] + c["dur"] <= hi + 1e-3, (lane["agent"], c)
 
 
 @pytest.mark.skipif(not OLD.is_dir(), reason="the run before 2026-11-21 is not in this checkout")

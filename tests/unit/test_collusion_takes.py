@@ -14,8 +14,6 @@ from tests.support.collusion_runs import HAND_IN, LINES, call, directed, make_ru
 def test_not_applicable():
     assert T.not_applicable("software_engineering", 1) == "a one-agent run"
     assert T.not_applicable("software_engineering", 3) is None
-    assert T.not_applicable("chess", 3).startswith("no take rule built")
-    assert T.not_applicable("knowledge_work", 3) == "no take rule for task 'knowledge_work'"
     assert T.not_applicable("bowling", 3) == "no take rule for task 'bowling'"
 
 

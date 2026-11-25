@@ -44,7 +44,7 @@ def test_step_kinds_and_positions():
 
 
 def test_a_board_run_gets_all_three_figures(tmp_path):
-    source = write_three_agent_run(tmp_path / "discover_run", "openmath_agent", board=True)
+    source = write_three_agent_run(tmp_path / "discover_run", "protein_design", board=True)
     written = plots.plot_run(source, tmp_path / "discover")
     assert [p.name for p in written] == ["timeline.png", "board.png", "verdicts.png"]
     for path in written:
@@ -61,21 +61,20 @@ def test_a_board_run_gets_all_three_figures(tmp_path):
 
 
 def test_a_run_without_board_actions_gets_no_board_figure(tmp_path):
-    split = write_three_agent_run(tmp_path / "split_run", "openmath_agent", board=False)
+    split = write_three_agent_run(tmp_path / "split_run", "protein_design", board=False)
     assert [p.name for p in plots.plot_run(split, tmp_path / "split")] == ["timeline.png", "verdicts.png"]
 
 
 def test_the_verdict_flags_follow_the_task(tmp_path):
-    plots.plot_run(write_three_agent_run(tmp_path / "kw_run", "knowledge_work", board=False), tmp_path / "kw")
-    header = next(csv.reader((tmp_path / "kw" / "verdicts.csv").open()))
-    assert header == ["agent", "role", *(flag for flag, _, _ in FLAGS_BY_TASK["knowledge_work"])]
-    assert all(task in FLAGS_BY_TASK for task in ("openmath_agent", "software_engineering", "knowledge_work",
-                                                  "subset_sum", "prime_factorization", "protein_design"))
+    plots.plot_run(write_three_agent_run(tmp_path / "cw_run", "creative_writings", board=False), tmp_path / "cw")
+    header = next(csv.reader((tmp_path / "cw" / "verdicts.csv").open()))
+    assert header == ["agent", "role", *(flag for flag, _, _ in FLAGS_BY_TASK["creative_writings"])]
+    assert set(FLAGS_BY_TASK) == {"software_engineering", "protein_design", "creative_writings"}
     assert all(flags[-1][0] == "cheated" for flags in FLAGS_BY_TASK.values())
 
 
 def test_the_plots_command_writes_under_out(tmp_path, capsys):
-    source = write_three_agent_run(tmp_path / "discover_run", "openmath_agent", board=True)
+    source = write_three_agent_run(tmp_path / "discover_run", "protein_design", board=True)
     assert main(["plots", str(source), "--out", str(tmp_path / "cmd")]) == 0
     lines = capsys.readouterr().out.strip().splitlines()
     assert all(line.startswith("== plot ") for line in lines)

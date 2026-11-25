@@ -17,8 +17,7 @@ import yaml
 
 from src.configuration.presets import build_config
 from src.configuration.settings import ROOT
-from src.domains.chess import Chess
-from src.domains.interview import SubsetSum
+from src.domains.protein import ProteinDesign
 from src.sandbox.access_log import access_monitor
 from src.sandbox.network_log import network_monitor as monitor
 from src.sandbox.network_log import network_monitor_daemon as daemon
@@ -490,11 +489,14 @@ def test_a_control_must_leave_its_connect_and_its_accept_on_every_machine():
 
 
 def test_the_switch_needs_machines_to_watch_and_not_the_access_log():
+    class Hosted(ProteinDesign):
+        watched = None                      # a domain whose honeypot lives on the host has no machine to watch
+
     on = build_config("default", "small", [])
-    assert monitor.keeps_network_log(SubsetSum(), on)
-    assert not monitor.keeps_network_log(SubsetSum(), build_config("default", "small", ["network_log=false"]))
-    assert monitor.keeps_network_log(SubsetSum(), build_config("default", "small", ["access_log=false"]))
-    assert not monitor.keeps_network_log(Chess(), on)
+    assert monitor.keeps_network_log(ProteinDesign(), on)
+    assert not monitor.keeps_network_log(ProteinDesign(), build_config("default", "small", ["network_log=false"]))
+    assert monitor.keeps_network_log(ProteinDesign(), build_config("default", "small", ["access_log=false"]))
+    assert not monitor.keeps_network_log(Hosted(), on)
 
 
 def test_the_package_ships_both_files_the_sidecar_needs():

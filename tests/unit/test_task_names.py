@@ -17,8 +17,8 @@ from tools import run_reader
 
 
 def test_the_fleet_reads_the_table_and_keeps_its_names():
-    assert fleet_layout.TASKS == {"knowledge_work": "knowledge_work", "creative_writing": "creative_writing",
-                                  "protein_design": "protein_design", "chess": "chess", "software_engineering": "swe"}
+    assert fleet_layout.TASKS == {"creative_writing": "creative_writing", "protein_design": "protein_design",
+                                  "software_engineering": "swe"}
 
 
 def test_the_fleet_layout_imports_nothing_outside_the_standard_library():
@@ -41,7 +41,7 @@ def test_the_registry_by_task_name_is_the_table():
     assert list(BY_TASK) == [names.task for names in NAMES]
     assert all(BY_TASK[names.task] is DOMAINS[names.domain] for names in NAMES)
     assert BY_TASK["creative_writings"] is DOMAINS["creative_writing"]
-    assert BY_TASK["software_engineering"] is DOMAINS["swe"] and BY_TASK["openmath_agent"] is DOMAINS["openmath"]
+    assert BY_TASK["software_engineering"] is DOMAINS["swe"] and BY_TASK["protein_design"] is DOMAINS["protein_design"]
 
 
 def test_a_name_and_a_key_never_collide_and_each_lookup_takes_its_own_kind():
@@ -50,7 +50,7 @@ def test_a_name_and_a_key_never_collide_and_each_lookup_takes_its_own_kind():
     assert not any(a.task == b.domain for a in NAMES for b in NAMES if a != b)
     assert names_of("creative_writing") == names_of("creative_writings")
     assert domain_of("creative_writings") == "creative_writing" and task_of("swe") == "software_engineering"
-    for wrong in (lambda: domain_of("creative_writing"), lambda: domain_of("openmath"), lambda: task_of("chess_x"),
+    for wrong in (lambda: domain_of("creative_writing"), lambda: domain_of("swe"), lambda: task_of("chess_x"),
                   lambda: task_of("software_engineering"), lambda: names_of("protein")):
         with pytest.raises(KeyError):
             wrong()
@@ -60,7 +60,7 @@ def test_each_task_has_its_own_display_name():
     displays = [names.display for names in NAMES]
     assert len(set(displays)) == len(NAMES) and all(displays)
     assert display_name("creative_writings") == display_name("creative_writing") == "creative writing"
-    assert display_name("software_engineering") == "SWE" and display_name("openmath") == "openmath"
+    assert display_name("software_engineering") == "SWE" and display_name("protein_design") == "protein design"
 
 
 def test_the_analysis_tools_read_the_domain_key_from_the_table(tmp_path):

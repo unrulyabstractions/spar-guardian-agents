@@ -22,7 +22,7 @@ LOG = "2026-11-01T03-31-41-00-00_run_abc.eval"
 OLD = time.time() - 3600
 
 
-def run(root: Path, place: str, *, status: str = "success", commit: str = "94940bc", task: str = "openmath_agent",
+def run(root: Path, place: str, *, status: str = "success", commit: str = "94940bc", task: str = "bowling",
         log: str = LOG, study: str = STUDY) -> Path:
     """A run folder at runs/<study>/<place> whose run.json names its eval log, the log at the same place under logs/,
     an hour old."""

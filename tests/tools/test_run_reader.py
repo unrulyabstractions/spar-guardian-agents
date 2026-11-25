@@ -1,4 +1,4 @@
-"""tools/run_reader.py on the generated runs: riemann_minimal (three workers, a02 and a03 judged cheated, a01 read a03's
+"""tools/run_reader.py on the generated runs: binder_minimal (three workers, a02 and a03 judged cheated, a01 read a03's
 post) and smoke/complete (a lone mock agent)."""
 from __future__ import annotations
 
@@ -42,25 +42,25 @@ def test_a_run_in_a_group_is_read_by_its_name_with_its_log_at_the_mirror(sample_
     folder. Its eval log, gone from the path run.json records, sits at the same place under logs/. A name two folders
     hold stops the tool."""
     study = tmp_path / "runs" / "study_x"
-    grouped = copy_run(sample_runs / "riemann_minimal", study / "invalid" / "riemann_minimal")
+    grouped = copy_run(sample_runs / "binder_minimal", study / "invalid" / "binder_minimal")
     recorded = json.loads((grouped / "processed/run.json").read_text())
-    log = tmp_path / "logs" / "study_x" / "invalid" / "riemann_minimal" / Path(recorded["eval_log"]).name
+    log = tmp_path / "logs" / "study_x" / "invalid" / "binder_minimal" / Path(recorded["eval_log"]).name
     log.parent.mkdir(parents=True)
     log.write_bytes(Path(recorded["eval_log"]).read_bytes())
     write_text(grouped / "processed/run.json", json.dumps({**recorded,
                                                            "eval_log": f"/root/work/logs/study_x/{log.name}"}))
     monkeypatch.setattr(settings, "RUNS", study)
-    run = load_run("riemann_minimal")
-    assert (run.name, run.directory, run.eval_log) == ("invalid/riemann_minimal", grouped.resolve(), log.resolve())
-    copy_run(sample_runs / "riemann_minimal", study / "riemann_minimal")
-    assert load_runs(["riemann_minimal"], "probe") is None
-    assert "2 folders hold a run named riemann_minimal" in capsys.readouterr().err
+    run = load_run("binder_minimal")
+    assert (run.name, run.directory, run.eval_log) == ("invalid/binder_minimal", grouped.resolve(), log.resolve())
+    copy_run(sample_runs / "binder_minimal", study / "binder_minimal")
+    assert load_runs(["binder_minimal"], "probe") is None
+    assert "2 folders hold a run named binder_minimal" in capsys.readouterr().err
 
 
 def test_a_relative_eval_log_is_read_from_the_runs_own_checkout(sample_runs, tmp_path, monkeypatch):
     """run.json names the log from the checkout the run sits in, so a pulled copy reads its own log, never the file
     at the same path in this repository."""
-    run_dir = copy_run(sample_runs / "riemann_minimal", tmp_path / "copy" / "runs" / "study_x" / "riemann_minimal")
+    run_dir = copy_run(sample_runs / "binder_minimal", tmp_path / "copy" / "runs" / "study_x" / "binder_minimal")
     recorded = json.loads((run_dir / "processed/run.json").read_text())
     rel = Path("logs", "kept", Path(recorded["eval_log"]).name)
     for checkout in (tmp_path / "copy", tmp_path / "repo"):
@@ -78,10 +78,10 @@ def test_cli_lists_every_tool():
     assert main([]) == 2
 
 
-def test_riemann_minimal_fields():
-    run = load_run("riemann_minimal")
-    assert run.name == "riemann_minimal"
-    assert run.domain == "openmath"
+def test_binder_minimal_fields():
+    run = load_run("binder_minimal")
+    assert run.name == "binder_minimal"
+    assert run.domain == "protein_design"
     assert run.agents == ["a01", "a02", "a03"]
     assert run.roles == {"a01": "worker", "a02": "worker", "a03": "worker"}
     assert run.judge_cheated == {"a01": False, "a02": True, "a03": True}
@@ -89,12 +89,12 @@ def test_riemann_minimal_fields():
     assert run.rounds == run.run_json["rules"]["rounds"]
     assert run.timeline == run.run_json["rules"]["timeline"]
     assert run.eval_log is not None and run.eval_log.suffix == ".eval"
-    assert run.exploit["holds"] == {"a01": ["slice1"], "a02": ["slice2"], "a03": ["slice3"]}
+    assert run.exploit["holds"] == {"a01": ["segment1"], "a02": ["segment2"], "a03": ["segment3"]}
     assert "prior_work" in run.exploit and run.exploit["access"]["policy"] == "split"
 
 
-def test_riemann_minimal_steps_follow_the_timeline():
-    run = load_run("riemann_minimal")
+def test_binder_minimal_steps_follow_the_timeline():
+    run = load_run("binder_minimal")
     agent_steps = run.agent_steps("a01")
     activations = sorted((entry for entry in run.timeline if entry["agent"] == "a01"), key=lambda e: e["activation"])
     assert len(agent_steps) == 30 == len(activations)
@@ -103,8 +103,8 @@ def test_riemann_minimal_steps_follow_the_timeline():
     assert all(step.round is None for step in run.steps("a01") if step.source != "agent")
 
 
-def test_riemann_minimal_reads_and_posts():
-    run = load_run("riemann_minimal")
+def test_binder_minimal_reads_and_posts():
+    run = load_run("binder_minimal")
     reads = run.reads("a01")
     assert len(reads) == 1
     assert reads[0].posts == [("a03", 1)]
@@ -114,8 +114,8 @@ def test_riemann_minimal_reads_and_posts():
     assert [post.number for post in run.posts("a01")] == [2]
 
 
-def test_riemann_minimal_merged_trace_is_chronological():
-    run = load_run("riemann_minimal")
+def test_binder_minimal_merged_trace_is_chronological():
+    run = load_run("binder_minimal")
     trace = merged_trace(run)
     assert len(trace) == 30 + 11 + 17 + 2
     rounds = [entry.round for entry in trace]
@@ -125,22 +125,22 @@ def test_riemann_minimal_merged_trace_is_chronological():
     assert step.agent == "a03" and "board_post" in step.tools and step.round == post.round
 
 
-def test_summary_round_trip(riemann_copy):
-    copy = riemann_copy
+def test_summary_round_trip(binder_copy):
+    copy = binder_copy
     run = load_run(copy)
     path = write_summary(run, "probe", {"agents": 3, "where": copy})
     assert path == copy / "analysis/tools" / "probe" / "summary.json"
     summary = read_summary(run, "probe")
     assert summary == json.loads(path.read_text())
-    assert (summary["tool"], summary["run"], summary["agents"]) == ("probe", "riemann_minimal", 3)
+    assert (summary["tool"], summary["run"], summary["agents"]) == ("probe", "binder_minimal", 3)
     assert summary["written_at"].endswith("+00:00")
     assert read_summary(run, "absent") is None
     with pytest.raises(ValueError):
         write_summary(run, "probe", {"run": "other"})
 
 
-def test_cache_answers_when_the_log_is_gone(tmp_path, riemann_copy):
-    copy = riemann_copy
+def test_cache_answers_when_the_log_is_gone(tmp_path, binder_copy):
+    copy = binder_copy
     original = load_run(copy)
     run_json = json.loads((copy / "processed/run.json").read_text())
     run_json["eval_log"] = str(tmp_path / "gone.eval")

@@ -105,7 +105,7 @@ def test_a_gate_box_holds_no_phase_two_arm_and_no_stage_shares_a_box():
     assert all(box.name.startswith(box.stage) for box in EVERY_BOX)
 
 
-def test_the_study_has_no_solo_cell_no_chess_and_no_knowledge_work():
+def test_the_study_has_no_solo_cell_and_runs_the_three_tasks():
     assert {arm.kind for box in EVERY_BOX for arm in box.arms} == {"minimal", "minimal_cheat"}
     assert {box.task for box in EVERY_BOX} == {"software_engineering", "protein_design", "creative_writing"}
     assert {job.cell for job in EVERY_JOB if "vuls" in job.cell} == {"swe.vuls_minimal", "swe.vuls_minimal_cheat"}
@@ -156,7 +156,7 @@ def test_pack_keeps_arms_whole_and_opens_a_box_when_the_next_arm_does_not_fit(mo
 def test_find_box_refuses_a_name_outside_the_study():
     assert find_box("gate-flipt-luna-2").task == "software_engineering"
     with pytest.raises(ValueError, match="no box"):
-        find_box("gate-chess-luna-1")
+        find_box("gate-nothing-luna-1")
     with pytest.raises(ValueError, match="unknown stage"):
         stage_boxes("phase3")
 

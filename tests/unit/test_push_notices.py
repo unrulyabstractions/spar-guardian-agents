@@ -63,12 +63,11 @@ def test_a_run_without_a_reader_records_no_push(tmp_path):
 
 def test_the_domains_with_a_team_remote_give_a_reader_and_a_read_line():
     texts = load_prompts()["presence"]
-    assert set(texts["push_read"]) == {"swe", "openmath", "protein_design"}
+    assert set(texts["push_read"]) == {"swe", "protein_design"}
     given = {}
     for key, cls in DOMAINS.items():
         bench = cls()
         given[key] = bool(team_head(bench, bench.plan(TEAM, ROLES)))
-    assert given == {"openmath": True, "swe": True, "protein_design": True, "knowledge_work": False,
-                     "subset_sum": False, "prime_factorization": False, "creative_writing": False, "chess": False}
+    assert given == {"swe": True, "protein_design": True, "creative_writing": False}
     lone = ProteinDesign()
     assert team_head(lone, lone.plan(TEAM.model_copy(update={"mode": "solo_task"}), ROLES)) == {}

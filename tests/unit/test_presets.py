@@ -46,7 +46,7 @@ def test_with_overrides_types_values():
 @pytest.mark.parametrize("pairs", [["n_agents"], ["=3"], ["nope=1"], ["n_agents=many"], ["shutdown=maybe"],
                                    ["scale=huge"], ["mode=pairs"], ["mode=none"], ["rounds=swe:120"],
                                    ["turn_budget=100"], ["steps_per_agent=8"], ["free_board_actions=3"],
-                                   ["access=openmath:all"]])
+                                   ["access=protein_design:all"]])
 def test_with_overrides_rejects(pairs):
     with pytest.raises((ValueError, ValidationError)):
         with_overrides(SwarmConfig(), pairs)

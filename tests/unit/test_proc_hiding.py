@@ -12,9 +12,8 @@ from inspect_ai._util.registry import registry_log_name
 
 from src import tasks
 from src.configuration.presets import build_config
-from src.domains.chess import Chess
-from src.domains.interview import SubsetSum
-from src.domains.openmath import OpenMath
+from src.domains.creative import CreativeWriting
+from src.domains.protein import ProteinDesign
 from src.export import _export_run_blocks as run_blocks
 from src.sandbox import peer_shell
 from src.sandbox.access_log.access_monitor import AUDITOR
@@ -168,7 +167,7 @@ def test_the_ids_never_meet():
 
 
 @pytest.mark.parametrize(("benchmark", "pairs", "keeps"), [
-    (OpenMath(), [], True), (SubsetSum(), [], True), (Chess(), [], False), (OpenMath(), ["proc_hiding=false"], False)])
+    (CreativeWriting(), [], True), (ProteinDesign(), [], True), (CreativeWriting(), ["proc_hiding=false"], False)])
 def test_the_switch_on_a_benchmark_with_a_shell(benchmark, pairs, keeps):
     config = build_config("default", "small", ["n_agents=2", *pairs])
     assert ph.keeps_proc_hiding(benchmark, config) is keeps

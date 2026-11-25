@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from src import run as run_module
 from src.cli import build_parser
 from src.configuration import settings
-from src.domains.openmath import OpenMath
+from src.domains.protein import ProteinDesign
 from src.export.run_export import write_run
 from src.judging import cheatbench_judge as judging
 from src.judging import judge_pass, judge_records, labels_judge, verdict_files
@@ -36,7 +36,7 @@ PRICES = {"input": 1.0, "output": 2.0}
 USAGE = ModelUsage(input_tokens=1000, output_tokens=100, total_tokens=1100)
 PER_CALL = (1000 * 1.0 + 100 * 2.0) / 1_000_000
 ENTRY = {"generation_config": {}, "unsupported": []}
-SPEC = judging.judge_spec(OpenMath.task_dir, OpenMath.name)
+SPEC = judging.judge_spec(ProteinDesign.task_dir, ProteinDesign.name)
 
 
 def reply(text: str) -> ModelOutput:
@@ -72,9 +72,9 @@ def transcript(agent: str, reasoning=None) -> dict:
                            "session_id": "s", "trajectory_id": "t", "steps": steps}}
 
 
-def openmath_run(root: Path, agents=("a01", "a02", "a03", "a04")) -> Path:
-    return write_run_dir(root, {"task": OpenMath.name, "config": {}}, {a: transcript(a) for a in agents},
-                         row="riemann", task=OpenMath.name, model="m", role=None, failure=None,
+def protein_run(root: Path, agents=("a01", "a02", "a03", "a04")) -> Path:
+    return write_run_dir(root, {"task": ProteinDesign.name, "config": {}}, {a: transcript(a) for a in agents},
+                         row="alfalfa_chi", task=ProteinDesign.name, model="m", role=None, failure=None,
                          transcript_path="/root/work/elsewhere/transcript.json")
 
 
@@ -93,7 +93,7 @@ def test_the_scorer_judges_every_agent_and_the_export_adds_the_identity(tmp_path
     the bare ID), with the transcript it read last, by its path from the run's folder."""
     out = ModelOutput.from_content("mockllm/model", verdict(cheated=True))
     task = build_task(pull(n_agents=2, rounds=2),
-                      scorer_=judging.cheatbench_judge(OpenMath.name, str(OpenMath.task_dir)))
+                      scorer_=judging.cheatbench_judge(ProteinDesign.name, str(ProteinDesign.task_dir)))
     [log] = inspect_eval(task, model=scripted_model({"a01": [do("a")], "a02": [do("b")]}, []),
                          model_roles={"judge": get_model("mockllm/model", custom_outputs=[out] * 2)},
                          log_dir=str(tmp_path), display="none", log_realtime=False, max_retries=0)
@@ -203,8 +203,8 @@ def test_the_prompt_is_cheatbenchs_with_the_agents_own_instructions():
     judge_schema.py, and the message the one CheatBench's judge_episode builds. CheatBench resolves its own root, so
     the paths are compared resolved: a checkout whose submodule is a link (a worktree) names the same file."""
     assert SPEC.prompt_path == cb_judge.JUDGE_PROMPT == (settings.CHEATBENCH / "prompts" / "judge.md").resolve()
-    assert SPEC.schema_path.read_bytes() == (OpenMath.task_dir / cb_judge.SCHEMA_MODULE).read_bytes()
-    assert set(SPEC.fields) == {*cb_judge.load_judge_spec(OpenMath.task_dir).fields}
+    assert SPEC.schema_path.read_bytes() == (ProteinDesign.task_dir / cb_judge.SCHEMA_MODULE).read_bytes()
+    assert set(SPEC.fields) == {*cb_judge.load_judge_spec(ProteinDesign.task_dir).fields}
     expected = cb_judge.build_judge_prompt(SPEC, cb_judge.render_transcript(transcript("a01")),
                                            transcript("a01")["prompt"])[0]["content"]
     text = judging.prompt_text(SPEC, transcript("a01"))
@@ -289,7 +289,7 @@ def by_agent(said: dict[str, str]):
 
 
 def test_a_cheatbench_pass_writes_judges_only_and_records_failures(tmp_path):
-    run = openmath_run(tmp_path / "run")
+    run = protein_run(tmp_path / "run")
     before = tree_hashes(run)
     judge = mock_judge(by_agent({"a01": verdict(cheated=True), "a02": "not json", "a03": verdict(),
                                  "a04": verdict(explicit_prohibition_violated=True)}))
@@ -302,16 +302,16 @@ def test_a_cheatbench_pass_writes_judges_only_and_records_failures(tmp_path):
     assert [rows[a]["cheated"] for a in ("a01", "a02", "a03", "a04")] == [True, None, False, True]
     assert rows["a02"]["parse_ok"] is False and rows["a02"]["raw"] == "not json"
     first = rows["a01"]
-    assert first["unit"] == first["episode"] == "riemann#1@a01" and first["task"] == OpenMath.name
+    assert first["unit"] == first["episode"] == "alfalfa_chi#1@a01" and first["task"] == ProteinDesign.name
     assert first["prompt_sha256"] == judging.spec_record(SPEC)["prompt_sha256"] and first["schema_sha256"]
-    assert first["transcript_path"] == "trajectories/riemann#1@a01/transcript.json"
+    assert first["transcript_path"] == "trajectories/alfalfa_chi#1@a01/transcript.json"
     assert first["transcript_sha256"] == hashlib.sha256((run / "processed" / first["transcript_path"]).read_bytes()) \
         .hexdigest()
     assert first["input_sha256"] == judging.sha256(judging.prompt_text(SPEC, transcript("a01")))
 
 
 def test_units_already_held_are_skipped_failed_ones_retried_unless_only_missing_and_redo_judges_all(tmp_path):
-    run = openmath_run(tmp_path / "run")
+    run = protein_run(tmp_path / "run")
     asked = []
 
     def outputs(prompt):
@@ -339,7 +339,7 @@ def test_the_cap_stops_a_pass_before_it_could_be_passed(tmp_path, monkeypatch):
     """One call at a time: each call reserves the most it can cost, so the third call, whose reservation would pass
     the cap, is never made."""
     monkeypatch.setattr(judge_pass, "CONCURRENT", 1)
-    run = openmath_run(tmp_path / "run")
+    run = protein_run(tmp_path / "run")
     judge = mock_judge(lambda _: reply(verdict()))
     units, _ = judge_pass.cheatbench_units(run)
     bound = max(judge_pass.most_cost(judge, u) for u in units)
@@ -351,7 +351,7 @@ def test_the_cap_stops_a_pass_before_it_could_be_passed(tmp_path, monkeypatch):
 
 
 def test_a_pass_refuses_without_a_cap_or_a_bounded_price(tmp_path):
-    run = openmath_run(tmp_path / "run")
+    run = protein_run(tmp_path / "run")
     for cap in (None, 0):
         with pytest.raises(ValueError, match="--cap"):
             judge_pass.run_pass("cheatbench", [run], mock_judge(lambda _: reply(verdict())), cap=cap)
@@ -364,7 +364,7 @@ def test_a_pass_refuses_without_a_cap_or_a_bounded_price(tmp_path):
 
 def test_the_commands_exit_codes(tmp_path, monkeypatch, capsys):
     """2 for a refused start, 3 when the cap left units, 0 when the pass ran through."""
-    run = openmath_run(tmp_path / "run")
+    run = protein_run(tmp_path / "run")
     monkeypatch.setattr(run_module, "require_judge_key", lambda name, code: None)
     monkeypatch.setattr(run_module.judging.Judge, "of",
                         lambda name, batch: mock_judge(lambda _: reply(verdict()), name=name))

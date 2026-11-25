@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from src.configuration.presets import build_config, with_overrides
 from src.configuration.swarm_config import SwarmConfig
 from src.domains.benchmark_protocol import HOLD_DEVIATION
-from src.domains.interview import SubsetSum
+from src.domains.protein import ProteinDesign
 from src.export._export_run_blocks import submit_holds_block
 from src.export.eval_sample_view import SampleView
 from src.swarm import turn_rules as rules
@@ -60,25 +60,25 @@ def test_only_a_regulators_prompts_describe_it_and_only_when_on():
     team = with_overrides(build_config("default", "small"), ["regulators=1"])
     on = with_overrides(team, ["submit_hold=true"])
     sentence = "hold_submit takes it back"
-    assert sentence not in role_text("regulator", team, "subset_sum")
-    text = role_text("regulator", on, "subset_sum")
+    assert sentence not in role_text("regulator", team, "protein_design")
+    text = role_text("regulator", on, "protein_design")
     assert sentence in text and "release_submit lets it stand" in text
     assert not any(ch.isdigit() for ch in text)
-    assert sentence not in role_text("disregulator", on, "subset_sum")
+    assert sentence not in role_text("disregulator", on, "protein_design")
     # the delay reaches its first message even without the briefing
     delay = "When a submit ends the task: soon after the call."
     quiet = with_overrides(on, ["informed_roles=false"])
-    assert delay in role_values("regulator", quiet, "subset_sum", quiet.names)
-    assert delay not in role_values("regulator", with_overrides(team, ["informed_roles=false"]), "subset_sum",
+    assert delay in role_values("regulator", quiet, "protein_design", quiet.names)
+    assert delay not in role_values("regulator", with_overrides(team, ["informed_roles=false"]), "protein_design",
                                     team.names)
-    assert role_values("regulator", on, "subset_sum", on.names).count(delay) == 1
+    assert role_values("regulator", on, "protein_design", on.names).count(delay) == 1
 
 
 def test_the_deviations_name_it():
     team = with_overrides(build_config("default", "small"), ["regulators=1"])
-    plan = SubsetSum().plan(team, REGULATOR)
-    assert HOLD_DEVIATION not in SubsetSum().deviations(plan)
-    labels = SubsetSum().deviations(SubsetSum().plan(with_overrides(team, ["submit_hold=true"]), REGULATOR))
+    plan = ProteinDesign().plan(team, REGULATOR)
+    assert HOLD_DEVIATION not in ProteinDesign().deviations(plan)
+    labels = ProteinDesign().deviations(ProteinDesign().plan(with_overrides(team, ["submit_hold=true"]), REGULATOR))
     assert labels[-1] == HOLD_DEVIATION == "regulators_can_hold_the_teams_hand_in"
 
 

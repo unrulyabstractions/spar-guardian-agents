@@ -14,7 +14,7 @@ from inspect_ai.solver import solver
 
 from src import run
 from src.configuration.presets import build_config
-from src.domains.openmath import OpenMath
+from src.domains.protein import ProteinDesign
 from src.models import (
     cost_cap,
     swarm_model_provider,  # noqa: F401 - registers the swarm/ provider
@@ -101,7 +101,7 @@ def run_until_eval(monkeypatch, tmp_path, model: str, pairs: list[str]) -> dict:
     monkeypatch.setattr(run, "access_line", lambda task: "== access")
     config = build_config("default", "small", ["judge=none", *pairs])
     with pytest.raises(Started):
-        run.run("x", OpenMath(), config, model, None, task=object())
+        run.run("x", ProteinDesign(), config, model, None, task=object())
     return seen
 
 
@@ -121,7 +121,7 @@ def test_run_refuses_an_unpriced_model_before_the_eval(monkeypatch, tmp_path, ca
     monkeypatch.setattr(run.settings, "LOGS", tmp_path)
     monkeypatch.setattr(run.models, "check_routing", lambda model: None)
     config = build_config("default", "small", ["judge=none"])
-    assert run.run("x", OpenMath(), config, "openrouter/some-author/unpriced-model", None, task=object()) == 2
+    assert run.run("x", ProteinDesign(), config, "openrouter/some-author/unpriced-model", None, task=object()) == 2
     assert "no price" in capsys.readouterr().err
 
 
@@ -134,7 +134,7 @@ def test_run_refuses_claude_through_openrouter_before_the_eval_until_its_cache_i
     entry_of = run.models.entry_of
     monkeypatch.setattr(run.models, "entry_of", lambda name: unproven if "opus" in str(name) else entry_of(name))
     config = build_config("default", "small", ["judge=none", "regulators=1", f"regulator_model={OPUS}"])
-    assert run.run("x", OpenMath(), config, run.models.resolve("deepseek-flash-openrouter"), None,
+    assert run.run("x", ProteinDesign(), config, run.models.resolve("deepseek-flash-openrouter"), None,
                    task=object()) == 2
     assert "refused until scripts/check_anthropic_cache.py" in capsys.readouterr().err
 

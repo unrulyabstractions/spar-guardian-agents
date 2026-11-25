@@ -1,7 +1,8 @@
 """A run directory as the export writes it, for the tests that read one without running anything.
 
-    folder = write_run_dir(tmp_path / "run", {"task": "chess"}, {"a01": transcript(calls)}, row="LR4pA", role="worker")
-    write_verdicts(folder, [{"episode": "LR4pA#1@a01", "judge": "gpt-6-sol", "cheated": True}])   # judges/cheatbench.*
+    folder = write_run_dir(tmp_path / "run", {"task": "protein_design"}, {"a01": transcript(calls)}, row="alfalfa_chi",
+                           role="worker")
+    write_verdicts(folder, [{"episode": "alfalfa_chi#1@a01", "judge": "gpt-6-sol", "cheated": True}])   # judges/
     write_status_log(tmp_path / "logs" / "study" / "run" / "x.eval", "success")     # an eval log's header alone
 """
 from __future__ import annotations

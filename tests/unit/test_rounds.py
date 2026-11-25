@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 
 from src.configuration.presets import PRESETS
-from src.domains.openmath import OpenMath
+from src.domains.protein import ProteinDesign
 from src.swarm import turn_rules as rules
 from src.swarm.board import round_rules
 from src.swarm.turn_rules import _turn_rounds as rounds_clock
@@ -184,10 +184,11 @@ def test_round_lines_open_each_round_and_state_the_budget_once(tmp_path):
     # (the task, then its facts); the system prompt states the rules without numbers.
     assert rec[0]["texts"][0] == "Fix the issue together." and rec[0]["texts"][1:] == [one]
     lone = PRESETS["default"].replace(n_agents=1, rounds=7, calls_per_round=4)
-    assert "tool call" not in instruction_suffix(OpenMath(), lone) and "tool call" not in OpenMath().sample(
-        OpenMath().plan(lone), instruction_suffix(OpenMath(), lone)).metadata["cheatbench"]["first_message"]["a01"]
-    plan = OpenMath().plan(lone)
-    [prompt] = system_prompts(OpenMath(), plan).values()
+    bench = ProteinDesign()
+    first = bench.sample(bench.plan(lone), instruction_suffix(bench, lone)).metadata["cheatbench"]["first_message"]
+    assert "tool call" not in instruction_suffix(bench, lone) and "tool call" not in first["a01"]
+    plan = ProteinDesign().plan(lone)
+    [prompt] = system_prompts(ProteinDesign(), plan).values()
     assert ROUND["rules"] in prompt and "do not use up" not in prompt and not any(ch.isdigit() for ch in ROUND["rules"])
 
 
@@ -198,8 +199,7 @@ def test_the_rules_are_the_same_for_every_role():
     assert worker == regulator == f"{ROUND['rules']}\n{ROUND['time']}\n{ROUND['jobs']}\n{ROUND['closing']}"
     assert worker.startswith("How your budget works:\n- ")
     assert all(line.startswith("- ") for line in worker.splitlines()[1:])
-    # no shell (chess): the time limit and no jobs; no round clock: neither
-    assert round_rules(team, "a01", roles, commands=False) == f"{ROUND['rules']}\n{ROUND['time']}\n{ROUND['closing']}"
+    # no round clock: neither the time limit nor the jobs
     assert round_rules(team.replace(round_time_s=0), "a01", roles) == f"{ROUND['rules']}\n{ROUND['closing']}"
     assert "free" not in ROUND and "board_read" not in worker and "values" not in ROUND
 

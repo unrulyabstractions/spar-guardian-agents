@@ -1,4 +1,4 @@
-"""tools/docent on a copy of the generated riemann_minimal (three workers, a02 and a03 judged cheated by CheatBench's
+"""tools/docent on a copy of the generated binder_minimal (three workers, a02 and a03 judged cheated by CheatBench's
 judge, two board posts), with the run environment stood in for: the dry run, the refusals without a usable key, and the
 upload path against a stand-in client."""
 from __future__ import annotations
@@ -32,7 +32,7 @@ def test_key_problem_names_the_three_places():
 
 
 def test_upload_without_key_exits_2(no_key, capsys):
-    assert main(["docent", "riemann_minimal"]) == 2
+    assert main(["docent", "binder_minimal"]) == 2
     assert "no Docent API key found" in capsys.readouterr().err
 
 
@@ -62,13 +62,13 @@ ANSWER = {"ladders": {"agents": {a: dict(zip(RUNGS, LADDERS[a])) for a in ("a01"
 
 
 @pytest.fixture
-def run_python(monkeypatch, tmp_path, riemann_copy):
-    """A stand-in for the run environment's Python that answers ANSWER for riemann_copy, and the code record the
+def run_python(monkeypatch, tmp_path, binder_copy):
+    """A stand-in for the run environment's Python that answers ANSWER for binder_copy, and the code record the
     measures read beside it (signals.jsonl), written without the ladders."""
-    write_jsonl(riemann_copy / "analysis/signals.jsonl", [{"row": "agent", "agent": a} for a in ("a01", "a02", "a03")]
+    write_jsonl(binder_copy / "analysis/signals.jsonl", [{"row": "agent", "agent": a} for a in ("a01", "a02", "a03")]
                 + [{"row": "team"}])
     stand_in = tmp_path / "run_python"
-    stand_in.write_text(f"#!/bin/sh\ntest \"$1\" = -c && test \"$3\" = {riemann_copy.resolve()} && "
+    stand_in.write_text(f"#!/bin/sh\ntest \"$1\" = -c && test \"$3\" = {binder_copy.resolve()} && "
                         f"echo '{json.dumps(ANSWER)}'\n")
     stand_in.chmod(0o755)
     monkeypatch.setattr(docent_convert, "RUN_PYTHON", stand_in)
@@ -76,25 +76,25 @@ def run_python(monkeypatch, tmp_path, riemann_copy):
     return stand_in
 
 
-def test_dry_run_on_riemann(no_key, riemann_copy, run_python):
-    before = (riemann_copy / "analysis/signals.jsonl").read_bytes()
-    assert main(["docent", str(riemann_copy), "--dry-run", "--board"]) == 0
-    assert (riemann_copy / "analysis/signals.jsonl").read_bytes() == before        # computed, never written
-    out = riemann_copy / "analysis/tools" / "docent"
+def test_dry_run_on_binder(no_key, binder_copy, run_python):
+    before = (binder_copy / "analysis/signals.jsonl").read_bytes()
+    assert main(["docent", str(binder_copy), "--dry-run", "--board"]) == 0
+    assert (binder_copy / "analysis/signals.jsonl").read_bytes() == before        # computed, never written
+    out = binder_copy / "analysis/tools" / "docent"
     summary = json.loads((out / "summary.json").read_text())
     agent_runs = json.loads((out / "agent_runs.json").read_text())
     assert summary["tool"] == "docent" and summary["dry_run"] is True
     assert summary["n_agent_runs"] == len(agent_runs) == 4
     assert [run["id"] for run in agent_runs] == [row["id"] for row in summary["agent_runs"]]
-    judge = {row["agent"]: row for row in read_jsonl(riemann_copy / "analysis/judges" / "cheatbench.gpt-6-sol.jsonl")}
+    judge = {row["agent"]: row for row in read_jsonl(binder_copy / "analysis/judges" / "cheatbench.gpt-6-sol.jsonl")}
     for agent_run in agent_runs[:3]:
         metadata = agent_run["metadata"]
         agent = metadata["agent"]
         assert metadata["judge_cheated"] == judge[agent]["cheated"]
-        assert metadata["attempted_access"] == judge[agent]["attempted_access"]
+        assert metadata["read_sequence_file"] == judge[agent]["read_sequence_file"]
         assert metadata["judge_summary"] == judge[agent]["summary"]
         assert metadata["roster"] == ["a01", "a02", "a03"]
-        folder = riemann_copy / "processed/trajectories"
+        folder = binder_copy / "processed/trajectories"
         steps = json.loads(next(folder.glob(f"*@{agent}/transcript.json")).read_text())
         steps = steps["trajectory"]["steps"]
         results = sum(len((step.get("observation") or {}).get("results") or []) for step in steps)
@@ -128,20 +128,20 @@ def test_dry_run_on_riemann(no_key, riemann_copy, run_python):
 
 
 @pytest.mark.skipif(not docent_convert.RUN_PYTHON.is_file(), reason="no run environment in this checkout")
-def test_the_run_environment_answers_for_a_real_run(riemann_copy):
+def test_the_run_environment_answers_for_a_real_run(binder_copy):
     """The real run environment (RUN_PYTHON) on the generated run with a code record that holds the ladders: every
     agent carries every field of FIELDS, its ladders as recorded and its judge label scores as the measure reads them
     (None: no judge has read the run), and nothing is written into the run."""
     rows = [{"row": "agent", "agent": a, **dict(zip(RUNGS[:3], LADDERS[a]))} for a in ("a01", "a02", "a03")]
-    write_jsonl(riemann_copy / "analysis/signals.jsonl", [*rows, {"row": "team", **dict(zip(RUNGS[:3],
+    write_jsonl(binder_copy / "analysis/signals.jsonl", [*rows, {"row": "team", **dict(zip(RUNGS[:3],
                                                                                             LADDERS["team"]))}])
-    before = sorted((p, p.stat().st_mtime_ns) for p in riemann_copy.rglob("*") if p.is_file())
+    before = sorted((p, p.stat().st_mtime_ns) for p in binder_copy.rglob("*") if p.is_file())
     docent_convert.measures.cache_clear()
-    agents, team = docent_convert.measures(riemann_copy)
+    agents, team = docent_convert.measures(binder_copy)
     assert {a: tuple(fields[f] for f in docent_convert.FIELDS) for a, fields in agents.items()} == {
         a: LADDERS[a] + (None, None) for a in ("a01", "a02", "a03")}
     assert tuple(team[f] for f in docent_convert.TEAM_FIELDS) == LADDERS["team"] + (None, None)
-    assert sorted((p, p.stat().st_mtime_ns) for p in riemann_copy.rglob("*") if p.is_file()) == before
+    assert sorted((p, p.stat().st_mtime_ns) for p in binder_copy.rglob("*") if p.is_file()) == before
 
 
 def test_a_folder_without_run_json_has_no_measures(tmp_path):
@@ -170,27 +170,27 @@ class StandInClient:
         return {"status": "success", "total_runs_added": len(agent_runs), "job_ids": ["job-1"]}
 
 
-def test_upload_records_collection_and_ids(monkeypatch, capsys, riemann_copy):
+def test_upload_records_collection_and_ids(monkeypatch, capsys, binder_copy):
     client = StandInClient()
     monkeypatch.setattr(command, "discovered_key", lambda: "dk_stand_in")
     monkeypatch.setattr(command, "connect", lambda: client)
-    assert main(["docent", str(riemann_copy)]) == 0
-    summary = json.loads((riemann_copy / "analysis/tools" / "docent" / "summary.json").read_text())
+    assert main(["docent", str(binder_copy)]) == 0
+    summary = json.loads((binder_copy / "analysis/tools" / "docent" / "summary.json").read_text())
     collection_id, uploaded = client.uploads[0]
     assert collection_id == summary["collection_id"] == "collection-1"
     assert summary["dry_run"] is False
     assert summary["agent_run_ids"] == [agent_run.id for agent_run in uploaded]
     assert summary["collection_url"] == "https://docent.example/dashboard/collection-1"
     assert "https://docent.example/dashboard/collection-1" in capsys.readouterr().out
-    assert main(["docent", str(riemann_copy), "--collection-id", "existing"]) == 0
+    assert main(["docent", str(binder_copy), "--collection-id", "existing"]) == 0
     assert client.uploads[1][0] == "existing"
 
 
-def test_failed_upload_names_the_collection(monkeypatch, capsys, riemann_copy):
+def test_failed_upload_names_the_collection(monkeypatch, capsys, binder_copy):
     client = StandInClient(fail_on=0)
     monkeypatch.setattr(command, "discovered_key", lambda: "dk_stand_in")
     monkeypatch.setattr(command, "connect", lambda: client)
-    assert main(["docent", str(riemann_copy)]) == 1
+    assert main(["docent", str(binder_copy)]) == 1
     err = capsys.readouterr().err
     assert "stand-in upload failure" in err and "--collection-id collection-1" in err
-    assert not (riemann_copy / "analysis/tools" / "docent" / "summary.json").exists()
+    assert not (binder_copy / "analysis/tools" / "docent" / "summary.json").exists()

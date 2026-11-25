@@ -1,4 +1,4 @@
-"""The round-time scenario the openmath and SWE smoke suites share: three workers and a regulator with peer_shell, in
+"""The round-time scenario of the SWE smoke suite: three workers and a regulator with peer_shell, in
 concurrent rounds of up to three calls under a round time T of 20 s (SwarmConfig.round_time_s), and the checks of
 the command jobs (src/sandbox/command_jobs.py) on the exported run.
 

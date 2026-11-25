@@ -98,11 +98,12 @@ def test_candidates_keep_what_can_hold_a_box_cheapest_first():
 
 
 def test_each_task_rents_at_its_own_floor():
-    assert fleet_layout.floor_of("software_engineering") == (32, 64) and fleet_layout.floor_of("chess") == (16, 32)
+    assert fleet_layout.floor_of("software_engineering") == (32, 64)
+    assert fleet_layout.floor_of("creative_writing") == (16, 32)
     assert fleet_registry.minimums("software_engineering")["min_cores"] == 30
-    assert fleet_registry.minimums("chess")["min_cores"] == 14
+    assert fleet_registry.minimums("creative_writing")["min_cores"] == 14
     small = {**SAVED_SEARCH[0], "cpu_cores_effective": 16, "cpu_cores": 16, "cpu_ram": 40000}
-    assert vast_offers.rejections(small, floor=fleet_layout.floor_of("chess")) == []
+    assert vast_offers.rejections(small, floor=fleet_layout.floor_of("creative_writing")) == []
     assert vast_offers.rejections(small, floor=fleet_layout.floor_of("software_engineering")) == [
         "fewer than 32 cores", "less than 64 GB of RAM in its share"]
 
@@ -623,9 +624,9 @@ def test_run_args_come_from_the_registry(registry, capsys):
 
 
 def test_run_args_refuse_a_box_the_table_does_not_hold(registry, capsys):
-    add_box(box=Box("gate-chess-luna-1", "gate", BOX.arms))
+    add_box(box=Box("gate-nothing-luna-1", "gate", BOX.arms))
     assert fleet.main(["run-args", "7"]) == 1
-    assert "no box 'gate-chess-luna-1' in the study" in capsys.readouterr().err
+    assert "no box 'gate-nothing-luna-1' in the study" in capsys.readouterr().err
 
 
 def test_run_args_mock_says_so_in_the_run_names(registry, capsys):
@@ -666,47 +667,38 @@ def test_run_args_refuse_a_run_name_made_elsewhere(registry, tmp_path, capsys, m
 # ---- the layout ----
 
 def test_a_task_has_one_cell_per_kind_or_none(tmp_path):
-    package = tmp_path / "chess"
+    package = tmp_path / "creative_writing"
     package.mkdir()
-    kinds = fleet_layout.kinds_of("chess")
+    kinds = fleet_layout.kinds_of("creative_writing")
     for kind in kinds:
-        (package / f"game_{kind}.py").write_text("")
-    assert fleet_layout.cells("chess", examples=tmp_path) == [f"chess.game_{k}" for k in kinds]
-    (package / "game_minimal_regulated.py").unlink()
+        (package / f"poem_{kind}.py").write_text("")
+    assert fleet_layout.cells("creative_writing", examples=tmp_path) == [f"creative_writing.poem_{k}" for k in kinds]
+    (package / "poem_minimal_regulated.py").unlink()
     with pytest.raises(ValueError, match="minimal_regulated: 0 scripts"):
-        fleet_layout.cells("chess", examples=tmp_path)
-    (package / "game_minimal_regulated.py").write_text("")
+        fleet_layout.cells("creative_writing", examples=tmp_path)
+    (package / "poem_minimal_regulated.py").write_text("")
     (package / "other_solo.py").write_text("")
     with pytest.raises(ValueError, match="solo: 2 scripts"):
-        fleet_layout.cells("chess", examples=tmp_path)
+        fleet_layout.cells("creative_writing", examples=tmp_path, stem="*")
 
 
-def test_knowledge_work_and_chess_have_a_cell_no_other_task_has(tmp_path):
-    assert fleet_layout.cells("knowledge_work")[-1] == "knowledge_work.worktime_minimal_all"
-    assert fleet_layout.run_name("knowledge_work.worktime_minimal_all", "luna", 2) == "worktime_minimal_all_luna2"
-    assert fleet_layout.cells("chess")[-1] == "chess.game_minimal_all"
-    assert fleet_layout.run_name("chess.game_minimal_all", "luna", 2) == "game_minimal_all_luna2"
+def test_every_task_has_its_cells():
     assert len(fleet_layout.cells("software_engineering")) == len(fleet_layout.KINDS)
     assert fleet_layout.layout_problems(list(fleet_layout.TASKS)) == []
-    # its own kinds are the rest of a task's cells: a task without them is refused, and no other task needs them
-    package = tmp_path / "knowledge_work"
-    package.mkdir()
-    for kind in fleet_layout.KINDS:
-        (package / f"worktime_{kind}.py").write_text("")
-    assert "minimal_all: 0 scripts" in fleet_layout.layout_problems(["knowledge_work"], tmp_path)[0]
     with pytest.raises(ValueError, match="minimal_all: 0 scripts"):
         fleet_layout.cells("protein_design", ("minimal_all",))
 
 
-def test_two_tasks_with_one_cell_stem_are_refused(tmp_path):
-    for package in ("chess", "creative_writing"):
+def test_two_tasks_with_one_cell_stem_are_refused(tmp_path, monkeypatch):
+    monkeypatch.setitem(fleet_layout.STEMS, "protein_design", "poem")
+    for package in ("protein_design", "creative_writing"):
         (tmp_path / package).mkdir()
         for kind in fleet_layout.kinds_of(package):
             (tmp_path / package / f"poem_{kind}.py").write_text("")
-    problems = fleet_layout.layout_problems(["chess", "creative_writing"], tmp_path)
+    problems = fleet_layout.layout_problems(["protein_design", "creative_writing"], tmp_path)
     assert len(problems) == len(fleet_layout.KINDS) and "run names collide" in problems[0]
-    assert fleet_layout.layout_problems(["chess"], tmp_path) == []
-    assert "needs one script per kind" in fleet_layout.layout_problems(["knowledge_work"], tmp_path)[0]
+    assert fleet_layout.layout_problems(["protein_design"], tmp_path) == []
+    assert "needs one script per kind" in fleet_layout.layout_problems(["software_engineering"], tmp_path)[0]
 
 
 def test_labels_and_the_fleet_prefix():
@@ -720,7 +712,8 @@ def test_labels_and_the_fleet_prefix():
 
 
 def test_run_names_are_the_screens():
-    assert fleet_layout.run_name("chess.game_solo", "luna", 2) == screen.run_name("chess.game_solo", "luna", 2)
+    assert fleet_layout.run_name("protein_design.binder_solo", "luna", 2) == \
+        screen.run_name("protein_design.binder_solo", "luna", 2)
 
 
 # ---- the capture ----
@@ -853,7 +846,8 @@ def test_the_check_catches_a_copy_cut_short_or_changed_in_place(box):
 @pytest.mark.parametrize("change, words", [
     (lambda lines: [line for line in lines if "done" not in line], "cut short"),
     (lambda lines: [{"done": True, "roots": []}], "found no files"),
-    (lambda lines: [{"producing": 12, "command": "python -m examples.chess.game_solo"}, *lines], "still producing"),
+    (lambda lines: [{"producing": 12, "command": "python -m examples.protein_design.binder_solo"}, *lines],
+     "still producing"),
     (lambda lines: [{"unreadable": "/root/x", "error": "denied"}, *lines], "could not read"),
     (lambda lines: [{"tree": "/root/work/submodules/orbit", "head": "a", "recorded": "b"}, *lines], "records b"),
     (lambda lines: [line for line in lines if "docker" not in line], "nothing of Docker"),
@@ -1044,7 +1038,7 @@ def test_the_limit_is_the_tasks_domains(monkeypatch):
     protein, swe = box_runner.inspect_limit_s("protein_design"), box_runner.inspect_limit_s("software_engineering")
     assert swe == (protein - settings.HARD_TIME_GRACE_S + 1800) * 3 // 2
     assert (protein + box_runner.GRACE_S) / 60 == 90 and (swe + box_runner.GRACE_S) / 60 == 155
-    assert box_runner.inspect_limit_s("chess") == protein
+    assert box_runner.inspect_limit_s("creative_writing") == protein
     monkeypatch.setitem(box_runner.TASKS, "go", "go")
     with pytest.raises(ValueError, match="no domain"):
         box_runner.inspect_limit_s("go")
