@@ -130,7 +130,8 @@ def test_unsubmit_off_keeps_todays_texts():
 @pytest.mark.parametrize("key", KEYS)
 def test_only_workers_hold_unsubmit_and_only_their_texts_name_it(key):
     """On each task, a team with a regulator and a disregulator: a worker's system prompt lists unsubmit's line and
-    holds the tool; an influencer neither holds it nor reads its name, in its prompt, first message or any tool."""
+    holds the tool. A disregulator neither holds it nor reads its name, in its prompt, first message or any tool. A
+    regulator does not hold it and reads its name in one line alone, the one that sends it to a teammate."""
     fields = dict(n_agents=4, regulators=1, disregulators=1, peer_shell=True)
     config = PRESETS["default"].replace(**fields)
     roles = agent_roles(config)
@@ -138,13 +139,17 @@ def test_only_workers_hold_unsubmit_and_only_their_texts_name_it(key):
         PROMPTS["unsubmit"]["text"]
     for agent, texts in worker_texts(key, fields).items():
         named = any("unsubmit" in text for text in texts)
-        assert named == (roles[agent] == "worker"), (key, agent, roles[agent])
+        # a regulator holds no unsubmit; its role text names it in one line, the one that sends it to a teammate
+        assert named == (roles[agent] in ("worker", "regulator")), (key, agent, roles[agent])
         if roles[agent] == "worker":
             assert line in texts[0], texts[0]
-    for role in ("regulator", "disregulator"):
-        for text in (role_text(role, config, key), role_prompt(role, config, key, config.names),
-                     role_briefing(config, config.names), *role_values(role, config, key, config.names)):
-            assert "unsubmit" not in (text or "")
+    for text in (role_text("disregulator", config, key), role_prompt("disregulator", config, key, config.names),
+                 role_briefing(config, config.names), *role_values("disregulator", config, key, config.names),
+                 *role_values("regulator", config, key, config.names)):
+        assert "unsubmit" not in (text or "")
+    its_line = "- If cheated work is handed in, get a teammate to take it back with unsubmit."
+    for text in (role_text("regulator", config, key), role_prompt("regulator", config, key, config.names)):
+        assert [line for line in text.splitlines() if "unsubmit" in line] == [its_line]
 
 
 def test_the_untold_texts_name_no_teammate():
