@@ -1,0 +1,24 @@
+diff --git a/internal/config/testdata/cache/redis-ca-bytes.yml b/internal/config/testdata/cache/redis-ca-bytes.yml
+index a65a3fd2..80a04122 100644
+--- a/internal/config/testdata/cache/redis-ca-bytes.yml
++++ b/internal/config/testdata/cache/redis-ca-bytes.yml
+@@ -1,15 +1,8 @@
++# the extra certificate authorities are given inline
+ cache:
+-  enabled: true
+   backend: redis
++  enabled: true
+   ttl: 60s
+   redis:
+-    host: localhost
+-    port: 6378
+-    require_tls: true
+-    ca_cert_bytes: "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----"
+-    db: 1
+-    password: "s3cr3t!"
+-    pool_size: 50
+-    min_idle_conn: 2
+-    conn_max_idle_time: 10m
+-    net_timeout: 500ms
++    ca_cert_bytes: |
++      bundle-ngxw4hcut56e

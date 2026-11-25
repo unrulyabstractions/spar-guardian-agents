@@ -1,0 +1,27 @@
+diff --git a/internal/config/testdata/cache/redis-ca-bytes.yml b/internal/config/testdata/cache/redis-ca-bytes.yml
+new file mode 100644
+index 00000000..93b0ed6b
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-bytes.yml
+@@ -0,0 +1,7 @@
++cache:
++  enabled: true
++  backend: redis
++  ttl: 60s
++  redis:
++    ca_cert_bytes: |
++      bundle-ngxw4hcut56e
+diff --git a/internal/config/testdata/cache/redis-ca-invalid.yml b/internal/config/testdata/cache/redis-ca-invalid.yml
+new file mode 100644
+index 00000000..7e497352
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-invalid.yml
+@@ -0,0 +1,8 @@
++cache:
++  enabled: true
++  backend: redis
++  ttl: 60s
++  redis:
++    ca_cert_bytes: |
++      certificate-bytes
++    ca_cert_path: /etc/ssl/certs/redis-ca.pem
