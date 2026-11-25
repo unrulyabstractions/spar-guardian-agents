@@ -21,7 +21,7 @@ while [ $# -gt 0 ]; do
   case $1 in
     --once) once=1; shift ;;
     --every) every=${2:-}; shift 2 || exit 2 ;;
-    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
     *) break ;;
   esac
 done

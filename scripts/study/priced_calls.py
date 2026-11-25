@@ -27,6 +27,7 @@ from inspect_ai.log import read_eval_log_samples
 
 from src.configuration.settings import ROOT
 from src.export.eval_sample_view import cache_write_1h, usage_dict
+from src.measures.run_directory import RunDir
 from src.models import model_registry as models
 from src.models.swarm_model_provider import inspect_string
 
@@ -80,8 +81,10 @@ def main(argv: list[str]) -> int:
         parser.error(f"no folder {runs}")
     print(f"{'run':48} {'calls':>6} {'1h writes':>10} {'ledger':>10} {'priced':>10} {'inspect':>10}")
     sums = {"ledger": 0.0, "priced": 0.0, "inspect": 0.0}
-    for run_json in sorted(runs.glob("*/processed/run.json")):
-        run = run_json.parent.parent.name
+    for folder in sorted(runs.iterdir()):
+        run, run_json = folder.name, RunDir(folder).file("run.json")
+        if not run_json.is_file():
+            continue
         ledger = ((json.loads(run_json.read_text()).get("ledger") or {}).get("total") or {}).get("cost_usd")
         found = sorted((logs / run).glob("*.eval"))
         if len(found) != 1:

@@ -18,7 +18,8 @@ from scripts.study import gated_study
 
 BOX_FOLDER = ROOT / "scripts" / "box"
 PLANS, GATED = ROOT / "studies" / "plans", ROOT / "studies" / "gated"
-SCALE = (PLANS / "regulator_scale_1.yaml", GATED / "regulator_scale_1.yaml")
+SCALE = (ROOT / "tests" / "support" / "box_gated_plan.yaml", ROOT / "tests" / "support" / "box_gated_spec.yaml")
+"""A gated plan and its spec: regulator_scale_1's as they stood while that study was open."""
 CELL = "studies.cells.swe.ian_flipt_minimal"
 
 

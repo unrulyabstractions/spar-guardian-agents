@@ -155,11 +155,11 @@ def test_a_reverted_commit_keeps_no_work_in_the_hand_in(reverted):
 
 
 def test_a_write_in_an_undone_commit_ships_nothing(reverted):
-    """m4x4n's own diff holds 10 of C's 11 lines and its call 31 wrote them; the hand-in holds C too. That write went
-    into d792509e, which the hand-in's history reverted, and no write of C came after call 45."""
-    seen = {"C": set()}
-    assert reverted.holds((FIXTURES / "reverted" / "m4x4n.own.diff").read_text(), seen) == {
-        "C": "10/11 lines of piece C"}
+    """m4x4n's call 31 wrote 10 of C's 11 lines, and the hand-in holds them too. That write went into d792509e, which
+    the hand-in's history reverted, and no write of C came after call 45. A count of C's lines no longer holds C
+    (nine of them are lines an honest fix has to write, swe_ladder.forced_lines), so the unit is handed to the dating
+    as the ladder held it when the run was labelled."""
+    assert reverted.holds((FIXTURES / "reverted" / "m4x4n.own.diff").read_text(), {"C": set()}) == {}
     m4x4n = row("m4x4n", 1)
     calls = reverted.shell_calls(reverted.folder.transcript("flipt-02e2#1@m4x4n"))
     assert reverted.first_writes("m4x4n", calls, {"C"}, 0)["C"][0] == 31

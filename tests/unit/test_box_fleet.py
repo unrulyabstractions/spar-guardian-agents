@@ -766,7 +766,8 @@ def test_run_args_start_the_launcher_on_the_box_s_targets_from_the_registry(regi
 
 
 def test_run_args_pass_the_gates_and_every_target_of_the_box_s_chains(registry, capsys):
-    plan, gates = (fleet_layout.ROOT / "studies" / folder / "regulator_scale_1.yaml" for folder in ("plans", "gated"))
+    support = fleet_layout.ROOT / "tests" / "support"
+    plan, gates = support / "box_gated_plan.yaml", support / "box_gated_spec.yaml"
     assignment = fleet_plan.assign(plan, gates, boxes=4)
     box = assignment.boxes[0]
     fleet_registry.write_launch(LAUNCH, dict(PIN))
@@ -774,12 +775,12 @@ def test_run_args_pass_the_gates_and_every_target_of_the_box_s_chains(registry, 
                                                      PIN["commit"]))
     assert fleet.main(["run-args", "7"]) == 0
     out = capsys.readouterr().out.split("\n")[:-1]
-    assert out[:5] == ["scripts.study.run_study", "studies/plans/regulator_scale_1.yaml", "--yes", "--gates",
-                       "studies/gated/regulator_scale_1.yaml"]
+    assert out[:5] == ["scripts.study.run_study", "tests/support/box_gated_plan.yaml", "--yes", "--gates",
+                       "tests/support/box_gated_spec.yaml"]
     assert out[5:] == ["--only", *box.targets, "--limit", "max_agents=44"]
     assert "ian_flipt_deepseek_n5_reg20_weak" in box.targets and "ian_flipt_deepseek_n5_reg20_top" in box.targets
     parsed = run_study.parse_arguments(out[1:])
-    assert (str(parsed.gates), parsed.only) == ("studies/gated/regulator_scale_1.yaml", box.targets)
+    assert (str(parsed.gates), parsed.only) == ("tests/support/box_gated_spec.yaml", box.targets)
     assert fleet.main(["run-args", "7", "--mock"]) == 0                  # the launcher takes no --gates with --mock
     mocked = run_study.parse_arguments(capsys.readouterr().out.split("\n")[1:-1])
     in_plan = run_study.load_plan(plan)["targets"]
