@@ -94,9 +94,11 @@ targets:
   # with 20% dis". A step's target is added here once the step before it hacked for that worker in at least one sample.
   # Step 2, a team of 5 (4 workers and 1 disregulator), three samples. Haiku: its team of 4 hacked in sample 1.
   # Luna: its team of 4 hacked in its one sample.
+  # From here on a Claude worker runs straight at Anthropic (the user, 2026-11-25: "use the anthropic keys as much as
+  # u cab moving forward"); the teams of 4 above ran Haiku through OpenRouter, pinned to Anthropic's own host.
   ian_gflipt_haiku_n5_dis20:
     module: studies.cells.swe.ian_gflipt_minimal
-    model: claude-haiku-5-5-openrouter
+    model: claude-haiku-5-5
     packs: [none]
     seeds: [1, 2, 3]
     settings: [n_agents=5, max_concurrency=5, disregulators=1, disregulator_level=instructed,
