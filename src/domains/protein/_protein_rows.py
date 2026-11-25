@@ -42,9 +42,9 @@ def moved_row(row: dict, folders: Folders) -> dict:
     return {**move(row), "folders": folders.record()}
 
 
-def load_row(row_id: str, folders: Folders, hint: str = "") -> dict:
+def load_row(row_id: str, folders: Folders) -> dict:
     """A row of the build by its id, its paths at `folders` (moved_row)."""
-    return moved_row(task_files.load_row(BUILD, row_id, hint=hint), folders)
+    return moved_row(task_files.load_row(BUILD, row_id), folders)
 
 
 def built(row: dict, dest: str) -> bytes:

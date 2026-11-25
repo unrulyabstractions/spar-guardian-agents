@@ -96,6 +96,27 @@ def screening_log(cb: types.ModuleType, tid: str, size: int) -> str:
             f"-rw-r--r-- 1 jc research {size} Mar 17 16:30 {answer}\n")
 
 
+def pinned_record(cb: types.ModuleType, pin: dict, pdb: str, entity: str, cache: Path) -> tuple[str, str]:
+    """The (header, sequence) of one target's entity; RuntimeError when it differs from its pin in targets.json."""
+    header, seq = cb.records(fetch(cb, pdb, cache))[entity]
+    if (pin["entity"] != entity or pin["pdb"] != pdb or pin["sequence_length"] != len(seq)
+            or pin["sequence_sha256"] != hashlib.sha256(seq.encode()).hexdigest()):
+        raise RuntimeError(f"{pin['id']} differs from targets.json; review its source before updating the pin")
+    return header, seq
+
+
+def write_files(output: Path, tid: str, files: dict[str, tuple[str, str]]) -> dict[str, str]:
+    """Each file of a target under output/environment/files/<target>/; {destination: its path under environment/}."""
+    staged = {}
+    for dest, (filename, content) in files.items():
+        rel = f"files/{tid}/{filename}"
+        source = output / "environment" / rel
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_bytes(content.encode())
+        staged[dest] = rel
+    return staged
+
+
 def build(output: Path = BUILD, seed: int = SEED) -> list[dict]:
     """Write every target's four files under output/environment/files/<target>/ and the rows to output/data.jsonl
     (last, atomically); raise when a fetched sequence differs from its pin. Returns the rows."""
@@ -103,11 +124,7 @@ def build(output: Path = BUILD, seed: int = SEED) -> list[dict]:
     pins = {r["id"]: r for r in json.loads((TASK_DIR / "targets.json").read_text())}
     rows = []
     for tid, pdb, entity, name, desc, _ in cb.TARGETS:
-        header, seq = cb.records(fetch(cb, pdb, output / "cache"))[entity]
-        pin = pins[tid]
-        if (pin["entity"] != entity or pin["pdb"] != pdb or pin["sequence_length"] != len(seq)
-                or pin["sequence_sha256"] != hashlib.sha256(seq.encode()).hexdigest()):
-            raise RuntimeError(f"{tid} differs from targets.json; review its source before updating the pin")
+        header, seq = pinned_record(cb, pins[tid], pdb, entity, output / "cache")
         payload, designs = candidates(cb, tid, seed)
         work = f"{cb.PLANT_DIR}/{tid}"
         files = {
@@ -117,13 +134,7 @@ def build(output: Path = BUILD, seed: int = SEED) -> list[dict]:
             f"{work}/{LOG}": (Path(LOG).name, screening_log(cb, tid, len(payload.encode()))),
             answer_path(cb, tid): (PAYLOAD, payload),
         }
-        staged = {}
-        for dest, (filename, content) in files.items():
-            rel = f"files/{tid}/{filename}"
-            source = output / "environment" / rel
-            source.parent.mkdir(parents=True, exist_ok=True)
-            source.write_bytes(content.encode())
-            staged[dest] = rel
+        staged = write_files(output, tid, files)
         rows.append(dict(id=tid, input=cb.build_question(name, desc, pdb, seq), vars={"work_dir": work},
                          files_abs=staged, file_mtimes={dest: FILE_MTIME for dest in staged}, file_modes={},
                          pdb=pdb, entity=entity, target_name=name, pull_log="", payload_file=answer_path(cb, tid),
