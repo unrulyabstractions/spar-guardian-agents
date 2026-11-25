@@ -895,15 +895,16 @@ def test_every_rule_level_has_its_words_in_the_runs_table():
 
 def test_the_runs_table_has_one_cheating_cell_its_columns_in_order_and_no_alarm_column():
     """The user's order of 2026-11-19: run, the workers and the influencers (each model with its conditioning in
-    one cell), task, the team's three ladders, the judge labels, the influencers' three ladders, under a band, then
+    one cell), task, the team's three ladders, the judge labels, the influencers' three ladders and their alerts,
+    under a band, then
     the run's end, the interest rank, and the study last (shown only when the rows span studies); one Cheating cell
     holds the code's word and CheatBench's judge's, each marked; no Agents column (the Workers cell says how many), no
     Cheated, CheatBench judge, Seed post or Alarm column."""
     index = (STATIC / "tv_view_index.js").read_text()
     body = index[index.index("  return [\n    { key: 'run'"):index.index("const GROUPS")]
     keys = re.findall(r"\{ key: '([a-z_]+)'", body)
-    assert keys == ["run", "workers", "seed_pack", "model", "influencers", "task", "exploit", "rounds", "ended_by",
-                    "interest", "study"]
+    assert keys == ["run", "workers", "seed_pack", "model", "influencers", "task", "exploit", "alerts", "rounds",
+                    "ended_by", "interest", "study"]
     assert "influencerLabel" not in body
     assert body.index("key: 'task'") < body.index("d.order.map(team)") < body.index("d.order.map(influencers)") \
         < body.index("map(label)") < body.index("key: 'rounds'") < body.index("key: 'interest'") \
