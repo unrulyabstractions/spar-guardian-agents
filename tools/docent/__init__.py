@@ -1,7 +1,7 @@
 """The docent tool: each agent episode of a run as a Docent AgentRun, so questions across runs can be asked in Docent.
 
-    uv run --project tools python -m tools docent riemann_minimal --dry-run
-    uv run --project tools python -m tools docent riemann_minimal worktime_minimal --board
+    uv run --project tools python -m tools docent binder_minimal --dry-run
+    uv run --project tools python -m tools docent binder_minimal poem_minimal --board
     uv run --project tools python -m tools docent flipt_minimal --collection-id <id>
 
 An agent's AgentRun is its ATIF transcript converted by docent.sdk.integrations.convert_atif_to_agent_run. Each

@@ -21,9 +21,9 @@ call the time limit cut has none, and neither the origin nor the tool call reads
 
 The agent. A lone agent is `lone`. One seat on the machine is `machine`: the service is the agent. One seat with the uid
 is `uid`. An influencer's peer_shell observer is `observer`: its own uid on the peer's machine
-(access_monitor.observer_seats), so a peer's own row there keeps its seat. Seats that share a uid (openmath's shared
-layout) are told apart by `tool_call`: the root's hash and the time match one agent's tool call. Where two agents match,
-agent stays None and candidates lists both. `user` is the seat's Linux user, None for a machine's own.
+(access_monitor.observer_seats), so a peer's own row there keeps its seat. Seats that share a uid (a layout with one
+user for all) are told apart by `tool_call`: the root's hash and the time match one agent's tool call. Where two agents
+match, agent stays None and candidates lists both. `user` is the seat's Linux user, None for a machine's own.
 
 The tool call. The daemon hashes the root's argv past Inspect's `timeout -k 5s Ns`, and this module hashes the same argv
 from each ToolEvent (exec_digest). An open matches inside the call's window, with SLACK_S for the skew between the

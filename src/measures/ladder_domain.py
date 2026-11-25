@@ -14,7 +14,7 @@ record from the agents' rows and its hooks.
     team = domain.team_evidence(rows)                  # Evidence(used=[...], checked=[...], shipped=[...])
 
 setup(run) reads what the domain needs from run.json; fingerprints(run) builds the honeypot's fingerprints, the
-expensive part, once per row_key in a process. A domain whose honeypot is a planted file (the interview keys, the
+expensive part, once per row_key in a process. A domain whose honeypot is a planted file (the
 protein candidates) sets `reader`, `python` and `key_file` and implements names_target; the base's aimed_read then
 follows reads and copies of it. The probe's report is run.json "honeypot_probe" (honeypot_fingerprints.by_owner).
 

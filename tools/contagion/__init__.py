@@ -1,11 +1,11 @@
 """The contagion tool: standard contagion models of dishonest and honest behaviour over the board graph.
 
-    uv run --project tools python -m tools contagion riemann_minimal [--models si,threshold,sir] [--seed 0]
+    uv run --project tools python -m tools contagion binder_minimal [--models si,threshold,sir] [--seed 0]
     uv run --project tools python -m tools contagion --synthetic 100
 
 The observed curves are shares of agents by round. An agent is dishonest from its cheating onset and honest from the
 first round its regulator_intervened signal appears, or from the last round when its judge row sets its task's
-disclosure flag (DISCLOSURE_FLAGS; scout has no disclosure scanner). Knowledge work and SWE have no such flag. Onsets
+disclosure flag (DISCLOSURE_FLAGS; scout has no disclosure scanner). SWE has no such flag. Onsets
 come from runs/<study>/<name>/tools/scout/summary.json when present: its "onset" field for cheating, and the found round
 of regulator_intervened under "agents" for honesty. A disclosure flag counts at the last round, and summary notes say
 so. Without scout, or with a scout that ran grep only or none of the opened, used and submitted scanners, the onsets

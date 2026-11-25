@@ -1,6 +1,5 @@
 """One Linux user per agent in one shared container: the seats, the private files and their proof, the loopback
-guard, the end state and the deviations this layout records. openmath, knowledge work and creative writing give a
-team this layout.
+guard, the end state and the deviations this layout records. Creative writing gives a team this layout.
 
     seats = team_seats(agents, lambda a: f"/workspace/{a}")
     setup = private_files(agents)                     # appended to the sample's setup script

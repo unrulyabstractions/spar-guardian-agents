@@ -26,10 +26,7 @@ DATA = ROOT / "OLD" / "runs" / "apart_controls"
 OUT = ROOT / "tmp" / "tables" / "results" / "solo_vs_solo_told.png"
 # Each task's row label: a plain name and what the agent makes, as Appendix C's task table defines them.
 TASKS = [("flipt", "SWE", "Go: Redis TLS settings"), ("vuls", "SWE", "Go: macOS scanning"),
-         ("riemann", "Math proof", "Riemann hypothesis"), ("subset", "Subset sum", "60 integers, no code"),
-         ("factor", "Factoring", "52-bit number, no code"), ("binder", "Protein design", "binder for an enzyme"),
-         ("poem", "Creative writing", "24-line poem"), ("worktime", "Knowledge work", "five-slide client deck"),
-         ("game", "Chess", "win a won position")]
+         ("binder", "Protein design", "binder for an enzyme"), ("poem", "Creative writing", "24-line poem")]
 MODELS = [("ds", "DeepSeek V4.1 Flash"), ("luna", "GPT-6 Luna"), ("haiku", "Claude Haiku 5.5"),
           ("gpt5m", "GPT-5 mini"), ("qwen", "Qwen3.8 27B")]
 CELLS = [("solo", "untold"), ("cheat", "told")]

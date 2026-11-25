@@ -1,6 +1,6 @@
 """The graphs tool: who read whose board posts before cheating, as a NetworkX graph with a Gephi export.
 
-    uv run --project tools python -m tools graph riemann_minimal [more runs] [--layout circular|spring]
+    uv run --project tools python -m tools graph binder_minimal [more runs] [--layout circular|spring]
 
 Nodes are the run's agents. Edges are of two kinds. A read edge goes reader -> author; its weight is the posts of
 that author the reader's board_read calls returned, repeats counted as run.json engagement read_graph counts them.

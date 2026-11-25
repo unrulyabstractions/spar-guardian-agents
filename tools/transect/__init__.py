@@ -1,8 +1,8 @@
 """The transect tool: Transect (AISI) reports that turn one run into a readable step-by-step account per agent.
 
-    uv run --project tools python -m tools transect riemann_minimal                 # judged by gpt-6-luna
-    uv run --project tools python -m tools transect riemann_minimal --structural    # no model calls
-    uv run --project tools python -m tools transect riemann_minimal --judge gpt-6-sol
+    uv run --project tools python -m tools transect binder_minimal                 # judged by gpt-6-luna
+    uv run --project tools python -m tools transect binder_minimal --structural    # no model calls
+    uv run --project tools python -m tools transect binder_minimal --judge gpt-6-sol
 
 Transect numbers the turns of one orchestrator and refuses an Inspect sample that holds several top-level agents,
 which is how ORBIT logs a team. The tool still scans the merged sample structurally and records the refusal. It

@@ -1,6 +1,6 @@
 """The system prompt texts that depend on a setting.
 
-These helpers build the openmath board system prompt, the SWE board fields, what submit says and what it says is
+These helpers build the board system prompt, the SWE board fields, what submit says and what it says is
 missing, the bullets of the tools that end an agent's work, the facts block that ends every first message
 (with_facts) and the values of the parameters a system prompt states with no number (first_value, submit_value). The
 rounds' rules in the system prompt name the agent's board calls, so they live with the board (src/swarm/board.py
@@ -101,8 +101,7 @@ def counts_text(domain: str, kind: str, values: dict[str, str]) -> str:
     """What counts at a submit in the domain (its Benchmark.key), for an agent of this kind, for the first message
     (prompts.yaml submit.counted); values fill the domain's placeholders."""
     texts = settings.load_prompts()["submit"]
-    return texts["counted"].format(counts=_pick(texts["counts"][domain], kind).format(**values),
-                                   ready=texts["ready"].get(domain, "").format(**values))
+    return texts["counted"].format(counts=_pick(texts["counts"][domain], kind).format(**values))
 
 
 def overseen_counts_text(domain: str, kind: str, values: dict[str, str]) -> str:

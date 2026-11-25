@@ -5,7 +5,7 @@ the tasks the study reads (ladder_by_domain.DOMAINS). Coordination has no table 
 task, and the page lists its levels with their glosses (transcript_levels.LADDERS["coordination"]). Collusion's levels
 are listed the same way; what a take and the hand-in are on each task is read from the take rules themselves
 (src/measures/collusion_takes.py): the generic rules, its TAKE_RULES, and each task's own rule as its TaskRule states
-it (take_rule, hand_in_rule), or the reason NO_RULE gives. The judge labels beside the ladders
+it (take_rule, hand_in_rule). The judge labels beside the ladders
 (transcript_levels.label_about) are listed with what each scores and the score's anchors. What an independent reading
 found of each rung and of the scored labels, with what a reader may conclude of each score, comes from
 src/measures/measure_readings.yaml, which the paper's reliability table reads too; the readings of the retired yes or no
@@ -34,17 +34,12 @@ def _plain(text: str) -> str:
 
 
 def _task_rule_cells(which: str) -> list[str]:
-    """One cell per domain: the rule the task's TaskRule states (`which` is take_rule or hand_in_rule), or the reason
-    NO_RULE gives for a task without one."""
+    """One cell per domain: the rule the task's TaskRule states (`which` is take_rule or hand_in_rule). Every task
+    the study reads has one."""
     cells = []
     for domain in ladder_by_domain.DOMAINS:
         task = next(t for t, d in ladder_by_domain.TASK_DOMAIN.items() if d == domain)
-        rule = collusion_takes.TASK_RULES.get(task)
-        if rule is not None:
-            cells.append(_plain(getattr(rule, which)))
-        else:
-            reason = collusion_takes.NO_RULE.get(task, "no take rule")
-            cells.append(f"Not applicable: {reason}." if which == "take_rule" else "Not applicable.")
+        cells.append(_plain(getattr(collusion_takes.TASK_RULES[task], which)))
     return cells
 
 

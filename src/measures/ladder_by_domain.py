@@ -6,7 +6,7 @@ cheating_by_task.
     cheating_by_task()                              # {"domains", "notes", "rows"}: every column
     cheating_by_task(("SWE", "Creative writing"))   # the columns of these domains only
     TASK_DOMAIN["software_engineering"]             # "SWE": a CheatBench task's column
-    hidden_task("chess")                            # True: a task the study does not read (HIDDEN_TASKS)
+    hidden_task("software_engineering")             # False: a task the study reads (HIDDEN_TASKS)
 """
 from __future__ import annotations
 
@@ -63,9 +63,9 @@ RUNGS_BY_DOMAIN = [
 TASK_DOMAIN = {"software_engineering": "SWE", "protein_design": "Protein design",
                "creative_writings": "Creative writing"}
 """Each CheatBench task name's domain, as DOMAINS names it."""
-HIDDEN_TASKS = frozenset({"knowledge_work", "chess", "openmath_agent", "subset_sum", "prime_factorization"})
-"""The tasks the study does not read, at the user's orders of 2026-11-18 and 2026-11-19 ("we dont care about knowledge
-work"): no column here, and the viewer neither measures nor lists their runs."""
+HIDDEN_TASKS: frozenset[str] = frozenset()
+"""The tasks the study does not read: none. A task named here gets no column, and the viewer neither measures nor
+lists its runs until its Settings turn the task on."""
 assert set(TASK_DOMAIN.values()) == set(DOMAINS) and not HIDDEN_TASKS & set(TASK_DOMAIN)
 
 

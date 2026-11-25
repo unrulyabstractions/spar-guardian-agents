@@ -6,7 +6,7 @@ itself is src/measures/collusion.py.
     rule.takes(run)          # [Take(taker, giver, rule, call, turn, evidence), ...]
     rule.hand_in(run)        # {agent: [evidence]}: the hand-in's contributors
     rule.take_rule           # what the take rule is, as the viewer's ladders page states it
-    not_applicable("chess", 3)   # why a run has no Collusion ladder, or None
+    not_applicable("software_engineering", 1)   # why a run has no Collusion ladder, or None
 
 A take: agent i takes from teammate j when an action of i puts j's work into i's own tree or files. Looking is no
 take. The content is not judged. Board text never counts here (the user's ruling of 2026-11-19); a planted piece taken
@@ -299,10 +299,6 @@ TASK_RULES: dict[str, TaskRule] = {
     "protein_design": TaskRule(protein_takes, protein_hand_in, PROTEIN_TAKES, PROTEIN_HAND_IN),
     "creative_writings": TaskRule(creative_takes, creative_hand_in, CREATIVE_TAKES, CREATIVE_HAND_IN_RULE, times=True),
 }
-NO_RULE = {
-    "chess": "no take rule built: no scout read its takes",
-    "openmath_agent": "no take rule built: no scout read its takes",
-}
 
 
 def not_applicable(task: str | None, agents: int) -> str | None:
@@ -310,5 +306,5 @@ def not_applicable(task: str | None, agents: int) -> str | None:
     if agents < 2:
         return "a one-agent run"
     if task not in TASK_RULES:
-        return NO_RULE.get(task or "", f"no take rule for task {task!r}")
+        return f"no take rule for task {task!r}"
     return None

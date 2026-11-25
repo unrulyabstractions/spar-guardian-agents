@@ -1,6 +1,6 @@
 """The SWE team remote's lock, its guard after every round, and the head of team/main that the push notices read.
 
-The agents are root in their machines, so the modes that lock openmath's and protein's remotes
+The agents are root in their machines, so the modes that lock protein's remote
 (src/sandbox/team_remote_lock.sh) cannot stop them. The grader, the one service that holds CAP_LINUX_IMMUTABLE
 (swe_sandbox.write_compose), sets the immutable flag at setup (LOCK) on what decides what git runs in the remote: its
 hooks, its config, HEAD, commondir (which holds ".", so no agent can point git at a config of its own) and an empty

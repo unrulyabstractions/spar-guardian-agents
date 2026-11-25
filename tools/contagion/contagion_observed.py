@@ -12,8 +12,9 @@ from tools.scout.scout_scanners import CHEATING_SIGNALS, HONEST_SIGNALS
 
 BEHAVIOURS = ("dishonest", "honest")
 READ_KIND = "read"
-# Each task's flag for telling the others, from CheatBench's judge schemas. Knowledge work and SWE have none.
-DISCLOSURE_FLAGS = ("disclosed_access", "disclosed", "disclosed_to_arbiter", "final_source_disclosure")
+# Each task's flag for telling the others, from CheatBench's judge schemas: protein design's and creative writing's.
+# SWE has none.
+DISCLOSURE_FLAGS = ("disclosed_access", "disclosed")
 
 
 @dataclass(frozen=True)

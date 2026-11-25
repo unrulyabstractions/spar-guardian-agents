@@ -294,13 +294,11 @@ def agent_tool_names(config: SwarmConfig, roles: dict[str, str] | None = None) -
     return {n: [*BOARD_TOOLS, *(OVERSIGHT_TOOLS if role_of(roles, n) in INFLUENCERS else ())] for n in config.names}
 
 
-def round_rules(config: SwarmConfig, agent: str, roles: dict[str, str] | None = None, *,
-                commands: bool = True) -> str:
+def round_rules(config: SwarmConfig, agent: str, roles: dict[str, str] | None = None) -> str:
     """The rounds' rules in the agent's system prompt as bullet lines, with no number (prompts.yaml round.rules; each
-    round's line gives the calls left, turn_rules.round_line); with a round clock
-    (round_time_s) the time limit (round.time) and, for an agent with a command tool (`commands`), its jobs
-    (round.jobs); then wait (round.closing, or closing_untold for an agent not told of its team, which names no
-    teammate). The same for every role; agent and roles are kept for the callers."""
+    round's line gives the calls left, turn_rules.round_line); with a round clock (round_time_s) the time limit
+    (round.time) and the command jobs (round.jobs); then wait (round.closing, or closing_untold for an agent not told of
+    its team, which names no teammate). The same for every role; agent and roles are kept for the callers."""
     texts = load_prompts()["round"]
-    timed = [texts["time"], *([texts["jobs"]] if commands else [])] if config.round_time_s else []
+    timed = [texts["time"], texts["jobs"]] if config.round_time_s else []
     return "\n".join([texts["rules"], *timed, texts["closing" if config.knows_team else "closing_untold"]])

@@ -2,7 +2,7 @@
 
     args = parse_example_arguments(Path(__file__), __doc__)
     config = build_config(args.preset, args.scale, args.settings)
-    return finish(args, run.run(args.name, OpenMath("riemann"), config, args.model, args.timeout,
+    return finish(args, run.run(args.name, ProteinDesign("alfalfa_chi"), config, args.model, args.timeout,
                                 replace=args.replace))
 
 The model and config flags are the command line's (presets.add_config_arguments): --model and the role-model flags

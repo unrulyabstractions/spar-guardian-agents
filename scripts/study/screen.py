@@ -1,7 +1,7 @@
 """A screen: the example cells on one model, several samples each, as many runs at once as the machine holds.
 
     uv run python -m scripts.study.screen --model deepseek-flash-openrouter --samples 3 --jobs 9 [--suffix flash]
-                                    [--cells openmath.riemann_solo ...] [--summary-only]
+                                    [--cells protein_design.binder_solo ...] [--summary-only]
                                     [--preset P] [--scale S] [--set key=value ...]
                                     [--worker-model M] [--regulator-model M] [--disregulator-model M]
 

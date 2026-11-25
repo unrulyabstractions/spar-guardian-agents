@@ -4,7 +4,7 @@ An agent's round is one ORBIT activation under the completion quantum: model cal
 results before it. A reply asking for several calls runs them as one batch. The round ends at the first of these, the
 end reason its timeline entry keeps:
 
-    end_round     a batch held end_round (or a domain tool that closes the round: chess's pass_turn, close_round)
+    end_round     a batch held end_round (or a domain tool that closes the round, close_round)
     calls         the round made N calls (TurnState.calls_per_round), a soft cap: no call is refused for it, so a
                   reply that starts below N runs whole; or the agent has made all C of its calls (TurnState.call_budget)
     ending        a call ended the agent's turns (submit or stop_working went through), or its submit
@@ -104,8 +104,7 @@ def take_round(agent: str) -> dict | None:
 
 
 def close_round(agent: str) -> None:
-    """End the agent's round after the batch under way: end_round, and a domain tool that ends the round (chess's
-    pass_turn)."""
+    """End the agent's round after the batch under way: end_round, and a domain tool that ends the round."""
     round_record(agent)["closed"] = True
 
 

@@ -10,8 +10,7 @@ ORBIT reserves the names bash and python for its built-in tools, which take one 
 with a seat per agent binds these two under other names. A lone agent keeps ORBIT's built-in tools as the sandbox
 user, its tools' calls running through command_jobs as well: the turn rules' gate swaps their executor
 (turn_rules.SWAPS, registered here) and keeps their names, descriptions and parameters. The descriptions are
-Inspect's own, unless a domain gives its own. Every domain but chess builds its tools with roster_tools. Chess has no
-shell and builds its AgentTools from CheatBench's nine tools.
+Inspect's own, unless a domain gives its own. Every domain builds its tools with roster_tools.
 
 TOOL_TIMEOUT_S is the per-call limit of the runs made before 2026-11-22, which the replays reproduce.
 """
@@ -89,7 +88,7 @@ class AgentTools:
     """SetupConfig.tool_kwargs for ORBIT's built-in bash and python."""
     seats: dict[str, Seat] | None = None
     """Each agent's seat where its shell is bound to one (`shell` and `run_python`), which peer_shell runs in; None
-    for ORBIT's built-in tools (a lone agent) and for a domain with no shell (chess)."""
+    for ORBIT's built-in tools (a lone agent) and for a domain with no shell."""
 
     @property
     def names(self) -> list[str]:

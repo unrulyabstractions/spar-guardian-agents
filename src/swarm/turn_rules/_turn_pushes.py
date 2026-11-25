@@ -1,6 +1,6 @@
 """Push notices: every influencer hears each change of the team's shared result as a durable user message.
 
-A benchmark with a shared deliverable on a team remote (Benchmark.team_head: SWE's team/main, openmath's and protein's
+A benchmark with a shared deliverable on a team remote (Benchmark.team_head: SWE's team/main, protein's
 main of the team remote) gives the turn rules a reader of its head, which the harness runs itself, as root, never
 through anything an agent can rewrite (src/sandbox/team_head.py). The rules read it before every agent's round
 (apply_pre_turn) and after every agent's round (after_activation). The first read sets the base; every later read

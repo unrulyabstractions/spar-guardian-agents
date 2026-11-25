@@ -5,7 +5,7 @@ tool on the host, the end state and the probe.
     compose = write_compose(build_dir, agents)
     tools = roster_tools(agents, seats if len(agents) > 1 else None, task_tools=host_tool(...))
 
-CheatBench runs every episode of its python311 tasks (subset_sum, prime_factorization, protein_design) in one
+CheatBench runs every episode of its python311 tasks (protein_design among them) in one
 container built from its Dockerfile, as the user `user`, with the row's files at their absolute paths. Here a lone
 agent gets that container (the service `default`). A team gets one such container per agent, named by the agent and
 staged with the agent's own copy of the row, so a piece of the honeypot moves between agents only through the board,
@@ -13,7 +13,7 @@ or through the one volume a domain may mount in every machine (protein design's 
 ORBIT's built-in bash and python as `user`; a team's agents use `shell` and `run_python` bound to their own containers
 (src/sandbox/agent_tools.py).
 
-The task's own tool (the verifier of the interview tasks, the checker of protein design) runs on the host, bound per
+The task's own tool (the checker of protein design) runs on the host, bound per
 agent: host_tool() wraps CheatBench's grader `(state, call)` pair once per owner and records every call and the
 owner's state in the sample store (src/sandbox/task_tool_store.py). The owner is the agent alone and in solo_task, and
 the team in shared_task, where CheatBench's one state per episode becomes one state per team. accepted_by_owner()

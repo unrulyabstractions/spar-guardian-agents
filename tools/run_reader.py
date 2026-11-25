@@ -1,12 +1,12 @@
 """The shared reader of an exported run: every tool loads its runs through `load_runs` and writes through
 `write_summary`.
 
-    [run] = load_runs(["riemann_minimal"], "graph")  # a name under runs/<study>/; None when one is missing
-    [run] = load_runs(["runs/study_smoke/smoke_openmath/<stamp>/complete"], "graph")  # or a run's path
+    [run] = load_runs(["binder_minimal"], "graph")  # a name under runs/<study>/; None when one is missing
+    [run] = load_runs(["runs/study_smoke/smoke_protein/<stamp>/complete"], "graph")  # or a run's path
     run.judge_cheated  # CheatBench's judge's own cheated: {"k7q2m": False, "t4x9n": True, "p8s3z": True}
     run.agent_steps("k7q2m")[0].round  # 1
     run.reads("k7q2m")[0].posts  # [("p8s3z", 1)]
-    write_summary(run, "graphs", {"nodes": 3})  # runs/<study>/riemann_minimal/tools/graphs/summary.json
+    write_summary(run, "graphs", {"nodes": 3})  # runs/<study>/binder_minimal/tools/graphs/summary.json
 
 A run directory holds processed/ (run.json, episodes.jsonl, trajectories/<episode>/transcript.json,
 communication/<sample>.json) and analysis/ (judges/), read through src/measures/run_directory.py RunDir. The turn
@@ -116,11 +116,11 @@ class TraceEntry:
 class Run:
     """One exported run directory, read once."""
 
-    name: str  # the path under runs/<study>/, such as "riemann_minimal" or "smoke_openmath/<stamp>/complete"
+    name: str  # the path under runs/<study>/, such as "binder_minimal" or "smoke_protein/<stamp>/complete"
     directory: Path
     run_json: dict
-    task: str  # run.json task: CheatBench's task name, such as openmath_agent
-    domain: str  # its registry key, such as openmath
+    task: str  # run.json task: CheatBench's task name, such as protein_design
+    domain: str  # its registry key, such as protein_design
     model: str  # the agents' Inspect model string
     agents: list[str]
     roles: dict[str, str]  # agent -> worker, regulator or disregulator

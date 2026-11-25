@@ -10,8 +10,8 @@ Three scripts run inside a sandbox as root, in Python 3, which every image has:
                    uid and the jobs among them (src/sandbox/command_jobs.py), are spared: each call's exec leads a
                    session of its own, and the pid files after the user name it.
   LOOPBACK_GUARD   refuses loopback traffic from the agent users with iptables owner rules (uids from 1001, every
-                   per-agent user), except to the "ip:port" services the layout allows (openmath's article mirror,
-                   creative writing's review endpoint), and proves
+                   per-agent user), except to the "ip:port" services the layout allows (creative writing's
+                   review endpoint), and proves
                    it: root listens on 127.0.0.1 and connects to itself (the listener is up), then each agent's
                    connection must be refused. A layout where an agent gets through is refused. The rule matches every
                    packet an agent's socket sends, replies included, so an agent cannot serve a peer either. Unix

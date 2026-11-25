@@ -4,7 +4,7 @@ analysis tools (tools/.venv, without ORBIT) all draw from it.
 
     from src.utils.figure_style import ROLE_FILL, legend_below, style_axes, title_axes
     style_axes(ax, grid="y")
-    title_axes(ax, "riemann_minimal: board actions per round", "openmath_agent · 3 agent(s)")
+    title_axes(ax, "binder_minimal: board actions per round", "protein_design · 3 agent(s)")
     ax.legend(**legend_below(-0.22))
 """
 from __future__ import annotations

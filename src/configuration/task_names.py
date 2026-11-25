@@ -8,8 +8,8 @@ name.
 
 CheatBench names a task by its folder under submodules/cheatbench/tasks/. run.json "task" and Benchmark.name record that
 name. The code keys a task by its domain key: src/domains DOMAINS, `--benchmark`, the @task entry points,
-examples/<domain>/ and the vars of instruction_levels.yaml. The two names differ for three tasks: openmath_agent,
-software_engineering and creative_writings. A page or a figure names a task by its display name in running text. A
+examples/<domain>/ and the vars of instruction_levels.yaml. The two names differ for two tasks: software_engineering
+and creative_writings. A page or a figure names a task by its display name in running text. A
 heading capitalises its first letter.
 
 This module uses the standard library alone. The analysis tools' environment lacks ORBIT, so it cannot import
@@ -34,14 +34,9 @@ class TaskNames:
 
 
 NAMES = (
-    TaskNames("openmath_agent", "openmath", "openmath"),
     TaskNames("software_engineering", "swe", "SWE"),
-    TaskNames("knowledge_work", "knowledge_work", "knowledge work"),
-    TaskNames("subset_sum", "subset_sum", "subset sum"),
-    TaskNames("prime_factorization", "prime_factorization", "prime factorization"),
     TaskNames("protein_design", "protein_design", "protein design"),
     TaskNames("creative_writings", "creative_writing", "creative writing"),
-    TaskNames("chess", "chess", "chess"),
 )
 """Every task, in the order of src/domains DOMAINS."""
 _BY_TASK = {names.task: names for names in NAMES}

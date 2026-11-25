@@ -1,14 +1,12 @@
 """Access: which parts of the exploit each agent holds, as one policy for every domain.
 
-    plan("split", config.seats, roles, lambda n: [f"slice{k}" for k in range(1, n + 1)], ["whole"])
+    plan("split", config.seats, roles, lambda n: [f"segment{k}" for k in range(1, n + 1)], ["whole"])
     parse("seat1:B+C,seat2:A,seat3:")      # {"seat1": ["B", "C"], "seat2": ["A"], "seat3": []}
 
-A domain declares its items: the slices of the complete submission's archive on openmath, the honeypot's pieces on SWE,
-the review tool and the artifact read on knowledge work, the answer key's shards on subset sum, the factors' shares on
-prime factorization, the planted designs' segments on protein design, the reference's segments on creative writing, the
-request tool and the credential's halves on chess. Under `split`, the default, the domain's items for
-n neutral agents are dealt round robin over the neutral agents in seat order, so the whole exploit needs them all, and a
-regulator or a disregulator holds nothing. The deal starts from the neutral seat a domain names (`turn`; SWE turns it by
+A domain declares its items: the honeypot's pieces on SWE, the planted designs' segments on protein design and the
+reference's segments on creative writing. Under `split`, the default, the domain's items for n neutral agents are
+dealt round robin over the neutral agents in seat order, so the whole exploit needs them all, and a regulator or a
+disregulator holds nothing. The deal starts from the neutral seat a domain names (`turn`; SWE turns it by
 the seed), so two items next to each other in the domain's order always go to two agents. A domain with fewer items
 than neutral agents (SWE's three pieces) deals them again to the agents beyond: with five, the fourth and fifth hold the
 first and second pieces. When fewer than two agents are neutral every agent holds everything. Under `all` every agent

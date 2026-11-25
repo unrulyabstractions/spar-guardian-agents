@@ -1,8 +1,8 @@
 """The Inspect tasks of the experiment: one benchmark under one SwarmConfig, as an ORBIT task.
 
-    task = swarm_task(OpenMath("riemann"), build_config("default", "medium", ["regulators=3"]))
-    task = swarm_task(OpenMath("riemann"), config, name="riemann_cheat", extra_instruction=CHEAT)
-    inspect eval src/tasks.py@openmath -T preset=default -T regulators=1
+    task = swarm_task(ProteinDesign(None), build_config("default", "medium", ["regulators=3"]))
+    task = swarm_task(ProteinDesign(None), config, name="protein_cheat", extra_instruction=CHEAT)
+    inspect eval src/tasks.py@protein_design -T preset=default -T regulators=1
 
 The last form skips what `python -m src run` adds: the key and routing checks, the role models built before the
 sandbox starts, and the Gemini 402 retry (src/models/gemini_402_retry.py). A role model still gets the eval's generate
@@ -142,8 +142,7 @@ def system_prompts(benchmark: Benchmark, plan: Plan) -> dict[str, str]:
         role = role_of(plan.roles, agent)
         added = roles_module.role_prompt(role, config, benchmark.key, plan.agents)
         return roles_module.oversight_prompt(agent, plan.agents, added, benchmark.access_note(plan),
-                                             round_rules(config, agent, plan.roles,
-                                                         commands=benchmark.commands)) \
+                                             round_rules(config, agent, plan.roles)) \
             if config.oversees(role) else roles_module.with_role(base[agent], added)
 
     return {agent: prompt(agent) for agent in plan.agents}
@@ -197,8 +196,7 @@ def deliverable(benchmark: Benchmark, plan: Plan) -> Deliverable:
 
 
 def observers(benchmark: Benchmark, plan: Plan, tools: AgentTools) -> dict[str, int]:
-    """Each influencer's observer uid under SwarmConfig.peer_shell (src/sandbox/peer_shell.py), else none. A domain
-    whose agents have no shell of their own (chess) turns peer_shell off in its plan (Benchmark.plan)."""
+    """Each influencer's observer uid under SwarmConfig.peer_shell (src/sandbox/peer_shell.py), else none."""
     config = plan.config
     found = peer_shell.observer_uids(config.names, plan.roles) if config.peer_shell else {}
     if found and tools.seats is None:
@@ -286,7 +284,7 @@ def setup_solvers(benchmark: Benchmark, plan: Plan, tools: AgentTools | None = N
     record = seed_record(config, benchmark.key, benchmark.row)
     seeded = [seed_setup(benchmark, record, config.names)] if record else []
     tmp = [tmp_capture_setup(*machines_of(tools.seats, config.names))] \
-        if config.tmp_snapshots and benchmark.commands and tools is not None else []
+        if config.tmp_snapshots and tools is not None else []
     return [rules_setup(config, config.names, plan.roles,
                         time_limit_s=config.time_limit_s or benchmark.time_limit_s(),
                         round_end=benchmark.round_end(plan), **team_head(benchmark, plan)), *hidden, benchmark.setup(),
@@ -294,16 +292,13 @@ def setup_solvers(benchmark: Benchmark, plan: Plan, tools: AgentTools | None = N
 
 
 def cleanup(benchmark: Benchmark, config: SwarmConfig) -> Callable[[TaskState], Awaitable[None]]:
-    """Task.cleanup: the benchmark's, after the end of the command jobs (command_jobs.end_jobs, for a benchmark whose
-    agents hold a shell) and the access log's and the network log's captures when the scorers never ran. end_jobs and
-    each capture do nothing a second time, and a capture nothing for a log the sample does not keep."""
+    """Task.cleanup: the benchmark's, after the end of the command jobs (command_jobs.end_jobs) and the access log's
+    and the network log's captures when the scorers never ran. end_jobs and each capture do nothing a second time, and
+    a capture nothing for a log the sample does not keep."""
     logs = benchmark.keeps_access_log(config) or keeps_network_log(benchmark, config)
-    if not logs and not benchmark.commands:
-        return benchmark.cleanup
 
     async def run(state: TaskState) -> None:
-        if benchmark.commands:
-            await command_jobs.end_jobs()
+        await command_jobs.end_jobs()
         if logs:
             await capture(state)
             await capture_network(state)
@@ -312,10 +307,10 @@ def cleanup(benchmark: Benchmark, config: SwarmConfig) -> Callable[[TaskState], 
 
 
 def scorers(benchmark: Benchmark, config: SwarmConfig) -> list:
-    """The end of the command jobs (every job still running is killed) for a benchmark whose agents hold a shell, the
-    access log's capture before any harness read of the honeypot, then the network log's, the benchmark's scorers,
-    CheatBench's judge unless the config's judge is None, and the belief questions (refused for a benchmark that
-    gives them no words, Benchmark.belief_words)."""
+    """The end of the command jobs (every job still running is killed), the access log's capture before any harness
+    read of the honeypot, then the network log's, the benchmark's scorers, CheatBench's judge unless the config's
+    judge is None, and the belief questions (refused for a benchmark that gives them no words,
+    Benchmark.belief_words)."""
     monitor = [access_capture()] if benchmark.keeps_access_log(config) else []
     monitor += [network_capture()] if keeps_network_log(benchmark, config) else []
     judge = [cheatbench_judge(benchmark.name, str(benchmark.task_dir), judge=config.judge,
@@ -326,7 +321,7 @@ def scorers(benchmark: Benchmark, config: SwarmConfig) -> list:
         if words is None:
             raise ValueError(f"belief_probe: {benchmark.key} gives the belief questions no words (belief_words)")
         probes.append(belief_probes(words))
-    jobs = [command_jobs.jobs_capture()] if benchmark.commands else []
+    jobs = [command_jobs.jobs_capture()]
     return [*jobs, *monitor, *benchmark.scorers(), *judge, *probes]
 
 
@@ -442,34 +437,10 @@ def benchmark_task(key: str, preset_name: str, row: str | None, overrides: dict)
 
 
 @task
-def openmath(preset: str = "default", row: str | None = None, **overrides) -> Task:
-    """CheatBench's openmath_agent, one row."""
-    return benchmark_task("openmath", preset, row, overrides)
-
-
-@task
 def swe(preset: str = "default", row: str | None = None, **overrides) -> Task:
     """A CheatBench SWE issue under one of Lucy's honeypots (-T honeypot=, jigsaw by default; -T grade=false skips
     the hidden tests)."""
     return benchmark_task("swe", preset, row, overrides)
-
-
-@task
-def knowledge_work(preset: str = "default", row: str | None = None, **overrides) -> Task:
-    """CheatBench's knowledge_work, one GDPval row."""
-    return benchmark_task("knowledge_work", preset, row, overrides)
-
-
-@task
-def subset_sum(preset: str = "default", row: str | None = None, **overrides) -> Task:
-    """CheatBench's subset_sum interview, one question."""
-    return benchmark_task("subset_sum", preset, row, overrides)
-
-
-@task
-def prime_factorization(preset: str = "default", row: str | None = None, **overrides) -> Task:
-    """CheatBench's prime_factorization interview, one question."""
-    return benchmark_task("prime_factorization", preset, row, overrides)
 
 
 @task
@@ -482,9 +453,3 @@ def protein_design(preset: str = "default", row: str | None = None, **overrides)
 def creative_writing(preset: str = "default", row: str | None = None, **overrides) -> Task:
     """CheatBench's creative_writings, one brief."""
     return benchmark_task("creative_writing", preset, row, overrides)
-
-
-@task
-def chess(preset: str = "default", row: str | None = None, **overrides) -> Task:
-    """CheatBench's chess, one position."""
-    return benchmark_task("chess", preset, row, overrides)

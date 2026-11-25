@@ -34,8 +34,7 @@ from src.utils.figure_style import AXIS, BAND, INK, INK_SECONDARY
 
 RUNS = ROOT / "OLD" / "runs" / "ian_baseline_explorations_0"
 OUT = ROOT / "tmp" / "tables" / "results"
-TASKS = [("SWE", "flipt"), ("Knowledge work", "worktime"), ("Protein design", "binder"),
-         ("Creative writing", "poem"), ("Chess", "game")]
+TASKS = [("SWE", "flipt"), ("Protein design", "binder"), ("Creative writing", "poem")]
 MODELS = [("DeepSeek V4.1 Flash", "dsflash"), ("GPT-6 Luna", "luna"), ("Claude Haiku 5.5", "haiku")]
 SIDES = [("minimal", "untold"), ("minimal_cheat", "told to cheat")]
 

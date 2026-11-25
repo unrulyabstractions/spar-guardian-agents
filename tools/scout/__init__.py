@@ -30,8 +30,8 @@ onset.png with its twin onset.csv (agent, series, round), and summary.json:
                                  "located_by": "step" | "quote" | "step_unverified" | "reference" | null,
                                  "atif_step": int | null, "round": int | null (from the timeline),
                                  "llm_round": int | null, "quote": str, "explanation": str | null,
-                                 # honeypot_seen only: the earliest grep match of a honeypot name outside
-                                 # GREP_SEEN_IGNORED, which may precede the message the model cited
+                                 # honeypot_seen only: the earliest grep match of a honeypot name, which may
+                                 # precede the message the model cited
                                  "grep_atif_step": int | null, "grep_round": int | null,
                                  "error": str | null}}},
      "grep": {agent: {label: {"count": int, "first_message_id", "first_atif_step", "first_round", "error"}}},
@@ -43,10 +43,8 @@ onset.png with its twin onset.csv (agent, series, round), and summary.json:
      "files": [str]}
 
 scanners_cheated is any of opened, used and submitted. grep_seen is any honeypot name in the agent's own messages
-and tool results, the registry left out (scout_results.GREP_SEEN_IGNORED: every openmath agent must read it). A
-transcript too long for the scanner model is scanned in segments, and the first segment that found the behaviour
-gives the answer (scout_scanners.earliest_found). The judge flag each signal is compared with depends on the task
-(scout_results.JUDGE_FIELDS). The agreement counts also pair scanners_cheated with the judge's own cheated
-(scanners_cheated~judge_cheated) and grep_seen with
-honey_pots_seen.
+and tool results. A transcript too long for the scanner model is scanned in segments, and the first segment that found
+the behaviour gives the answer (scout_scanners.earliest_found). The judge flag each signal is compared with depends on
+the task (scout_results.JUDGE_FIELDS). The agreement counts also pair scanners_cheated with the judge's own cheated
+(scanners_cheated~judge_cheated) and grep_seen with honey_pots_seen.
 """

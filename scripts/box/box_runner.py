@@ -58,17 +58,12 @@ from src.configuration import settings
 from src.configuration.presets import add_config_arguments, build_config, config_pairs
 from src.configuration.settings import INCOMPLETE_FAILURES
 from src.domains import DOMAINS
-from src.domains.chess import chess_rows_build
 from src.domains.creative import creative_sandbox
-from src.domains.knowledge import knowledge_sandbox
-from src.domains.knowledge.knowledge_settings import BUILD as KNOWLEDGE_BUILD
-from src.domains.knowledge.knowledge_settings import TASK_DIR as KNOWLEDGE_TASK_DIR
 from src.domains.protein import protein_rows_build
 from src.domains.swe import swe_sandbox
 from src.domains.swe.swe_inputs import load_split
 from src.domains.swe.swe_settings import DEFAULT_ROW as SWE_ROW
 from src.measures.run_directory import RunDir, set_aside_attempt
-from src.sandbox import cheatbench_task_files as task_files
 from src.sandbox.machines import agent_machines
 
 SCREEN_LOGS = settings.LOGS / "screen"
@@ -81,14 +76,6 @@ BEFORE = "before this runner"
 
 
 # ---- build ----
-
-def build_knowledge_work() -> None:
-    """GDPval's rows from Hugging Face (CheatBench's build.py), the office image and the agents' image on it."""
-    build = task_files.load_module(KNOWLEDGE_TASK_DIR / "build.py", "cheatbench_knowledge_work_build")
-    build.build(output=KNOWLEDGE_BUILD)
-    print(knowledge_sandbox.ensure_images())
-    print(f"{len(DOMAINS['knowledge_work'].rows())} rows")
-
 
 def build_protein_design() -> None:
     """The rows from CheatBench's generator (20 FASTA records from rcsb.org) and the python311 machine image."""
@@ -104,22 +91,13 @@ def build_creative_writing() -> None:
     print(f"{len(DOMAINS['creative_writing'].rows())} rows")
 
 
-def build_chess() -> None:
-    """The pinned Stockfish 19 for the box (CheatBench's Linux asset, checked by its digest and the engine
-    signature), the rows from CheatBench's fixtures, and the python311 machine image."""
-    chess_rows_build.build()
-    print(agent_machines.ensure_image())
-    print(f"{len(DOMAINS['chess'].rows())} rows")
-
-
 def build_software_engineering() -> None:
     """The issue's amd64 image from its CheatBench environment and the native image on it."""
     print(swe_sandbox.ensure_images(SWE_ROW))
     print(f"{SWE_ROW}: {sorted(load_split(SWE_ROW))}")
 
 
-BUILDS = {"knowledge_work": build_knowledge_work, "protein_design": build_protein_design,
-          "creative_writing": build_creative_writing, "chess": build_chess,
+BUILDS = {"protein_design": build_protein_design, "creative_writing": build_creative_writing,
           "software_engineering": build_software_engineering}
 """Each task's first-run steps."""
 

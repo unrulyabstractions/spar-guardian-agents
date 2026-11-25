@@ -22,7 +22,7 @@ const table = (cls, cols, rows) => h('div', { class: 'table-wrap' }, h('table', 
 /** A rule's text with each `span` in backticks as code and each date kept on one line. */
 const prose = s => String(s == null ? '' : s).split(/(`[^`]+`|\d{4}-\d{2}-\d{2})/).map((part, i) => (i % 2 === 0 ? part
   : part.startsWith('`') ? h('code', null, part.slice(1, -1)) : h('span', { class: 'nowrap' }, part)));
-/** A task's id in words: knowledge_work is "Knowledge work". */
+/** A task's id in words: protein_design is "Protein design". */
 const taskWords = id => { const s = String(id).replace(/_/g, ' '); return s[0].toUpperCase() + s.slice(1); };
 
 /** The row a ladder's table puts before the first level above the line, spanning `span` columns. */

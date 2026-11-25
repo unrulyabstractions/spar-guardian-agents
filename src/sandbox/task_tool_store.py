@@ -1,11 +1,10 @@
 """The sample store of a task's own tool: every call in order, and each owner's state after its last call.
 
-    record({"agent": "k7q2m", "owner": "team", "tool": "verify_subset", ...})
+    record({"agent": "k7q2m", "owner": "team", "tool": "check_design", ...})
     accepted = states().get("team", {}).get("accepted")
 
-The machines layer's host tool (the interview verifier, the protein checker) and knowledge work's review tool record
-their calls here; the scorers, the delivery predicates and the export read them back. An owner is the agent, or the
-team in shared_task.
+The machines layer's host tool (the protein checker) records its calls here; the scorers, the delivery predicates and
+the export read them back. An owner is the agent, or the team in shared_task.
 """
 from __future__ import annotations
 

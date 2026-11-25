@@ -52,7 +52,7 @@ run.json "network":
              (the tracer died mid-run, a restart, a machine down, a row that failed), lost (events) or dropped (rows)
     broken   a control missing or no stopped row: the rows are true and an absence means nothing
     absent   the switch was on and no record came back; no file
-    off      the switch was off, or the domain has no machine to watch (chess, whose honeypot lives on the host):
+    off      the switch was off, or the domain has no machine to watch (a honeypot that lives on the host):
              {"status": "off"} alone, no file
 
 cross_agent holds every connect and send whose agent and peer_agent are both named and differ, an observer's

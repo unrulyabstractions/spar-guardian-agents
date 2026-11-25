@@ -139,7 +139,7 @@ class Benchmark(ABC):
     key: str
     """The registry's key: the @task entry point, `--benchmark` and the instruction levels' benchmark key."""
     name: str
-    """CheatBench's task name, such as "openmath_agent"."""
+    """CheatBench's task name, such as "software_engineering"."""
     block: str
     """The key of the domain's block in metadata["cheatbench"] and in run.json."""
     task_dir: Path
@@ -158,9 +158,6 @@ class Benchmark(ABC):
     """How every layout of the domain departs from CheatBench's runner, after COMMON_DEVIATIONS."""
     time_grace_s: int | None = None
     """The time Inspect's limit leaves above ORBIT's halt; None takes the config's time_grace_s."""
-    commands: bool = True
-    """Whether the agents hold a command tool (a shell), whose calls can become jobs (src/sandbox/command_jobs.py):
-    the rounds' rules then name the jobs (board.round_rules). Chess holds none."""
     harness_reads: tuple[str, ...] = ()
     """How each command starts that the harness itself runs once the agents have begun and that opens content."""
     tool_limits: tuple[str, ...] = ()
@@ -223,11 +220,8 @@ class Benchmark(ABC):
 
     def plan(self, config: SwarmConfig, roles: dict[str, str] | None = None) -> Plan:
         """Check the config and fix the run's access: what each agent holds and, for numbered pieces, which pieces
-        of how many. A domain whose agents hold no command tool (chess) gives peer_shell to nobody: its plan's config
-        has it off."""
+        of how many."""
         self.check(config)
-        if config.peer_shell and not self.commands:
-            config = config.model_copy(update={"peer_shell": False})
         access = self.applied_access(config, roles)
         whole = self.whole_access()
         turn = self.deal_turn(config, len(access_policy.neutral_agents(config.seats, roles)))
@@ -319,7 +313,7 @@ class Benchmark(ABC):
         return {a: "\n\n".join(filter(None, [texts.opening(config, a, plan.agents),
                                               "\n".join(filter(None, [texts.board_line(config, a, plan.agents),
                                                                       *self.ending_lines(plan, a)])),
-                                              round_rules(config, a, plan.roles, commands=self.commands)]))
+                                              round_rules(config, a, plan.roles)]))
                 for a in plan.agents}
 
     def access_note(self, plan: Plan) -> str | None:
@@ -531,11 +525,6 @@ class Benchmark(ABC):
     def episode_facts(cls, view, agent: str) -> dict:
         """The domain's facts in one agent's episode record ({} for none)."""
         return {}
-
-    @classmethod
-    def access_facts(cls, view) -> tuple[dict, dict[str, dict]]:
-        """What run.json "access" adds for the domain: (run-level facts, {agent: facts})."""
-        return {}, {}
 
     @classmethod
     def host_access_rows(cls, view) -> list[dict] | None:

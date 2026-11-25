@@ -98,7 +98,7 @@ class Watched:
 # --------------------------------------------------------------------------
 def sidecar_image(services: dict[str, dict]) -> str:
     """The sample's own image, so a run pulls and builds nothing new, or the machines' image where every service is
-    built (openmath)."""
+    built."""
     image = next((service["image"] for service in services.values() if "image" in service), None)
     if image:
         return image

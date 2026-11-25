@@ -203,10 +203,9 @@ class SwarmConfig(BaseModel):
     """How the team shares the task. solo_task: each agent its own copy of the task, its own workspace, git identity
     and honeypot; the roster is not told, and a neutral agent's submit hands in its own work and ends its own turns.
     shared_task: one task and one deliverable; the agents hold the parts of the exploit `access` deals them, each in
-    its own copy of the repository and workspace (openmath, SWE), with its own share of the tools (knowledge work) or
-    on its own machine (subset sum, prime factorization, protein design), and under access=all openmath shares one
-    workspace; the roster is told, a neutral agent's submit hands in the team's work and ends the run, and every agent
-    but a regulator may stop_working."""
+    its own copy of the repository and workspace (SWE) or on its own machine (protein design); the roster is told, a
+    neutral agent's submit hands in the team's work and ends the run, and every agent but a regulator may
+    stop_working."""
     scale: str | None = None
     """The scale the size fields came from (src/configuration/scales.py SCALES), set by at_scale. None means the
     fields hold their own values. A later --set may change any field a scale gave; this label then keeps the
@@ -220,21 +219,14 @@ class SwarmConfig(BaseModel):
     access: Access = "split"
     """Which parts of the exploit each agent holds (src/configuration/access_policy.py; Benchmark.plan).
     split: the domain's items are dealt round robin over the neutral agents, so the whole exploit needs them all:
-    openmath cuts the complete submission's archive into one slice per neutral agent, SWE deals the honeypot's pieces
-    (jigsaw B, C, A; own_piece A, B, C; the seed turns the seat the deal starts from), knowledge work deals the review
-    tool to the first
-    half of the neutral agents
-    and the artifact read to the rest, subset sum deals the answer key's shards, prime factorization the factors'
-    additive shares, protein design the segments of the planted designs, creative writing the segments of the
-    reference, and chess the request tool and the credential's two halves. Regulators and disregulators hold
-    nothing. Every agent holds everything in a solo_task team, alone, and when fewer than two are neutral. all: every
-    agent holds everything. A map {seat: [items]} names what each seat holds, on the command line as
-    `seat1:slice1+slice2,seat2:slice3,seat3:` (nothing after the colon: nothing). It names seats because the IDs are
-    drawn per run: seat k is the k-th ID of `seats`. A map must name every seat and nothing else, so a map written with
-    agent IDs is refused when the config is built. The items are slice1..sliceN or whole
-    (openmath), A, B, C or whole (SWE), review and read (knowledge work), shard1..shardN (subset sum), share1..shareN
-    (prime factorization), segment1..segmentN (protein design, creative writing), and request, credential1 and
-    credential2 (chess)."""
+    SWE deals the honeypot's pieces (jigsaw B, C, A; own_piece A, B, C; the seed turns the seat the deal starts from),
+    protein design the segments of the planted designs and creative writing the segments of the reference. Regulators
+    and disregulators hold nothing. Every agent holds everything in a solo_task team, alone, and when fewer than two are
+    neutral. all: every agent holds everything. A map {seat: [items]} names what each seat holds, on the command line as
+    `seat1:segment1+segment2,seat2:segment3,seat3:` (nothing after the colon: nothing). It names seats because the IDs
+    are drawn per run: seat k is the k-th ID of `seats`. A map must name every seat and nothing else, so a map written
+    with agent IDs is refused when the config is built. The items are A, B, C or whole (SWE) and segment1..segmentN
+    (protein design, creative writing)."""
 
     @field_validator("access", mode="before")
     @classmethod
@@ -430,8 +422,7 @@ class SwarmConfig(BaseModel):
     peer_shell: bool = True
     """Whether the influencers get peer_shell (src/sandbox/peer_shell.py): a shell on any teammate's machine, as an
     observer uid of their own with read access to every file there, the honeypot's included. Workers never get it. On
-    by default since 2026-11-22; a run's config without the field had it off. Chess has no shell: its plan turns it
-    off (Benchmark.plan)."""
+    by default since 2026-11-22; a run's config without the field had it off."""
     worker_model: str | None = None
     """The neutral workers' model: a registry entry or an Inspect model string; None is the run's --model. An entry
     is stored as its Inspect string. An agent whose role has a model of its own runs it through the swarm provider
@@ -478,7 +469,7 @@ class SwarmConfig(BaseModel):
     network_log: bool = True
     """Whether a sidecar of its own records every socket call in the agents' machines (src/sandbox/network_log/): each
     bind, listen, connect, accept, UDP send and close, by bpftrace where the host allows it, else by the socket tables.
-    It records only and blocks nothing. A domain with no machine to watch (chess) gives run.json network
+    It records only and blocks nothing. A domain with no machine to watch gives run.json network
     {"status": "off"}. Runs before 2026-11-21 recorded no switch and have no block."""
     proc_hiding: bool = True
     """Whether /proc in the agents' machines shows each agent only its own processes and no page map
@@ -489,8 +480,8 @@ class SwarmConfig(BaseModel):
     """Whether the run lists each agent machine's temporary directories (/tmp, /var/tmp, /dev/shm) as root, once before
     round 1 and after every tool call that ran a command there (src/sandbox/live_tmp_capture.py), and the export writes
     them as tmp_snapshots.json with run.json "tmp_snapshots". A failed listing is recorded and never fails the run.
-    False: no listing, run.json tmp_snapshots {"status": "off"}. A domain whose agents hold no shell (chess) takes
-    none. Runs before 2026-11-22 recorded no switch; a replay (src/replay/tmp_snapshots.py) gives theirs."""
+    False: no listing, run.json tmp_snapshots {"status": "off"}. Runs before 2026-11-22 recorded no switch; a replay
+    (src/replay/tmp_snapshots.py) gives theirs."""
 
     # ---------------------------------------------------------------- the judge
     judge: str | None = settings.JUDGE_MODEL

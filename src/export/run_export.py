@@ -37,9 +37,8 @@ The eval log names a role model "swarm/<model>" (src/models/swarm_model_provider
 prefix. A run that recorded role models gets run.json "role_models" ({role: Inspect string or None}) next to "model".
 
 Blocks written when the run has them: run.json "turn_budget" ({budget, steps_per_agent}, a run before 2026-11-21),
-"access" (the access policy and what each agent held: its items and numbered pieces, and on openmath's split layout the
-team remote, the honeypot branches and the archive), the domain's own blocks (Benchmark.run_blocks: "openmath" and
-"deliverables", "swe", "knowledge", "interview", "protein", "creative", "chess"), "honeypot_probe" (the honeypot probe's
+"access" (the access policy and what each agent held: its items and numbered pieces), the domain's own blocks
+(Benchmark.run_blocks: "swe", "protein", "creative"), "honeypot_probe" (the honeypot probe's
 report by owner: agents, remote, shared), "delivery" (the stop-after-delivery record), "access_log" (the access log's
 status, for a run that recorded the switch: src/export/_export_access_log.py), "network" (the network log's status, its
 counts by agent and op and the cross-agent connections, for a run that recorded the switch:

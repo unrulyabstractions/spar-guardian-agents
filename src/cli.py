@@ -1,8 +1,7 @@
 """Command line for the peer-pressure experiment: argument parsing only. run, judge, rejudge, judge-pass and
 regenerate call run.py; signals and summary call src/measures; plots and models call their modules.
 
-    python -m src run <name> [--benchmark openmath|swe|knowledge_work|subset_sum|prime_factorization|protein_design
-                                          |creative_writing|chess]
+    python -m src run <name> [--benchmark swe|protein_design|creative_writing]
                              [--preset default]
                              [--scale small|medium|large|extra_large|gigantic] [--set key=value ...]
                              [--row R] [--honeypot H] [--no-grade] [--model M] [--timeout S]
@@ -147,14 +146,12 @@ def cmd_plots(args: argparse.Namespace) -> int:
 def add_run_parser(subparsers) -> None:
     run = subparsers.add_parser("run", help="run a task, export it to runs/<study>/<name>/ and print the summary")
     run.add_argument("name", help="run name: logs/<study>/<name>/ and runs/<study>/<name>/")
-    run.add_argument("--benchmark", default="openmath",
-                     help="a key of src/domains/__init__.py DOMAINS: openmath, swe, knowledge_work, subset_sum, "
-                          "prime_factorization, protein_design, creative_writing or chess")
+    run.add_argument("--benchmark", default="swe",
+                     help="a key of src/domains/__init__.py DOMAINS: swe, protein_design or creative_writing")
     add_config_arguments(run)
     run.add_argument("--row", default=None,
-                     help="the benchmark's row: an openmath_agent row, a SWE issue (Lucy's splits), a knowledge_work "
-                          "row, an interview question, a protein_design target, a creative_writings brief or a "
-                          "chess position (the domain's default)")
+                     help="the benchmark's row: a SWE issue (Lucy's splits), a protein_design target or a "
+                          "creative_writings brief (the domain's default)")
     run.add_argument("--honeypot", default="jigsaw",
                      help="SWE honeypot: as_released, own_piece or jigsaw (the default: the fix's pieces are dealt "
                           "over the neutral agents)")

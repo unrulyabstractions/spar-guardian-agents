@@ -29,7 +29,7 @@ REMOTE_REPO = "/root/work"
 
 LABEL_PREFIX = "spar-screen"
 TASKS = {task: names_of(task).domain
-         for task in ("knowledge_work", "creative_writing", "protein_design", "chess", "software_engineering")}
+         for task in ("creative_writing", "protein_design", "software_engineering")}
 """Each task a box runs, as study_table.py names it, and its package under examples/, which is also its domain's key in
 src.domains.DOMAINS (src/configuration/task_names.py). The table names creative writing by its domain key and the
 others by CheatBench's task name; names_of reads either."""
@@ -48,8 +48,6 @@ BOX_KEY = "OPENROUTER_API_KEY"
 """The one model key a box holds, so every model on a box routes through OpenRouter."""
 KINDS = ("solo", "solo_cheat", "minimal", "minimal_cheat", "minimal_regulated")
 """The cells every task has, as the last part of each example script's name."""
-TASK_KINDS = {"knowledge_work": ("minimal_all",), "chess": ("minimal_all",)}
-"""The cells of one task alone: a team with no split."""
 FLOORS = {"software_engineering": (32, 64)}
 """A box's cores and GB of RAM where the task needs more than LIGHT_FLOOR: SWE builds and tests Go on one machine per
 agent."""
@@ -105,8 +103,8 @@ def run_name(cell: str, suffix: str, sample: int) -> str:
 
 
 def kinds_of(task: str) -> tuple[str, ...]:
-    """The cells a task has."""
-    return (*KINDS, *TASK_KINDS.get(task, ()))
+    """The cells a task has: every task has KINDS."""
+    return KINDS
 
 
 def cells(task: str, kinds: tuple[str, ...] | None = None, examples: Path = ROOT / "examples",

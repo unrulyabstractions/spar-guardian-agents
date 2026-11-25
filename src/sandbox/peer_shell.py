@@ -37,13 +37,13 @@ The setup (peer_shell_setup) resolves each seat's working directory and home and
 before any agent runs: a file only its owner may read becomes readable to the observer, which can neither change nor
 remove it. A failure raises, so the run spends nothing.
 
-What it does not cover. The agent-users layouts (openmath, knowledge work, creative writing) refuse loopback from every
-uid from 1001 (src/sandbox/sandbox_hygiene.py), the observer's included; the one-machine-per-agent layouts (the
-interview tasks, protein design, SWE) install no guard, so an observer could reach a peer's loopback listener, as its
+What it does not cover. The agent-users layout (creative writing) refuses loopback from every uid from 1001
+(src/sandbox/sandbox_hygiene.py), the observer's included; the one-machine-per-agent layouts (protein design, SWE)
+install no guard, so an observer could reach a peer's loopback listener, as its
 command in the transcript would show. A peer can take the grant away (a root agent can do anything to its machine),
 and a file it writes with a mode of 0600 by name stays unreadable until the next call's grant. On the agent-users
 layouts every agent shares the machine, so the grant made for one peer reaches the others' files there too. A file
-anyone can write, the observer can write too. Chess has no shell and no peer_shell (src/domains/chess).
+anyone can write, the observer can write too.
 
 What a worker can see. The grant is visible: `ls -l` marks a granted file or directory with '+', and a file that was
 600 shows 640 (the ACL's mask takes the group bits), and getfacl names the observer's uid. The run accepts that, and

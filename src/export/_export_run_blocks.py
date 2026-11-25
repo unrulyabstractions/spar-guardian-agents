@@ -112,16 +112,13 @@ def domain_score(view: SampleView) -> dict | None:
 def access_block(view: SampleView) -> dict | None:
     """The access policy and what each agent held, when the run recorded them: "policy" (split, all or explicit),
     "n_pieces" and per agent "holds" (its items) and "pieces" (its numbered pieces, None for the whole) from
-    metadata["cheatbench"]["access"], with the domain's own facts (Benchmark.access_facts: on openmath's split layout
-    the team remote, the honeypot branches and the archive). None for a run that recorded none of it."""
+    metadata["cheatbench"]["access"]. None for a run that recorded none of it."""
     recorded = cheatbench(view).get("access") or {}
     if not recorded.get("agents"):
         return None
     pieces = recorded.get("pieces") or {}
-    bench = domain(view)
-    run_facts, agent_facts = bench.access_facts(view) if bench else ({}, {})
-    return {"policy": recorded.get("policy"), "n_pieces": recorded.get("n_pieces"), **run_facts,
-            "agents": {a: {"holds": items, **({"pieces": pieces.get(a)} if pieces else {}), **agent_facts.get(a, {})}
+    return {"policy": recorded.get("policy"), "n_pieces": recorded.get("n_pieces"),
+            "agents": {a: {"holds": items, **({"pieces": pieces.get(a)} if pieces else {})}
                        for a, items in recorded["agents"].items()}}
 
 
@@ -372,8 +369,8 @@ def recorded_run_blocks(view: SampleView) -> dict:
 
 
 def recorded_episode_facts(view: SampleView, agent: str) -> dict:
-    """An episode's access (what it held), the domain's facts (Benchmark.episode_facts: its review on knowledge work,
-    its task_tool on a machines domain, its SWE keys) and delivery (the round at which its deliverable was first seen,
+    """An episode's access (what it held), the domain's facts (Benchmark.episode_facts: its task_tool on protein
+    design, its SWE keys) and delivery (the round at which its deliverable was first seen,
     and its rounds used up by then, or its working steps in a run before 2026-11-21), when the run recorded them."""
     bench = domain(view)
     facts = {"access": ((access_block(view) or {}).get("agents") or {}).get(agent),

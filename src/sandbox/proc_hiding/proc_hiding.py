@@ -1,6 +1,6 @@
 """What /proc shows an agent: only its own processes, and no page map (SwarmConfig.proc_hiding, on by default).
 
-    keeps_proc_hiding(benchmark, config)        # the switch, on a benchmark whose agents hold a shell
+    keeps_proc_hiding(benchmark, config)        # the switch
     compose = with_proc_hiding(compose)         # every service under PROFILE, loaded into the Docker host first
     setup = [..., hide_proc(benchmark), benchmark.setup(), ...]      # src/tasks.py, before any agent command
 
@@ -8,8 +8,8 @@ Two protections, each proven in every run on its own Docker host before any agen
 
 Processes. Each agent machine's /proc is remounted with hidepid=2 (the kernel shows it as hidepid=invisible) and
 gid=PROC_GID: a process sees another's /proc/<pid> only when it may ptrace it, which in a container without
-SYS_PTRACE means only its own uid's, or when it holds PROC_GID. Where agents share a machine (openmath's split and solo
-layouts, knowledge work and creative writing), an agent's `ps`, a listing of /proc and a read of
+SYS_PTRACE means only its own uid's, or when it holds PROC_GID. Where agents share a machine (creative writing), an
+agent's `ps`, a listing of /proc and a read of
 /proc/<pid>/cmdline or environ no longer show a teammate's commands, nor the harness's own root processes (the
 controls' nonces, the job collectors). An agent's own processes stay whole: ps, top, Python and bash's <(...), which
 reads /proc/self/fd. The group PROC_GROUP (gid PROC_GID) holds root in each machine's /etc/group, so every exec of ours
@@ -19,8 +19,8 @@ observer runs with PROC_GID as its group (src/sandbox/peer_shell.py), so it sees
 every other process of that machine, as before. Holding PROC_GID, the observer may leave a setgid-PROC_GID file where
 anyone can write (/tmp); so every service runs with Docker's no-new-privileges, which the kernel keeps on every
 process of the container, each exec included, and no exec of a setgid or setuid file changes an agent's ids (sudo
-and su stop working for an agent). Agents that share one uid (openmath's shared layout, CheatBench's `user` for every
-agent) still see each other: the record names those machines. The access log's and the network log's
+and su stop working for an agent). Agents that share one uid (CheatBench's `user` for every agent) still see each
+other: the record names those machines. The access log's and the network log's
 sidecars read /proc in the host's pid namespace, which the remount does not touch. Docker gives a container no way to
 mount /proc with options, and its processes lack SYS_ADMIN, so a privileged helper container in the host's pid
 namespace enters each machine's mount namespace and remounts it (host_helper.py).
@@ -89,9 +89,8 @@ REFUSAL = "--set proc_hiding=false runs without it"
 
 
 def keeps_proc_hiding(benchmark, config) -> bool:
-    """Whether the run hides /proc: SwarmConfig.proc_hiding on a benchmark whose agents hold a shell (chess holds
-    none)."""
-    return bool(getattr(config, "proc_hiding", False)) and bool(getattr(benchmark, "commands", False))
+    """Whether the run hides /proc: SwarmConfig.proc_hiding."""
+    return bool(getattr(config, "proc_hiding", False))
 
 
 # --------------------------------------------------------------------------

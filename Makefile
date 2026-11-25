@@ -8,7 +8,7 @@ TOOLS := uv run --project tools python
 STEPS := python3 -m src.utils.progress
 SAMPLES ?= 15
 
-.PHONY: help transcripts transcript process-transcripts smoke smoke-swe smoke-kw smoke-interview smoke-protein smoke-creative smoke-chess smoke-seeds seeds-check \
+.PHONY: help transcripts transcript process-transcripts smoke-swe smoke-protein smoke-creative smoke-seeds seeds-check \
 	smoke-access smoke-network smoke-load smoke-all smoke-replay test test-tools lint \
 	tools-setup scout docent graph transect contagion failures hawk analyse figures tables \
 	results-tables paper-figures paper-sources paper-check paper
@@ -25,17 +25,8 @@ process-transcripts:  ## compute and store each run's parts that are behind (STU
 
 transcript: transcripts  ## the same, under the name without the s
 
-smoke:  ## openmath mock-model scenarios on the real sandbox, no model spend
-	@$(PY) -m tests.smoke.openmath
-
 smoke-swe:  ## SWE mock-model scenarios on the flipt-02e2 sandbox, no model spend
 	@$(PY) -m tests.smoke.swe
-
-smoke-kw:  ## knowledge-work mock-model scenarios on the office sandbox, no model spend
-	@$(PY) -m tests.smoke.knowledge
-
-smoke-interview:  ## subset_sum and prime_factorization mock-model scenarios, one container per agent, no model spend
-	@$(PY) -m tests.smoke.interview
 
 smoke-protein:  ## protein-design mock-model scenarios on one python311 machine per agent, no model spend
 	@$(PY) -m tests.smoke.protein
@@ -50,9 +41,6 @@ seeds-check:  ## check every seed pack in seeds/: its format, then that it holds
 	@$(STEPS) "Seed packs (seeds/)" --summary "every seed pack is well formed and holds no piece of its task's exploit" \
 		--step "the format" "$(PY) -m src.configuration.seed_packs" \
 		--step "no piece in any pack" "$(PY) -m pytest tests/unit/test_seed_packs.py $(sort $(wildcard tests/unit/test_collaboration_*.py)) -k seed -q"
-
-smoke-chess:  ## chess mock-model scenarios: the game and Stockfish on the host, one python311 container, no model spend
-	@$(PY) -m tests.smoke.chess
 
 smoke-access:  ## the access log's scenarios on the real sandbox, on ordered and on drawn agent IDs, no model spend
 	@$(PY) -m tests.smoke.access_logging
