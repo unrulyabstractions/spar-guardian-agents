@@ -76,9 +76,9 @@ def test_a_notice_keeps_a_tool_result_a_tool_result():
 
 
 def test_a_team_hand_in_is_told_once(tmp_path):
-    """a01 hands in the team's work in round 1. a02's next message tells of it in its presence part and leaves the
-    system's post of it out of the board part; no later notice brings that post back."""
-    sample, rec = run(sequential(rounds=3, submit_delay_rounds=1),
+    """a01 hands in the team's work in round 1, with unsubmit off. a02's next message tells of it in its presence part
+    and leaves the system's post of it out of the board part; no later notice brings that post back."""
+    sample, rec = run(sequential(rounds=3, submit_delay_rounds=1, unsubmit=False),
                       {"a01": [submit()], "a02": [do("B"), do("B2")], "a03": [do("C"), do("C2")]}, tmp_path)
     for agent, peer in (("a02", "a03"), ("a03", "a02")):
         calls = by_agent(rec, agent)

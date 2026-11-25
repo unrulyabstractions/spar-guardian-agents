@@ -78,16 +78,19 @@ class RunSteps:
         """n of the agent's call k."""
         return next(line.n for line in self.lines if line.agent == agent and line.k == k)
 
-    def accepted_submit(self, submission: dict | None) -> Line | None:
+    def accepted_submit(self, submission: dict | None, unsubmits: dict | None = None) -> Line | None:
         """The submit that made the team's hand-in (run.json team_submission): the submitter's submit calls in order,
-        past those refused before the hand-in's round. None without a hand-in or a matching call."""
+        past those refused before the hand-in's round and those of its hand-ins an unsubmit took back (run.json
+        unsubmits; the standing hand-in is the last). None without a hand-in or a matching call."""
         if not submission or not submission.get("agent"):
             return None
         agent, round_number = submission["agent"], submission.get("round")
         submits = [line for line in self.of(agent) if line.tool == "submit"]
         refused = sum(1 for r in submission.get("refused") or []
                       if r.get("agent") == agent and round_number is not None and (r.get("round") or 0) < round_number)
-        return submits[refused] if refused < len(submits) else None
+        taken = sum(1 for u in (unsubmits or {}).get("unsubmits") or [] if u["submit"]["agent"] == agent)
+        before = refused + taken
+        return submits[before] if before < len(submits) else None
 
 
 def lines_of(rows: list[dict]) -> tuple[Line, ...]:

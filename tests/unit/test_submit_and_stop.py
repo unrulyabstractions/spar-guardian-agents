@@ -55,8 +55,9 @@ from tests.support.turn_rules_harness import (
     submit,
 )
 
-# three agents, shared_task, access=split; without the board sentence, so each prompt here ends with its own tool lines
-TEAM = build_config("default", "small", ["mention_board=false", "regulator_level=instructed"])
+# three agents, shared_task, access=split; without the board sentence, so each prompt here ends with its own tool lines;
+# with unsubmit off, so a submit ends its caller's turns as before 2026-11-24 (tests/unit/test_unsubmit.py has it on)
+TEAM = build_config("default", "small", ["mention_board=false", "regulator_level=instructed", "unsubmit=false"])
 SOLO = with_overrides(TEAM, ["mode=solo_task"])
 LONE = with_overrides(TEAM, ["n_agents=1"])
 ROLES = {"a01": "worker", "a02": "regulator", "a03": "disregulator"}
@@ -402,7 +403,7 @@ ROLES3 = {"a01": "worker", "a02": "worker", "a03": "disregulator"}
 
 
 def test_a_submit_with_no_delay_halts_after_its_round(tmp_path):
-    config = pull(rounds=4, mode="shared_task", disregulators=1, submit_delay_rounds=0)
+    config = pull(rounds=4, mode="shared_task", disregulators=1, submit_delay_rounds=0, unsubmit=False)
     scripts = {"a01": [submit("all done")], "a02": [do("B")], "a03": [do("C")]}
     sample, rec = run(config, scripts, tmp_path, roles=ROLES3)
     # The round under way finished for everyone, then every later step was dropped. a01's round ended with a submit
@@ -425,11 +426,10 @@ def test_a_submit_with_no_delay_halts_after_its_round(tmp_path):
 
 
 def test_a_submit_takes_effect_after_the_delay_and_tells_the_board(tmp_path):
-    """The default delay is two rounds: a01 hands in during round 1, its own turns end, and the others work through
-    round 3. The board gets a post from the system at once; a02, reading the notice in round 2, submits too and is
-    refused."""
-    config = pull(rounds=6, mode="shared_task")
-    assert config.submit_delay_rounds == 2
+    """With unsubmit off and a delay of two rounds, as before 2026-11-24: a01 hands in during round 1, its own turns
+    end, and the others work through round 3. The board gets a post from the system at once; a02, reading the notice
+    in round 2, submits too and is refused."""
+    config = pull(rounds=6, mode="shared_task", submit_delay_rounds=2, unsubmit=False)
     scripts = {"a01": [submit("ready"), do("A2"), do("A3")], "a02": [do("B1"), submit("me too"), do("B3")],
                "a03": [do("C")]}
     sample, rec = run(config, scripts, tmp_path)
@@ -455,7 +455,7 @@ def test_a_submit_takes_effect_after_the_delay_and_tells_the_board(tmp_path):
 
 def test_a_submit_in_sequence_lets_the_round_finish(tmp_path):
     config = pull(rounds=3, mode="shared_task", disregulators=1, concurrent_rounds=False,
-                  turn_order="round_robin", submit_delay_rounds=0)
+                  turn_order="round_robin", submit_delay_rounds=0, unsubmit=False)
     scripts = {"a01": [do("A")], "a02": [do("B"), submit(), do("B3")], "a03": [do("C")]}
     sample, _ = run(config, scripts, tmp_path, roles=ROLES3)
     # a02 submits in round 2; a03 still takes its round-2 step, and round 3 never runs.
@@ -465,7 +465,7 @@ def test_a_submit_in_sequence_lets_the_round_finish(tmp_path):
 
 
 def test_a_second_submit_is_refused(tmp_path):
-    config = pull(rounds=2, mode="shared_task", submit_delay_rounds=0)
+    config = pull(rounds=2, mode="shared_task", submit_delay_rounds=0, unsubmit=False)
     scripts = {"a01": [submit("one")], "a02": [submit("two")], "a03": [do("C")]}
     sample, _ = run(config, scripts, tmp_path)
     first = sample.store.get("TeamSubmission:agent")
@@ -483,7 +483,7 @@ async def slow_guard(agent: str) -> None:
 
 def test_of_two_concurrent_submits_one_goes_through(tmp_path):
     """Both calls pass the first check and await the guard; the one that resumes second finds the hand-in."""
-    config = pull(rounds=2, mode="shared_task", submit_delay_rounds=0)
+    config = pull(rounds=2, mode="shared_task", submit_delay_rounds=0, unsubmit=False)
     assert config.concurrent_rounds
     sample, _ = run(config, {"a01": [submit("one")], "a02": [submit("two")], "a03": [do("C")]}, tmp_path,
                     missing=slow_guard)
@@ -500,8 +500,9 @@ def test_of_two_concurrent_submits_one_goes_through(tmp_path):
 
 def test_a_submit_never_promises_a_round_the_plan_lacks(tmp_path):
     """A submit in the plan's last round ends the run after that round, and the notice and the answer say so."""
-    config = pull(rounds=2, mode="shared_task", concurrent_rounds=False, turn_order="round_robin")
-    assert config.submit_delay_rounds == 2 and config.rounds == 2
+    config = pull(rounds=2, mode="shared_task", concurrent_rounds=False, turn_order="round_robin",
+                  submit_delay_rounds=2, unsubmit=False)
+    assert config.rounds == 2
     sample, _ = run(config, {"a01": [read(), submit("late")], "a02": [read()], "a03": [read()]}, tmp_path)
     assert sample.store.get("TeamSubmission:ends_after_round") == 2 and store(sample, "halted_after_round") == 2
     assert [m["content"] for m in posts_of(sample)] == ["a01 handed in the team's work. The task ends soon."]
@@ -513,7 +514,7 @@ def test_a_hand_in_round_ends_its_agent_by_submit(tmp_path):
     """The round whose submit went through has ending "submit" by the store's record, even when the same reply submits
     again: the round's gate refuses that call, since the caller's turns have ended. The round uses one up, and the
     hand-in, not running out of rounds, ends the agent."""
-    config = sequential(rounds=1, calls_per_round=2)
+    config = sequential(rounds=1, calls_per_round=2, unsubmit=False)
     scripts = {"a01": [calls(("submit", {"answer": "x"}), ("submit", {"answer": "y"}))], "a02": [do("B")],
                "a03": [do("C")]}
     sample, _ = run(config, scripts, tmp_path)
@@ -533,7 +534,8 @@ def test_a_submit_with_nothing_to_grade_is_refused_and_charged(tmp_path):
         shipped_ = any(e["item"] == "ship" for e in store_as(WorkLog).executed)
         return None if shipped_ else "nothing is shipped"
 
-    config = pull(rounds=4, concurrent_rounds=False, turn_order="round_robin", submit_delay_rounds=0)
+    config = pull(rounds=4, concurrent_rounds=False, turn_order="round_robin", submit_delay_rounds=0,
+                  unsubmit=False)
     scripts = {"a01": [submit("early"), do("ship"), submit("now")], "a02": [do("B")], "a03": [do("C")]}
     sample, _ = run(config, scripts, tmp_path, missing=missing)
     early = "Nothing to hand in yet: nothing is shipped."

@@ -62,8 +62,7 @@ def multi_domain() -> dict:
         # a run records the config of its day; a field renamed since (free_board_actions_regulator) is left out, and
         # so are the instruction levels, whose stored values (enforce, persuade, ...) the code no longer has and
         # which decide no role's submit
-        config = SwarmConfig.model_validate({k: v for k, v in run["config"].items()
-                                             if k in SwarmConfig.model_fields and k not in STORED_LEVEL_FIELDS})
+        config = SwarmConfig.from_record(run["config"], leave_out=STORED_LEVEL_FIELDS)
         submit.add(tuple(config.holds_submit(role) for role in ROLES))
     n_workers, n_reg, n_dis, worker_items = one(teams, "the team")
     return {"workers": n_workers, "regulators": n_reg, "disregulators": n_dis, "worker_items": worker_items,

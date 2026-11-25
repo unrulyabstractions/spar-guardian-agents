@@ -1,12 +1,13 @@
 """The turn rules' store, their tags and names, the live run's lookups and the counters the board tools keep.
 
 TurnState holds the per-sample turn bookkeeping, the agents' entry rounds and exits among it (_turn_presence).
-TeamSubmission holds the team's hand-in and the refused submits, StopWorking the round of each stop_working call, Alerts
-each alert_humans call, and Delivered the stop-after-delivery record of a run made before 2026-11-23, which the
-export still reads (no rule writes it now). The board tools count
-their actions and spend the per-round budgets here. current_round reads the round of the step under way from ORBIT's
-live plan, and live_state an agent's live AgentState. Live holds what a sample keeps in memory only: each agent's
-round under way (_turn_rounds) and its conversation at its last boundary, which the peer tools read mid-round.
+TeamSubmission holds the team's hand-in and the refused submits, Unsubmits every hand-in and unsubmit under
+SwarmConfig.unsubmit, StopWorking the round of each stop_working call, Alerts each alert_humans call, and Delivered
+the stop-after-delivery record of a run made before 2026-11-23, which the export still reads (no rule writes it now).
+The board tools count their actions and spend the per-round budgets here. current_round reads the round of the step
+under way from ORBIT's live plan, and live_state an agent's live AgentState. Live holds what a sample keeps in memory
+only: each agent's round under way (_turn_rounds) and its conversation at its last boundary, which the peer tools read
+mid-round.
 
     record_board_action("k7q2m", "read", senders=["t4x9n"])
     if budget_used("k7q2m", "post") < limit: spend("k7q2m", "post", 1)
@@ -34,9 +35,8 @@ from src.swarm.turn_rules._turn_steps import step_round
 TURN_RULES_TAG = "swarm_turn_rules"
 TEAM_SUBMIT_TAG = "swarm_team_submit"     # info event of a submit that went through (src/swarm/submit_and_stop.py)
 HALT_TAG = "swarm_team_halt"            # info event when the plan is cut: after the hand-in, or with no worker left
-HOLD_TAG = "swarm_submit_hold"          # info event of a regulator's hold or release (src/swarm/submit_hold.py)
-HOLD_TOOL = "hold_submit"               # the regulators' tools under SwarmConfig.submit_hold
-RELEASE_TOOL = "release_submit"
+UNSUBMIT_TAG = "swarm_unsubmit"          # info event of a worker's unsubmit that went through (src/swarm/unsubmit.py)
+UNSUBMIT_TOOL = "unsubmit"               # the workers' tool under SwarmConfig.unsubmit
 DELIVERED = "delivered"           # the TurnState.ended reason of stop_after_delivery, in a run made before 2026-11-23
 ACTOR = "swarm.rules"
 BOARD_ID = "board"                                       # the board's channel id (src/swarm/board.py)
@@ -136,10 +136,12 @@ class TurnState(StoreModel):
 
 
 class TeamSubmission(StoreModel):
-    """The submits of the run (src/swarm/submit_and_stop.py). The first fields are the team's hand-in: the first
-    submit that went through, by a neutral agent of a shared_task team or by a lone agent; the run ends after
-    ends_after_round. own holds each solo_task agent's hand-in of its own work. refused holds every submit that handed
-    in nothing, in any mode: refused by the guard (Benchmark.gradable) or made after the hand-in."""
+    """The submits of the run (src/swarm/submit_and_stop.py). The first fields are the team's hand-in: the submit
+    that went through and stands, by a neutral agent of a shared_task team or by a lone agent; the run ends after
+    ends_after_round. Under SwarmConfig.unsubmit a worker's unsubmit empties them and a later submit fills them again
+    (src/swarm/unsubmit.py), so they hold the last submit that was not taken back. own holds each solo_task agent's
+    hand-in of its own work. refused holds every submit that handed in nothing, in any mode: refused by the guard
+    (Benchmark.gradable) or made after the hand-in."""
 
     agent: str | None = None
     round: int | None = None
@@ -153,7 +155,7 @@ class TeamSubmission(StoreModel):
 
 def hand_in_snapshot(store) -> str | None:
     """The snapshot of the team's hand-in as it stands at the run's end, read without writing the store: the last
-    submit that went through and was not taken back by hold_submit (src/swarm/submit_hold.py empties the hand-in, and a
+    submit that went through and was not taken back by unsubmit (src/swarm/unsubmit.py empties the hand-in, and a
     later submit fills it again). None when no hand-in stands or its snapshot failed."""
     name = TeamSubmission.__name__
     return store.get(f"{name}:snapshot") if store.get(f"{name}:agent") is not None else None
@@ -172,33 +174,26 @@ class Alerts(StoreModel):
     alerts: list[dict] = Field(default_factory=list)
 
 
-class SubmitHolds(StoreModel):
-    """The regulators' holds and releases of the team's hand-in (SwarmConfig.submit_hold, src/swarm/submit_hold.py),
-    written only when the option is on.
+class Unsubmits(StoreModel):
+    """Every team hand-in and every unsubmit under SwarmConfig.unsubmit (src/swarm/unsubmit.py), written only when the
+    option applies (gives_unsubmit).
 
-    decisions holds each call that went through, in order: {decision: hold or release, agent, round, reason, time,
-    submit: the hand-in it decided, as TeamSubmission held it}. A hold takes the hand-in out of TeamSubmission, gives
-    the worker that submitted its turns back (returns counts them per agent) and asks after_activation to put the
-    plan's steps back (restore). released says the hand-in under way was released, so no hold can follow it."""
+    submits holds each submit of the team's work that went through, in order: {agent, round, answer, time,
+    ends_after_round, snapshot, seq}. unsubmits holds each unsubmit that went through, in order: {agent, round, reason,
+    time, submit: the hand-in it took back, as TeamSubmission held it, seq}. seq numbers both in one order. An
+    unsubmit takes the hand-in out of TeamSubmission, lifts the plan's cut and asks after_activation to put the plan's
+    steps back (restore)."""
 
     on: bool = False
-    decisions: list[dict] = Field(default_factory=list)
-    released: bool = False
+    submits: list[dict] = Field(default_factory=list)
+    unsubmits: list[dict] = Field(default_factory=list)
     restore: bool = False
-    returns: dict[str, int] = Field(default_factory=dict)
 
 
-def submit_holds() -> SubmitHolds | None:
-    """The SubmitHolds record under submit_hold, else None: store_as writes a record's defaults, so a run without the
-    option reads the raw store and never gets one."""
-    return store_as(SubmitHolds) if store().get(f"{SubmitHolds.__name__}:on") else None
-
-
-def holdable() -> bool:
-    """Whether a regulator may still hold the team's hand-in: submit_hold is on, a hand-in stands and none released
-    it."""
-    holds = submit_holds()
-    return holds is not None and store_as(TeamSubmission).agent is not None and not holds.released
+def unsubmit_record() -> Unsubmits | None:
+    """The Unsubmits record under unsubmit, else None: store_as writes a record's defaults, so a run without the option
+    reads the raw store and never gets one."""
+    return store_as(Unsubmits) if store().get(f"{Unsubmits.__name__}:on") else None
 
 
 class Delivered(StoreModel):
@@ -236,7 +231,7 @@ class Live:
 
     rounds: dict[str, dict] = field(default_factory=dict)
     messages: dict[str, list] = field(default_factory=dict)
-    plan: list[dict] = field(default_factory=list)          # the written plan's steps, under submit_hold
+    plan: list[dict] = field(default_factory=list)          # the written plan's steps, under unsubmit
     regulators: list[str] = field(default_factory=list)     # the agents of role regulator
     # a round's message id -> what to record once the conversation holds it (_turn_rules_filter.settle)
     pending: dict[str, list[Callable[[], None]]] = field(default_factory=dict)

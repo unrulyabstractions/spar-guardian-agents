@@ -40,13 +40,12 @@ from src.swarm.turn_rules._turn_state import (
     Alerts,
     TeamSubmission,
     TurnState,
-    holdable,
     live_record,
     live_state,
     out_of_calls,
     running_record,
     running_step,
-    submit_holds,
+    unsubmit_record,
 )
 from src.swarm.turn_rules._turn_steps import step_round
 
@@ -109,16 +108,16 @@ def over_time(record: dict | None, limit: int | None) -> float | None:
 
 def ending_of(st: TurnState, submission: TeamSubmission, agent: str, round_number: int) -> str | None:
     """"stop" or "submit" when the agent's stop_working or submit went through in the round just completed, read from
-    the records: its turns ended by its own call (TurnState.ended), or the team's hand-in names it in this round. None
-    otherwise. An alert ends nothing (the entry's `alert`)."""
+    the records: its turns ended by its own call (TurnState.ended), or the team's hand-in names it in this round, or
+    under unsubmit a hand-in of its in this round (Unsubmits.submits), though taken back since. None otherwise. An
+    alert ends nothing (the entry's `alert`)."""
     ended = st.ended.get(agent)
     if ended == STOP_WORKING:
         return "stop"
     if ended == SUBMIT or (submission.agent == agent and submission.round == round_number):
         return "submit"
-    if any(d["decision"] == "hold" and d["submit"]["agent"] == agent and d["submit"]["round"] == round_number
-           for d in getattr(submit_holds(), "decisions", [])):
-        return "submit"                   # a regulator held it in the same round, before this callback
+    if any(s["agent"] == agent and s["round"] == round_number for s in getattr(unsubmit_record(), "submits", [])):
+        return "submit"
     return None
 
 
@@ -161,20 +160,18 @@ def workers_gone(st: TurnState) -> bool:
     """Whether every worker's turns have ended, by a stop, its own hand-in or a limit, while another agent's have not:
     the run is over then. A regulator cannot stop and a disregulator cannot hand in, so neither keeps it going. False
     with no worker, where only the plan's end stops the run, and once every agent has ended, which empties the plan.
-    False too while a regulator may hold the hand-in (SwarmConfig.submit_hold, holdable): the hand-in's own last
-    round ends the run then, and a hold gives the worker its turns back."""
-    return bool(st.workers) and set(st.workers) <= st.ended.keys() and len(st.ended) < len(st.agents) \
-        and not holdable()
+    Under unsubmit a submit ends nobody's turns, so only a stop or a limit ends a worker here."""
+    return bool(st.workers) and set(st.workers) <= st.ended.keys() and len(st.ended) < len(st.agents)
 
 
 def restored(step: ScheduleStep | None, pending: list) -> list:
-    """The pending plan, or after a regulator's hold (SubmitHolds.restore) the written plan's steps after the step
-    under way (Live.plan), which the hand-in's cut and the submitter's ending had taken out; after_activation then
-    keeps only the active agents' part of them, as after any round."""
-    holds = submit_holds()
-    if holds is None or not holds.restore:
+    """The pending plan, or after an unsubmit (Unsubmits.restore) the written plan's steps after the step under way
+    (Live.plan), which the hand-in's cut had taken out; after_activation then keeps only the active agents' part of
+    them, as after any round."""
+    record = unsubmit_record()
+    if record is None or not record.restore:
         return pending
-    holds.restore = False
+    record.restore = False
     plan = live_record().plan
     ids = [s["id"] for s in plan]
     at = ids.index(step.id) + 1 if step is not None and step.id in ids else 0

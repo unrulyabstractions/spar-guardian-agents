@@ -99,10 +99,10 @@ from src.swarm.board import (
 from src.swarm.end_round import end_round_bindings
 from src.swarm.seed_setup import seed_setup
 from src.swarm.submit_and_stop import Deliverable, ending_tools, submit_bindings
-from src.swarm.submit_hold import hold_bindings, hold_tools
 from src.swarm.tool_limits import limited_bindings, run_limits
 from src.swarm.tool_output_caps import cap_of, capped_bindings
 from src.swarm.turn_rules import END_ROUND, rules_setup, schedule, turn_rules_defense
+from src.swarm.unsubmit import unsubmit_bindings, unsubmit_tools
 
 # Stops a runaway per agent. Inspect counts cached prompt tokens in full, so the count grows with the square of the
 # steps while the bill barely moves: a context that grows steadily to 1M over 100 steps stays under this. An episode
@@ -208,8 +208,8 @@ def team_tools(benchmark: Benchmark, plan: Plan, tools: AgentTools) -> tuple[dic
     """(each agent's AgentSpec.tools, ORBIT tool_bindings): the benchmark's tools, then job_output and job_stop for an
     agent that holds a command tool (src/sandbox/command_jobs.py), then the board's (src/swarm/board.py), then
     peer_shell for an influencer under SwarmConfig.peer_shell, then submit and stop_working
-    as the agent holds them (src/swarm/submit_and_stop.py), then hold_submit and release_submit for a regulator under
-    SwarmConfig.submit_hold (src/swarm/submit_hold.py), then end_round for every agent (src/swarm/end_round.py).
+    as the agent holds them (src/swarm/submit_and_stop.py), then unsubmit for a worker under SwarmConfig.unsubmit
+    (src/swarm/unsubmit.py), then end_round for every agent (src/swarm/end_round.py).
     Every binding carries the run's cap on one tool result (src/swarm/tool_output_caps.py), and each tool a limit names
     its limits (SwarmConfig.tool_limits, src/swarm/tool_limits.py)."""
     config, roles = plan.config, plan.roles
@@ -219,12 +219,13 @@ def team_tools(benchmark: Benchmark, plan: Plan, tools: AgentTools) -> tuple[dic
     own = {n: [*tools.per_agent[n], *(shell if n in watchers else ())] for n in config.names}
     job_tools = {n: list(command_jobs.TOOLS) if holds_commands(own[n]) else [] for n in config.names}
     names = {n: [*tools.per_agent[n], *job_tools[n], *board[n], *(shell if n in watchers else ()),
-                 *ending_tools(config, role_of(roles, n)), *hold_tools(config, role_of(roles, n)), END_ROUND]
+                 *ending_tools(config, role_of(roles, n)), *unsubmit_tools(config, role_of(roles, n)), END_ROUND]
              for n in config.names}
     extra = peer_shell.peer_shell_binding(tools.seats, watchers, cap=lambda a: cap_of(config)) if watchers else {}
     jobs = command_jobs.job_bindings(cap=lambda a: cap_of(config)) if any(job_tools.values()) else {}
+    handing = deliverable(benchmark, plan)
     bindings = {**tools.bindings, **jobs, **board_bindings(config, roles=roles), **extra,
-                **submit_bindings(config, deliverable(benchmark, plan)), **hold_bindings(config),
+                **submit_bindings(config, handing), **unsubmit_bindings(config, handing.told),
                 **end_round_bindings(config.knows_team)}
     return names, limited_bindings(capped_bindings(bindings, config), config, names)
 

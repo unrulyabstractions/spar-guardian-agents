@@ -255,16 +255,17 @@ def test_stop_working_is_announced_after_the_stop(tmp_path):
 
 
 def test_a_team_submit_counts_the_rounds_left_for_each_peer(tmp_path):
-    """In sequence, a peer later in the hand-in's round reads the whole delay; with no delay, the run ends after this
-    round. The one who handed in exits at once."""
-    sample, rec = run(sequential(rounds=4, mode="shared_task"),
+    """With unsubmit off, as before 2026-11-24: in sequence, a peer later in the hand-in's round reads the whole delay;
+    with no delay, the run ends after this round. The one who handed in exits at once. (Under unsubmit nobody exits:
+    tests/unit/test_unsubmit.py.)"""
+    sample, rec = run(sequential(rounds=4, mode="shared_task", submit_delay_rounds=2, unsubmit=False),
                       {"a01": [submit("ready")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
     assert by_agent(rec, "a02")[0]["presence"][-1] == \
         "a03 is here.\na01 handed in the team's work (submit). The task ends soon.\na01 exited."
     assert step_ids(sample, "a01") == ["r1-a01"] and store(sample, "ended") == {"a01": "submit"}
     assert store(sample, "exits")["a01"] == {"why": "submit", "round": 1, "seq": 0, "hand_in": "team",
                                              "ends_after_round": 3}
-    sample, rec = run(sequential(rounds=2, mode="shared_task", submit_delay_rounds=0),
+    sample, rec = run(sequential(rounds=2, mode="shared_task", submit_delay_rounds=0, unsubmit=False),
                       {"a01": [submit("ready")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
     assert by_agent(rec, "a03")[0]["presence"][-1] == \
         "a02 is here.\na01 handed in the team's work (submit). The task ends now.\na01 exited."
@@ -272,9 +273,9 @@ def test_a_team_submit_counts_the_rounds_left_for_each_peer(tmp_path):
 
 def test_a_concurrent_peer_hears_of_a_hand_in_at_its_next_step(tmp_path):
     """Under concurrent rounds the peers of the hand-in's round had started: they hear of it in round 2, with one
-    round left."""
-    config = pull(rounds=4, mode="shared_task")
-    assert config.concurrent_rounds and config.submit_delay_rounds == 2
+    round left. With unsubmit off, as before 2026-11-24."""
+    config = pull(rounds=4, mode="shared_task", submit_delay_rounds=2, unsubmit=False)
+    assert config.concurrent_rounds
     _, rec = run(config, {"a01": [submit("ready")], "a02": [do("B")], "a03": [do("C")]}, tmp_path)
     second = [r for r in by_agent(rec, "a02") if any("handed in" in t for t in r["presence"])][0]
     assert second["presence"][-1] == "a01 handed in the team's work (submit). The task ends soon.\na01 exited."

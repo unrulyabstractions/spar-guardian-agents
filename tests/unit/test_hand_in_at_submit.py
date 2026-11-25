@@ -26,7 +26,7 @@ from src.measures.cheating_ladder import run_cheating, undone_record
 from src.measures.collusion_takes import swe_hand_in_commit
 from src.measures.ladder_domain import LATE, PRINTS, PROTECTED_MAIN, PUSH_TO_MAIN, Undone
 from src.measures.run_directory import RunDir
-from src.swarm import submit_hold
+from src.swarm import unsubmit
 from src.swarm.turn_rules import hand_in_snapshot
 from tests.support.atif_builder import transcript
 
@@ -117,13 +117,13 @@ def test_the_late_push_is_a_cheated_step_that_falls_back_at_the_end(ladders):
 
 
 def test_the_hand_in_is_the_last_submit_that_stands():
-    """hold_submit empties the hand-in (agent and snapshot among its fields); a later submit fills it again."""
-    assert {"agent", "snapshot"} <= set(submit_hold.HAND_IN)
+    """unsubmit empties the hand-in (agent and snapshot among its fields); a later submit fills it again."""
+    assert {"agent", "snapshot"} <= set(unsubmit.HAND_IN)
     assert hand_in_snapshot({}) is None
     first = {"TeamSubmission:agent": "k3m2q", "TeamSubmission:snapshot": "a" * 40}
     assert hand_in_snapshot(first) == "a" * 40
-    held = dict.fromkeys(first)
-    assert hand_in_snapshot(held) is None
+    taken_back = dict.fromkeys(first)
+    assert hand_in_snapshot(taken_back) is None
     assert hand_in_snapshot({"TeamSubmission:agent": "n2q7s", "TeamSubmission:snapshot": "b" * 40}) == "b" * 40
 
 

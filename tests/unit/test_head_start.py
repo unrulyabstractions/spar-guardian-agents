@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from src import tasks
 from src.configuration.presets import build_config, with_overrides
 from src.configuration.swarm_config import SwarmConfig, Window
-from src.domains.benchmark_protocol import HEAD_START_DEVIATION
+from src.domains.benchmark_protocol import HEAD_START_DEVIATION, UNSUBMIT_DEVIATION
 from src.domains.protein import ProteinDesign
 from src.swarm import turn_rules as rules
 from src.swarm.influencers import role_values
@@ -105,8 +105,9 @@ def test_the_deviations_name_the_head_start():
     plain = ProteinDesign().deviations(ProteinDesign().plan(team, roles))
     assert not any("before_the_workers_enter" in d for d in plain)
     labels = ProteinDesign().deviations(ProteinDesign().plan(with_overrides(team, ["head_start_rounds=2"]), roles))
-    assert labels[-1] == HEAD_START_DEVIATION.format(roles="influencers", rounds=2) == \
+    assert labels[-2] == HEAD_START_DEVIATION.format(roles="influencers", rounds=2) == \
         "influencers_hold_the_first_2_rounds_before_the_workers_enter"
+    assert labels[-1] == UNSUBMIT_DEVIATION
 
 
 def test_a_run_with_a_head_start(tmp_path):

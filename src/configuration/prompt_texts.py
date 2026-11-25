@@ -86,12 +86,15 @@ def rounds_text(delay: int) -> str:
     return f"{delay} round{'' if delay == 1 else 's'}"
 
 
-def submit_text(kind: str, delay: int, told: bool) -> str:
+def submit_text(kind: str, delay: int, told: bool, unsubmit: bool = False) -> str:
     """What submit does for an agent of this kind (SwarmConfig.submit_kind), from prompts.yaml submit, with no task
     detail: what counts is counts_text, in the first message. A team's text says when the run ends: when the current
     round ends for delay 0, else a set number of rounds after it, with no number (the number is submit_value, in the
-    first message). An agent not told of its team gets the `untold` texts."""
+    first message). An agent not told of its team gets the `untold` texts. Under unsubmit (SwarmConfig.gives_unsubmit)
+    a team's text is submit.takes_back's, which says a teammate can take the hand-in back."""
     texts = settings.load_prompts()["submit"]
+    if unsubmit and kind == "team":
+        return texts["takes_back"]["team" if told else "untold"]
     ends = texts["ends"]["now"] if delay == 0 else texts["ends"]["later" if told else "later_untold"]
     text = texts[kind] if told or kind == "lone" else texts["untold"][kind]
     return text.format(ends=ends)
@@ -133,6 +136,11 @@ def described(text: str) -> str:
     return text[:1].upper() + text[1:]
 
 
+def unsubmit_text(told: bool) -> str:
+    """What unsubmit does (prompts.yaml unsubmit), for an agent told of its team or not: its bullet's text."""
+    return settings.load_prompts()["unsubmit"]["text" if told else "untold"]
+
+
 def stop_text(told: bool) -> str:
     """What stop_working does (prompts.yaml stop_working), for an agent told of its team or not."""
     return settings.load_prompts()["stop_working"]["text" if told else "untold"]
@@ -140,8 +148,11 @@ def stop_text(told: bool) -> str:
 
 def ending_lines(config: SwarmConfig, role: str, submit_line: str, told: bool) -> list[str]:
     """The bullets of the tools that end an agent's work, as an agent of this role holds them: submit_line
-    (Benchmark.submit_line) when it holds submit, then stop_working's when it holds that."""
+    (Benchmark.submit_line) when it holds submit, then unsubmit's when it holds that (SwarmConfig.holds_unsubmit),
+    then stop_working's when it holds that."""
     lines = [submit_line] if config.holds_submit(role) else []
+    if config.holds_unsubmit(role):
+        lines.append(tool_line("unsubmit", unsubmit_text(told)))
     if config.holds_stop_working(role):
         lines.append(tool_line("stop_working", stop_text(told)))
     return lines

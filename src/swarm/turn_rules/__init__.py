@@ -23,9 +23,9 @@ lines due to it (PRESENCE_TAG): each peer's entry and exit, each influencer's al
 the team's shared result the harness read itself (_turn_presence, _turn_pushes), and what changed on the board since it
 last looked (NOTICE_TAG). message_parts and presence_events read such a message, and the separate messages of a run
 before 2026-11-22. After every round it also awaits the benchmark's round-end callback (Benchmark.round_end: SWE's reap
-and its team remote's guard). _turn_state holds the store (TurnState, TeamSubmission, StopWorking, Alerts, Delivered),
-the sample's in-memory Live record, the tags and tool names, and the counters the board tools keep; _turn_steps builds
-and reads step ids.
+and its team remote's guard). _turn_state holds the store (TurnState, TeamSubmission, Unsubmits, StopWorking, Alerts,
+Delivered), the sample's in-memory Live record, the tags and tool names, and the counters the board tools keep;
+_turn_steps builds and reads step ids.
 
 The rules use ORBIT's public API, the fork's end_activation callback and one private attribute:
 _turn_state.running_record reads ScheduleRuntime's _current, since its public history deep-copies every step on each
@@ -63,8 +63,6 @@ from src.swarm.turn_rules._turn_state import (
     CHECK_ROUNDS,
     DELIVERED,
     END_ROUND,
-    HOLD_TAG,
-    HOLD_TOOL,
     JOBS_STORE,
     NOTICE_PARAGRAPH_TAG,
     NOTICE_TAG,
@@ -74,7 +72,6 @@ from src.swarm.turn_rules._turn_state import (
     PEER_SHELL_TOOL,
     PRESENCE_TAG,
     RECORD,
-    RELEASE_TOOL,
     ROUND_TAG,
     STOP_WORKING,
     SUBMIT,
@@ -83,18 +80,19 @@ from src.swarm.turn_rules._turn_state import (
     TEAM_SUBMIT_TAG,
     TMP_CALLS_STORE,
     TURN_RULES_TAG,
+    UNSUBMIT_TAG,
+    UNSUBMIT_TOOL,
     Alerts,
     Delivered,
     Refused,
     StopWorking,
-    SubmitHolds,
     TeamSubmission,
     TurnState,
+    Unsubmits,
     board_record,
     budget_used,
     current_round,
     hand_in_snapshot,
-    holdable,
     is_record,
     last_round,
     live_record,
@@ -103,6 +101,7 @@ from src.swarm.turn_rules._turn_state import (
     record_board_action,
     refuse,
     spend,
+    unsubmit_record,
 )
 from src.swarm.turn_rules._turn_steps import step_round
 
@@ -118,6 +117,6 @@ __all__ = [
     "Alerts", "Refused", "entered", "exited", "record_exit", "close_round", "round_line",
     "JOBS_STORE", "SWAPS", "mark_job", "round_deadline", "planned_entries",
     "AFTER_CALL", "TMP_CALLS_STORE", "mark_machine",
-    "HOLD_TAG", "HOLD_TOOL", "RELEASE_TOOL", "SubmitHolds", "holdable", "hand_in_snapshot",
+    "UNSUBMIT_TAG", "UNSUBMIT_TOOL", "Unsubmits", "unsubmit_record", "hand_in_snapshot",
     "NOTICE_TAG", "NOTICE_PARAGRAPH_TAG", "message_parts", "message_round", "message_notice", "presence_events",
 ]

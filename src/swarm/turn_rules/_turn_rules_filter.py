@@ -382,7 +382,7 @@ class TurnRulesDefense(DefenseBase):
         (board_news, seen_of), "Posts on the board: 1 by a02. ..." while it has been told of none and "The board
         changed: a02 1 new of 2. ..." later, tagged NOTICE_TAG {kind, activation, call, round, seen, and first while it
         had been told of none}. When the
-        presence part tells of the team's hand-in or of its hold, the system's post of it is left out, so the message
+        presence part tells of the team's hand-in or of an unsubmit, the system's post of it is left out, so the message
         announces it once. Its record, run once ORBIT has committed the message (settle), marks the posts seen, keeps
         it in TurnState.added and writes the "notice" info event (TURN_RULES_TAG, with boundary true: the
         conversation holds it, so no reader places it as a provider-only message). (None, a record that marks the
@@ -392,7 +392,8 @@ class TurnRulesDefense(DefenseBase):
         if round_number is None:
             return None, None
         st = store_as(TurnState)
-        told = presence is not None and any(e["kind"] == "held" or (e["kind"] == "exited" and e["why"] == "submit")
+        told = presence is not None and any(e["kind"] in ("handed_in", "taken_back")
+                                            or (e["kind"] == "exited" and e["why"] == "submit")
                                             for e in presence.tag["events"])
         seen = seen_of(st, agent, conversation.messages)
         news = board_news(self.rules, agent, on_team(st, self.rules), seen, skip_system=told)

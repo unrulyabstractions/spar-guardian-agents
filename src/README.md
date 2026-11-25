@@ -96,7 +96,7 @@ The team on ORBIT's API.
 - `board.py`: one shared channel as ORBIT configuration, the tools `board_status`, `board_read` and `board_post` with the per-round budgets, and the rounds' rules each system prompt states (`round_rules`). `board_read` shows the board's records of who came and went among the posts it returns, each in its place and with no number; `board_status` counts no record.
 - `end_round.py`: the tool `wait` (`end_round` before c632292), which every agent holds and which ends its round. The agent reads that it pauses until its teammates have acted.
 - `seed_setup.py`: a seed pack's posts on the board, then an exit record for each of its authors, and its files on the agents' machines, before round 1.
-- `submit_hold.py`: a regulator's `hold_submit` and `release_submit`, under `submit_hold=true`.
+- `unsubmit.py`: the workers' `unsubmit`, which takes the team's standing hand-in back, under `unsubmit=true`.
 - `influencers.py`: who is regulator or disregulator (an influencer), on a board whose config asks for one, and the texts each role gets. A regulator's system prompt and first message are built here for every domain, in place of the benchmark's.
 - `submit_and_stop.py`: `submit` and `stop_working`, the tools that end an agent's work, and the influencers' `alert_humans`, which records an alert and ends nothing. ORBIT reserves `submit`, so the tool is bound as `team_submit` and shown to the model as `submit`.
 - `awareness_probes.py`: how an agent is asked a question after the run, on a copy of its conversation; the belief questions use it.

@@ -23,7 +23,7 @@ from src.configuration.swarm_config import SwarmConfig, Window, role_of
 from src.swarm.turn_rules import turn_activation
 from src.swarm.turn_rules._turn_presence import entry_rounds
 from src.swarm.turn_rules._turn_pushes import TEAM_HEAD, Pushes
-from src.swarm.turn_rules._turn_state import LIVE, ROUND_END, Live, SubmitHolds, TurnState
+from src.swarm.turn_rules._turn_state import LIVE, ROUND_END, Live, TurnState, Unsubmits
 from src.swarm.turn_rules._turn_steps import concurrent_step, round_order, single_step, step_id
 
 
@@ -93,10 +93,10 @@ def rules_setup(config: SwarmConfig | dict, agents: list[str], roles: dict[str, 
                 round_end: Callable[[str, int, list[dict]], Awaitable[None]] | None = None,
                 team_head: Callable[[], Awaitable[dict | None]] | None = None, push_read: str = "") -> Solver:
     """Task setup: write the initial TurnState into the sample's store and set the sample's Live record, which every
-    member's task shares, with the written plan under submit_hold, which a hold puts back (turn_activation), and the
-    SubmitHolds record. time_limit_s is the agents' time limit, after which a round ends at its next batch.
-    round_end is the benchmark's callback after each agent's round
-    (Benchmark.round_end), or None; team_head its reader of the team's head for the push notices
+    member's task shares, with the written plan under unsubmit (SwarmConfig.gives_unsubmit), which an unsubmit puts
+    back (turn_activation), and the Unsubmits record. time_limit_s is the agents' time limit, after which a round
+    ends at its next batch. round_end is the benchmark's callback after each agent's round (Benchmark.round_end), or
+    None; team_head its reader of the team's head for the push notices
     (Benchmark.team_head, _turn_pushes), with push_read, how its notice says to read the head."""
     rules = SwarmConfig.model_validate(config)
 
@@ -104,10 +104,10 @@ def rules_setup(config: SwarmConfig | dict, agents: list[str], roles: dict[str, 
         st = store_as(TurnState)
         for key, value in initial_state(rules, agents, roles, time_limit_s).items():
             setattr(st, key, value)
-        LIVE.set(Live(plan=plan_steps(rules, agents, roles) if rules.submit_hold else [],
+        LIVE.set(Live(plan=plan_steps(rules, agents, roles) if rules.gives_unsubmit else [],
                       regulators=[a for a in agents if role_of(roles, a) == "regulator"]))
-        if rules.submit_hold:
-            store_as(SubmitHolds).on = True
+        if rules.gives_unsubmit:
+            store_as(Unsubmits).on = True
         ROUND_END.set(round_end)
         TEAM_HEAD.set(team_head)
         if team_head is not None:

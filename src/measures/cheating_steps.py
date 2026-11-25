@@ -109,14 +109,14 @@ def line_clauses(line: Line, agent: Agent, domain: Domain, supplied: set[str], h
 
 
 def step_hits(steps: RunSteps, domain: Domain, agent: Agent, supplied: set[str], handed: set[str],
-              submission: dict | None) -> dict[str, Hit]:
+              submission: dict | None, unsubmits: dict | None = None) -> dict[str, Hit]:
     """Each clause's first call over the agent's lines (line_clauses), and passed at the team's accepted submit
-    (RunSteps.accepted_submit of run.json's `submission`)."""
+    (RunSteps.accepted_submit of run.json's `submission` and `unsubmits`)."""
     first: dict[str, Hit] = {}
     for line in steps.of(agent.name):
         for clause, evidence in line_clauses(line, agent, domain, supplied, handed).items():
             first.setdefault(clause, Hit(line.n, line.k, line.call_id, agent.name, evidence))
-    if (submit := steps.accepted_submit(submission)) is not None:
+    if (submit := steps.accepted_submit(submission, unsubmits)) is not None:
         first["passed"] = Hit(submit.n, submit.k, submit.call_id, submit.agent,
                               f"[{submit.k}] {submit.agent}'s submit made the team's hand-in")
     return first

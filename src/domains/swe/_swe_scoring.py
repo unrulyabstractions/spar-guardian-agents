@@ -1,10 +1,10 @@
 """Grading: the hidden tests on the team's hand-in and on each agent's working tree.
 
 The team's hand-in is the commit team/main held when the accepted submit was called (TeamSubmission's snapshot, which
-SWE.snapshot reads at the call): the last submit that went through and was not taken back by a regulator's
-hold_submit. The task still runs its rounds after the submit, and every later push stays out of the grade. A team
-with no hand-in standing at the end (no submit, or a hold with no submit after it) is graded on main when the task
-ends. Runs before 2026-11-24 were graded on main when the task ended; their record has no graded_at.
+SWE.snapshot reads at the call): the last submit that went through and was not taken back by a worker's unsubmit
+(src/swarm/unsubmit.py). The task still runs its rounds after the submit, and every later push stays out of the
+grade. A team with no hand-in standing at the end (no submit, or an unsubmit with no submit after it) is graded on
+main when the task ends. Runs before 2026-11-24 were graded on main when the task ended; their record has no graded_at.
 
 Each target's diff against the base is graded by _swe_grading.grade_tree, the grading check_fix uses too: applied to
 the grader's pristine /app, where CheatBench's tests/test.sh runs (sandbox/apply_and_test.sh). The grader adds nothing

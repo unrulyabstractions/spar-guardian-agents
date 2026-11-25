@@ -49,9 +49,9 @@ from src.swarm.turn_rules import (
     Alerts,
     Delivered,
     StopWorking,
-    SubmitHolds,
     TeamSubmission,
     TurnState,
+    Unsubmits,
     orbit_submit_ending,
 )
 
@@ -328,15 +328,16 @@ def alerts_block(view: SampleView) -> list[dict] | None:
     return (stored(view, Alerts) or {}).get("alerts") or None
 
 
-def submit_holds_block(view: SampleView) -> dict | None:
-    """The regulators' holds and releases of the team's hand-in (SwarmConfig.submit_hold; src/swarm/submit_hold.py,
-    SubmitHolds): decisions in order, each {decision, agent, round, reason, time, submit: the hand-in it decided},
-    whether the last hand-in was released, and the turns each hold gave back per agent (returns). None for a run
-    without the option."""
-    holds = stored(view, SubmitHolds)
-    if holds is None:
+def unsubmits_block(view: SampleView) -> dict | None:
+    """Every hand-in of the team's work and every worker's unsubmit (SwarmConfig.unsubmit; src/swarm/unsubmit.py,
+    Unsubmits): submits in order, each {agent, round, answer, time, ends_after_round, snapshot, seq}, and unsubmits in
+    order, each {agent, round, reason, time, submit: the hand-in it took back, seq}; seq numbers both in one order.
+    The graded hand-in is the last submit no unsubmit took back (team_submission). None for a run without the
+    option, every run made before it among them."""
+    record = stored(view, Unsubmits)
+    if record is None:
         return None
-    return {k: holds[k] for k in ("decisions", "released", "returns")}
+    return {k: record[k] for k in ("submits", "unsubmits")}
 
 
 def seed_block(view: SampleView) -> dict | None:
@@ -355,13 +356,13 @@ def seed_block(view: SampleView) -> dict | None:
 def recorded_run_blocks(view: SampleView) -> dict:
     """The run.json blocks a run carries only when it recorded them: the turn budget (a run before 2026-11-21), access,
     the domain's blocks
-    (Benchmark.run_blocks), the honeypot probe's report, delivery, the alerts, the holds of the hand-in, the sandbox,
+    (Benchmark.run_blocks), the honeypot probe's report, delivery, the alerts, the hand-ins and unsubmits, the sandbox,
     peer_shell, the command jobs, the seed, the code state and the command line that launched the run
     (src/configuration/launch_command.py: module, argv, study, command)."""
     cb, bench = cheatbench(view), domain(view)
     facts = {"turn_budget": cb.get("turn_budget"), "access": access_block(view),
              **(bench.run_blocks(view) if bench else {}), "honeypot_probe": honeypot_probe_block(view),
-             "delivery": delivery_block(view), "alerts": alerts_block(view), "submit_holds": submit_holds_block(view),
+             "delivery": delivery_block(view), "alerts": alerts_block(view), "unsubmits": unsubmits_block(view),
              "sandbox": sandbox_block(view),
              "peer_shell": peer_shell_block(view), "jobs": jobs_block(view), "seed": seed_block(view),
              "code": cb.get("code"), "launch": cb.get("launch")}

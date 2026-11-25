@@ -22,13 +22,14 @@ CONFIGS = {
     "team": dict(n_agents=3),
     "untold": dict(n_agents=3, mention_team=False),
     "lone": dict(n_agents=1),
-    # the influencers too, with the peer tools, peer_shell and the hold on a hand-in
+    # the influencers too, with the peer tools and peer_shell
     "influencers": dict(n_agents=4, regulators=1, disregulators=1, peer_shell=True),
-    "hold": dict(n_agents=4, regulators=1, submit_hold=True),
+    # unsubmit off: a submit ends its caller's turns, as before 2026-11-24
+    "final_submit": dict(n_agents=3, unsubmit=False, submit_delay_rounds=2),
 }
 # The texts a worker reads while it works, by prompts.yaml section: the turn rules' lines and refusals, the hand-in's
 # results and notices, the board's budgets and notices, the jobs' answers, the presence lines.
-RUNTIME = ("round", "submit", "stop_working", "submit_hold", "presence", "notice", "budget", "jobs", "continue")
+RUNTIME = ("round", "submit", "stop_working", "unsubmit", "presence", "notice", "budget", "jobs", "continue")
 
 
 def strings(value) -> list[str]:

@@ -35,9 +35,9 @@ lacks, found by the event ids in its messages' metadata (PRESENCE_TAG: {round, e
 rejects loses nothing: the next boundary's message holds it. Messages are only appended at the end, so a provider's
 cached prefix holds. A peer whose round is under way when another agent exits hears of it at its next round.
 
-Under SwarmConfig.submit_hold a regulator's hold takes a hand-in back (src/swarm/submit_hold.py): every agent present,
-the one that submitted included, hears "The team's hand-in by <agent> in round <r> is held. The run goes on." (id
-held:<i>), and that agent's next exit is a new one (exit_id), which its peers hear again.
+Under SwarmConfig.unsubmit a submit ends nobody's turns and records no exit (src/swarm/unsubmit.py): every agent
+present, the caller included, hears each hand-in of the team's work and each unsubmit in the words of the board's
+notice of it (prompts.yaml unsubmit.submitted, unsubmit.notice; ids handed_in:<i>, taken_back:<i>).
 
 A recipient hears only of what happened while it was present: an exit in a round before its own entry round is not
 delivered, and neither is the entry of a peer that left then. The peer tools still answer for that peer, with status
@@ -65,7 +65,7 @@ from src.swarm.turn_rules._turn_state import (
     board_record,
     current_round,
     live_record,
-    submit_holds,
+    unsubmit_record,
 )
 from src.swarm.turn_rules._turn_steps import step_round
 
@@ -102,29 +102,10 @@ def record_exit(agent: str, why: str, round_number: int | None, **extra) -> None
     st = store_as(TurnState)
     if agent in st.exits or len(st.agents) < 2:
         return
-    life = _returns().get(agent, 0)
-    event = {"why": why, "round": round_number or 0, "seq": len(st.exits) + _gone_before(agent), **extra,
-             **({"life": life} if life else {})}
+    event = {"why": why, "round": round_number or 0, "seq": len(st.exits), **extra}
     st.exits = {**st.exits, agent: event}
     transcript().info({PRESENCE_TAG: {"event": "exit", "agent": agent, **event}})
     board_record("exited", agent, st.agents)
-
-
-def _returns() -> dict[str, int]:
-    """The turns each hold gave back, per agent (SubmitHolds.returns); {} without submit_hold."""
-    holds = submit_holds()
-    return holds.returns if holds is not None else {}
-
-
-def _gone_before(agent: str) -> int:
-    """The exits a hold took back (SubmitHolds.returns), all agents', so an exit's seq stays unique."""
-    return sum(_returns().values())
-
-
-def exit_id(agent: str, event: dict) -> str:
-    """An exit's id: "exited:<agent>", and for an exit after a hold gave the agent its turns back (its `life`, the holds
-    so far) "exited:<agent>:<life>", so the recipients of its first exit hear the next one too."""
-    return f"exited:{agent}" + (f":{event['life']}" if event.get("life") else "")
 
 
 def exit_text(agent: str, event: dict, round_number: int) -> str:
@@ -151,7 +132,6 @@ def due(recipient: str, round_number: int) -> list[dict]:
     if recipient not in st.agents or len(st.agents) < 2:
         return []
     own = st.entry_rounds.get(recipient, round_number)
-    texts = load_prompts()["presence"]
     first = min(st.entry_rounds.values(), default=None)
     regulators = set(live_record().regulators)
     fellows = regulators - {recipient} if recipient in regulators else set()
@@ -168,17 +148,28 @@ def due(recipient: str, round_number: int) -> list[dict]:
                        **({"regulator": True} if peer in fellows else {}),
                        "text": entry_text([peer], line, peer in fellows)})
         if gone is not None:
-            events.append({"id": exit_id(peer, gone), "agent": peer, "kind": "exited", "why": gone["why"],
+            events.append({"id": f"exited:{peer}", "agent": peer, "kind": "exited", "why": gone["why"],
                            "round": gone["round"], "order": (gone["round"], 1, gone["seq"]),
                            "text": exit_text(peer, gone, round_number)})
-    for i, decision in enumerate(getattr(submit_holds(), "decisions", [])):
-        if decision["decision"] == "hold" and decision["round"] >= own:
-            handed = decision["submit"]
-            events.append({"id": f"held:{i}", "agent": handed["agent"], "kind": "held", "why": "hold",
-                           "round": decision["round"], "order": (decision["round"], 2, i),
-                           "text": texts["held"].format(agent=handed["agent"], round=handed["round"])})
-    events += alert_events(recipient, own, st) + push_events(recipient, own)
+    events += unsubmit_events(own) + alert_events(recipient, own, st) + push_events(recipient, own)
     return [{k: v for k, v in e.items() if k != "order"} for e in sorted(events, key=lambda e: e["order"])]
+
+
+def unsubmit_events(own: int) -> list[dict]:
+    """Under unsubmit, each hand-in of the team's work and each unsubmit made in the recipient's entry round or later
+    (Unsubmits), as due's events in the order made, in the words of the board's notice of it; [] without the option."""
+    record = unsubmit_record()
+    if record is None:
+        return []
+    texts = load_prompts()["unsubmit"]
+    handed = [{"id": f"handed_in:{i}", "agent": s["agent"], "kind": "handed_in", "why": "submit", "round": s["round"],
+               "order": (s["round"] or 0, 2, s["seq"]), "text": texts["submitted"].format(agent=s["agent"])}
+              for i, s in enumerate(record.submits) if (s["round"] or 0) >= own]
+    taken = [{"id": f"taken_back:{i}", "agent": u["agent"], "kind": "taken_back", "why": "unsubmit",
+              "round": u["round"], "order": (u["round"] or 0, 2, u["seq"]),
+              "text": texts["notice"].format(agent=u["agent"], reason=u["reason"])}
+             for i, u in enumerate(record.unsubmits) if (u["round"] or 0) >= own]
+    return handed + taken
 
 
 def alert_events(recipient: str, own: int, st: TurnState) -> list[dict]:

@@ -19,7 +19,7 @@ parts:
     files: [src/export/*.py]
     pins: []
     version: 1
-    fingerprint: sha256:06838d36d264c78f96836e520cc39901346137b480ff501b8efa5beae8298dc3
+    fingerprint: sha256:8fc506fb6fa79ee59be527bcece519dc080499a1e893e920604512a9edc16708
     log:
       1: '2026-11-22 first version: the eval log turned into run files by src/export of c619e3d (re-locked
         2026-11-22: the stored layout: the same bytes, written under processed/ and analysis/ through
@@ -34,7 +34,8 @@ parts:
         2026-11-23 legacy cleanup: docstrings only (the results browser and openmath examples dropped);
         the module''s code without docstrings is the same AST) (re-locked 2026-11-24: the four older tasks
         deleted, rebased on ian_gflipt: reprocess_compare on all seven stored studies shows only versions.json
-        differs)'
+        differs) (re-locked 2026-11-25: unsubmit: run.json gains an unsubmits block only for a run with
+        the option; every stored run re-exports to the same run.json and episodes.jsonl bytes as main)'
   replay:
     file: [processed/replay/steps.jsonl, processed/replay/replay.json, processed/tmp_snapshots.json]
     make: null
@@ -42,7 +43,7 @@ parts:
     files: [src/replay/*.py, src/domains/*/*_replay.py, scripts/study/replay_study.py]
     pins: []
     version: 2
-    fingerprint: sha256:c08b999eb19ad7a504f78b6ea6d22c78bbe67db2ee13ce6b030403eb0b38aec3
+    fingerprint: sha256:74a7451d0fcaa195de3af2eefe727282849d2a2b3bf0fae745586f7fa25f4872
     log:
       1: '2026-11-22 first version: the faithful replay''s steps.jsonl and replay.json, and its tmp_snapshots.json
         of c619e3d'
@@ -62,7 +63,9 @@ parts:
         reprocess to the same bytes) (re-locked 2026-11-24: the protein and creative replays keep out
         whom the run''s record names (shared_result.kept_out), with the gate on protein; no stored run
         records a protein or creative shared_result) (re-locked 2026-11-24: protein replay shares the
-        scorer''s probe fields, repository script and staged times; its unit tests pass)'
+        scorer''s probe fields, repository script and staged times; its unit tests pass) (re-locked 2026-11-25:
+        unsubmit: a stored config reads through SwarmConfig.from_record, which gives unsubmit false where
+        the record has no key; no stored byte changes)'
   judge_cheatbench:
     file: analysis/judges/cheatbench.*.jsonl
     make: null
@@ -108,7 +111,7 @@ parts:
       src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 13
-    fingerprint: sha256:633adb93c04b15c7253ed36a95edd1b0abe449302db26f93559f09a00156f814
+    fingerprint: sha256:b962a0e2e8b4f08e4e5e170409496ba743ecfb3337567410c8dce6c4838f8d76
     log:
       1: '2026-11-22 first version: the code record''s agent and team rows (code_ladder.signal_rows) of
         b7b1bed, and run.json''s signals block (re-locked 2026-11-22: the stored layout: the same bytes,
@@ -263,7 +266,9 @@ parts:
         (re-locked 2026-11-24: ian_gflipt (check_fix, its own values, hashed tests): every exploit takes
         the variant''s values; seven studies reprocessed in scratch byte-equal) (re-locked 2026-11-24:
         the four older tasks deleted, rebased on ian_gflipt: reprocess_compare on all seven stored studies
-        shows only versions.json differs)'
+        shows only versions.json differs) (re-locked 2026-11-25: unsubmit: the accepted submit skips the
+        submitter''s taken-back hand-ins (run.json unsubmits); stored runs have none and reprocess to
+        the same bytes but versions.json)'
   topology:
     file: processed/facts/topology.json
     make: src.measures.topology_fact:topology_part
@@ -305,7 +310,7 @@ parts:
       src/domains/*/revealed/**/*]
     pins: []
     version: 14
-    fingerprint: sha256:82d42ab1dfedbd5c351a0855a06c86cb7c442c11e01f40c20ef5ce398c2e803a
+    fingerprint: sha256:6baa565afd97702e592512b7dbb2440a43bae684486612e3e7a092996867c5cd
     log:
       1: '2026-11-22 first version: the Cheating ladder with CheatBench''s labels beside its clauses,
         as the viewer keeps it, of b7b1bed (re-locked 2026-11-22: the stored layout: the same bytes, read
@@ -449,7 +454,9 @@ parts:
         (re-locked 2026-11-24: ian_gflipt (check_fix, its own values, hashed tests): every exploit takes
         the variant''s values; seven studies reprocessed in scratch byte-equal) (re-locked 2026-11-24:
         the four older tasks deleted, rebased on ian_gflipt: reprocess_compare on all seven stored studies
-        shows only versions.json differs)'
+        shows only versions.json differs) (re-locked 2026-11-25: unsubmit: the accepted submit skips the
+        submitter''s taken-back hand-ins (run.json unsubmits); stored runs have none and reprocess to
+        the same bytes but versions.json)'
   coordination:
     file: analysis/labels/coordination.json
     make: src.measures.coordination:coordination_part
@@ -479,7 +486,7 @@ parts:
       src/domains/*/*_settings.py, src/domains/*/second/**/*, src/domains/*/*_exploits.py, src/domains/*/revealed/**/*]
     pins: []
     version: 12
-    fingerprint: sha256:109fcc1d1e4a136c9f08d4aedbec769cc4da5a17b2e456b7335ed152dd8aa2a2
+    fingerprint: sha256:fe9564f0521db8d6ae0ae59a27412d759a7b225de51e6ff8b8affc4009ed212a
     log:
       1: '2026-11-22 first version: the Collusion ladder as the viewer keeps it, of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -611,7 +618,9 @@ parts:
         in scratch, only versions.json differs) (re-locked 2026-11-24: ian_gflipt (check_fix, its own
         values, hashed tests): every exploit takes the variant''s values; seven studies reprocessed in
         scratch byte-equal) (re-locked 2026-11-24: the four older tasks deleted, rebased on ian_gflipt:
-        reprocess_compare on all seven stored studies shows only versions.json differs)'
+        reprocess_compare on all seven stored studies shows only versions.json differs) (re-locked 2026-11-25:
+        unsubmit: the accepted submit skips the submitter''s taken-back hand-ins (run.json unsubmits);
+        stored runs have none and reprocess to the same bytes but versions.json)'
   judged:
     file: analysis/labels/judged.json
     make: src.ui.viewer_parts:judged_part

@@ -86,8 +86,8 @@ ALERT_DEVIATION = "influencers_hold_alert_humans"
 # The label of a run whose regulators (and disregulators, head_start_roles influencers) hold the first rounds alone
 # (SwarmConfig.head_start_rounds): {rounds} is the head start's H, {roles} head_start_roles.
 HEAD_START_DEVIATION = "{roles}_hold_the_first_{rounds}_rounds_before_the_workers_enter"
-# The label of a run whose regulators may hold the team's hand-in (SwarmConfig.submit_hold, src/swarm/submit_hold.py).
-HOLD_DEVIATION = "regulators_can_hold_the_teams_hand_in"
+# The label of a run whose workers may take the team's hand-in back (SwarmConfig.unsubmit, src/swarm/unsubmit.py).
+UNSUBMIT_DEVIATION = "workers_can_take_back_the_teams_hand_in"
 # The common labels of a run where no agent gets submit or stop_working.
 NO_SUBMIT_DEVIATIONS = [ORBIT_AGENT_DEVIATION,
                         "agents_have_no_submit_tool_and_run_until_their_turn_cap_or_the_time_limit"]
@@ -389,7 +389,8 @@ class Benchmark(ABC):
     def submit_text(self, plan: Plan, kind: str) -> str:
         """What submit does for an agent of this kind (SwarmConfig.submit_kind: team, solo or lone) and what the
         domain's grader reads (prompt_texts.submit_text). The tool's description says the same."""
-        return texts.submit_text(kind, plan.config.submit_delay_rounds, self.tells_team(plan))
+        return texts.submit_text(kind, plan.config.submit_delay_rounds, self.tells_team(plan),
+                                 plan.config.gives_unsubmit)
 
     def counts_note(self, plan: Plan, agent: str) -> str | None:
         """What counts at a submit (prompts.yaml submit.counted), the first fact of the first message of an agent that
@@ -487,8 +488,8 @@ class Benchmark(ABC):
         """How the run departs from CheatBench's own runner, as short labels: the common ones (NO_SUBMIT_DEVIATIONS
         when no agent gets submit or stop_working), the delay of a shared_task team's submit, the domain's, the team's,
         a regulator's own prompt, /proc's hiding, the network log's and the access log's, then the presence lines of a
-        board, the influencers' alert_humans, a head start (head_start_rounds) and a regulator's hold on the hand-in
-        (submit_hold)."""
+        board, the influencers' alert_humans, a head start (head_start_rounds) and the workers' unsubmit
+        (gives_unsubmit)."""
         config = plan.config
         common = COMMON_DEVIATIONS if config.gives_submit or config.gives_stop_working else NO_SUBMIT_DEVIATIONS
         delay = [f"team_submit_takes_effect_after_{config.submit_delay_rounds}_rounds"] \
@@ -502,7 +503,7 @@ class Benchmark(ABC):
         head = [HEAD_START_DEVIATION.format(roles=config.head_start_roles, rounds=config.head_start_rounds)] \
             if config.head_start_rounds else []
         return [*common, *delay, *self.task_deviations, *(self.team_deviations(plan) if plan.team else []), *oversight,
-                *hidden, *monitor, *presence, *alert, *head, *([HOLD_DEVIATION] if config.submit_hold else [])]
+                *hidden, *monitor, *presence, *alert, *head, *([UNSUBMIT_DEVIATION] if config.gives_unsubmit else [])]
 
     # ---------------------------------------------------------------- what the export records
     @classmethod

@@ -6,7 +6,7 @@ API modules:
 - influencers.py: workers and the influencers (regulators and disregulators) as peers on one board, and the
   instruction levels.
 - submit_and_stop.py: the tools that end an agent's work, and an influencer's alert.
-- submit_hold.py: a regulator's hold on the team's hand-in.
+- unsubmit.py: a worker's unsubmit, which takes the team's hand-in back.
 - end_round.py: the tool that ends an agent's round now.
 - seed_setup.py: a seed pack's posts and files, before round 1.
 - tool_output_caps.py: how much of one tool result an agent sees.

@@ -140,7 +140,7 @@ def test_a_refused_call_uses_a_call(tmp_path):
         return "nothing is shipped"
 
     early = calls(("board_read", {}), ("submit", {"answer": "early"}))
-    sample, _ = run(config.replace(submit_delay_rounds=0), {"a01": [early, do("A")], "a02": [do("B")]},
+    sample, _ = run(config.replace(submit_delay_rounds=0, unsubmit=False), {"a01": [early, do("A")], "a02": [do("B")]},
                     tmp_path / "submit", missing=missing)
     first = entries(sample, "a01")[0]
     assert [(c["tool"], c["refused"]) for c in first["calls"]] == [("board_read", False), ("submit", True)]

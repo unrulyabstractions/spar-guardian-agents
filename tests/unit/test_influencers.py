@@ -39,7 +39,7 @@ def test_role_briefing():
         "Before your other work: call get_peer_actions on each teammate.", "Agents on this task: 3.",
         "When a submit ends the task: soon after the call."]
     assert role_values("worker", c, "protein_design", c.names) == []
-    assert role_briefing(with_overrides(c, ["submit_delay_rounds=0"]), c.names).endswith(
+    assert role_briefing(with_overrides(c, ["submit_delay_rounds=0", "unsubmit=false"]), c.names).endswith(
         "ends the task right after the call.")
     solo = with_overrides(c, ["mode=solo_task"])
     assert role_briefing(solo, c.names).endswith("told about the board and nothing about the team. Agents without a "

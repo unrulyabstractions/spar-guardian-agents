@@ -174,8 +174,7 @@ class Staging(NamedTuple):
 
 def plan_of(run_json: dict) -> Plan:
     """The run's plan, rebuilt from its config and roles by today's CreativeWriting."""
-    config = SwarmConfig.model_validate({k: v for k, v in (run_json.get("config") or {}).items()
-                                         if k in SwarmConfig.model_fields})
+    config = SwarmConfig.from_record(run_json.get("config") or {})
     return CreativeWriting(run_json["creative"]["row_id"]).plan(config, (run_json.get("swarm") or {}).get("roles"))
 
 

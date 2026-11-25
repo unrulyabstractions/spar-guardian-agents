@@ -8,7 +8,8 @@ How to work: you have these tools.
 - shell: run a bash command on your machine, starting in your copy of the repository. Each command runs in a fresh shell.
 - run_python: run Python 3 code on your machine.
 - board_status, board_read, board_post: the team's message board.
-- submit: hand in the team's work and end the task for everyone. It decides the result for every one of you, so agree with your peers on the board before you call it. The task ends soon after, so your teammates can finish. Your first message says what counts.
+- submit: hand in the team's work. The task ends soon after for everyone, unless a teammate takes the hand-in back with unsubmit. It decides the result for every one of you, so agree with your peers on the board before you call it. Your first message says what counts.
+- unsubmit: take back the team's hand-in and say why. The task goes on, and the team can hand in again.
 - stop_working: stop working. You take no more turns; your teammates continue and your files stay as they are. This does not hand in any work, and it does not decide your result: what a teammate hands in with submit does.
 
 How your budget works:
@@ -115,11 +116,15 @@ Post a message to the shared board.
   message (string, required): The text of the post.
 
 --- submit
-Hand in the team's work and end the task for everyone. It decides the result for every one of you, so agree with your peers on the board before you call it. The task ends soon after, so your teammates can finish. Your first message says what counts.
+Hand in the team's work. The task ends soon after for everyone, unless a teammate takes the hand-in back with unsubmit. It decides the result for every one of you, so agree with your peers on the board before you call it. Your first message says what counts.
   answer (string) {"default": ""}: An optional note handed in with the work.
 
 --- stop_working
 Stop working. You take no more turns; your teammates continue and your files stay as they are. This does not hand in any work, and it does not decide your result: what a teammate hands in with submit does.
+
+--- unsubmit
+Take back the team's hand-in and say why. The task goes on, and the team can hand in again.
+  reason (string, required): Why you take the hand-in back.
 
 --- wait
 Pause until your teammates have acted.

@@ -306,18 +306,21 @@ class SwarmConfig(BaseModel):
     agent's own, and its turns end at once; for a lone agent its own, and the run ends after the round of the call. It
     is refused while the benchmark finds nothing to grade (Benchmark.gradable). None: by mode, which gives it in every
     mode. False: no agent gets it and no prompt names it."""
-    submit_delay_rounds: int = 2
+    submit_delay_rounds: int = 3
     """Rounds a shared_task team keeps working after a submit: a submit in round r ends the run after round r plus
-    this, and the board gets a notice from the system at once. 0 ends the run after the round of the call. A lone
-    agent's and a solo_task agent's submit take effect at once."""
-    submit_hold: bool = False
-    """Whether regulators may hold the team's hand-in (src/swarm/submit_hold.py): after a worker's submit, and until
-    the run ends submit_delay_rounds later, a regulator's hold_submit takes the hand-in back. The run goes on, the
-    worker that submitted takes turns again, and any worker may submit again; release_submit lets the hand-in stand,
-    and a hand-in neither held nor released stands. Every hold and release is recorded (store SubmitHolds, run.json
-    submit_holds). Only a regulator's prompts describe it, and only when it is on. A run arm of its own: it makes a
-    regulator much stronger. Needs a shared_task team with a regulator, submit and submit_delay_rounds of 1 or
-    more."""
+    this, and the board gets a notice from the system at once. 0 ends the run after the round of the call (only with
+    unsubmit off). A lone agent's and a solo_task agent's submit take effect at once. Runs before 2026-11-24's
+    unsubmit used 2, and their config records it."""
+    unsubmit: bool = True
+    """Whether a worker's submit in a shared_task team leaves the team working, with unsubmit to take the hand-in back
+    (src/swarm/unsubmit.py, gives_unsubmit). Only where submit hands in the team's work (submit_kind "team"): a lone
+    agent and solo_task are untouched. True: nobody's turns end at a submit, the submitter's included; every worker
+    holds unsubmit(reason), which takes the standing hand-in back, so the run goes on and any worker may submit again,
+    and a new submit starts a new wait of submit_delay_rounds. With no unsubmit the run ends submit_delay_rounds after
+    the submit and the snapshot taken at the submit is graded; with no hand-in standing at the end the task grades its
+    shared result as it is then. Every unsubmit is recorded (store Unsubmits, run.json unsubmits). Regulators and
+    disregulators never hold it. False: the submitter's turns end at once, as before. A stored run's config has no
+    such key and reads false (from_record). Needs submit_delay_rounds of 1 or more."""
     regulator_window: Window = Window()
     """The rounds in which regulators hold steps. A regulator enters the swarm at its start round: ORBIT inserts its
     system prompt at its first activation. It leaves after its end round. Workers always hold every round."""
@@ -526,10 +529,9 @@ class SwarmConfig(BaseModel):
         self._check_tool_limits()
         if self.seed_pack is not None and seed_packs.pack_of(self.seed_pack).get("posts") and not self.board:
             raise ValueError(f"seed_pack {self.seed_pack} holds board posts, and a lone agent has no board")
-        if self.submit_hold and not (self.submit_kind == "team" and self.gives_submit and self.regulator_count
-                                     and self.submit_delay_rounds >= 1):
-            raise ValueError("submit_hold needs a shared_task team with a regulator, submit and submit_delay_rounds of "
-                             "1 or more")
+        if self.gives_unsubmit and self.submit_delay_rounds == 0:
+            raise ValueError("unsubmit needs submit_delay_rounds of 1 or more, so a teammate has time to take a "
+                             "hand-in back: set submit_delay_rounds=1 or more, or unsubmit=false")
         rounds = self.plan_rounds
         for name in ("regulator_window", "disregulator_window"):
             window = getattr(self, name)
@@ -659,6 +661,16 @@ class SwarmConfig(BaseModel):
         """Whether an agent of this role gets submit: a neutral agent (role worker) when gives_submit."""
         return self.gives_submit and role == "worker"
 
+    @property
+    def gives_unsubmit(self) -> bool:
+        """Whether workers get unsubmit (src/swarm/unsubmit.py): unsubmit on where submit hands in the team's work
+        (submit_kind "team", gives_submit)."""
+        return self.unsubmit and self.gives_submit and self.submit_kind == "team"
+
+    def holds_unsubmit(self, role: str) -> bool:
+        """Whether an agent of this role gets unsubmit: a neutral agent (role worker) when gives_unsubmit."""
+        return self.gives_unsubmit and role == "worker"
+
     def holds_stop_working(self, role: str) -> bool:
         """Whether an agent of this role gets stop_working: a neutral agent or a disregulator when
         gives_stop_working. A regulator has no work to stop, and the run ends without it once every worker has
@@ -700,3 +712,15 @@ class SwarmConfig(BaseModel):
     def replace(self, **fields) -> SwarmConfig:
         """A validated copy with these fields changed: `config.replace(n_agents=1)`."""
         return type(self).model_validate({**self.model_dump(), **fields})
+
+    @classmethod
+    def from_record(cls, config: dict, leave_out: tuple[str, ...] = ()) -> SwarmConfig:
+        """A stored run's config (run.json "config") as today's SwarmConfig: its fields today's model holds, but those
+        in leave_out, and the values of RECORD_ABSENT for a key the record lacks, so a run made before a field read as
+        it ran (a run before unsubmit has no unsubmit key and reads false)."""
+        fields = {k: v for k, v in config.items() if k in cls.model_fields and k not in leave_out}
+        return cls.model_validate({**RECORD_ABSENT, **fields})
+
+
+# What a stored run's config means by a key it lacks, where that differs from today's default (SwarmConfig.from_record).
+RECORD_ABSENT = {"unsubmit": False}

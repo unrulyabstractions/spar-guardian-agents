@@ -235,10 +235,10 @@ def test_board_rounds_and_engagement(tmp_path):
     # The post went through ORBIT's store, as channel_post's do.
     assert [(m["sender"], m["content"]) for m in posts_of(sample)] == [("a02", "hello"), ("a01", "I saw your post")]
     # The board tools and wait are offered, ORBIT's channel tools are withheld, and the default shared_task gives
-    # neutral agents submit and every agent stop_working.
+    # neutral agents submit and unsubmit and every agent stop_working.
     for r in rec:
-        assert r["tools"] == ["board_post", "board_read", "board_status", "stop_working", "submit", "wait",
-                              "work"], r["tools"]
+        assert r["tools"] == ["board_post", "board_read", "board_status", "stop_working", "submit", "unsubmit",
+                              "wait", "work"], r["tools"]
 
 
 def test_channel_tools_are_withheld(tmp_path):

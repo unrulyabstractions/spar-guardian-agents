@@ -66,6 +66,7 @@ from src.swarm.turn_rules._turn_state import (
     live_record,
     out_of_calls,
     record_entry,
+    unsubmit_record,
 )
 
 END_REASONS = ("end_round", "calls", "ending", "time", "round_time", "no_tool_call", "context")
@@ -196,8 +197,9 @@ def open_round(agent: str, state: AgentState) -> Part | None:
 
 def turns_over(st: TurnState, agent: str) -> bool:
     """Whether the agent's turns have ended (TurnState.ended), or its submit handed in the run's work: a lone agent's
-    hand-in ends the run after its round."""
-    return agent in st.ended or store_as(TeamSubmission).agent == agent
+    hand-in ends the run after its round. A team's submitter keeps its turns under unsubmit (an Unsubmits record), and
+    has ended otherwise."""
+    return agent in st.ended or (store_as(TeamSubmission).agent == agent and unsubmit_record() is None)
 
 
 def charge(agent: str) -> None:

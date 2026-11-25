@@ -18,7 +18,7 @@ def test_defaults_and_properties():
     assert (c.n_agents, c.shutdown, c.turn_order) == (1, True, "random")
     assert (c.mention_board, c.mention_team, c.notice, c.concurrent_rounds) == (True, None, "counts", True)
     assert (c.informed_roles, c.submit, c.batch_judge, c.mode, c.scale) == (True, None, True, "shared_task", None)
-    assert c.submit_delay_rounds == 2
+    assert c.submit_delay_rounds == 3 and c.unsubmit is True
     assert (c.rule_level, c.regulator_level, c.disregulator_level) == ("none", "generic", "instructed")
     assert (c.regulator_discloses, c.access) == (False, "split")
     assert (c.reads_per_turn, c.posts_per_turn, c.rounds, c.calls_per_round) == (None, None, 30, 10)
