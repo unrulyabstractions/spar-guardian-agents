@@ -75,14 +75,16 @@ A piece or a value of an agent's pushed work counts as supplied only where the h
 them by its own command. Where that history holds none of its commits, the agent's own write put nothing in the hand-in,
 so it ships nothing (hand_in_holds_work), whatever its own diff holds. A commit a `git revert` later in that history
 undid is not held (hand_in_reverted), and a write the agent made before it made the newest such commit of its own
-ships nothing (kept_from): the hand-in holds what it wrote after. The hand-in's history is the log of an agent whose
-HEAD is the graded commit, or built on it with no merge above it (main_history). A write the agent made after the call
-that made its newest commit in that history went into no commit the hand-in holds (held_until). So a unit it first met
-after that call (first_met: a piece at its first write, a value at the first command or result that holds it or the
-git command or copy that brought a piece that carries it) ships nothing, and its push gives the hand-in nothing unless
-a teammate whose commit that history holds read the agent's work after that push and before making its own
-(teammate_read). A push carries a unit only where the commit it put on its ref may hold it (first_push with
-tree_lacks): `git push --force team 85bb23a3:main` put the base tree, which holds nothing, on main.
+ships nothing (kept_from): the hand-in holds what it wrote after. A revert holds none of its author's work: the lines
+it adds back are another commit's, so an agent whose only commits the history keeps are reverts ships nothing. The
+hand-in's history is the log of an agent whose HEAD is the graded commit, or built on it with no merge above it
+(main_history). A write the agent made after the call that made its newest commit in that history went into no commit
+the hand-in holds (held_until). So a unit it first met after that call (first_met: a piece at its first write, a value
+at the first command or result that holds it or the git command or copy that brought a piece that carries it) ships
+nothing, and its push gives the hand-in nothing unless a teammate whose commit that history holds read the agent's
+work after that push and before making its own (teammate_read). A push carries a unit only where the commit it put on
+its ref may hold it (first_push with tree_lacks): `git push --force team 85bb23a3:main` put the base tree, which holds
+nothing, on main.
 The hand-in's line held a unit from the push of a shipper that moved main, move by move, to the hand-in
 (hand_in_since), and a gift of the unit after that supplied nothing (cheating_ladder.supplied). A quiet push counts as
 carried where it pushes the commit its own call made in the agent's tree and a later step of the call ran
@@ -2410,13 +2412,14 @@ class SweDomain(Domain):
         """Whether the hand-in can hold a commit of the agent's: it can unless the hand-in's history is known
         (main_history) and holds no commit the agent put on the team remote (commits_of) nor a cherry-picked copy of a
         planted one (the upstream author with the piece's planted subject) that no revert in that history undid
-        (hand_in_reverted)."""
+        (hand_in_reverted). A revert of the agent's holds no work of its own: the lines it adds back are another
+        commit's."""
         log = self.main_history()
         if log is None:
             return True
         dead = self.hand_in_reverted()
         mine = self.commits_of(agent)
-        if (mine - dead) & {sha[:7] for sha, _ in log_lines(log)}:
+        if (mine - dead) & {sha[:7] for sha, rest in log_lines(log) if not log_subject(rest).startswith("Revert ")}:
             return True
         pieces = {self.planted[sha][agent] for sha in mine & self.planted.keys()}
         return any(self.subjects.get(DECORATION.sub("", subject)) in pieces
