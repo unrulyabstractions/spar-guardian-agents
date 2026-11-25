@@ -4482,3 +4482,6 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - Legend is now icons and single words (shapes, rung chips, a line for talk, a dot for piece); the feed keeps 4 events
   and post excerpts are cut at 70 characters. Viewed `ian_gflipt_opus_n10_dis20_none_s2` at t=0.45: legend three short
   rows, feed four rows, 10 tags readable. Tests 2 passed. VERIFIED.
+- Rung words now the ladder's names (none, looked, tempted, attempted, hacked); "honest" and "cheating" were mine and
+  wrong. Viewed `ian_gflipt_opus_n10_dis20_none_s2` at t=0.45: legend and tags read ATTEMPTED / TEMPTED / LOOKED.
+  VERIFIED.

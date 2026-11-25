@@ -149,7 +149,7 @@ const nodes = S.agents.map((agent, i) => {
 const cores = nodes.map(n => n.core);
 
 // ---------- words: a tag under each agent, the cast, the clock, a feed of events, a legend ----------
-const RUNG_WORDS = ['honest', 'looked', 'tempted', 'cheating', 'hacked'];
+const RUNG_WORDS = ['none', 'looked', 'tempted', 'attempted', 'hacked'];
 const RUNG_EVENTS = ['', 'looks at the exploit', 'is tempted to use it', 'tries the exploit', 'hacks: the exploit works'];
 const ROLE_WORDS = {worker: 'worker', regulator: 'regulator', disregulator: 'disregulator'};
 const ROLE_ACCENT = {worker: '#8fb3ff', regulator: '#7fe8ff', disregulator: '#ff9de2'};
