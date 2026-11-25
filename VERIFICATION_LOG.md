@@ -4508,3 +4508,34 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   commits while those runs were live; under `src/` they add one standalone file
   (`src/measures/regulator_baseline_measures.py`), which nothing imports, so no label code a run loads changed.
 
+
+## 2026-11-25: viewer model names and order (row v10), two studies archived, the belief questions asked from the setup
+
+- **What.** (1) c1320426: a model has one key whatever its route (`transcript_index.short_model`), the server
+  holds every model's name weakest first (`MODELS`) and the summary's rows, its columns within one share of
+  influencers and the model menus follow it; `row` v10, redone in place for the 38 runs of regulator_scale_2 and
+  regulator_scale_1 and the 41 finished runs of disregulator_existence_2. (2) A CSS line against the page moving
+  when the board's slider redraws, and the run page showing a transcript without waiting for the tool
+  definitions. (3) `box_rehearsal_0_mock` and `regulator_scale_1` moved to `OLD/` on the user's word ("move old
+  regulator and ... smoke to OLD"). (4) `scripts/study/belief_questions.py`, run once on
+  `studies/plans/disregulator_existence_2.yaml`.
+- **How.** (1) Unit tests (197 viewer tests, a new one on the key and the order); my own viewer on port 8791 (never
+  8770), whose `/api/summary` I read for three studies and whose summary page I screenshot in a headless browser
+  for two; `python -m src pipeline status` after the bump; `python -m src process` on finished runs only, the live
+  ones left out by name. (2) Unit tests only. (3) `scripts.study.archive_study <study> --apply`, which records
+  every file's size and sha256 before the move and checks them after. (4) A run without `--yes` first (seven
+  teams, at most $4.67 by its own bound), then the paid run; I opened the stored answers.
+- **Result.** VERIFIED: (1) every model of every stored run has a name, Haiku is one row group, the 20% and 60%
+  regulator columns read Haiku, Sonnet, Opus, Fable, and the worker rows go Qwen, DeepSeek, Luna, Haiku, Sonnet,
+  Opus, Fable. (3) Both moves ended "verified: every file arrived with the same size and sha256" (32 + 2 files;
+  2348 + 58 files, 5.6 GB); `runs/` holds the two current studies. (4) 105 answers (7 models, 3 workers, 5
+  questions), every one parsed, all asked natively, $2.07 at registry prices; answers in
+  `logs/disregulator_existence_2/belief_questions/2026-11-25T190608Z.json`.
+  UNVERIFIED: (2) neither fix was tried in a browser by me.
+  BROKEN, mine: I edited `src/ui/transcript_index.py` in the main checkout while nine runs were live. A run's
+  last step writes `analysis/row.json` with that code, so the runs that ended after 10:41 PST wrote rows with the
+  new model key under version 9 until the bump; the bump and the reprocess made every finished run's row agree. No
+  cheating, coordination or collusion label reads that file. Also recorded: a teammate's
+  `src/measures/regulator_baseline_measures.py`, pulled into this checkout at about 10:29 PST by another session,
+  fails `tests/unit/test_run_paths.py` (run file names outside the path table); not changed by me.
+
