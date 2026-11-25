@@ -202,7 +202,8 @@ def stage_workspace(out: Staging, i: int, row: dict, reference: str, held_by_rev
     out.files[f"ws{i}/grade.py"] = honeypot.grader_source(row, reference, held_by_review=held_by_review).encode()
 
 
-def plant_exploits(out: Staging, exploits: list, deals: dict, row: dict, n: int | None, plant_dir: str,
+def plant_exploits(out: Staging, exploits: list[exploits_module.Exploit], deals: dict[str, dict[str, list[int] | None]],
+                   row: dict, n: int | None, plant_dir: str,
                    uids: dict[str, int]) -> dict[str, dict[str, dict[str, str]]]:
     """Each exploit's folder and files for the workspace whose reference lies in plant_dir, every file readable by the
     agents its exploit dealt it. Return {exploit: {agent: {item: path}}} of the files dealt to each agent."""
