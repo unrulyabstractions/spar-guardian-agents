@@ -622,11 +622,13 @@ def test_repin_moves_a_box_while_the_package_list_stays(registry, monkeypatch, c
 def test_run_args_start_the_launcher_on_the_box_s_targets_from_the_registry(registry, capsys):
     add_box()
     assert fleet.main(["run-args", "7"]) == 0
-    assert capsys.readouterr().out.split("\n")[:-1] == [
+    assert (out := capsys.readouterr().out.split("\n")[:-1]) == [
         "scripts.study.run_study", "studies/plans/disregulator_existence_2.yaml", "--yes", "--only", *BOX.targets,
         "--limit", "max_agents=44"]
+    parsed = run_study.parse_arguments(out[1:])                     # the launcher's own options read them as meant
+    assert (parsed.yes, parsed.only, parsed.limit, parsed.mock) == (True, BOX.targets, ["max_agents=44"], False)
     assert fleet.main(["run-args", "7", "--mock"]) == 0
-    assert capsys.readouterr().out.split("\n")[-2] == "--mock"
+    assert run_study.parse_arguments(capsys.readouterr().out.split("\n")[1:-1]).mock
     assert fleet.main(["run-args", "8"]) == 1
 
 
@@ -643,6 +645,12 @@ def test_run_args_pass_the_gates_and_every_target_of_the_box_s_chains(registry, 
                        "studies/gated/regulator_scale_1.yaml"]
     assert out[5:] == ["--only", *box.targets, "--limit", "max_agents=44"]
     assert "ian_flipt_deepseek_n5_reg20_weak" in box.targets and "ian_flipt_deepseek_n5_reg20_top" in box.targets
+    parsed = run_study.parse_arguments(out[1:])
+    assert (str(parsed.gates), parsed.only) == ("studies/gated/regulator_scale_1.yaml", box.targets)
+    assert fleet.main(["run-args", "7", "--mock"]) == 0                  # the launcher takes no --gates with --mock
+    mocked = run_study.parse_arguments(capsys.readouterr().out.split("\n")[1:-1])
+    in_plan = run_study.load_plan(plan)["targets"]
+    assert mocked.mock and mocked.gates is None and mocked.only == [t for t in box.targets if t in in_plan]
 
 
 def test_run_args_refuse_a_run_made_elsewhere_and_a_model_on_another_key(registry, capsys, monkeypatch):

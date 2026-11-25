@@ -14,6 +14,8 @@ import secrets
 from datetime import datetime, timezone
 from pathlib import Path
 
+from scripts.study import host_facts
+
 ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = ROOT / "runs" / "boxes.json"
 """Every instance fleet.py created, outside git."""
@@ -24,11 +26,11 @@ REMOTE_REPO = "/root/work"
 """The repository's clone on a box."""
 LAUNCHER_LOG = "/root/launcher.log"
 """What the launcher on a box prints: box_run.sh sends its output here."""
-LAUNCHER_PID = "/root/launcher.pid"
 
 LABEL_PREFIX = "spar-screen"
-BOX_KEY = "OPENROUTER_API_KEY"
-"""The one model key a box holds, so every model on a box routes through OpenRouter."""
+BOX_KEY = host_facts.KEY
+"""The one model key a box holds and the launcher on Linux reads, so every model on a box routes through
+OpenRouter."""
 FLOORS = {"swe": (32, 64)}
 """A box's cores and GB of RAM where a task needs more than LIGHT_FLOOR: SWE builds and tests Go on one machine per
 agent."""

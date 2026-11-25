@@ -41,8 +41,6 @@ from src.measures.run_directory import RunDir
 ENTRY_FIELDS = ("study", "plan", "gates", "tasks", "box", "key", "label", "launch", "commit", "requirements",
                 "requirements_sha256", "python_version", "uv_version", "cores", "ram_gb", "dph", "min_cores",
                 "min_ram_gb", "min_disk_gb", "max_agents", "runs", "cap_usd")
-MOCK_SUFFIX = "_mock"
-"""The study a launcher with --mock runs into: <study>_mock."""
 
 
 def cmd_plan(args: argparse.Namespace) -> int:
@@ -126,9 +124,16 @@ def made_elsewhere(study: str, name: str) -> str | None:
 
 def launcher_args(entry: dict, mock: bool) -> list[str]:
     """What the box starts after `.venv/bin/python -m`: the launcher on the plan, the spec, the box's targets and its
-    agents at once, as the registry records them."""
-    return ["scripts.study.run_study", entry["plan"], "--yes", *(["--gates", entry["gates"]] if entry["gates"] else []),
-            "--only", *entry["targets"], "--limit", f"max_agents={entry['max_agents']}", *(["--mock"] if mock else [])]
+    agents at once, as the registry records them. The launcher decides no gates under --mock, so a mock launch drops
+    the spec and names only the box's targets the plan holds now. ValueError when the plan holds none of them."""
+    gates, targets = ["--gates", entry["gates"]] if entry["gates"] else [], entry["targets"]
+    if mock:
+        in_plan = run_study.load_plan(Path(entry["plan"]))["targets"]
+        gates, targets = [], [target for target in targets if target in in_plan]
+        if not targets:
+            raise ValueError(f"{entry['plan']} holds none of the box's targets yet: --mock runs only open targets")
+    return ["scripts.study.run_study", entry["plan"], "--yes", *gates, "--only", *targets,
+            "--limit", f"max_agents={entry['max_agents']}", *(["--mock"] if mock else [])]
 
 
 def run_refusals(entry: dict, mock: bool) -> list[str]:
@@ -137,7 +142,7 @@ def run_refusals(entry: dict, mock: bool) -> list[str]:
     box = fleet_plan.box_for(Path(entry["plan"]), Path(entry["gates"]) if entry["gates"] else None, entry["box"],
                              entry["targets"], entry["max_agents"])
     problems = [] if mock else fleet_plan.key_problems(box)
-    study = entry["study"] + (MOCK_SUFFIX if mock else "")
+    study = entry["study"] + (run_study.MOCK_SUFFIX if mock else "")
     clashes = list(filter(None, (made_elsewhere(study, run.name) for run in box.runs)))
     if clashes:
         problems.append("this checkout holds runs of these names made elsewhere, which the watch would overwrite: "
@@ -149,12 +154,13 @@ def cmd_run_args(args: argparse.Namespace) -> int:
     try:
         entry = open_entry(args.id)
         problems = run_refusals(entry, args.mock)
+        launcher = [] if problems else launcher_args(entry, args.mock)
     except (RuntimeError, OSError, KeyError, ValueError) as error:
         problems = [str(error)]
     if problems:
         print("refused: " + "; ".join(problems), file=sys.stderr)
         return 1
-    print("\n".join(launcher_args(entry, args.mock)))
+    print("\n".join(launcher))
     return 0
 
 
