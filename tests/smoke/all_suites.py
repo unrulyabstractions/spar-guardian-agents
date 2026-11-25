@@ -24,8 +24,9 @@ from src.configuration import settings
 from src.utils import progress
 from tests.smoke import LOGS, STAMP_VARIABLE, invocation_stamp
 
-# access_load fills the machine by itself; replay_swe plays back a stored run instead of running a task
-NOT_SUITES = {"__init__", "access_load", "all_suites", "common", "replay_swe"}
+# access_load fills the machine by itself; replay_swe plays back a stored run instead of running a task;
+# swe_hashed_tests grades trees in one grader container and runs no task
+NOT_SUITES = {"__init__", "access_load", "all_suites", "common", "replay_swe", "swe_hashed_tests"}
 SUITES = sorted(path.stem for path in Path(__file__).parent.glob("*.py") if path.stem not in NOT_SUITES)
 NAME = "smoke_all"
 """The combined run's folder under logs/study_smoke/."""
