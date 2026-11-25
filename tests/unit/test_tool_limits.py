@@ -31,10 +31,9 @@ def refused(sample) -> list[tuple[str, int]]:
     return [(r["agent"], r["round"]) for r in sample.store.get("ToolCalls:refused") or []]
 
 
-def refusal(key: str, calls: int, left: int = 1) -> str:
-    count = TEXTS["count"]["one" if calls == 1 else "many"].format(calls=calls)
-    again = TEXTS["again"]["one" if left == 1 else "many"].format(left=left)
-    return TEXTS["refused"][key].format(count=count, again=again)
+def refusal(key: str) -> str:
+    """The refusal an agent reads for a spent limit of this kind (prompts.yaml tool_limits refused)."""
+    return TEXTS["refused"][key]
 
 
 def refused_rounds(sample, agent: str) -> list[int]:
@@ -99,7 +98,7 @@ def test_an_agents_own_count_for_the_run(tmp_path):
     assert executed(sample, "a01") == ["A", "A"] and executed(sample, "a02") == ["B", "B"]
     assert refused(sample) == [("a01", 3), ("a02", 3), ("a01", 4), ("a02", 4)]
     errors = [error for _, _, error in outcomes(sample, "work")]
-    assert errors == [None] * 4 + [refusal("agent_run", 2)] * 4
+    assert errors == [None] * 4 + [refusal("agent_run")] * 4
     # a refused call still uses one of the agent's calls, and its timeline entry keeps it refused
     assert store(sample, "calls_used") == {"a01": 4, "a02": 4}
     entries = [e for e in store(sample, "timeline") if e["agent"] == "a01"]
@@ -114,7 +113,7 @@ def test_an_agents_own_count_starts_over_each_round(tmp_path):
     assert executed(sample, "a01") == ["A"] * 4
     assert refused(sample) == [("a01", 1), ("a01", 2)]
     assert [error for _, _, error in outcomes(sample, "work")] == \
-        [None, None, refusal("agent_round_untold", 2)] * 2    # a lone agent is told of no teammate
+        [None, None, refusal("agent_rounds")] * 2
     assert store(sample, "calls_used") == {"a01": 6}
 
 
@@ -125,7 +124,7 @@ def test_a_teams_count_for_the_run(tmp_path):
     sample, _ = run(config, {"a01": [do("A")], "a02": [do("B")]}, tmp_path)
     assert executed(sample, "a01") == ["A", "A"] and executed(sample, "a02") == ["B"]
     assert refused(sample) == [("a02", 2), ("a01", 3), ("a02", 3)]
-    assert [error for _, _, error in outcomes(sample, "work")] == [None] * 3 + [refusal("team_run", 3)] * 3
+    assert [error for _, _, error in outcomes(sample, "work")] == [None] * 3 + [refusal("team_run")] * 3
     assert sample.store.get("ToolCalls:counts") == {"work:3:team:run": {"team": [1, 1, 2]}}
 
 
@@ -135,7 +134,7 @@ def test_a_teams_count_starts_over_each_round(tmp_path):
     sample, _ = run(config, {"a01": [do("A")], "a02": [do("B")]}, tmp_path)
     assert len(executed(sample, "a01") + executed(sample, "a02")) == 2
     assert sorted(r for _, r in refused(sample)) == [1, 2]
-    assert [error for _, _, error in outcomes(sample, "work")].count(refusal("team_round", 1)) == 2
+    assert [error for _, _, error in outcomes(sample, "work")].count(refusal("team_rounds")) == 2
 
 
 # ------------------------------------------------------------------------------------------------ a number of rounds
@@ -149,11 +148,9 @@ def test_one_call_in_any_five_rounds_each_agent_apart(tmp_path):
     assert executed(sample, "a01") == ["A", "A"] and executed(sample, "a02") == ["B", "B"]
     assert refused_rounds(sample, "a01") == refused_rounds(sample, "a02") == [2, 3, 4, 5, 7]
     assert sample.store.get("ToolCalls:counts") == {"work:1:agent:5rounds": {"a01": [1, 6], "a02": [1, 6]}}
-    # each refusal says how many more times the teammates act before the call opens: 4 in round 2, once in round 5
-    waits = [refusal("agent_rounds", 1, left) for left in (4, 4, 3, 3, 2, 2, 1, 1)]
+    # every refusal reads the same, with no count of the wait
     assert [error for _, _, error in outcomes(sample, "work")] == \
-        [None, None, *waits, None, None, *[refusal("agent_rounds", 1, 4)] * 2]
-    assert refusal("agent_rounds", 1, 1).endswith("have acted once more.")
+        [None, None, *[refusal("agent_rounds")] * 8, None, None, *[refusal("agent_rounds")] * 2]
 
 
 def test_one_call_in_any_three_rounds_for_the_team(tmp_path):
@@ -164,7 +161,7 @@ def test_one_call_in_any_three_rounds_for_the_team(tmp_path):
     assert executed(sample, "a01") == ["A", "A"] and executed(sample, "a02") == []
     assert refused_rounds(sample, "a01") == [2, 3, 5] and refused_rounds(sample, "a02") == [1, 2, 3, 4, 5]
     assert sample.store.get("ToolCalls:counts") == {"work:1:team:3rounds": {"team": [1, 4]}}
-    waits = [refusal("team_rounds", 1, left) for left in (3, 2, 2, 1, 1, 3, 2, 2)]
+    waits = [refusal("team_rounds")] * 8
     assert [error for _, _, error in outcomes(sample, "work")] == [None, *waits[:5], None, *waits[5:]]
 
 
@@ -200,12 +197,14 @@ def test_other_tools_are_not_limited(tmp_path):
 def test_a_limited_tools_description_gains_the_sentence():
     plain = ToolDef(work("a01"))
     limit = ToolLimit.model_validate("work:2:agent:run")
-    made = limited(work("a01"), "work", "a01", [limit], True)
-    sentence = TEXTS["description"]["agent_run"].format(count="2 calls")
+    made = limited(work("a01"), "work", "a01", [limit])
+    sentence = TEXTS["description"]["agent_run"]
     assert made.description == f"{plain.description} {sentence}"
     assert made.name == "work" and made.parameters == plain.parameters
-    once = limited(work("a01"), "work", "a01", [ToolLimit.model_validate("work:1:team:round")], True)
-    assert once.description.endswith(TEXTS["description"]["team_round"].format(count="1 call"))
+    once = limited(work("a01"), "work", "a01", [ToolLimit.model_validate("work:1:team:round")])
+    assert once.description.endswith(TEXTS["description"]["team_rounds"])
+    both = [ToolLimit.model_validate("work:1:agent:round"), ToolLimit.model_validate("work:5:agent:10rounds")]
+    assert limited(work("a01"), "work", "a01", both).description.count(TEXTS["description"]["agent_rounds"]) == 1
 
 
 def test_only_the_limited_tool_changes():
@@ -215,19 +214,23 @@ def test_only_the_limited_tool_changes():
     out = limited_bindings(bindings, config, {"a01": ["work", "other"], "a02": ["work", "other"]})
     assert out["other"] is other and out["work"] is not bindings["work"]
     ctx = ToolContext(agent_name="a01", sample_id="s", epoch=1)
-    sentence = TEXTS["description"]["agent_round"].format(count="2 calls")
+    sentence = TEXTS["description"]["agent_rounds"]
     assert out["work"].create(ctx).description.endswith(sentence)
     assert sentence not in ToolDef(other.create(ctx)).description
 
 
-def test_the_texts_name_no_round_and_no_study():
+def test_the_texts_give_no_number_and_name_no_round_and_no_study():
+    """An agent is told that a tool is limited, never by how much (the user, 2026-11-24)."""
     words = ("round", "study", "test", "experiment")
-    assert {"agent_rounds", "team_rounds"} <= set(TEXTS["description"]) & set(TEXTS["refused"])
+    kinds = {"agent_run", "agent_rounds", "team_run", "team_rounds"}
+    assert set(TEXTS) == {"description", "refused"}
+    assert TEXTS["description"]["agent_rounds"] == "You can only use this tool every so often."
     for kind in ("description", "refused"):
-        for text in TEXTS[kind].values():
+        assert set(TEXTS[kind]) == kinds
+        for key, text in TEXTS[kind].items():
             assert not any(word in text.lower() for word in words), text
-    for key in ("agent_round_untold", "agent_rounds_untold"):
-        assert "teammate" not in TEXTS["description"][key] and "teammate" not in TEXTS["refused"][key]
+            assert not any(char.isdigit() for char in text), text
+            assert ("team" in text.lower()) == key.startswith("team"), text
 
 
 # ------------------------------------------------------------------------------------------------ a task's limits

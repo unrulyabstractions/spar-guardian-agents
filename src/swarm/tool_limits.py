@@ -51,26 +51,20 @@ class ToolCalls(StoreModel):
     refused: list[dict] = Field(default_factory=list)
 
 
-def text_key(limit: ToolLimit, told: bool) -> str:
-    """The key of the limit's texts in prompts.yaml tool_limits: per_when, when run, round or rounds (N of 2 or
-    more), with _untold for an agent's count over rounds when the agent is not told of its team."""
-    when = "rounds" if (limit.rounds or 0) > 1 else limit.when
-    key = f"{limit.per}_{when}"
-    return key if told or key not in ("agent_round", "agent_rounds") else f"{key}_untold"
+def text_key(limit: ToolLimit) -> str:
+    """The key of the limit's texts in prompts.yaml tool_limits: who shares the count, then run or rounds."""
+    return f"{limit.per}_{'run' if limit.rounds is None else 'rounds'}"
 
 
-def limit_text(kind: str, limit: ToolLimit, told: bool, left: int = 1) -> str:
-    """The limit's sentence (kind "description") or refusal (kind "refused"); left is the rounds until a call opens
-    again, which a refusal of a limit over N rounds states as the times the teammates act (prompts.yaml again)."""
-    texts = load_prompts()["tool_limits"]
-    count = texts["count"]["one" if limit.calls == 1 else "many"].format(calls=limit.calls)
-    again = texts["again"]["one" if left == 1 else "many"].format(left=left)
-    return texts[kind][text_key(limit, told)].format(count=count, turns=limit.rounds, again=again)
+def limit_text(kind: str, limit: ToolLimit) -> str:
+    """The limit's sentence (kind "description") or its refusal (kind "refused"). Neither gives a number."""
+    return load_prompts()["tool_limits"][kind][text_key(limit)]
 
 
-def described(description: str, limits: list[ToolLimit], told: bool) -> str:
-    """The tool's description with each limit's sentence after it."""
-    return " ".join([description.rstrip(), *(limit_text("description", limit, told) for limit in limits)])
+def described(description: str, limits: list[ToolLimit]) -> str:
+    """The tool's description with each limit's sentence after it, a sentence two limits share said once."""
+    sentences = dict.fromkeys(limit_text("description", limit) for limit in limits)
+    return " ".join([description.rstrip(), *sentences])
 
 
 def holder(limit: ToolLimit, agent: str) -> str:
@@ -89,16 +83,7 @@ def kept(limit: ToolLimit, agent: str) -> list[int]:
     return rounds if limit.rounds is None else [r for r in rounds if r > now() - limit.rounds]
 
 
-def left(limit: ToolLimit, agent: str) -> int:
-    """The rounds until a spent limit over N rounds lets a call through again: once its oldest calls leave the count,
-    enough that fewer than `calls` remain. 1 for any other limit."""
-    rounds = kept(limit, agent)
-    if limit.rounds is None or len(rounds) < limit.calls:
-        return 1
-    return rounds[len(rounds) - limit.calls] + limit.rounds - now()
-
-
-def admit(tool: str, agent: str, limits: list[ToolLimit], told: bool) -> None:
+def admit(tool: str, agent: str, limits: list[ToolLimit]) -> None:
     """Let one call through every limit on the tool, counting it toward each, or refuse it (Refused) with the first
     spent limit's text and record the refusal. Nothing awaits between the check and the count, so agents in one
     concurrent round never pass a shared count."""
@@ -106,7 +91,7 @@ def admit(tool: str, agent: str, limits: list[ToolLimit], told: bool) -> None:
     spent = next((limit for limit in limits if len(kept(limit, agent)) >= limit.calls), None)
     if spent is not None:
         record.refused = [*record.refused, {"tool": tool, "agent": agent, "round": now(), "limit": spent.text}]
-        raise Refused(limit_text("refused", spent, told, left(spent, agent)))
+        raise Refused(limit_text("refused", spent))
     counts = dict(record.counts)
     for limit in limits:
         mine = counts.get(limit.text, {})
@@ -114,15 +99,15 @@ def admit(tool: str, agent: str, limits: list[ToolLimit], told: bool) -> None:
     record.counts = counts
 
 
-def limited(value, tool: str, agent: str, limits: list[ToolLimit], told: bool) -> ToolDef:
+def limited(value, tool: str, agent: str, limits: list[ToolLimit]) -> ToolDef:
     """The tool as built, as a ToolDef whose description states its limits and whose calls pass admit first."""
     definition = value if isinstance(value, ToolDef) else ToolDef(value)
 
     async def execute(**kwargs):
-        admit(tool, agent, limits, told)
+        admit(tool, agent, limits)
         return await definition.tool(**kwargs)
 
-    return ToolDef(execute, name=definition.name, description=described(definition.description, limits, told),
+    return ToolDef(execute, name=definition.name, description=described(definition.description, limits),
                    parameters=definition.parameters, parallel=definition.parallel, viewer=definition.viewer,
                    model_input=definition.model_input, max_output=definition.max_output, options=definition.options)
 
@@ -190,7 +175,7 @@ def limited_bindings(bindings: dict, config: SwarmConfig, held: dict[str, list[s
     def wrap(name: str, binding) -> ToolFactory:
         def create(ctx: ToolContext) -> ToolDef:
             value = binding.create(ctx) if isinstance(binding, ToolFactory) else binding
-            return limited(value, name, ctx.agent_name, by_tool[name], config.knows_team)
+            return limited(value, name, ctx.agent_name, by_tool[name])
         return ToolFactory(create)
 
     return {name: wrap(name, binding) if name in by_tool else binding for name, binding in bindings.items()}

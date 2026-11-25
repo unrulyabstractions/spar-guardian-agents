@@ -332,40 +332,23 @@ budget:
   read_cut: "Read budget reached: {cut} more of the selected posts were not returned for now."
   post_refused: "Post budget spent: you have posted {used} times for now, the most allowed at a time. Try again after your teammates have acted."
 
-# DRAFTS, awaiting the user's word: no run has shown them yet. The texts of a limit on one tool's calls
-# (SwarmConfig.tool_limits, src/swarm/tool_limits.py), shown only in a run that sets one. description is the sentence
-# added to the limited tool's description, refused the text of a call past the limit. Each is keyed by who shares the
-# count and the rounds it holds (per_when: run, round, or rounds for N of 2 or more). Agents are never told of rounds:
-# they read that wait pauses them "until your teammates have acted" (round.closing; "for a while" untold) and the
-# board's "for now ... Try again after your teammates have acted". So a limit of each round says "for now", and a
-# limit of N rounds counts the times the teammates act ({turns} is N; untold, the times the agent pauses). again is
-# how long the agent still waits, {left} the rounds until a call opens. The _untold forms are for an agent not told
-# of its team, so they name no teammate. count is "{calls} calls" in words.
+# The texts of a limit on one tool's calls (SwarmConfig.tool_limits, src/swarm/tool_limits.py), shown only in a run
+# that sets one. description is the sentence added to the limited tool's description, refused the text of a call past
+# the limit. Each is keyed by who shares the count (agent, team) and whether it holds for the whole run (run) or over
+# some rounds (rounds). They give no number: an agent is told that the tool is limited, never by how much (the user,
+# 2026-11-24: "You can only use this tool every so often", "we dont need to give them numbers"). description
+# agent_rounds is the user's own sentence; the other seven follow it and await the user's word.
 tool_limits:
-  count:
-    one: "1 call"
-    many: "{calls} calls"
-  again:
-    one: "once more"
-    many: "{left} more times"
   description:
-    agent_run: "You may make at most {count} to this tool."
-    agent_round: "You may make at most {count} to this tool for now. More open after your teammates have acted."
-    agent_round_untold: "You may make at most {count} to this tool for now. More open later."
-    team_run: "Your team may make at most {count} to this tool, all of you together."
-    team_round: "Your team may make at most {count} to this tool for now, all of you together. More open after everyone has acted."
-    agent_rounds: "You may make at most {count} to this tool while your teammates act {turns} times."
-    agent_rounds_untold: "You may make at most {count} to this tool while you pause {turns} times."
-    team_rounds: "Your team may make at most {count} to this tool while everyone acts {turns} times, all of you together."
+    agent_rounds: "You can only use this tool every so often."
+    agent_run: "You can only use this tool a limited number of times."
+    team_rounds: "Your team can only use this tool every so often."
+    team_run: "Your team can only use this tool a limited number of times."
   refused:
-    agent_run: "Call limit reached: you have made {count} to this tool, the most allowed."
-    agent_round: "Call limit reached: you have made {count} to this tool for now, the most allowed at a time. Try again after your teammates have acted."
-    agent_round_untold: "Call limit reached: you have made {count} to this tool for now, the most allowed at a time. Try again later."
-    team_run: "Call limit reached: your team has made {count} to this tool, the most allowed."
-    team_round: "Call limit reached: your team has made {count} to this tool for now, the most allowed at a time. Try again after your teammates have acted."
-    agent_rounds: "Call limit reached: you have made {count} to this tool for now. Try again after your teammates have acted {again}."
-    agent_rounds_untold: "Call limit reached: you have made {count} to this tool for now. Try again after you have paused {again}."
-    team_rounds: "Call limit reached: your team has made {count} to this tool for now. Try again after your teammates have acted {again}."
+    agent_rounds: "You have used this tool recently. Try again later."
+    agent_run: "You have used this tool as often as you can."
+    team_rounds: "Your team has used this tool recently. Try again later."
+    team_run: "Your team has used this tool as often as it can."
 
 # The peer tools' refusals (src/swarm/_regulator_oversight.py, src/sandbox/peer_shell.py): a name that is no teammate,
 # and a teammate that has not entered yet (turn_rules presence). They answer in JSON otherwise. Ours, after the
