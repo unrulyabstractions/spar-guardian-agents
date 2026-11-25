@@ -221,9 +221,22 @@ uv run python -m scripts.study.run_study studies/plans/ian_influencers_0.yaml --
 ```
 
 `--dry-run` lists every cell, the cells already done and the command of each cell still to run. It launches
-nothing. `--yes` launches the cells that are not done, on this Mac's Docker, and every run makes paid model calls.
+nothing. `--yes` launches the cells that are not done, on this host's Docker, and every run makes paid model calls.
 A closed plan never launches. `--study <name>` runs a plan into another study. The rules of `CLAUDE.md` hold for
 every launch: a spend check before it, the cost per cell to the user, and live pricing in the first 10 minutes.
+
+| option | what it changes for this launch |
+|---|---|
+| `--only <target> ...` | runs only these targets; with `--gates` an arm runs only when every arm its gate chain names is among them |
+| `--limit <key>=<N> ...` | replaces one limit: `max_runs`, `max_agents`, `spacing_s` or `max_per_task.<task>`; any other key is refused |
+| `--mock` | every model, the roles' too, is `mockllm/model`; the runs go to `<study>_mock`; no key, no spend; no `--gates` |
+
+`--dry-run` shows what each option changes. A plan with no `time_limit_s` is refused under every option.
+
+The launcher runs on the Mac or on Linux (`scripts/study/host_facts.py`). On the Mac a cell runs under `zsh -lic`,
+which reads the key from `~/.zshrc`. On Linux it runs under `bash -c` with the launcher's own `OPENROUTER_API_KEY`,
+and a paid launch without it is refused. Linux reads its free memory from `/proc/meminfo` and Docker's disk from the
+filesystem of Docker's data root.
 
 The launcher runs the longest expected chain first. A cell's expected time is the mean wall time of the study's
 stored runs of its task and worker model, or of its task, or 15 minutes. Its chain is that time times one plus the

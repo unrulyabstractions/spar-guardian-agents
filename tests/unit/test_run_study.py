@@ -10,8 +10,10 @@ import subprocess
 import pytest
 
 from scripts.study import gated_study as gs
+from scripts.study import host_facts
 from scripts.study import run_study as seed_study
 from src.configuration import settings
+from src.configuration.swarm_config import ROLES
 from src.measures.run_directory import RunDir
 
 PLANS = settings.ROOT / "studies" / "plans"
@@ -88,7 +90,7 @@ def test_a_dry_run_and_a_run_without_yes_launch_nothing(plan_file, monkeypatch, 
     """A dry run lists every cell and launches nothing; a run without --yes refuses, and so does a closed plan, even
     with --yes."""
     monkeypatch.setattr(subprocess, "Popen", no_launch)
-    monkeypatch.setattr(seed_study, "free_memory_pct", lambda: 70)
+    monkeypatch.setattr(seed_study.HOST, "free_memory_pct", lambda: 70)
     monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 20)
     assert seed_study.main([str(plan_file), "--dry-run", "--study", "no_such_study"]) == 0
     out = capsys.readouterr().out
@@ -104,9 +106,9 @@ def test_the_scheduler_waits_for_memory_disk_and_the_limits(plan_file, monkeypat
     cell = next(c for c in seed_study.cells(seed_study.load_plan(plan_file)) if c.task == "swe")
     limits = {"max_runs": 10, "max_per_task": {"swe": 1}, "spacing_s": 0}
     monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 20)
-    monkeypatch.setattr(seed_study, "free_memory_pct", lambda: 39)
+    monkeypatch.setattr(seed_study.HOST, "free_memory_pct", lambda: 39)
     assert seed_study.room({}, cell, limits, 0.0) == "memory 39% free"
-    monkeypatch.setattr(seed_study, "free_memory_pct", lambda: 40)
+    monkeypatch.setattr(seed_study.HOST, "free_memory_pct", lambda: 40)
     assert seed_study.room({}, cell, limits, 0.0) is None
     assert seed_study.room({"x": (None, cell)}, cell, limits, 0.0) == "1 swe runs running"
     monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 9)
@@ -150,7 +152,7 @@ def test_a_light_cell_does_not_wait_behind_a_full_task(plan_file, monkeypatch):
     """The first queued cell with room launches: a cell whose task is full is passed over, and any other reason
     (the runs' limit, memory, disk, the spacing) holds every cell."""
     monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 20)
-    monkeypatch.setattr(seed_study, "free_memory_pct", lambda: 80)
+    monkeypatch.setattr(seed_study.HOST, "free_memory_pct", lambda: 80)
     swe = seed_study.cells(seed_study.load_plan(plan_file))[0]
     other = seed_study.Cell("poem_luna", "none", 1, "studies.cells.creative_writing.ian_poem_minimal",
                             "gpt-6-luna-openrouter", "creative_writing")
@@ -179,14 +181,14 @@ def test_the_live_runs_are_read_from_the_cell_scripts_command_lines(monkeypatch)
         "/x/python3 -m studies.cells.swe.ian_flipt_minimal --name cut_off\"\\012",
         "(python3)",
     ])
-    monkeypatch.setattr(seed_study.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": ps})())
+    monkeypatch.setattr(seed_study.HOST, "process_lines", ps.splitlines)
     assert seed_study.live_names() == {"ian_flipt_luna_baseline_none_s1", "ian_poem_luna_baseline_none_s1"}
 
 
 def test_a_tasks_own_disk_floor_lets_a_light_cell_launch_where_swe_waits(plan_file, monkeypatch):
     """limits min_disk_gb gives a task its own floor of free Docker disk; a task without one keeps
     MIN_FREE_DISK_GB. An SWE cell short of disk is passed over like a cell whose task is full."""
-    monkeypatch.setattr(seed_study, "free_memory_pct", lambda: 80)
+    monkeypatch.setattr(seed_study.HOST, "free_memory_pct", lambda: 80)
     monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 6)
     swe = seed_study.cells(seed_study.load_plan(plan_file))[0]
     poem = seed_study.Cell("poem_luna", "none", 1, "studies.cells.creative_writing.ian_poem_minimal",
@@ -247,12 +249,11 @@ def test_the_queue_runs_the_longest_remaining_chain_first():
     assert seed_study.chain_minutes(slow, timings, chains) == 120.0
 
 
-def test_docker_disk_reads_the_vms_size_and_free_space(monkeypatch):
-    out = "Filesystem 1G-blocks Used Available Use% Mounted on\n/dev/vdb1 59G 36G 23G 62% /var/lib/docker\n"
-    monkeypatch.setattr(seed_study.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": out})())
-    assert seed_study.docker_disk() == (59, 23) and seed_study.free_disk_gb() == 23
-    monkeypatch.setattr(seed_study.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": "colima not up"})())
-    assert seed_study.docker_disk() is None and seed_study.free_disk_gb() is None
+def test_the_free_disk_is_the_hosts_docker_disk(monkeypatch):
+    monkeypatch.setattr(seed_study.HOST, "docker_disk", lambda: (59, 23))
+    assert seed_study.free_disk_gb() == 23
+    monkeypatch.setattr(seed_study.HOST, "docker_disk", lambda: None)
+    assert seed_study.free_disk_gb() is None
 
 
 def test_a_plan_takes_the_needs_of_its_tasks(plan_file):
@@ -319,7 +320,7 @@ def test_with_gates_the_launcher_opens_the_next_arm_as_soon_as_a_run_ends(tmp_pa
     monkeypatch.setattr(seed_study, "RUNS", tmp_path / "runs")
     monkeypatch.setattr(seed_study, "LOGS", tmp_path / "logs")
     monkeypatch.setattr(seed_study, "live_names", set)
-    monkeypatch.setattr(seed_study, "free_memory_pct", lambda: 80)
+    monkeypatch.setattr(seed_study.HOST, "free_memory_pct", lambda: 80)
     monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 50)
     monkeypatch.setattr(seed_study.time, "sleep", lambda s: None)
     monkeypatch.setattr(seed_study.subprocess, "Popen", FakeRun)
@@ -346,7 +347,7 @@ def test_without_gates_the_launcher_writes_no_plan(plan_file, tmp_path, monkeypa
     monkeypatch.setattr(seed_study, "LOGS", tmp_path / "logs")
     monkeypatch.setattr(seed_study, "gate_step", no_launch)
     monkeypatch.setattr(seed_study, "live_names", set)
-    monkeypatch.setattr(seed_study, "free_memory_pct", lambda: 80)
+    monkeypatch.setattr(seed_study.HOST, "free_memory_pct", lambda: 80)
     monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 50)
     monkeypatch.setattr(seed_study.time, "sleep", lambda s: None)
     monkeypatch.setattr(seed_study.subprocess, "Popen", FakeRun)
@@ -400,7 +401,7 @@ def test_a_cells_agents_and_cap_are_the_last_settings_that_name_them(tmp_path):
 def test_a_dry_run_sums_each_cells_own_cap(tmp_path, monkeypatch, capsys):
     path = tmp_path / "plan.yaml"
     path.write_text(SIZED)
-    monkeypatch.setattr(seed_study, "free_memory_pct", lambda: 70)
+    monkeypatch.setattr(seed_study.HOST, "free_memory_pct", lambda: 70)
     monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 300)
     monkeypatch.setattr(seed_study, "live_runs", lambda: {"other_study_run": 5})
     assert seed_study.main([str(path), "--dry-run", "--study", "no_such_study"]) == 0
@@ -422,7 +423,7 @@ def test_max_agents_counts_every_live_run_on_the_mac_and_passes_over_a_cell_that
     """A swarm of 20 waits while 10 agents are live (here 5 of the launcher's own and 5 of another study's), and a
     swarm of 5 queued behind it launches. Once nothing is live, a swarm larger than max_agents launches too."""
     monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 300)
-    monkeypatch.setattr(seed_study, "free_memory_pct", lambda: 80)
+    monkeypatch.setattr(seed_study.HOST, "free_memory_pct", lambda: 80)
     monkeypatch.setattr(seed_study, "live_runs", lambda: {"own_5": 5, "other_5": 5})
     limits = {**seed_study.LIMITS, "max_runs": 6, "spacing_s": 0, "max_agents": 24}
     running = {"own_5": (None, team("own", 5))}
@@ -438,7 +439,7 @@ def test_max_agents_counts_every_live_run_on_the_mac_and_passes_over_a_cell_that
 def test_a_plan_without_max_agents_never_reads_the_process_table_for_it(plan_file, monkeypatch):
     """The plans of before keep their behaviour: no agent limit, and no ps call for one."""
     monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 20)
-    monkeypatch.setattr(seed_study, "free_memory_pct", lambda: 80)
+    monkeypatch.setattr(seed_study.HOST, "free_memory_pct", lambda: 80)
     monkeypatch.setattr(seed_study, "live_runs", no_launch)
     limits = seed_study.load_plan(plan_file)["limits"]
     assert limits["max_agents"] is None
@@ -450,7 +451,7 @@ def test_a_later_stage_waits_while_an_earlier_stage_is_queued(monkeypatch):
     """The queue sorts by stage before the critical path, and a stage 1 cell does not pass a stage 0 cell held by
     max_agents, so every smaller swarm starts before the first swarm of 20."""
     monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 300)
-    monkeypatch.setattr(seed_study, "free_memory_pct", lambda: 80)
+    monkeypatch.setattr(seed_study.HOST, "free_memory_pct", lambda: 80)
     monkeypatch.setattr(seed_study, "live_runs", dict)
     limits = {**seed_study.LIMITS, "max_runs": 6, "spacing_s": 0, "max_agents": 24}
     ten, big = team("ten", 10), team("big", 20, stage=1)
@@ -471,7 +472,7 @@ def test_the_live_runs_carry_their_agents(monkeypatch):
         " --set n_agents=4 --set n_agents=20",
         "uv run python -m studies.cells.swe.ian_flipt_minimal --model m --no-judge --name team_s1 --set seed=1",
     ])
-    monkeypatch.setattr(seed_study.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": ps})())
+    monkeypatch.setattr(seed_study.HOST, "process_lines", ps.splitlines)
     assert seed_study.live_runs() == {"big_s1": 20, "team_s1": 3}
     assert seed_study.live_names() == {"big_s1", "team_s1"}
 
@@ -531,3 +532,138 @@ def test_a_launch_may_name_the_openrouter_key_it_pays_with(tmp_path, capsys):
     with pytest.raises(SystemExit):
         seed_study.main([str(plan_file), "--dry-run", "--openrouter-key-env", "sk-or-not-a-name"])
 
+
+# ---------------------------------------------------------------- --only, --limit and --mock
+def dry(plan_file, monkeypatch, capsys, *options) -> tuple[int, str, str]:
+    """A dry run with the options: its exit code, its output and its errors."""
+    monkeypatch.setattr(seed_study.HOST, "free_memory_pct", lambda: 70)
+    monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 20)
+    code = seed_study.main([str(plan_file), "--dry-run", "--study", "no_such_study", *options])
+    out = capsys.readouterr()
+    return code, out.out, out.err
+
+
+def test_only_runs_the_named_targets_and_refuses_an_unknown_one(plan_file, monkeypatch, capsys):
+    code, out, _ = dry(plan_file, monkeypatch, capsys, "--only", "swe_luna")
+    assert code == 0 and out.count("  plan   ") == 4 and "swe_deepseek" not in out
+    code, out, _ = dry(plan_file, monkeypatch, capsys, "--only", "swe_luna", "--only", "swe_deepseek")
+    assert out.count("  plan   ") == 8
+    code, _, err = dry(plan_file, monkeypatch, capsys, "--only", "swe_luna", "swe_nobody")
+    assert code == 2 and "--only swe_nobody: no target of" in err
+
+
+GATED_CHAIN = GATED.replace("  positive_control: {cell: cheat, when: {baseline: not_cheated}}\n",
+                            "  positive_control: {cell: cheat, when: {baseline: not_cheated}}\n"
+                            "  negative_control: {when: {seeded: cheated}}\n")
+"""baseline, then seeded gated on it, positive_control gated on baseline, negative_control gated on seeded."""
+
+
+def test_with_gates_only_takes_an_arm_whose_whole_chain_is_named(tmp_path):
+    spec_file = tmp_path / "spec.yaml"
+    spec_file.write_text(GATED_CHAIN)
+    spec = gs.load_spec(spec_file)
+    assert seed_study.arm_chain(spec, "negative_control") == {"negative_control", "seeded", "baseline"}
+    assert len(seed_study.gated_runs(spec, None)) == 4
+    runs = seed_study.gated_runs(spec, {"flipt_a_baseline", "flipt_a_seeded", "flipt_a_negative_control"})
+    assert runs == {"flipt_a_baseline_none_s1", "flipt_a_seeded_revealing_s1", "flipt_a_negative_control_revealing_s1"}
+    assert seed_study.gated_runs(spec, {"flipt_a_seeded", "flipt_a_negative_control"}) == set()   # baseline left out
+    assert seed_study.gated_runs(spec, {"flipt_a_baseline"}) == {"flipt_a_baseline_none_s1"}
+
+
+def test_with_gates_only_names_targets_of_the_spec_not_yet_in_the_plan(tmp_path, monkeypatch, capsys):
+    """The written plan holds the baseline alone; seeded is the spec's, so --only may name it, and an unknown target
+    is refused."""
+    monkeypatch.setattr(seed_study, "RUNS", tmp_path / "runs")
+    spec_file, plan_file = tmp_path / "spec.yaml", tmp_path / "plan.yaml"
+    spec_file.write_text(GATED_CHAIN)
+    gs.write_plan(gs.decide(gs.load_spec(spec_file), tmp_path / "runs" / "study_x"), plan_file)
+    monkeypatch.setattr(seed_study.HOST, "free_memory_pct", lambda: 70)
+    monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 20)
+    args = [str(plan_file), "--dry-run", "--gates", str(spec_file)]
+    assert seed_study.main([*args, "--only", "flipt_a_baseline", "flipt_a_seeded"]) == 0
+    assert capsys.readouterr().out.count("  plan   ") == 1
+    assert seed_study.main([*args, "--only", "flipt_a_nothing"]) == 2
+    assert "no target of" in capsys.readouterr().err
+
+
+def test_limit_replaces_the_plans_limits_for_one_launch(plan_file, monkeypatch, capsys):
+    overrides = seed_study.limit_overrides(["max_runs=2", "max_per_task.swe=1", "spacing_s=0", "max_agents=9"])
+    assert overrides == {"max_runs": 2, "max_per_task": {"swe": 1}, "spacing_s": 0, "max_agents": 9}
+    limits = seed_study.with_limits(plan_file, seed_study.load_plan(plan_file), overrides)["limits"]
+    assert (limits["max_runs"], limits["max_per_task"], limits["spacing_s"], limits["max_agents"]) == (2, {"swe": 1},
+                                                                                                         0, 9)
+    options = seed_study.Options(overrides)
+    plan_file.write_text(PLAN.replace("max_runs: 10", "max_runs: 7"))          # the plan read again keeps the override
+    assert seed_study.reload_plan(plan_file, {}, options)["limits"]["max_runs"] == 2
+    code, out, _ = dry(plan_file, monkeypatch, capsys, "--limit", "max_runs=1", "--limit", "max_per_task.swe=3")
+    assert code == 0 and "'max_runs': 1, 'max_per_task': {'swe': 3}" in out
+
+
+@pytest.mark.parametrize("pair,why", [
+    ("max_cost=3", "--limit takes max_runs"), ("max_runs", "--limit takes"), ("max_per_task=3", "--limit takes"),
+    ("min_disk_gb.swe=3", "--limit takes"), ("max_runs=-1", "an integer of 0 or more"),
+    ("spacing_s=1.5", "an integer of 0 or more"), ("max_runs=true", "an integer of 0 or more"),
+    ("max_per_task.poem=2", "the plan's tasks are ['swe']"), ("max_agents=0", "max_agents is a positive integer")])
+def test_limit_refuses_an_unknown_key_or_a_bad_value(plan_file, monkeypatch, capsys, pair, why):
+    code, _, err = dry(plan_file, monkeypatch, capsys, "--limit", pair)
+    assert code == 2 and why in err
+
+
+def test_a_plan_with_a_short_time_limit_is_refused_under_every_option(plan_file, monkeypatch, capsys):
+    plan_file.write_text(PLAN.replace("settings: [time_limit_s=18000, cost_limit_usd=5]\n", ""))
+    code, _, err = dry(plan_file, monkeypatch, capsys, "--mock", "--only", "swe_luna", "--limit", "max_runs=1")
+    assert code == 2 and "names no time_limit_s" in err
+
+
+def test_mock_gives_every_model_and_every_role_the_mock_model_and_its_own_study(plan_file, monkeypatch, capsys):
+    """The roles' models go after the target's own settings, so a paid regulator_model there is overridden."""
+    regulated = "    settings: [regulators=1, regulator_model=claude-haiku-5-5-openrouter]\n"
+    plan_file.write_text(PLAN.replace("    packs: [none, swe/revealing]\nlimits",
+                                      f"    packs: [none, swe/revealing]\n{regulated}limits"))
+    monkeypatch.setattr(seed_study.HOST, "free_memory_pct", lambda: 70)
+    monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 20)
+    assert seed_study.main([str(plan_file), "--dry-run", "--mock"]) == 0
+    out = capsys.readouterr().out
+    assert "study study_x_mock, 8 cells" in out and "none paid: every model is mockllm/model" in out
+    lines = [line.strip() for line in out.splitlines() if "exec uv run" in line]
+    assert len(lines) == 8 and all(line.startswith("STUDY=study_x_mock ") for line in lines)
+    for line in lines:                                  # the model and each role's last model are the mock one
+        pairs = re.findall(r"--set (\S+)", line)
+        assert "--model mockllm/model " in line
+        assert all(seed_study.setting(pairs, f"{role}_model") == "mockllm/model" for role in ROLES)
+    roles = " ".join(f"--set {role}_model=mockllm/model" for role in ("worker", "regulator", "disregulator"))
+    luna = next(line for line in lines if "--name swe_luna_revealing_s1" in line)
+    assert f"--set regulator_model=claude-haiku-5-5-openrouter {roles} --set id_salt=swe_luna_s1" in luna
+    assert seed_study.main([str(plan_file), "--dry-run", "--mock", "--gates", str(plan_file)]) == 2
+    assert "--mock decides no gates" in capsys.readouterr().err
+
+
+def test_a_mock_launch_runs_its_cells_without_a_key_and_a_paid_one_on_linux_needs_it(plan_file, tmp_path, monkeypatch,
+                                                                                      capsys):
+    monkeypatch.setattr(seed_study, "RUNS", tmp_path / "runs")
+    monkeypatch.setattr(seed_study, "LOGS", tmp_path / "logs")
+    monkeypatch.setattr(seed_study, "live_names", set)
+    monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 50)
+    monkeypatch.setattr(seed_study.time, "sleep", lambda s: None)
+    linux = host_facts.Linux()
+    monkeypatch.setattr(seed_study, "HOST", linux)
+    monkeypatch.setattr(linux, "free_memory_pct", lambda: 80)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "")
+    plan_file.write_text(PLAN.replace("seeds: [1, 2]", "seeds: [1]").replace("spacing_s: 60", "spacing_s: 0"))
+    monkeypatch.setattr(subprocess, "Popen", no_launch)
+    assert seed_study.main([str(plan_file), "--yes"]) == 2
+    assert "OPENROUTER_API_KEY is not set" in capsys.readouterr().err
+    started = []
+
+    class MockRun(FakeRun):
+        def __init__(self, argv, env=None, **kwargs):
+            started.append((argv, env))
+            super().__init__(argv)
+
+    FakeRun.launched = []
+    monkeypatch.setattr(subprocess, "Popen", MockRun)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "k")
+    assert seed_study.main([str(plan_file), "--yes", "--mock", "--only", "swe_luna"]) == 0
+    assert len(started) == 2 and all(argv[:2] == ["bash", "-c"] for argv, _ in started)
+    assert all("OPENROUTER_API_KEY" not in env for _, env in started)
+    assert all("STUDY=study_x_mock " in argv[-1] and "--model mockllm/model" in argv[-1] for argv, _ in started)

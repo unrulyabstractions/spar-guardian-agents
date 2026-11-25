@@ -1,13 +1,14 @@
-"""What a plan's launch would need, beside what this Mac has, before any run starts. It launches nothing and makes no
+"""What a plan's launch would need, beside what this host has, before any run starts. It launches nothing and makes no
 model call.
 
     uv run python -m scripts.study.preflight studies/plans/ian_influencers_0.yaml
     uv run python -m scripts.study.preflight studies/plans/ian_influencers_0.yaml
         --gates studies/gated/ian_influencers_0.yaml
 
-It prints Docker's disk (its size and free space in Colima's VM) beside the Mac's free disk, and the Colima command
-that grows the VM's disk when the plan's peak needs more than Docker has free. It prints the Mac's free memory over
-the launcher's floor, and Docker's own memory. It prints each task's limit beside how many runs (or agents) the free
+It prints Docker's disk (its size and free space) beside the host's free disk, and how Docker's disk grows when the
+plan's peak needs more than Docker has free: on the Mac the Colima command that grows its VM's disk, on Linux the size
+of disk to launch on. It prints the host's free memory over the launcher's floor, and Docker's own memory. The host's
+facts come from scripts/study/host_facts.py. It prints each task's limit beside how many runs (or agents) the free
 disk and memory allow, from the plan's `limits.needs` ({<task>: {disk_gb: X, memory_gb: Y}} for one run, with
 `per: agent` for one agent) or the defaults measured on 2026-11-23. It ends with an estimate of the study's wall time
 from the stored runs' timings and names the critical path. With --gates the chains of the gated spec count toward
@@ -17,7 +18,7 @@ The peak is the most the limits let run at once: the cells still to run, heavies
 its task's max_per_task and max_agents allow (a cell larger than max_agents alone, as the launcher starts it). The
 estimate is the longest of four: the longest chain, the work over max_runs, a task's work over its max_per_task, and
 the agent-minutes over max_agents. It ignores the spacing and the disk and memory holds. It exits 1 when the peak
-needs more disk than Docker has free, more memory than the Mac has over the launcher's floor, or more than
+needs more disk than Docker has free, more memory than the host has over the launcher's floor, or more than
 DOCKER_MEMORY_SHARE of Docker's memory.
 """
 from __future__ import annotations
@@ -31,9 +32,9 @@ from pathlib import Path
 
 from scripts.study import gated_study
 from scripts.study import run_study as rs
+from scripts.study.host_facts import GB, HOST
 from src.configuration import settings
 
-GB = 2 ** 30
 DEFAULT_NEEDS = {"swe": {"disk_gb": 7.0, "memory_gb": 1.5}}
 """One run's needs by task, measured on 2026-11-23; a plan's limits.needs replaces them."""
 OTHER_NEEDS = {"disk_gb": 0.5, "memory_gb": 0.2}
@@ -84,18 +85,9 @@ def peak_need(peak: list[rs.Cell], limits: dict, key: str) -> float:
     return sum(run_need(cell, limits, key) for cell in peak)
 
 
-def mac_free_disk_gb() -> float:
-    """Free GB on the Mac's disk that holds the home folder, where Colima keeps its VM's disk."""
+def host_free_disk_gb() -> float:
+    """Free GB on the host's disk that holds the home folder, where Colima keeps its VM's disk on the Mac."""
     return shutil.disk_usage(Path.home()).free / GB
-
-
-def mac_memory_gb() -> float | None:
-    """The Mac's memory in GB (`sysctl hw.memsize`), None when it cannot say."""
-    try:
-        out = subprocess.run(["sysctl", "-n", "hw.memsize"], capture_output=True, text=True, timeout=30).stdout
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    return int(out.strip()) / GB if re.fullmatch(r"\d+", out.strip()) else None
 
 
 def docker_memory_gb() -> float | None:
@@ -109,14 +101,14 @@ def docker_memory_gb() -> float | None:
 
 
 def memory_room_gb(total: float | None, free_pct: int | None) -> float | None:
-    """The GB of memory runs may take before the Mac falls under the launcher's floor (MIN_FREE_MEMORY_PCT)."""
+    """The GB of memory runs may take before the host falls under the launcher's floor (MIN_FREE_MEMORY_PCT)."""
     if total is None or free_pct is None:
         return None
     return total * (free_pct - rs.MIN_FREE_MEMORY_PCT) / 100
 
 
 def grown_disk_gb(size: int, free: int, need: float) -> int | None:
-    """The size, in tens of GB, Colima's disk must grow to for the need plus MIN_FREE_DISK_GB; None when it fits."""
+    """The size, in tens of GB, Docker's disk must grow to for the need plus MIN_FREE_DISK_GB; None when it fits."""
     short = need + rs.MIN_FREE_DISK_GB - free
     return int(math.ceil((size + short) / 10) * 10) if short > 0 else None
 
@@ -146,14 +138,14 @@ def estimate(todo: list[rs.Cell], limits: dict, timings: dict, chains: dict[str,
 def report(plan: dict, todo: list[rs.Cell], timings: dict, chains: dict[str, int]) -> tuple[list[str], bool]:
     """The preflight's lines and whether the limits ask for more than the disk or the memory allows."""
     limits, lines, over = plan["limits"], [], False
-    disk, mac_disk = rs.docker_disk(), mac_free_disk_gb()
-    total, free_pct = mac_memory_gb(), rs.free_memory_pct()
+    disk, host_disk = HOST.docker_disk(), host_free_disk_gb()
+    total, free_pct = HOST.memory_gb(), HOST.free_memory_pct()
     room, docker_memory = memory_room_gb(total, free_pct), docker_memory_gb()
     peak = peak_cells(todo, limits)
     by_task = peak_runs(peak)
     disk_need, memory_need = peak_need(peak, limits, "disk_gb"), peak_need(peak, limits, "memory_gb")
     size, free = disk if disk else (None, None)
-    lines.append(f"docker disk: {size} GB, {free} GB free; the Mac's disk: {mac_disk:.0f} GB free")
+    lines.append(f"docker disk: {size} GB, {free} GB free; {HOST.name}'s disk: {host_disk:.0f} GB free")
     lines.append(f"memory: {total and round(total)} GB, {free_pct}% free, {room and round(room, 1)} GB over the "
                  f"launcher's floor of {rs.MIN_FREE_MEMORY_PCT}%; "
                  f"Docker's: {docker_memory and round(docker_memory, 1)} GB")
@@ -172,12 +164,10 @@ def report(plan: dict, todo: list[rs.Cell], timings: dict, chains: dict[str, int
         over = True
         lines.append(f"DISK   the peak needs {disk_need:.1f} GB, Docker has {free} GB free")
     if size is not None and (grow := grown_disk_gb(size, free, disk_need)):
-        fits = "fits" if grow - size < mac_disk else "does not fit"
-        lines.append(f"grow   colima stop && colima start --disk {grow}   ({grow - size} GB more, which {fits} in the "
-                     f"Mac's free disk; colima stop ends every container, so never while runs are live)")
+        lines.append(f"grow   {HOST.grow_disk(size, grow, host_disk)}")
     if room is None or memory_need > room:
         over = True
-        lines.append(f"MEMORY the peak needs {memory_need:.1f} GB, the Mac has {room} GB over its floor")
+        lines.append(f"MEMORY the peak needs {memory_need:.1f} GB, {HOST.name} has {room} GB over its floor")
     if docker_memory is not None and memory_need > DOCKER_MEMORY_SHARE * docker_memory:
         over = True
         lines.append(f"DOCKER the peak needs {memory_need:.1f} GB, over {DOCKER_MEMORY_SHARE:.0%} of Docker's "

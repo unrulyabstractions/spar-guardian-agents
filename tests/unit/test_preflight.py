@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.study import preflight
+from scripts.study import host_facts, preflight
 from scripts.study import run_study as rs
 
 SWE, POEM = "studies.cells.swe.ian_flipt_minimal", "studies.cells.creative_writing.ian_poem_minimal"
@@ -28,10 +28,12 @@ def cell(name, module, task, model="m"):
 @pytest.fixture
 def machine(monkeypatch):
     """A Mac with 48 GB, 70% free, 400 GB of free disk, and Docker at 60 GB with 40 GB free."""
-    monkeypatch.setattr(rs, "docker_disk", lambda: (60, 40))
-    monkeypatch.setattr(rs, "free_memory_pct", lambda: 70)
-    monkeypatch.setattr(preflight, "mac_memory_gb", lambda: 48.0)
-    monkeypatch.setattr(preflight, "mac_free_disk_gb", lambda: 400.0)
+    mac = host_facts.Mac()
+    monkeypatch.setattr(preflight, "HOST", mac)
+    monkeypatch.setattr(mac, "docker_disk", lambda: (60, 40))
+    monkeypatch.setattr(mac, "free_memory_pct", lambda: 70)
+    monkeypatch.setattr(mac, "memory_gb", lambda: 48.0)
+    monkeypatch.setattr(preflight, "host_free_disk_gb", lambda: 400.0)
     monkeypatch.setattr(preflight, "docker_memory_gb", lambda: 24.0)
 
 
@@ -85,7 +87,7 @@ def test_the_command_passes_when_the_peak_fits(tmp_path, machine, capsys):
 def test_the_command_fails_and_names_the_colima_command_when_the_disk_is_short(tmp_path, machine, monkeypatch, capsys):
     plan = tmp_path / "plan.yaml"
     plan.write_text(PLAN.replace("max_runs: 4,", "max_runs: 4, needs: {swe: {disk_gb: 9}},"))
-    monkeypatch.setattr(rs, "docker_disk", lambda: (60, 23))
+    monkeypatch.setattr(preflight.HOST, "docker_disk", lambda: (60, 23))
     assert preflight.main([str(plan), "--runs", str(tmp_path / "runs")]) == 1
     out = capsys.readouterr().out
     assert "DISK   the peak needs 27.5 GB, Docker has 23 GB free" in out
@@ -95,7 +97,7 @@ def test_the_command_fails_and_names_the_colima_command_when_the_disk_is_short(t
 def test_the_command_fails_when_the_memory_is_short(tmp_path, machine, monkeypatch, capsys):
     plan = tmp_path / "plan.yaml"
     plan.write_text(PLAN)
-    monkeypatch.setattr(rs, "free_memory_pct", lambda: 45)       # 2.4 GB over the floor
+    monkeypatch.setattr(preflight.HOST, "free_memory_pct", lambda: 45)       # 2.4 GB over the floor
     assert preflight.main([str(plan), "--runs", str(tmp_path / "runs")]) == 1
     assert "MEMORY the peak needs 4.7 GB" in capsys.readouterr().out
 
@@ -143,8 +145,8 @@ targets:
   small: {{module: {SWE}, model: qwen3.8-flash-openrouter, packs: [none], settings: [n_agents=4]}}
 limits: {{max_runs: 6, max_agents: 24, needs: {{swe: {{disk_gb: 2.3, memory_gb: 0.8, per: agent}}}}}}
 """)
-    monkeypatch.setattr(rs, "docker_disk", lambda: (400, 338))
-    monkeypatch.setattr(rs, "free_memory_pct", lambda: 91)
+    monkeypatch.setattr(preflight.HOST, "docker_disk", lambda: (400, 338))
+    monkeypatch.setattr(preflight.HOST, "free_memory_pct", lambda: 91)
     assert preflight.main([str(plan), "--runs", str(tmp_path / "runs")]) == 0
     out = capsys.readouterr().out
     assert "peak at the limits: 2 runs of 24 agents (swe 2; max_agents 24), 55.2 GB disk, 19.2 GB memory" in out

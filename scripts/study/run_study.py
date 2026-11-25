@@ -1,7 +1,15 @@
-"""A seed study from a plan file: every target with every pack, one run per cell and seed, on this Mac's Docker.
+"""A seed study from a plan file: every target with every pack, one run per cell and seed, on this host's Docker.
 
     uv run python -m scripts.study.run_study studies/plans/ian_influencers_0.yaml --dry-run  # cells, commands
     uv run python -m scripts.study.run_study studies/plans/ian_influencers_0.yaml --yes      # launch: paid calls
+    uv run python -m scripts.study.run_study <plan> --yes [--gates <spec>] [--only <target> ...]
+        [--limit key=value ...] [--mock]
+
+--only runs only the named targets of the plan; with --gates an arm runs only when its whole chain of gates lies among
+the named targets. --limit replaces one of the plan's limits for this launch (LIMIT_OPTIONS: max_runs, max_agents,
+spacing_s, max_per_task.<task>), again after each read of the plan; an unknown key is refused. --mock gives every model
+of every cell, the roles' models too, Inspect's mock model (MOCK_MODEL), runs into the study <study>_mock, reads no
+key and pays nothing; it takes no --gates. --dry-run shows what each of them changes.
 
 A plan (studies/plans/*.yaml, studies/README.md, seeds/README.md) names the study, the seeds, the targets and their
 packs:
@@ -30,9 +38,11 @@ with one GATES line each time. It queues no cell outside the spec. A live run wh
 Inspect sample buffer have not changed for STALL_MINUTES is printed once as `STALL <name> <minutes>`; nothing is
 killed.
 
-Each cell runs one command, under `zsh -lic` so the key comes from ~/.zshrc and never from a command line.
---openrouter-key-env NAME makes the cell pay with the OpenRouter key in the login shell's variable NAME (the line then
-opens with OPENROUTER_API_KEY="${NAME}", the name and never the key):
+Each cell runs one command. The host (scripts/study/host_facts.py) says how: on the Mac under `zsh -lic`, so the key
+comes from ~/.zshrc, and on Linux under `bash -c` with the launcher's own OPENROUTER_API_KEY, refused before the first
+launch when it is not set. A mock cell runs under `bash -c` with no key in its environment. --openrouter-key-env NAME
+makes the cell pay with the OpenRouter key in the variable NAME (the line then opens with OPENROUTER_API_KEY="${NAME}",
+the name and never the key). The key is never on a command line:
 
     STUDY=<study> uv run python -m <module> --model <model> --no-judge --name <target>_<pack>_s<seed>
         --set seed=<seed> [--set <each of the plan's settings>] [--set <each of the target's settings>]
@@ -46,20 +56,21 @@ would inherit a time limit shorter than their rounds allow is refused until it n
 id_salt is the target's and the seed's, not the pack's, so every pack of a target and seed draws the same IDs, roles and
 deal as its control. A cell whose runs/<study>/<name>/run.json exists is skipped (--replace runs it again and sets the
 old one aside). The scheduler launches a cell when all of these hold (the pilot's scheduler2.sh): at least
-MIN_FREE_MEMORY_PCT of the Mac's memory free by `memory_pressure`, at least MIN_FREE_DISK_GB free on Colima's docker
-disk (or the task's own floor, limits min_disk_gb), fewer than max_runs running, fewer than
+MIN_FREE_MEMORY_PCT of the host's memory free, at least MIN_FREE_DISK_GB free on the disk of Docker's data (or the
+task's own floor, limits min_disk_gb), fewer than max_runs running, fewer than
 max_per_task[<task>] of the cell's task running, and spacing_s since the
 last launch. Each run's console goes to logs/<study>/run_study/<name>.log. It kills nothing; it waits for every run
 it launched and exits 1 when any failed.
 
 A run counts its agents: the last `n_agents=` of the plan's and the target's settings, else DEFAULT_AGENTS. With
-limits max_agents, a cell launches only when its agents and the agents of every cell script live on this Mac (any
+limits max_agents, a cell launches only when its agents and the agents of every cell script live on this host (any
 study's, read from their command lines) fit under it. A cell larger than max_agents launches once no agent is live, so
 nothing waits for ever. A cell that does not fit is passed over like one whose task is full. A target's `stage`
 (default 0) orders the queue before the critical path: no cell launches while a cell of an earlier stage is queued, so a
 plan can hold its largest swarms until every smaller one has started.
 
-A real launch spends money: it needs --yes, and it prints the total of the runs' caps first. The rules of CLAUDE.md
+A real launch spends money: it needs --yes, and it prints the total of the runs' caps first. A mock launch needs --yes
+too, since it starts containers. The rules of CLAUDE.md
 (a spend check, live pricing in the first 10 minutes) apply to it as to any paid run.
 """
 from __future__ import annotations
@@ -77,8 +88,10 @@ import yaml
 from inspect_ai._util.appdirs import inspect_data_dir
 
 from scripts.study import gated_study
+from scripts.study.host_facts import HOST
 from src.configuration import seed_packs, settings
 from src.configuration.presets import build_config
+from src.configuration.swarm_config import ROLES
 from src.measures.run_directory import RunDir
 from src.models.cost_cap import DEFAULT_CAP_USD
 
@@ -88,7 +101,7 @@ LIMITS = {"max_runs": 10, "max_per_task": {}, "spacing_s": 60, "min_disk_gb": {}
 """min_disk_gb: {task: GB} is a task's own floor of free Docker disk in place of MIN_FREE_DISK_GB: a task whose
 containers write little (a poem, a binder) may launch where an SWE run, whose agents each build 1 to 2 GB, may not.
 needs: {task: {disk_gb: X, memory_gb: Y}} is what one run of the task takes, or one agent of it with `per: agent`;
-scripts.study.preflight reads it. max_agents: the most agents live at once on this Mac, None for no limit."""
+scripts.study.preflight reads it. max_agents: the most agents live at once on this host, None for no limit."""
 NEED_KEYS = {"disk_gb", "memory_gb", "per"}
 PER = ("run", "agent")
 DEFAULT_AGENTS = 3
@@ -113,6 +126,12 @@ OPENROUTER_KEY = "OPENROUTER_API_KEY"
 """The variable every OpenRouter model's key is read from (src/models/model_registry.yaml)."""
 KEY_ENV = re.compile(r"[A-Z][A-Z0-9_]*")
 """A variable's name, as --openrouter-key-env takes it."""
+LIMIT_OPTIONS = ("max_runs", "max_agents", "spacing_s", "max_per_task.<task>")
+"""The limits --limit may replace for one launch."""
+MOCK_MODEL = "mockllm/model"
+"""Inspect's mock model, which --mock gives every agent: no key and no spend."""
+MOCK_SUFFIX = "_mock"
+"""A mock launch's study is the plan's study with this suffix, so its runs never mix with real ones."""
 
 
 @dataclass
@@ -179,6 +198,15 @@ def load_plan(path: Path) -> dict:
         if not isinstance(spec.get("stage", 0), int) or spec.get("stage", 0) < 0:
             raise ValueError(f"{path}: {target}'s stage is an integer of 0 or more")
     limits = {**LIMITS, **(plan.get("limits") or {})}
+    check_limits(path, limits)
+    out = {**plan, "settings": [str(pair) for pair in plan.get("settings") or []], "limits": limits}
+    if not out.get("closed"):
+        check_time_limit(path, out)
+    return out
+
+
+def check_limits(path: Path, limits: dict) -> None:
+    """Refuse limits with a key LIMITS does not name, a bad need or a max_agents that is no positive integer."""
     if set(limits) != set(LIMITS):
         raise ValueError(f"{path}: limits takes {sorted(LIMITS)}")
     for task, need in (limits["needs"] or {}).items():
@@ -186,10 +214,6 @@ def load_plan(path: Path) -> dict:
             raise ValueError(f"{path}: needs of {task} take {sorted(NEED_KEYS)}, per being one of {PER}")
     if limits["max_agents"] is not None and (not isinstance(limits["max_agents"], int) or limits["max_agents"] < 1):
         raise ValueError(f"{path}: max_agents is a positive integer")
-    out = {**plan, "settings": [str(pair) for pair in plan.get("settings") or []], "limits": limits}
-    if not out.get("closed"):
-        check_time_limit(path, out)
-    return out
 
 
 def check_time_limit(path: Path, plan: dict) -> None:
@@ -251,32 +275,87 @@ def command(cell: Cell, study: str, extra: list[str], replace: bool, key_env: st
     return f"{key}STUDY={shlex.quote(study)} exec uv run python -m {cell.module} {argv}"
 
 
-def free_memory_pct() -> int | None:
-    """The Mac's free memory in percent (`memory_pressure`), None when it cannot say."""
-    try:
-        out = subprocess.run(["memory_pressure"], capture_output=True, text=True, timeout=60).stdout
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    found = re.search(r"free percentage:\s*(\d+)%", out)
-    return int(found.group(1)) if found else None
+def limit_overrides(pairs: list[str]) -> dict:
+    """The --limit pairs as limits: {key: N}, max_per_task.<task>=N into {"max_per_task": {task: N}}. Each value is
+    an integer of 0 or more; a key outside LIMIT_OPTIONS is refused."""
+    out: dict = {}
+    for pair in pairs:
+        key, sep, text = pair.partition("=")
+        name, dot, task = key.partition(".")
+        value = yaml.safe_load(text) if sep and text else None
+        if not sep or (f"{name}.<task>" if dot else name) not in LIMIT_OPTIONS or (dot and not NAME.fullmatch(task)):
+            raise ValueError(f"--limit takes {', '.join(LIMIT_OPTIONS)} as key=value, got {pair!r}")
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            raise ValueError(f"--limit {pair!r}: the value is an integer of 0 or more")
+        if dot:
+            out.setdefault("max_per_task", {})[task] = value
+        else:
+            out[name] = value
+    return out
 
 
-def docker_disk() -> tuple[int, int] | None:
-    """(size, free) in GB of Colima's docker disk, None when it cannot say."""
-    try:
-        out = subprocess.run(["colima", "ssh", "--", "df", "-BG", "/var/lib/docker"], capture_output=True, text=True,
-                             timeout=60).stdout
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    lines = out.strip().splitlines()
-    fields = [field.rstrip("G") for field in lines[-1].split()] if len(lines) > 1 else []
-    return (int(fields[1]), int(fields[3])) if len(fields) >= 4 and fields[1].isdigit() and fields[3].isdigit() \
-        else None
+def with_limits(path: Path, plan: dict, overrides: dict) -> dict:
+    """The plan with the --limit overrides in place of its own limits. max_per_task names a task of the plan's cells."""
+    if not overrides:
+        return plan
+    tasks = {cell.task for cell in cells(plan)}
+    unknown = sorted(set(overrides.get("max_per_task") or {}) - tasks)
+    if unknown:
+        raise ValueError(f"--limit max_per_task.{unknown[0]}: the plan's tasks are {sorted(map(str, tasks))}")
+    limits = {**plan["limits"], **overrides,
+              "max_per_task": {**(plan["limits"]["max_per_task"] or {}), **(overrides.get("max_per_task") or {})}}
+    check_limits(path, limits)
+    return {**plan, "limits": limits}
+
+
+def mocked(plan: dict) -> dict:
+    """The plan with every model Inspect's mock model: each target's model, and each role's model after the target's
+    own settings, so no setting of the plan can name a paid model."""
+    roles = [f"{role}_model={MOCK_MODEL}" for role in ROLES]
+    targets = {target: {**spec, "model": MOCK_MODEL, "settings": [*(spec.get("settings") or []), *roles]}
+               for target, spec in plan["targets"].items()}
+    return {**plan, "targets": targets}
+
+
+@dataclass(frozen=True)
+class Options:
+    """What a launch changes of its plan: the --limit overrides, and --mock."""
+    limits: dict
+    mock: bool = False
+
+
+def launch_plan(path: Path, options: Options) -> dict:
+    """The plan file read and checked, with this launch's options applied."""
+    plan = with_limits(path, load_plan(path), options.limits)
+    return mocked(plan) if options.mock else plan
+
+
+def arm_chain(spec: gated_study.Spec, arm: str) -> set[str]:
+    """The arm and every arm its gate names, and theirs, down to the arms with no gate."""
+    when = next(a for a in spec.arms if a.name == arm).when
+    return {arm}.union(*(arm_chain(spec, other) for other in when))
+
+
+def gated_runs(spec: gated_study.Spec, only: set[str] | None) -> set[str]:
+    """The spec's run names a launch may make: every one, or with --only those whose target and the targets of its
+    whole chain of gates are all among the named targets."""
+    out = set()
+    for stem, worker in spec.cells():
+        for arm in spec.arms:
+            chain = {spec.target(stem, worker, a)[0] for a in spec.arms if a.name in arm_chain(spec, arm.name)}
+            if only is None or chain <= only:
+                out.add(spec.run_name(stem, worker, arm))
+    return out
+
+
+def chosen(cell: Cell, only: set[str] | None, allowed: set[str] | None) -> bool:
+    """Whether the launch runs the cell: its target among --only, and its run among the spec's with --gates."""
+    return (only is None or cell.target in only) and (allowed is None or cell.name in allowed)
 
 
 def free_disk_gb() -> int | None:
-    """Free GB on Colima's docker disk, None when it cannot say."""
-    disk = docker_disk()
+    """Free GB on the disk that holds Docker's data, None when the host cannot say."""
+    disk = HOST.docker_disk()
     return disk[1] if disk else None
 
 
@@ -289,12 +368,12 @@ def task_full(running: dict[str, tuple], cell: Cell, limits: dict) -> str | None
 
 
 def held_all(running: dict[str, tuple], limits: dict, last: float) -> str | None:
-    """Why no cell launches now, whatever its task: the runs' limit, the spacing, the Mac's memory. None otherwise."""
+    """Why no cell launches now, whatever its task: the runs' limit, the spacing, the host's memory. None otherwise."""
     if len(running) >= limits["max_runs"]:
         return f"{len(running)} runs running"
     if time.time() - last < limits["spacing_s"]:
         return "spacing"
-    memory = free_memory_pct()
+    memory = HOST.free_memory_pct()
     if memory is None or memory < MIN_FREE_MEMORY_PCT:
         return f"memory {memory}% free"
     return None
@@ -317,7 +396,7 @@ def agents_full(live: int | None, cell: Cell, limits: dict) -> str | None:
 
 
 def live_agents(running: dict[str, tuple], limits: dict) -> int | None:
-    """The agents live on this Mac: the launcher's own runs and every other cell script's (live_runs), each run once.
+    """The agents live on this host: the launcher's own runs and every other cell script's (live_runs), each run once.
     None when the plan sets no max_agents, so a plan without one never reads the process table for it."""
     if limits.get("max_agents") is None:
         return None
@@ -360,14 +439,10 @@ TEAM = re.compile(r"--set n_agents=(\d+)(?:\s|$)")
 
 
 def live_runs() -> dict[str, int]:
-    """The cell scripts running on this Mac now, from their command lines: each run's name (`--name <run>`) and its
+    """The cell scripts running on this host now, from their command lines: each run's name (`--name <run>`) and its
     agents (the last `--set n_agents=N`, else DEFAULT_AGENTS). uv's process and Python's count as one run."""
-    try:
-        out = subprocess.run(["ps", "-axo", "command="], capture_output=True, text=True, timeout=60).stdout
-    except (OSError, subprocess.TimeoutExpired):
-        return {}
     found = {}
-    for line in out.splitlines():
+    for line in HOST.process_lines():
         if m := LIVE.match(line.strip()):
             teams = TEAM.findall(line)
             found[m[1]] = int(teams[-1]) if teams else DEFAULT_AGENTS
@@ -375,7 +450,7 @@ def live_runs() -> dict[str, int]:
 
 
 def live_names() -> set[str]:
-    """The run names of the cell scripts running on this Mac now (live_runs): the runs a launcher of this study
+    """The run names of the cell scripts running on this host now (live_runs): the runs a launcher of this study
     started before this one, which this one adopts and never launches again."""
     return set(live_runs())
 
@@ -429,12 +504,13 @@ def gate_step(spec_path: Path, plan_path: Path, study_dir: Path) -> tuple[dict[s
     return gated_study.chain_lengths(gates), f"{opened} open, {waiting} waiting; wrote {plan_path}"
 
 
-def new_cells(plan: dict, known: set[str], study: str, replace: bool, allowed: set[str] | None) -> list[Cell]:
-    """The plan's cells not seen before and not done (or every one with replace), in allowed when it is given.
-    Each is added to known."""
+def new_cells(plan: dict, known: set[str], study: str, replace: bool, only: set[str] | None,
+              allowed: set[str] | None) -> list[Cell]:
+    """The plan's cells the launch runs (chosen), not seen before and not done (or every one with replace). Each is
+    added to known."""
     out = []
     for cell in cells(plan):
-        if cell.name in known or (allowed is not None and cell.name not in allowed):
+        if cell.name in known or not chosen(cell, only, allowed):
             continue
         known.add(cell.name)
         if replace or not RunDir(RUNS / study / cell.name).is_run():
@@ -465,16 +541,17 @@ def stamp() -> str:
     return time.strftime("%H:%M:%S")
 
 
-def reload_plan(path: Path, plan: dict) -> dict:
-    """The plan file read again, or the last plan read when the file is caught mid-write or closed."""
+def reload_plan(path: Path, plan: dict, options: Options) -> dict:
+    """The plan file read again with the launch's options, or the last plan read when the file is caught mid-write
+    or closed."""
     try:
-        fresh = load_plan(path)
+        fresh = launch_plan(path, options)
     except (OSError, ValueError, yaml.YAMLError):
         return plan
     return plan if fresh.get("closed") else fresh
 
 
-def main(argv: list[str] | None = None) -> int:
+def parse_arguments(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="python -m scripts.study.run_study", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("plan", type=Path, help="a plan file, e.g. studies/plans/ian_influencers_0.yaml")
@@ -486,29 +563,58 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--gates", type=Path, help="a gated spec whose gates the launcher opens itself after each run")
     parser.add_argument("--openrouter-key-env", metavar="NAME", help="the variable of the login shell that holds the "
                         f"OpenRouter key this launch pays with, in place of {OPENROUTER_KEY}")
+    parser.add_argument("--only", action="extend", nargs="+", metavar="TARGET",
+                        help="run only these targets of the plan; with --gates an arm runs only when its whole chain "
+                             "of gates lies among them")
+    parser.add_argument("--limit", action="extend", nargs="+", default=[], metavar="KEY=VALUE",
+                        help=f"replace one of the plan's limits for this launch: {', '.join(LIMIT_OPTIONS)}")
+    parser.add_argument("--mock", action="store_true", help=f"every model {MOCK_MODEL}, the runs into the study "
+                        f"<study>{MOCK_SUFFIX}; no key is read and nothing is paid")
     args = parser.parse_args(argv)
     if args.openrouter_key_env and not KEY_ENV.fullmatch(args.openrouter_key_env):
         parser.error("--openrouter-key-env takes a variable's name, such as OPENROUTER_API_KEY_OWN")
-    plan = load_plan(args.plan)
-    study = args.study or plan["study"]
+    return args
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_arguments(argv)
+    try:
+        options = Options(limit_overrides(args.limit), args.mock)
+        plan = launch_plan(args.plan, options)
+    except ValueError as error:
+        print(error, file=sys.stderr)
+        return 2
+    study = (args.study or plan["study"]) + (MOCK_SUFFIX if args.mock else "")
+    only = set(args.only) if args.only else None
     allowed = None                                              # with --gates: the spec's run names alone
+    known_targets = set(plan["targets"])
     if args.gates:
+        if args.mock:
+            print("--mock decides no gates: rehearse a gated plan's targets with --mock --only", file=sys.stderr)
+            return 2
         spec = gated_study.load_spec(args.gates)
         if spec.study != study:
             print(f"--gates {args.gates} is of study {spec.study}, the launch of {study}", file=sys.stderr)
             return 2
-        allowed = spec.run_names()
+        allowed = gated_runs(spec, only)
+        known_targets |= {spec.target(stem, worker, arm)[0] for stem, worker in spec.cells() for arm in spec.arms}
+    if only is not None and (unknown := sorted(only - known_targets)):
+        print(f"--only {' '.join(unknown)}: no target of {args.plan}" + (" or of its spec" if args.gates else ""),
+              file=sys.stderr)
+        return 2
     todo, skipped = [], []
     for cell in cells(plan):
-        if allowed is not None and cell.name not in allowed:
+        if not chosen(cell, only, allowed):
             continue
         done = RunDir(RUNS / study / cell.name).is_run()
         (skipped if done and not args.replace else todo).append(cell)
     caps = sorted({cell.cap_usd(plan["settings"]) for cell in todo}) or \
         [float(setting(plan["settings"], "cost_limit_usd") or DEFAULT_CAP_USD)]
+    spend = f"none paid: every model is {MOCK_MODEL}" if args.mock else (
+        f"at most ${sum(cell.cap_usd(plan['settings']) for cell in todo):.2f} at the runs' caps of "
+        f"{' and '.join(f'${cap:.2f}' for cap in caps)}")
     print(f"plan {args.plan}: study {study}, {len(todo) + len(skipped)} cells, {len(skipped)} done already, "
-          f"{len(todo)} to run; at most ${sum(cell.cap_usd(plan['settings']) for cell in todo):.2f} at the runs' "
-          f"caps of {' and '.join(f'${cap:.2f}' for cap in caps)}")
+          f"{len(todo)} to run; {spend}")
     for cell in skipped:
         print(f"  skip   {cell.name} (runs/{study}/{cell.name} holds its run)")
     for cell in todo:
@@ -516,7 +622,7 @@ def main(argv: list[str] | None = None) -> int:
               f"${cell.cap_usd(plan['settings']):.2f} cap" + (f", stage {cell.stage})" if cell.stage else ")"))
         print(f"         {command(cell, study, plan['settings'], args.replace, args.openrouter_key_env)}")
     if args.dry_run:
-        print(f"  now    memory {free_memory_pct()}% free (needs {MIN_FREE_MEMORY_PCT}%), docker disk "
+        print(f"  now    memory {HOST.free_memory_pct()}% free (needs {MIN_FREE_MEMORY_PCT}%), docker disk "
               f"{free_disk_gb()} GB free (needs {MIN_FREE_DISK_GB}), agents live {live_agents({}, plan['limits'])}; "
               f"limits {plan['limits']}")
         return 0
@@ -526,6 +632,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if not args.yes:
         print("a launch makes paid model calls: add --yes, or --dry-run to look", file=sys.stderr)
+        return 2
+    if not args.mock and (why := HOST.key_problem()):
+        print(why, file=sys.stderr)
         return 2
     study_dir = RUNS / study
     chains: dict[str, int] = {}
@@ -546,8 +655,8 @@ def main(argv: list[str] | None = None) -> int:
     stalled: set[str] = set()
     while queue or running:
         ended = False
-        plan = reload_plan(args.plan, plan)                    # the plan may gain targets and change its limits
-        for cell in new_cells(plan, known, study, args.replace, allowed):
+        plan = reload_plan(args.plan, plan, options)           # the plan may gain targets and change its limits
+        for cell in new_cells(plan, known, study, args.replace, only, allowed):
             queue.append(cell)
             todo.append(cell)
             print(f"{stamp()} QUEUE  {cell.name} (new in the plan)", flush=True)
@@ -578,8 +687,8 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{stamp()} GATES  {said_gates}", flush=True)
             except (OSError, ValueError, yaml.YAMLError) as error:
                 print(f"{stamp()} GATES  not written: {error}", flush=True)
-            plan = reload_plan(args.plan, plan)
-            for cell in new_cells(plan, known, study, args.replace, allowed):
+            plan = reload_plan(args.plan, plan, options)
+            for cell in new_cells(plan, known, study, args.replace, only, allowed):
                 queue.append(cell)
                 todo.append(cell)
                 print(f"{stamp()} QUEUE  {cell.name} (opened by its gate)", flush=True)
@@ -596,7 +705,8 @@ def main(argv: list[str] | None = None) -> int:
                 line = (f"cd {shlex.quote(str(settings.ROOT))} && "
                         f"{command(cell, study, plan['settings'], args.replace, args.openrouter_key_env)}")
                 log = open(logs / f"{cell.name}.log", "w")      # the child keeps its own copy of the handle
-                running[cell.name] = (subprocess.Popen(["zsh", "-lic", line], stdout=log, stderr=subprocess.STDOUT,
+                argv, env = HOST.cell_process(line, args.mock)
+                running[cell.name] = (subprocess.Popen(argv, env=env, stdout=log, stderr=subprocess.STDOUT,
                                                        stdin=subprocess.DEVNULL), cell)
                 log.close()
                 last = time.time()
