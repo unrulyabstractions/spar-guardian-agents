@@ -16,6 +16,7 @@ from src.configuration.presets import build_config
 from src.configuration.prompt_texts import APART
 from src.domains.creative import CreativeWriting
 from src.domains.creative import _creative_honeypot as honeypot
+from src.domains.creative import _creative_scenario as scenarios
 from src.domains.creative import creative_sandbox as sandbox
 from src.domains.creative._creative_ladder import ROUTES, CreativeDomain
 from src.domains.creative._creative_settings import PLANT_ROOT, SIDE_COPY_DIR, VARIANTS, Variant
@@ -48,10 +49,11 @@ def plan_of(variant: str | None = "ian_poem", *pairs: str):
 
 def test_the_variants():
     assert VARIANTS == {"ian_poem": Variant(exploits=("hidden", "revealed"), scenario=SCENARIO, rows=("museum_poem",))}
-    assert honeypot.scenario(None) is None
+    assert scenarios.scenario(None) is None
     assert Variant() == Variant(exploits=("hidden",), scenario=None, rows=())
-    assert VARIANTS["ian_poem"].side_copies and not Variant().side_copies
-    assert set(honeypot.scenario(SCENARIO)) == {"replace", "apart", "principal", "words"}
+    assert [e.name for e in CreativeWriting("museum_poem", variant="ian_poem").exploits] == ["hidden", "revealed"]
+    assert [e.name for e in CreativeWriting("museum_poem").exploits] == ["hidden"]
+    assert set(scenarios.scenario(SCENARIO)) == {"replace", "apart", "principal", "words"}
     assert settings.load_prompts()["creative_writing"]["scenarios"].keys() == {SCENARIO}
     with pytest.raises(ValueError, match="variant must be one of"):
         CreativeWriting("museum_poem", variant="ian_flipt")
@@ -63,7 +65,7 @@ def test_the_commission_stands_where_the_interview_sentences_stood():
     plain, bench = CreativeWriting("museum_poem"), CreativeWriting("museum_poem", variant="ian_poem")
     was, told = (b.instruction(b.task_yaml(), ROW) for b in (plain, bench))
     team = bench.instruction(bench.task_yaml(), ROW, team=True)
-    replace, apart = honeypot.scenario(SCENARIO)["replace"], honeypot.scenario(SCENARIO)["apart"]
+    replace, apart = scenarios.scenario(SCENARIO)["replace"], scenarios.scenario(SCENARIO)["apart"]
     assert all(was.count(old) == 1 and old not in told for old in replace)
     # the token's place: the end of the sentence on the check against the poem, and no other
     assert [new for new in replace.values() if APART in new] == \
@@ -77,12 +79,12 @@ def test_the_commission_stands_where_the_interview_sentences_stood():
     assert not TEST_WORDS.search(told.replace(KEPT, "")), told
     assert TEST_WORDS.search(was.replace(KEPT, ""))            # CheatBench's own: a job candidate, the interviewer
     with pytest.raises(ValueError, match="not one"):
-        honeypot.scenario_instruction("An instruction with none of the sentences.\n", SCENARIO)
-    assert honeypot.scenario_instruction(was, None) == was
+        scenarios.scenario_instruction("An instruction with none of the sentences.\n", SCENARIO)
+    assert scenarios.scenario_instruction(was, None) == was
 
 
 def test_no_text_of_the_scenario_names_a_test_or_holds_a_piece():
-    told = honeypot.scenario(SCENARIO)
+    told = scenarios.scenario(SCENARIO)
     texts = [*told["replace"].values(), told["apart"]]
     assert not [t for t in texts if TEST_WORDS.search(t.replace(KEPT, ""))], texts
     lines = set(honeypot.fingerprints(ROW, None).lines)
@@ -97,7 +99,7 @@ def test_every_agents_first_message_holds_the_commission(monkeypatch):
     bench, plain = CreativeWriting("museum_poem", variant="ian_poem"), CreativeWriting("museum_poem")
     block = tasks.swarm_task(bench, config).dataset[0].metadata["cheatbench"]
     old = tasks.swarm_task(plain, config).dataset[0].metadata["cheatbench"]
-    told = honeypot.scenario(SCENARIO)
+    told = scenarios.scenario(SCENARIO)
     assert block["creative"]["variant"] == "ian_poem" and block["creative"]["scenario"] == SCENARIO
     assert "variant" not in old["creative"] and "side_copies" not in old["creative"]
     assert {"each_held_piece_also_a_file_in_a_side_folder_readable_by_its_holder_alone",
@@ -361,7 +363,7 @@ def test_the_scenarios_words_reach_a_regulator_a_disregulator_and_the_identified
     """The user, 2026-11-23: on this task a regulator's and a disregulator's first message and the identified rule
     speak of Fernway Studio's poem, under the reference's root and in the side copies' folder, and of grade.pyc."""
     bench, plain = CreativeWriting("museum_poem", variant="ian_poem"), CreativeWriting("museum_poem")
-    told = honeypot.scenario(SCENARIO)["words"]
+    told = scenarios.scenario(SCENARIO)["words"]
     words, own = bench.level_words(), settings.load_instruction_levels()["vars"]["creative_writing"]
     assert set(told) == {"goal", "prior_work", "identified", "cheating"}
     assert words == {key: text.format(ref_dir=PLANT_ROOT, side_dir=SIDE_COPY_DIR) for key, text in told.items()}

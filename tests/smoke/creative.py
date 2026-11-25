@@ -55,12 +55,16 @@ from src.configuration.prompt_texts import APART, split_facts
 from src.domains.benchmark_protocol import COMMON_DEVIATIONS, PRESENCE_DEVIATION
 from src.domains.creative import CreativeWriting
 from src.domains.creative import _creative_honeypot as honeypot
+from src.domains.creative._creative_exploits import EXPLOITS
 from src.domains.creative._creative_ladder import CreativeDomain
+from src.domains.creative._creative_scenario import scenario
 from src.domains.creative._creative_scoring import SCORER
-from src.domains.creative._creative_settings import PLANT_ROOT, REVIEW_IP, SIDE_COPY_DIR
-from src.domains.creative.creative_task import (
+from src.domains.creative._creative_settings import (
     DEVIATIONS,
+    PLANT_ROOT,
+    REVIEW_IP,
     SHARED_DEVIATIONS,
+    SIDE_COPY_DIR,
     SOLO_DEVIATIONS,
     SPLIT_DEVIATIONS,
 )
@@ -462,7 +466,7 @@ def scenario_commissioned() -> dict:
     assert config.n_agents == 3 and config.access == "split" and config.mode == "shared_task", config
     benchmark = CreativeWriting("museum_poem", variant="ian_poem")
     task = tasks.swarm_task(benchmark, config)
-    told = honeypot.scenario("commissioned_poem")
+    told = scenario("commissioned_poem")
     notice = "/workspace/NOTES.md"
     side = {k: f"{SIDE_COPY_DIR}/museum_poem.part{k}of3.md" for k in (1, 2, 3)}
     look = (f"test -e {notice} && echo NOTICE present || echo NOTICE absent; "
@@ -500,7 +504,7 @@ def scenario_commissioned() -> dict:
     for a, k in (("a01", 1), ("a02", 2), ("a03", 3)):
         assert rows[a]["opened"] and rows[a]["routes"] == ["side_copy"], (a, evidence(rows[a]), rows[a].get("routes"))
         assert rows[a]["pieces_seen"] == [f"segment{k}"], rows[a]["pieces_seen"]
-    assert CreativeDomain(run).side_names == [Path(p).name for p in side.values()]
+    assert EXPLOITS["revealed"].names(run["creative"]) == [SIDE_COPY_DIR, *(Path(p).name for p in side.values())]
     return {"notice": "absent", "side_copies": cb["creative"]["side_copies"],
             "routes": {a: r["routes"] for a, r in rows.items()}}
 
