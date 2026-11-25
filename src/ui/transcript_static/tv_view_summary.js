@@ -1,5 +1,6 @@
 /* View: one collection's runs by condition (#/summary?col=<collection>), from /api/summary
- * (src/ui/transcript_summary.py). A row per workers' model, task and number of workers (and seed pack, only in a
+ * (src/ui/transcript_summary.py). A row per workers' model, task and team size (its workers, or its agents where
+ * influencers take workers' places: the summary's rows_by) (and seed pack, only in a
  * collection with seeded runs); a column per condition: the baseline, one column per influencer combination with baseline workers
  * (role, instruction level and model, stacked on three lines in the header), the positive control (told to cheat), the
  * two negative controls (a rule), and a column per other combination the collection holds. A cell: its runs (a link
@@ -103,9 +104,9 @@ function cellView(c, d, detailed, col) {
 function colLabel(c) {
   const xs = c.influencers;
   if (!xs.length) return c.label;
-  const role = x => (x.n === 1 ? x.role : `${x.n} ${x.role}s`);
   const block = x => [
-    h('div', { class: 'sum-col-line' }, h('span', { class: ['role-chip', `role-chip-${x.role}`] }, role(x))),
+    h('div', { class: 'sum-col-line' }, h('span', { class: ['role-chip', `role-chip-${x.role}`],
+      title: 'share of the team' }, `${x.share}% ${x.role}s`)),
     h('div', { class: 'sum-col-line' }, h('span', { class: ['level-chip', `level-chip-${x.role}`] }, x.level || 'no level')),
     h('div', { class: 'sum-col-line sum-col-model' }, modelLabel({ model: x.model }))];
   return [
@@ -114,23 +115,23 @@ function colLabel(c) {
   ];
 }
 
-/** A row's team as "workers / regulators / disregulators": the workers, and each influencer role's number over the
- * row's cells that hold runs, as one number or a range ("3 / 0–1 / 0"). */
+/** A row's team as "workers / regulators / disregulators": each role's number over the row's cells that hold runs (a
+ * cell's team), as one number or a range ("3 / 0–1 / 0"). */
 export function teamOf(r, columns) {
-  const seen = { regulator: new Set(), disregulator: new Set() };
+  const seen = { worker: new Set(), regulator: new Set(), disregulator: new Set() };
   for (const c of columns) {
-    if (!r.cells[c.key] || !r.cells[c.key].n) continue;
-    for (const role of Object.keys(seen)) {
-      seen[role].add((c.influencers || []).filter(x => x.role === role).reduce((n, x) => n + (x.n || 0), 0));
-    }
+    const cell = r.cells[c.key];
+    if (!cell || !cell.n) continue;
+    for (const role of Object.keys(seen)) for (const n of cell.team[role]) seen[role].add(n);
   }
   const span = set => { const v = [...set].sort((a, b) => a - b); return !v.length ? '0' : v.length === 1 ? String(v[0]) : `${v[0]}–${v[v.length - 1]}`; };
-  return `${r.workers} / ${span(seen.regulator)} / ${span(seen.disregulator)}`;
+  return `${span(seen.worker)} / ${span(seen.regulator)} / ${span(seen.disregulator)}`;
 }
 
 /** A column's tooltip: its workers' conditioning and each influencer's role, level and model. */
 const colTitle = c => [c.worker, ...(c.influencers.length
-  ? c.influencers.map(x => `${x.role} ${x.level || 'no level'} ${modelLabel({ model: x.model })}`) : ['no influencer'])].join('; ');
+  ? c.influencers.map(x => `${x.share}% ${x.role}s ${x.level || 'no level'} ${modelLabel({ model: x.model })}`)
+  : ['no influencer'])].join('; ');
 
 /** The All row over some rows: each column's cells summed, the ladders' level counts in each ladder's order; no
  * link, since the runs page has no filter for a set of rows. */
@@ -215,7 +216,8 @@ export async function viewSummary(q) {
   // The seed picker stands only where the collection's runs differ by seed pack, as the Seed column does.
   const sPick = s.by_seed ? select([['', 'All seeds'], ...[...new Set(s.rows.map(r => seedName(r.seed_pack)))]
     .sort().map(name => [name, name])], seed, v => nav({ seed: v }), { 'aria-label': 'Seed' }) : null;
-  const lead = s.by_seed ? 4 : 3;
+  const byAgents = s.rows_by === 'agents';
+  const lead = 3 + (s.by_seed ? 1 : 0) + (byAgents ? 1 : 0);
 
   // The band over the condition columns: one cell per run of columns of the same group. A group of one column named
   // as its column is that column's header, over both header rows.
@@ -232,6 +234,8 @@ export async function viewSummary(q) {
   // The lead columns' headers stand over both header rows, on the condition headers' baseline, and stick at the left.
   const band = [h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-model' }, 'Workers\' model'),
     h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-task' }, 'Task'),
+    byAgents ? h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-agents', title: 'Agents per team' }, 'Agents')
+      : null,
     h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-workers', title: 'Agents per team, by role' },
       'Workers / Regulators / Disregulators'),
     s.by_seed ? h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-seed', title: 'Board posts and files planted before round 1' }, 'Seed') : null];
@@ -259,7 +263,8 @@ export async function viewSummary(q) {
   });
   const body = rows.map(r => h('tr', null,
     h('th', { scope: 'row', class: 'sum-model' }, spaced(modelLabel({ model: r.model }))),
-    h('td', { class: 'sum-task' }, spaced(r.task)), h('td', { class: 'num sum-workers' }, teamOf(r, s.columns)),
+    h('td', { class: 'sum-task' }, spaced(r.task)), byAgents ? h('td', { class: 'num sum-agents' }, String(r.size)) : null,
+    h('td', { class: 'num sum-workers' }, teamOf(r, s.columns)),
     s.by_seed ? h('td', { class: 'sum-seed' }, spaced(r.seed_pack.split('/').pop())) : null,
     cells(r.cells)));
   const totals = wmodel || task || seed || !allShown ? summed(rows, s.columns, ladders) : s.totals;
@@ -277,7 +282,7 @@ export async function viewSummary(q) {
     const lefts = [0];
     for (const th of [...band].filter(Boolean).slice(0, lead - 1)) lefts.push(lefts[lefts.length - 1] + th.getBoundingClientRect().width);
     for (const tr of table.querySelectorAll('tr')) {
-      [...tr.children].filter(x => x.matches('.sum-model, .sum-task, .sum-workers, .sum-seed'))
+      [...tr.children].filter(x => x.matches('.sum-model, .sum-task, .sum-agents, .sum-workers, .sum-seed'))
         .forEach((x, i) => { x.classList.add('sum-stick'); x.style.left = `${lefts[i]}px`; });
     }
   });

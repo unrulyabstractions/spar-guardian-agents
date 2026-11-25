@@ -70,11 +70,37 @@ def level_rank(role: str, level: str | None) -> tuple[int, str]:
     return (order.index(level), level) if level in order else (len(order), level)
 
 
+def team_size(row: dict) -> int:
+    """The agents of a run's team: its workers and its influencers."""
+    return row["workers"] + sum(x.get("n", 1) for x in row["influencer_conditioning"])
+
+
+def swarms_keep_their_size(rows: list[dict]) -> bool:
+    """Whether influencers take workers' places in the collection's teams: some team with influencers stands beside a
+    team without any of its own size, and beside none of its own number of workers, among the runs of its workers'
+    model, task and seed pack (4 workers and a regulator beside 5 workers). A team of 3 workers and a regulator beside
+    3 workers is a team that influencers were added to."""
+    def among(r: dict, agents: int) -> tuple:
+        return r["model"], r["task_label"], r.get("seed_pack", "none"), agents
+    plain = {among(r, r["workers"]) for r in rows if not r["influencer_conditioning"]}
+    return any(among(r, team_size(r)) in plain and among(r, r["workers"]) not in plain
+               for r in rows if r["influencer_conditioning"])
+
+
 def influencers_of(row: dict) -> tuple[tuple, ...]:
-    """The run's influencers as (role, level, model, n), regulators first, each role by level and model."""
-    xs = [(x["role"], x["level"], x.get("model") or "", x.get("n", 1)) for x in row["influencer_conditioning"]]
+    """The run's influencers as (role, level, model, share), regulators first, each role by level and model. share is
+    the percent of the team the influencers of that role, level and model make up (the user, 2026-11-25: "what % of
+    swarm they represent so they are comparable across sizes"): 1 regulator of 5 agents and 4 of 20 are both 20."""
+    team = team_size(row)
+    xs = [(x["role"], x["level"], x.get("model") or "", round(100 * x.get("n", 1) / team))
+          for x in row["influencer_conditioning"]]
     return tuple(sorted(xs, key=lambda x: (INFLUENCERS.index(x[0]) if x[0] in INFLUENCERS else len(INFLUENCERS), x[0],
                                            level_rank(x[0], x[1]), x[2], x[3])))
+
+
+def share_words(role: str, share: int) -> str:
+    """An influencer role and its share of the team in words: "20% regulators"."""
+    return f"{share}% {role}s"
 
 
 def condition_of(row: dict) -> tuple[str, tuple]:
@@ -83,17 +109,17 @@ def condition_of(row: dict) -> tuple[str, tuple]:
 
 
 def combination(influencers: tuple) -> str:
-    """The influencers in words: "regulator · generic · claude-haiku-5.5", a second one after " + "."""
-    return " + ".join(" · ".join([role if n == 1 else f"{n} {role}s", level or "no level", model or "no model"])
-                      for role, level, model, n in influencers)
+    """The influencers in words: "20% regulators · generic · claude-haiku-5.5", a second one after " + "."""
+    return " + ".join(" · ".join([share_words(role, share), level or "no level", model or "no model"])
+                      for role, level, model, share in influencers)
 
 
 def short(influencers: tuple) -> str:
-    """The influencers as a column's name: their set, their levels, their models, "regulator · generic ·
+    """The influencers as a column's name: their set, their levels, their models, "20% regulators · generic ·
     claude-haiku-5.5" or "both · generic, instructed · claude-haiku-5.5, gpt-6-luna"."""
     roles = {x[0] for x in influencers}
     first = influencers[0]
-    who = "both" if len(roles) > 1 else first[0] if first[3] == 1 else f"{first[3]} {first[0]}s"
+    who = "both" if len(roles) > 1 else share_words(first[0], first[3])
     return " · ".join([who, ", ".join(x[1] or "no level" for x in influencers),
                        ", ".join(x[2] or "no model" for x in influencers)])
 
@@ -103,7 +129,7 @@ def column_of(worker: str, influencers: tuple) -> dict:
     with influencers; otherwise an "other" column named by its combination ("Positive control + regulator · ...")."""
     roles = {x[0] for x in influencers}
     infl = "both" if len(roles) > 1 else next(iter(roles)) if roles else "none"
-    listed = [{"role": r, "level": lv, "model": m or None, "n": n} for r, lv, m, n in influencers]
+    listed = [{"role": r, "level": lv, "model": m or None, "share": share} for r, lv, m, share in influencers]
     if not influencers:
         fixed = next((c for c in COLUMNS if c["worker"] == worker), None)
         if fixed:
@@ -123,7 +149,8 @@ def column_order(c: dict) -> tuple:
     within a control band COLUMNS' order, and the other conditions by key."""
     band = PLACE.index(c["group"])
     if c["group"] in SETS:
-        return (band, tuple((level_rank(x["role"], x["level"]), x["model"] or "", x["n"]) for x in c["influencers"]))
+        return (band, tuple((level_rank(x["role"], x["level"]), x["model"] or "", x["share"])
+                            for x in c["influencers"]))
     if c["group"] in ("baseline", "positive", "negative"):
         return (band, (COLUMNS.index(next(x for x in COLUMNS if x["key"] == c["key"])),))
     return (band, (c["key"],))
@@ -174,8 +201,9 @@ def exact_filters(mine: list[dict], runs: list[dict], base: dict, influencers: l
 
 def cell(rows: list[dict]) -> dict:
     """One cell's counts: n, cheated, accessed and passed (each k of n), alerted (the runs in which an influencer
-    alerted humans), alerts (those alerts and how many were true and false alarms, the rows' alerts summed) and the
-    teams' level counts per ladder in the ladder's order."""
+    alerted humans), alerts (those alerts and how many were true and false alarms, the rows' alerts summed), team (per
+    role, the numbers of such agents its runs hold, lowest first) and the teams' level counts per ladder in the
+    ladder's order."""
     ladders = transcript_levels.LADDERS
     cheating = ladders["cheating"]["levels"]
     accessed = set(cheating[cheating.index(ACCESSED):])
@@ -185,7 +213,10 @@ def cell(rows: list[dict]) -> dict:
         levels = ladders[ladder]["levels"]
         order = [v for v in levels if v in seen] + sorted((v for v in seen if v not in levels), key=str)
         return [[v, seen[v]] for v in order]
+    def held(role: str) -> list[int]:
+        return sorted({sum(x.get("n", 1) for x in r["influencer_conditioning"] if x["role"] == role) for r in rows})
     return {"n": len(rows),
+            "team": {"worker": sorted({r["workers"] for r in rows}), **{role: held(role) for role in INFLUENCERS}},
             "cheated": sum(r["levels"].get("cheated") is True for r in rows),
             "accessed": sum(r["levels"]["team"].get("cheating") in accessed for r in rows),
             "passed": sum(r["levels"].get("passed") is True for r in rows),
@@ -196,12 +227,17 @@ def cell(rows: list[dict]) -> dict:
 
 def summary(rows: list[dict], col: str) -> dict:
     """The #/summary page's data for collection `col`: {col, total (its valid runs), by_seed (whether any run is
-    seeded, so rows split by seed pack), columns (column_of, in column_order), groups, rows: [{model, task, workers,
-    seed_pack (None unless by_seed), task_name (the page leaves out a task its Settings turn off), cells: {column
-    key: cell or None}}], totals: {column key: cell or None}}, over every task. A cell carries `filters`, the runs
-    page's query that keeps exactly its runs, or None when none does."""
+    seeded, so rows split by seed pack), rows_by, columns (column_of, in column_order), groups, rows: [{model, task,
+    size, seed_pack (None unless by_seed), task_name (the page leaves out a task its Settings turn off), cells:
+    {column key: cell or None}}], totals: {column key: cell or None}}, over every task. A row is the teams of one
+    size: their number of workers (rows_by "workers": influencers are added to a team), or their number of agents
+    where influencers take workers' places (rows_by "agents", swarms_keep_their_size), so that a column's share of
+    influencers compares across sizes. A cell carries `filters`, the runs page's query that keeps exactly its runs,
+    or None when none does."""
     mine = [r for r in rows if r["col"] == col]
     by_seed = any(r.get("seed_pack", "none") != "none" for r in mine)
+    rows_by = "agents" if swarms_keep_their_size(mine) else "workers"
+    size_of = team_size if rows_by == "agents" else (lambda r: r["workers"])
     found = {condition_of(r): column_of(*condition_of(r)) for r in mine}
     columns = {c["key"]: dict(c, influencer="none", influencers=[]) for c in COLUMNS}
     columns.update({c["key"]: c for c in found.values()})
@@ -218,15 +254,17 @@ def summary(rows: list[dict], col: str) -> dict:
         return {**cell(runs), "filters": exact_filters(mine, runs, base, c["influencers"], of_column[c["key"]])}
     groups: dict[tuple, dict[str, list[dict]]] = {}
     for r in mine:
-        key = (r["model"] or "", r["task_label"], r["workers"], r.get("seed_pack", "none") if by_seed else None)
+        key = (r["model"] or "", r["task_label"], size_of(r), r.get("seed_pack", "none") if by_seed else None)
         groups.setdefault(key, {}).setdefault(key_of[condition_of(r)], []).append(r)
     out_rows = []
-    for (model, task, workers, pack), by_col in sorted(
+    for (model, task, size, pack), by_col in sorted(
             groups.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[0][2], kv[0][3] != "none", kv[0][3] or "")):
-        where = {"task": task, "model": model, "workers": str(workers), **({"seed_pack": pack} if by_seed else {})}
+        where = {"task": task, "model": model, **({"workers": str(size)} if rows_by == "workers" else {}),
+                 **({"seed_pack": pack} if by_seed else {})}
         task_name = next(r for rs in by_col.values() for r in rs).get("task_name")
-        out_rows.append({"model": model, "task": task, "task_name": task_name, "workers": workers, "seed_pack": pack,
+        out_rows.append({"model": model, "task": task, "task_name": task_name, "size": size, "seed_pack": pack,
                          "cells": {c["key"]: filled(by_col.get(c["key"], []), c, where) for c in columns}})
     totals = {c["key"]: filled(of_column.get(c["key"], []), c, {}) for c in columns}
-    return {"col": col, "total": len(mine), "by_seed": by_seed, "columns": columns, "groups": GROUPS, "alone": ALONE,
+    return {"col": col, "total": len(mine), "by_seed": by_seed, "rows_by": rows_by, "columns": columns,
+            "groups": GROUPS, "alone": ALONE,
             "rows": out_rows, "totals": totals}

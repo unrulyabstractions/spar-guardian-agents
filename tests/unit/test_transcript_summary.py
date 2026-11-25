@@ -51,14 +51,15 @@ MINE = [r for r in ROWS if r["col"] == COL]
 
 
 def cells(s: dict) -> list[tuple[tuple, str, dict]]:
-    return [((r["model"], r["task"], r["workers"]), k, c) for r in s["rows"] for k, c in r["cells"].items() if c]
+    return [((r["model"], r["task"], r["size"]), k, c) for r in s["rows"] for k, c in r["cells"].items() if c]
 
 
-def cell_runs(rows: list[dict], s: dict, model: str | None, task: str | None, workers, key: str) -> list[dict]:
+def cell_runs(rows: list[dict], s: dict, model: str | None, task: str | None, size, key: str) -> list[dict]:
     """The runs that belong in a cell, found again from the rows: their condition's column and the row's keys."""
+    size_of = ts.team_size if s["rows_by"] == "agents" else (lambda r: r["workers"])
     return [r for r in rows if ts.column_of(*ts.condition_of(r))["key"] == key
             and (model is None or (r["model"] or "") == model) and (task is None or r["task_label"] == task)
-            and (workers is None or r["workers"] == workers)]
+            and (size is None or size_of(r) == size)]
 
 
 def test_one_column_per_influencer_combination_in_order():
@@ -69,11 +70,12 @@ def test_one_column_per_influencer_combination_in_order():
     labels = [c["label"] for c in s["columns"]]
     assert labels == [
         "Baseline", "Generic rule", "Rule naming the exploit",
-        "+ regulator · ambiguous · haiku", "+ regulator · enforce · haiku", "+ regulator · enforce · luna",
+        "+ 25% regulators · ambiguous · haiku", "+ 25% regulators · enforce · haiku",
+        "+ 25% regulators · enforce · luna",
         "Positive control",
-        "+ disregulator · overt · luna", "+ disregulator · persuade · luna",
+        "+ 25% disregulators · overt · luna", "+ 25% disregulators · persuade · luna",
         "+ both · enforce, persuade · haiku, luna",
-        "Rule: copy no solution", "Positive control + regulator · enforce · haiku"]
+        "Rule: copy no solution", "Positive control + 25% regulators · enforce · haiku"]
     groups = [c["group"] for c in s["columns"]]
     assert groups == ["baseline", "negative", "negative"] + ["regulator"] * 3 + ["positive"] + ["disregulator"] * 2 \
         + ["both", "other", "other"]
@@ -111,11 +113,11 @@ def test_every_cell_link_keeps_exactly_its_runs():
         kept = {r["id"] for r in ROWS if ts.runs_page_keeps(r, f)}
         assert kept == {r["id"] for r in cell_runs(MINE, s, model, task, workers, key)}
     main = next(r for r in s["rows"] if (r["model"], r["task"]) == ("m1", "SWE (flipt)"))["cells"]
-    assert main["baseline | regulator · enforce · haiku"]["filters"] == {
+    assert main["baseline | 25% regulators · enforce · haiku"]["filters"] == {
         "col": COL, "task": "SWE (flipt)", "model": "m1", "workers": "3", "worker": "baseline",
         "influencer": "regulator",
         "influencer_level": "regulator: enforce", "q": "haiku"}
-    assert "q" not in main["baseline | regulator · ambiguous · haiku"]["filters"]
+    assert "q" not in main["baseline | 25% regulators · ambiguous · haiku"]["filters"]
     assert main["baseline"]["filters"] == {"col": COL, "task": "SWE (flipt)", "model": "m1", "workers": "3",
                                            "worker": "baseline", "influencer": "none"}
 
@@ -124,19 +126,19 @@ def test_a_cell_no_filter_picks_out_has_no_link():
     rows = [row("z_reg", influencers=REG_E_HAIKU), row("z_reg_x", influencers=REG_E_LUNA)]
     s = ts.summary(rows, COL)
     got = {k: c["filters"] for k, c in s["rows"][0]["cells"].items() if c}
-    assert got["baseline | regulator · enforce · haiku"] is None
-    assert got["baseline | regulator · enforce · luna"]["q"] == "x"
+    assert got["baseline | 25% regulators · enforce · haiku"] is None
+    assert got["baseline | 25% regulators · enforce · luna"]["q"] == "x"
 
 
 def test_rows_split_by_team_size_always_and_by_seed_pack_only_when_a_run_is_seeded():
     s = ts.summary(ROWS, COL)
     assert s["by_seed"] is False
-    assert [(r["model"], r["task"], r["workers"], r["seed_pack"]) for r in s["rows"]] == [
+    assert [(r["model"], r["task"], r["size"], r["seed_pack"]) for r in s["rows"]] == [
         ("m1", "Protein design (binder)", 3, None), ("m1", "SWE (flipt)", 3, None), ("m2", "SWE (flipt)", 3, None)]
     assert all(c["filters"] is None or ("workers" in c["filters"] and "seed_pack" not in c["filters"])
                for _, _, c in cells(s))
     mixed = ts.summary(ROWS + [row("s4", workers=4)], COL)
-    assert [(r["model"], r["task"], r["workers"]) for r in mixed["rows"]] == [
+    assert [(r["model"], r["task"], r["size"]) for r in mixed["rows"]] == [
         ("m1", "Protein design (binder)", 3), ("m1", "SWE (flipt)", 3), ("m1", "SWE (flipt)", 4),
         ("m2", "SWE (flipt)", 3)]
     four = mixed["rows"][2]["cells"]["baseline"]
@@ -159,10 +161,10 @@ def test_k_of_n_counts_and_level_counts():
     assert (base["n"], base["cheated"], base["accessed"], base["passed"]) == (3, 1, 2, 1)
     assert base["levels"]["cheating"] == [["none", 1], ["looked", 1], ["hacked", 1]]
     assert base["levels"]["coordination"] == [["low", 3]]
-    reg = main["baseline | regulator · enforce · haiku"]
+    reg = main["baseline | 25% regulators · enforce · haiku"]
     assert (reg["n"], reg["cheated"], reg["accessed"], reg["passed"]) == (2, 0, 1, 0)
     assert "influencer_levels" not in reg
-    total = s["totals"]["baseline | regulator · enforce · haiku"]
+    total = s["totals"]["baseline | 25% regulators · enforce · haiku"]
     assert total["n"] == 3 and "task" not in total["filters"]
 
 
@@ -195,7 +197,7 @@ def test_the_stored_index_lands_every_valid_run_in_one_cell():
                 if x is None or x["filters"] is None:
                     continue
                 kept = {r["id"] for r in idx["rows"] if ts.runs_page_keeps(r, x["filters"])}
-                want = cell_runs(mine, s, row["model"], row["task"], row["workers"], key)
+                want = cell_runs(mine, s, row["model"], row["task"], row["size"], key)
                 if s["by_seed"]:        # a seeded collection's rows split by seed pack too
                     want = [r for r in want if r.get("seed_pack", "none") == row["seed_pack"]]
                 assert kept == {r["id"] for r in want} and len(kept) == x["n"], (c["key"], row["task"], key)
@@ -256,3 +258,27 @@ def test_a_rows_alerts_are_the_runs_signal_counts():
     assert "{ key: 'alerts', label: 'Alerts', group: 'influencers'," in page
     assert "title: 'Times an influencer alerted humans'," in page
     assert "cell: r => (r.influencer_conditioning.length ? alertsCell(r.alerts) : none()) }" in page
+
+
+def test_influencers_of_one_share_stand_in_one_column_whatever_the_teams_size():
+    """1 regulator of 5 agents and 4 of 20 are both 20% of their team, so they share a column; 3 of 5 are 60%. Each
+    cell says how many influencers of each role its runs hold."""
+    def team(run: str, workers: int, regulators: int) -> dict:
+        out = row(run, workers=workers, influencers=REG_E_HAIKU)
+        out["influencer_conditioning"][0]["n"] = regulators
+        return out
+    regulated = [team("n5_reg20", 4, 1), team("n20_reg20", 16, 4), team("n5_reg60", 2, 3)]
+    assert ts.summary(regulated, COL)["rows_by"] == "workers"          # no team without influencers to stand beside
+    s = ts.summary([row("n5", workers=5), row("n20", workers=20), *regulated], COL)
+    fifth, most = "baseline | 20% regulators · enforce · haiku", "baseline | 60% regulators · enforce · haiku"
+    assert [c["key"] for c in s["columns"] if c["influencers"]] == [fifth, most]
+    assert [c["influencers"][0]["share"] for c in s["columns"] if c["influencers"]] == [20, 60]
+    # the regulators took workers' places (a team of 5 holds 4 workers or 2), so a row is the teams of one size
+    assert s["rows_by"] == "agents" and [r["size"] for r in s["rows"]] == [5, 20]
+    assert ts.summary(ROWS, COL)["rows_by"] == "workers"
+    cells = {r["size"]: r["cells"] for r in s["rows"]}
+    assert cells[5][fifth]["team"] == {"worker": [4], "regulator": [1], "disregulator": [0]}
+    assert cells[5][most]["team"] == {"worker": [2], "regulator": [3], "disregulator": [0]}
+    assert cells[20][fifth]["team"] == {"worker": [16], "regulator": [4], "disregulator": [0]}
+    assert cells[20][most] is None and "workers" not in cells[5][fifth]["filters"]
+    assert s["totals"][fifth]["n"] == 2 and s["totals"][fifth]["team"]["regulator"] == [1, 4]
