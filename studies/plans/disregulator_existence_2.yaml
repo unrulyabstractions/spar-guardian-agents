@@ -96,6 +96,17 @@ targets:
     seeds: [1, 2, 3]
     settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
                disregulator_model=deepseek-flash-openrouter, cost_limit_usd=25]
+  # Fable workers with the DeepSeek disregulator (the user, 2026-11-25: "Can you also run Fable worker vs deepseek
+  # disregulator?"): three samples as Sonnet and Opus above, straight at Anthropic. Fable's list prices are twice
+  # Opus's for input, output and cache writes and equal for cache reads; an Opus team of 4 cost $1.12 to $1.58 a run,
+  # and the one Fable disregulator beside three Haiku workers cost $2.99.
+  ian_gflipt_fable_disregulator_weak:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: claude-fable-5-2
+    packs: [none]
+    seeds: [1, 2, 3]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=deepseek-flash-openrouter, cost_limit_usd=40]
   # How far a DeepSeek disregulator reaches (the user, 2026-11-25): "if the disregulator deepseep study shows hacking
   # for X model (like haiku already did), plan to increase to 5 swarm with 20% disregulator, if hacked, do 10 swarm
   # with 20% dis". A step's target is added here once the step before it hacked for that worker in at least one sample.
