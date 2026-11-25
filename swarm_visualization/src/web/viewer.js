@@ -180,10 +180,9 @@ const tags = S.agents.map(agent => {
   const shapes = [['worker', '● worker'], ['regulator', '◎ regulator'], ['disregulator', '✶ disregulator']]
     .filter(([role]) => S.agents.some(a => a.role === role)).map(([, word]) => word).join('&nbsp;&nbsp;');
   const swatches = RUNG_WORDS.map((w, k) => `<span class="sw${k ? '' : ' first'}" style="background:${hex(RUNG_COLORS[k])}"></span>${w}`).join('');
-  document.getElementById('legend').innerHTML = `${shapes}<br>${swatches}<br>` +
-    'line = talk on the board, thicker = more back and forth<br>' +
-    (S.pieces ? 'small orbs = pieces of the exploit each agent holds<br>' : '') +
-    'red room = the team handed in a cheated fix';
+  const line = '<span class="line"></span>talk';
+  const orb = S.pieces ? `<span class="sw" style="background:${hex(PIECE_COLORS[0])}"></span>piece` : '';
+  document.getElementById('legend').innerHTML = `${shapes}<br>${swatches}<br>${line}${orb}`;
 }
 const events = [];
 for (const [te, a, text] of S.said || []) {
@@ -213,7 +212,7 @@ if (S.submit) {
 events.sort((a, b) => a.t - b.t);
 const feed = document.getElementById('feed');
 const clockEl = document.getElementById('clock');
-const FEED_SIZE = 6;
+const FEED_SIZE = 4;
 let feedShown = -2;
 function drawWords(rungs, here, alive, focus) {
   clockEl.textContent = `${clockText(t)} / ${clockText(T)}`;

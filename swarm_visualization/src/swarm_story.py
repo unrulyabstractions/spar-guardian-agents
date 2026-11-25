@@ -30,7 +30,7 @@ ROLE_LETTER = {"worker": "W", "regulator": "R", "disregulator": "D"}
 MODEL_NAMES = (("opus", "Opus"), ("sonnet", "Sonnet"), ("haiku", "Haiku"), ("fable", "Fable"),
                ("deepseek", "DeepSeek"), ("luna", "Luna"), ("sol", "Sol"), ("qwen", "Qwen"), ("gemini", "Gemini"),
                ("gpt", "GPT"), ("llama", "Llama"))
-EXCERPT = 150
+EXCERPT = 70
 
 
 def model_name(model: str | None) -> str:
