@@ -4249,3 +4249,23 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - **What.** The swarm provider runs `prepare_env` where it builds every role model; `inspect eval src/tasks.py@...` refuses any paid model (the eval's, a bound role's, a role model, the judge) and names `python -m src run`. A provider's `key_file` is its only key: missing, a dangling link or a folder is refused with "write the key to <path> (chmod 600)", for runs and judge commands, and the `== models` line names each paid model's key source. A direct run refuses ANTHROPIC_BASE_URL other than https://api.anthropic.com (`pinned_base_url` beside `shadow_env`). `caching_verified` names its route and entry, and the gate refuses another's; the three OpenRouter stamps gained theirs. Every check runs before any export. A key file holds `[A-Za-z0-9_-]+` in ASCII, errors name only the path. An optional `<key_file>.workspace` (wrkspc_...) puts `anthropic-workspace-id` on every request through the Anthropic client's `default_headers`, passed as a model arg on every path (role models, the run's model, the judge, the paid check). Rebased onto aa4b0a7a.
 - **How.** No paid call, no Docker. tests/unit/test_anthropic_direct_route.py (54) and tests/unit/test_claude_prompt_cache.py (81) with made-up keys in tmp_path; the header read off requests a fake Anthropic transport received, present with the file and absent without. I removed each fix in turn and ran both files: every removal failed at least one test. The cache check run offline under `env -i` with an empty HOME: without --yes, three calls of four marks each and nothing sent; with --yes, refused for the missing key file.
 - **Result.** VERIFIED: the `-k "registry or cost or cache or model or swarm_model or prompt_values or anthropic or judge"` selection passes (414 passed, 2 skipped; main: 308 passed, 2 skipped); pipeline status 0 problems after re-locking judge_cheatbench (no verdict byte changes); agent_texts the same 168 files as tests/golden; ruff clean; the full unit suite fails only test_paper_sources (cheating_rungs, params, regulator_levels, regulator_suffix) and test_run_paths, the same five that fail on main (4240 passed, 23 skipped). UNVERIFIED: that Anthropic accepts the workspace header and reads the cache on the direct route (the paid check, not run).
+
+## 2026-11-25: run_study on the Mac or Linux, with --only, --limit and --mock (branch vast-launcher)
+
+- **What.** `scripts/study/host_facts.py` (the Mac's and Linux's facts and the argv of a cell); `run_study` and
+  `preflight` call it; `--only`, `--limit` and `--mock`; a launcher adopts a live run only of its own study.
+- **How.** 130 tests of run_study, preflight, host_facts and gated_study, and 344 selected by "study or preflight or host
+  or gated or launch" against main's same selection. Every plan's `--dry-run` before and after, compared line by line
+  with only the live memory, disk and agent figures masked. Every plan's `--dry-run --mock`, counting commands without
+  the mock model or without the mock roles last. One real mock launch of disregulator_existence_2 `--only
+  ian_gflipt_haiku_baseline --mock --limit max_runs=1`, then I read its run.json and episodes.jsonl. The Linux facts
+  ran in `python:3.12-slim` and on Colima's Ubuntu VM with real Docker.
+- **Result.** VERIFIED: all 130 tests pass; the selection has no failing id that main lacks (main fails
+  test_every_study_folder_has_an_entry, which the worktree skips without runs/). All 11 plans print the same cells
+  and commands as before. Under `--mock` every command of the 11 plans has `--model mockllm/model` and the three role
+  models last. The mock run ended with exit 0 in 6 minutes and wrote runs/disregulator_existence_2_mock/<run>/ with
+  model mockllm/model, the three role models mockllm/model, 3 agents and 300 turns each; I deleted it after reading.
+  On Linux the facts read 93% free, 23.4 GB, and Docker's disk (394, 339) GB, which match /proc/meminfo and
+  `df -BG /var/lib/docker`. BROKEN, then fixed: while my mock run was live, a real launch of disregulator_existence_2
+  on main adopted it by name and skipped its real haiku baseline. That session launched the cell by hand at 00:40:58;
+  489a1cf makes a launcher adopt only its own study's runs. UNVERIFIED: a paid launch on Linux; preflight on Linux.
