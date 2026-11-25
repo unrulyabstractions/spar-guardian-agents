@@ -7,9 +7,9 @@
 # that /root/box_id names the box and print what box_probe.py status reads there (the launcher, the live cells, the
 # last write, the runs stored), prefixed with the time and the box. Each pass starts with what the watched boxes bill
 # per hour. A box that cannot be reached, a failed rsync, a box that reports trouble, and a box whose runs all ended
-# (it bills until it is captured and destroyed) get a line starting with !!. One box failing never stops the watch of the others. The watch only
-# reads and copies: it never starts, stops or destroys anything. --once makes one pass and exits nonzero on any !!.
-# rsync is Homebrew's: the Mac's /usr/bin/rsync is openrsync.
+# (it bills until it is captured and destroyed) get a line starting with !!. One box failing never stops the watch
+# of the others. The watch only reads and copies: it never starts, stops or destroys anything. --once makes one pass
+# and exits nonzero on any !!. rsync is Homebrew's: the Mac's /usr/bin/rsync is openrsync.
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)

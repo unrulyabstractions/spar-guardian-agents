@@ -12,6 +12,7 @@ file it made.
 ```
 python3 ~/.claude/hooks/cloud_boxes_guard.py start-daemon --project "$PWD"     # 1. the guard; create refuses without it
 python3 ~/.claude/hooks/cloud_boxes_guard.py status
+python3 ~/.claude/hooks/cloud_boxes_guard.py spend                            #    spent today, last hour, $/h, balances
 uv run python -m scripts.box.fleet plan <plan> [--gates <spec>] --boxes N     # 2. the assignment; sends nothing
 uv run python -m scripts.box.fleet offers                                     # 3. what can hold a box, cheapest first
 uv run python -m scripts.box.fleet create --plan <plan> [--gates <spec>] --boxes N --dry-run
@@ -20,10 +21,10 @@ uv run python -m scripts.box.fleet status                                     # 
 scripts/box/box_setup.sh <id>                                                 # 5. per box: clone, .venv, kernel, build
 scripts/box/box_run.sh <id> --mock                                            # 6. the mock check: no key, no spend
 scripts/box/watch.sh --once <id>
-read -rs BOX_OPENROUTER_API_KEY && export BOX_OPENROUTER_API_KEY              # 7. a key capped in OpenRouter
-scripts/box/box_run.sh <id>                                                   #    the real runs
+scripts/box/box_run.sh <id> --main-key                                        # 7. the real runs, on the main key
 scripts/box/watch.sh                                                          # 8. pulls runs/ and logs/ every 3 min
-uv run python -m scripts.box.live_cost <id> ... [--since snap.json]           #    the live runs' cost so far
+uv run python -m scripts.box.live_cost <id> ... --save snap.json              #    the live runs' cost so far
+uv run python -m scripts.box.live_cost <id> ... --since snap.json             #    and each run's $/h since then
 scripts/box/capture_check.sh <id> --pull                                      # 9. every file here, by bytes
 uv run python -m scripts.box.fleet destroy <id>                               # 10. snapshot, then destroy
 ```
@@ -43,7 +44,13 @@ once, its runs, their caps and the commit. `box_run.sh` reads them back and star
 ```
 
 `--mock` adds `--mock`: every model is Inspect's mock model, the runs go to `<study>_mock`, no key goes to the box.
-Running `box_run.sh` again after the launcher ended starts the runs the box does not store.
+The launcher decides no gates under `--mock`, so a mock launch drops `--gates` and names only the box's targets the
+plan holds now. Running `box_run.sh` again after the launcher ended starts the runs the box does not store.
+
+Every study's boxes take the main key (CLAUDE.md §3a): `--main-key` sends `OPENROUTER_API_KEY` from the shell's
+environment, so run `box_run.sh` from a terminal that reads `~/.zshrc`, or as `zsh -lic 'scripts/box/box_run.sh <id>
+--main-key'`. `box_key.py` checks first that OpenRouter caps the key and that enough is left for every run the box
+may make at its cap. Without `--main-key` the box gets `BOX_OPENROUTER_API_KEY`, a key made for the launch.
 
 `capture_check.sh --pull` brings the box's `runs/` and `logs/` into the same folders here, its launcher output and the
 plan copy it rewrote as gates opened into `logs/<study>/boxes/<id>/`, and every other file into
@@ -73,10 +80,10 @@ destroyed. While any box exists, `/loop 30m /cloud-boxes` runs the same check.
 | `box <id> of <study> runs <targets> already` | two boxes of one study never run the same target |
 | `the fleet would bill $X/h, past its cap` | `--max-fleet-dph` (15 $/h) holds the open boxes and this launch |
 | `the account holds these boxes already` | a box of this name is live: destroy it, or rent under another `--label-prefix` |
-| `vast.ai cannot start it` (status) | destroy it with `--accept-loss`, then `create ... --only <box> --label-prefix spar-screen-retry` |
+| `vast.ai cannot start it` (status) | destroy it with `--accept-loss`, then `create --plan <plan> [--gates <spec>] --boxes N --only <box> --label-prefix spar-screen-retry` |
 | `the box needs N cores` (setup) | the VM came up smaller than its offer: capture, destroy, rent with `--skip-machine <machine>` |
 | `made elsewhere` (run-args) | this machine holds a run of the box's names that no box made: the watch would overwrite it |
-| `no box key`, `no credit limit`, `less than the $X these runs may spend` | `BOX_OPENROUTER_API_KEY` must be capped in OpenRouter with room for every run the box may make at its cap, gated arms too; `--main-key` sends the main key under the same checks, by the user's word for a study |
+| `no box key`, `no credit limit`, `less than the $X these runs may spend` | the key sent (`OPENROUTER_API_KEY` with `--main-key`, else `BOX_OPENROUTER_API_KEY`) must be capped in OpenRouter with room for every run the box may make at its cap, gated arms too |
 | `a launcher is alive` | the box runs already; watch it |
 | `/root/box_id names ...` | the endpoint reaches another box: run `fleet status` |
 | `this machine holds another run of <run>` (capture) | an eval log here, or the one a run.json here names, is not the box's: nothing is pulled; set the local run aside first |
@@ -86,9 +93,12 @@ destroyed. While any box exists, `/loop 30m /cloud-boxes` runs the same check.
 
 `box_setup_remote.sh` runs `proc_hiding_check.py`, which proves the runs' `/proc` hiding on the box's kernel and
 refuses the box when it fails. `network_trace_check.sh` says which way of recording the agents' network calls works
-there (eBPF or the socket tables):
+there (eBPF or the socket tables). It tests in `cbtask:python311`, which a box builds only for creative_writing or
+protein_design; a SWE box builds it first with the first line below (the SWE image has no bash):
 
 ```
+scripts/box/box_ssh.sh <id> "cd /root/work && .venv/bin/python -c \
+  'from src.sandbox.machines import agent_machines; agent_machines.ensure_image()'"
 scripts/box/box_scp.sh <id> scripts/box/network_trace_check.sh box:/root/ship/
 scripts/box/box_ssh.sh <id> bash /root/ship/network_trace_check.sh --json /root/network_trace_check.json
 ```

@@ -4,15 +4,15 @@
 # The launcher is the Mac's own, scripts/study/run_study.py, on the box's plan: `run_study <plan> --yes [--gates
 # <spec>] --only <the box's targets> --limit max_agents=<its agents at once>`, all from the box's registry entry through
 # fleet.py run-args, which refuses a model that needs a key a box does not hold and a run of the box this machine holds
-# from a run made elsewhere. --mock passes --mock: every model is Inspect's mock model, the runs go to <study>_mock, no
-# key goes to the box and nothing is paid. Running this again on a box whose launcher ended starts the runs not stored.
+# from a run made elsewhere. --mock passes --mock without --gates and with only the targets the plan holds now: every
+# model is Inspect's mock model, the runs go to <study>_mock, no key goes to the box and nothing is paid. Running this
+# again on a box whose launcher ended starts the runs not stored.
 #
 # A box holds one key, OPENROUTER_API_KEY. It goes from this shell's environment to /root/.box_env (mode 600) through
-# ssh's standard input: never on a command line, never printed. The box checks only its length. The key sent is
-# BOX_OPENROUTER_API_KEY alone: a key made for this launch with a credit limit in OpenRouter's dashboard, revoked after
-# the destroys. scripts/box/box_key.py refuses it first unless OpenRouter caps it and enough is left for every run the
-# box may make at its dollar cap. --main-key sends OPENROUTER_API_KEY instead, by the user's word for a study, under
-# those same two checks.
+# ssh's standard input: never on a command line, never printed. The box checks only its length. --main-key sends
+# OPENROUTER_API_KEY itself, which every study's boxes take (CLAUDE.md §3a); without it the key sent is
+# BOX_OPENROUTER_API_KEY, a key made for the launch. scripts/box/box_key.py refuses either unless OpenRouter caps it
+# and enough is left for every run the box may make at its dollar cap.
 #
 # Once /root/box_id shows the endpoint reaches this instance, the launcher starts under nohup setsid with /root/.box_env
 # sourced, uv on its PATH and UV_NO_SYNC set (the cells' `uv run` uses the .venv the launch pinned as it is). Its output

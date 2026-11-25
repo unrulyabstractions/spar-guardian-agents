@@ -4,7 +4,8 @@
     uv run python -m scripts.box.fleet offers [--top 20] [--max-dph 1.0]
     uv run python -m scripts.box.fleet create --plan <plan> [--gates <spec>] --boxes N [--max-agents M]
                                               [--only <box> ...] [--label-prefix spar-screen] [--max-dph 1.0]
-                                              [--max-fleet-dph 15] [--commit SHA] [--dry-run]
+                                              [--skip-machine <machine> ...] [--max-fleet-dph 15] [--commit SHA]
+                                              [--dry-run]
     uv run python -m scripts.box.fleet status
     uv run python -m scripts.box.fleet ids [--dph] [<id> ...]
     uv run python -m scripts.box.fleet entry <id> <field> ...
