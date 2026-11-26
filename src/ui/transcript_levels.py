@@ -695,6 +695,24 @@ def _influencers(levels: dict, roles: dict[str, str | None]) -> list[dict]:
     return [{"agent": a, "role": roles.get(a), "level": lvl} for a, lvl in (levels.get("influencers") or {}).items()]
 
 
+def worker_levels(measured: dict) -> list[dict]:
+    """Each worker's own level on each ladder, from the run's stored measures (the run page's `measured`): [{agent,
+    cheating, coordination, collusion, cheated}], the workers by name, a ladder that does not apply NA. A worker is an
+    agent whose role (the Coordination measure's roles, else the Cheating or Collusion measure's) is_worker; the
+    influencers are left out, as the team's levels leave them out."""
+    X, C, M = measured["cheating"], measured.get("coordination") or {}, measured["collusion"]
+    cheat = X["agents"] if X.get("applicable") else {}
+    pairs = M["agents"] if M.get("applicable") else {}
+    roles = {**{a: r.get("role") for a, r in pairs.items()}, **{a: r.get("role") for a, r in cheat.items()},
+             **(C.get("roles") or {})}
+    coord = C.get("agents") or {}
+    return [{"agent": a, "cheating": cheat[a]["rung"] if a in cheat else NA,
+             "coordination": (coord[a]["level"] or "none") if a in coord else NA,
+             "collusion": pairs[a]["rung"] if a in pairs else NA,
+             "cheated": cheat[a]["cheated"] if a in cheat else None}
+            for a in sorted(roles) if is_worker(roles[a])]
+
+
 def index_levels(levels: dict, roles: dict[str, str | None]) -> dict:
     """The index's summary of compute()'s answer: the team's level names, whether the team cheated (the Cheating
     measure's team_cheated, None where it does not apply), whether the grader passed the team's hand-in (the Cheating

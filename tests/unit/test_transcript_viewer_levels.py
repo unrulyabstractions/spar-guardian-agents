@@ -1051,7 +1051,9 @@ def test_a_run_of_a_task_the_study_does_not_read_opens_and_its_summary_row_names
     assert set(viewer.rows) == {"study_x/poem_minimal_luna1", "study_x/binder_minimal_luna1"}
     assert viewer.dirs["study_x/binder_minimal_luna1"] == study / "binder_minimal_luna1"
     s = viewer.summaries["study_x"]
-    assert s == tv.transcript_summary.summary(list(viewer.rows.values()), "study_x")
+    members = {run_id: tv.transcript_levels.worker_levels(m) for run_id, m in viewer.measured.items()}
+    assert s == tv.transcript_summary.summary(list(viewer.rows.values()), "study_x", members)
+    assert s["totals"]["baseline"]["members"]["n"] == sum(r["workers"] for r in viewer.rows.values())
     assert sorted(r["task_name"] for r in s["rows"]) == ["creative_writings", "protein_design"]
 
 

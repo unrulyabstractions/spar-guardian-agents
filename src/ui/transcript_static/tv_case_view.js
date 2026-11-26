@@ -10,11 +10,14 @@
  * reasoning is a label of that call and its excerpt is marked in the reasoning (showReasoning opens it); a step's
  * reasoning, tool call and tool result are three sections, each folded by its header strip; a step's head line is its
  * call number and its levels as chips, an outline for a level reached before and a marked chip for a label of its own;
- * the strip's legend is one small table, a row per ladder. Every string goes in through h() text nodes. */
+ * the strip's legend is one small table, a row per ladder; a submit or unsubmit call's head carries what it did
+ * (ctx.handIns, tv_presence.js handInChip) and its box an edge in the colour of a hand-in or a take-back, and the
+ * agent that made the final hand-in a star chip beside its levels. Every string goes in through h() text nodes. */
 import { h, plural } from '/static/app/dom.js';
 import { excerptSpan, markedNodes } from './tv_excerpt.js';
 import { levelChip, scoreChip } from './tv_levels.js';
-import { boardChip, callsLeft, paragraphChip, presenceChips, presenceEvents, roundChip } from './tv_presence.js';
+import { boardChip, callsLeft, finalOf, handInChip, paragraphChip, presenceChips, presenceEvents, roundChip,
+  shortSha } from './tv_presence.js';
 
 // Colour ramps per ladder, level 0 first. Each ladder's line (/api/ladders' "line", the first level above it) parts two
 // colour families: pale and calm below it, strong above it, so a reader sees the line at a glance.
@@ -313,6 +316,11 @@ export function disregChip(d) {
 const ENDED = { stop_working: 'stop_working', submit: 'submit', teammate_submit: 'teammate\'s submit', rounds: 'calls ran out',
   steps: 'calls ran out', time: 'timeout', time_limit: 'timeout', tokens: 'context limit', context: 'context limit', error: 'error' };
 
+/** The chip of the agent that made the final hand-in (tv_presence.js finalOf); null for any other agent. */
+const finalChip = f => (f ? h('span', { class: ['hi-call', 'hi-submit', 'hi-final-chip'],
+  title: `final hand-in, round ${f.round}${f.snapshot ? `, ${shortSha(f.snapshot)}` : ''}` },
+h('span', { class: 'hi-star' }, '★')) : null);
+
 export function renderCase(t, ctx) {
   const lv = ctx.levels;
   const steps = (t && t.trajectory && t.trajectory.steps) || [];
@@ -529,15 +537,22 @@ export function renderCase(t, ctx) {
     lv ? headChips(x.before - 1, false) : null),
     h('div', { class: 'cb' }, judgedLines(x.model), x.reasoning ? reasoningSection(x.reasoning, markOf(x.model)) : null,
       x.text ? (x.src === 'agent' ? textSection(x.text) : promptSection(x.text)) : null, x.src === 'system' ? toolsHere() : null));
+  // The team's hand-ins and take-backs (ctx.handIns, /api/run hand_ins) by the id of the call that made each.
+  const handIns = ctx.handIns || null;
+  const eventOf = new Map(((handIns && handIns.events) || []).filter(e => e.call_id).map(e => [e.call_id, e]));
+  const HAND_IN_TOOLS = { submit: 'is-hand-in', unsubmit: 'is-take-back' };
   const callCard = c => {
     const k = c.k;
     const labs = own.get(k) || [];
-    const el = h('div', { class: ['call', labelled(k) && 'has-label', labs.some(l => l.ladder === 'coordination') && 'has-board'], id: `a-${ctx.agent}-call-${k}`,
+    const tool = c.tc.function_name || '';
+    const handed = Object.hasOwn(HAND_IN_TOOLS, tool) ? handInChip(tool, eventOf.get(c.tc.tool_call_id) || null, handIns) : null;
+    const el = h('div', { class: ['call', labelled(k) && 'has-label', labs.some(l => l.ladder === 'coordination') && 'has-board',
+      handed && eventOf.has(c.tc.tool_call_id) && HAND_IN_TOOLS[tool]], id: `a-${ctx.agent}-call-${k}`,
       dataset: { call: String(k), tcid: c.tc.tool_call_id || '' },
       style: labs.length ? `--step:${RAMP[labs[0].ladder][labs[0].index]}` : null },
       h('div', { class: 'ch' }, foldButton('call'), h('span', { class: 'cn' }, `Call ${k}`), posChip(c.tc.tool_call_id),
         jobChip(c.tc),
-        lv ? headChips(k, true) : null, h('span', { class: 'mz' }, c.tc.function_name || '')),
+        lv ? headChips(k, true) : null, handed, h('span', { class: 'mz' }, tool)),
       h('div', { class: 'cb' },
         section('call', 'Tool call', h('span', { class: 'sec-tool' }, c.tc.function_name || '?'), argText(c.tc.arguments), null),
         c.res.map(r => {
@@ -760,7 +775,7 @@ export function renderCase(t, ctx) {
     h('span', { class: 'cs-ladder', title: lv.ladders[L].name },
       h('span', { class: 'cs-ladder-mark', style: `color:${inkOf(L, lv.ladders[L])}` }, SHORT[L]),
       levelChip(L, lv.ladders[L], mine[L].level, false, { facts: mine[L].facts }))),
-  belief ? beliefChip(belief) : null, disregChip(ctx.disregulator)) : null;
+  belief ? beliefChip(belief) : null, disregChip(ctx.disregulator), finalChip(finalOf(ctx.handIns, ctx.agent))) : null;
   // A slider beside the strip, a row per call as the strip's: its handle at the call at the top of the steps, and a drag,
   // a click on its track or the arrow keys bring a call there.
   const thumb = h('div', { class: 'cs-thumb' });

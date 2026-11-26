@@ -16,7 +16,10 @@
  * disclosed access". The run record keeps its headings, tables, chips and evidence; every definition is on the Ladders
  * page. The run's alerts (alert_humans) show as a badge in the bar and a card heading Details, each regulator's
  * measures as the card after it (tv_regulators.js, /api/run's regulators), and each agent's entry
- * and exit as a card after the judge labels (tv_presence.js, /api/run's presence). A tab beside the agents' is one
+ * and exit as a card after the judge labels (tv_presence.js, /api/run's presence). The team's hand-ins and take-backs
+ * (/api/run's hand_ins) show as a badge in the bar and a strip in Details, a row per round, after the alerts; the agent
+ * that made the final hand-in carries a star wherever the page names it (the agents' selects, its card, the Details
+ * tables), and each submit and unsubmit call in a transcript says what it did. A tab beside the agents' is one
  * entry of `views` (a key, its label and a function that draws it once, answering its element and, for the Board, a
  * promise of its handle). */
 import { appendAll, enc, fmtInt, fmtUsd, h } from '/static/app/dom.js';
@@ -30,7 +33,7 @@ import { alarmBadge, cheatbenchTeam, cheatbenchWords, cheatingCell, cheatingPane
 import { DEFAULT_FOLDS, PARTS, centreVertically, disregChip, renderCase, stripLegend } from './tv_case_view.js';
 import { renderBoard } from './tv_view_board.js';
 import { netUrl } from './tv_net_panel.js';
-import { alertsBadge, alertsCard, presenceCard } from './tv_presence.js';
+import { alertsBadge, alertsCard, handInsBadge, handInsCard, presenceCard, starOf, starText } from './tv_presence.js';
 import { regulatorsCard } from './tv_regulators.js';
 import { tmpUrl } from './tv_tmp_panel.js';
 
@@ -123,7 +126,7 @@ export async function viewRun(id, q, view) {
           .then(x => { if (!x.ok) throw new Error(`HTTP ${x.status}`); return x.json(); })
           .then(t => soon.then(tl => [t, tl]))
           .then(([t, tl]) => {
-            state.tr = renderCase(t, { agent: a.agent, levels: d.levels, isRegulator: a.role === 'regulator', regulatorCalls: regulatorCalls(a.agent, a.role), tools: tl, rounds: roundsOf(a.agent), endedBy: a.episode && a.episode.ended_by, disregulator: a.disregulator, beliefs: beliefsOf(a) });
+            state.tr = renderCase(t, { agent: a.agent, levels: d.levels, isRegulator: a.role === 'regulator', regulatorCalls: regulatorCalls(a.agent, a.role), tools: tl, rounds: roundsOf(a.agent), endedBy: a.episode && a.episode.ended_by, disregulator: a.disregulator, beliefs: beliefsOf(a), handIns: d.hand_ins });
             btn.disabled = false;
             btn.textContent = `Transcript (${sizeTxt})`;
             return state.tr;
@@ -136,7 +139,7 @@ export async function viewRun(id, q, view) {
     btn.addEventListener('click', () => { selectTab(a.agent); });
     appendAll(card, [
       h('div', { class: 'ep-card-head' },
-        h('h2', { class: 'agent-h' }, `Agent ${a.agent}`), roleTag(a.role), disregChip(a.disregulator),
+        h('h2', { class: 'agent-h' }, `Agent ${a.agent}`, starOf(d.hand_ins, a.agent)), roleTag(a.role), disregChip(a.disregulator),
         a.episode.model ? muted(a.episode.model, 'small') : null,
         h('span', { class: 'spacer' }), btn),
       wideItems(episodeRecord({ ...a.episode, agent: undefined })),   // the card's title names the agent
@@ -157,6 +160,12 @@ export async function viewRun(id, q, view) {
     const box = tr.findCall(k);
     if (box) flash(box);
     else flash(c.card);
+  }
+  // A call by its id (a hand-in's or a take-back's) opens in its agent's tab.
+  async function gotoCallId(agent, callId) {
+    if (!callId || !cards.has(agent)) return;
+    const tr = await selectTab(agent);
+    flash(tr.el.querySelector(`.call[data-tcid="${CSS.escape(callId)}"]`) || cards.get(agent).card);
   }
   // A post opens in the Board tab.
   const openPost = label => selectTab('board').then(b => b.showPost(label)).catch(() => {});
@@ -308,8 +317,10 @@ export async function viewRun(id, q, view) {
   let lastAgent = null;    // the agent whose transcript was open last: where the Transcript button goes back to
   // Two selects, Workers and Influencers, each in that order; an option names the agent, an influencer's role, and its
   // Cheating level. A select shows its group's name when the page shows none of its agents, so any choice opens one.
+  // The agent that made the final hand-in carries a star.
   const option = a => h('option', { value: a.agent },
-    [a.agent, a.role !== 'worker' ? a.role : null, cellOf(a, 'cheating').level].filter(Boolean).join(' · '));
+    [a.agent + starText(d.hand_ins, a.agent), a.role !== 'worker' ? a.role : null, cellOf(a, 'cheating').level]
+      .filter(Boolean).join(' · '));
   const picker = (name, list) => {
     const sel = h('select', { class: 'rp-pick', title: name, onchange: () => sel.value && selectTab(sel.value).catch(() => {}) },
       h('option', { value: '', disabled: true, hidden: true }, name), list.map(option));
@@ -319,14 +330,15 @@ export async function viewRun(id, q, view) {
   const pickers = [picker('Workers', workers), influencers.length ? picker('Influencers', influencers) : null].filter(Boolean);
   const detailsView = () => ({ el: h('div', { class: 'rp-team' },
     alertsCard(d.presence, roles, (agent, k) => gotoCall(agent, k).catch(() => {})),
+    handInsCard(d.hand_ins, (agent, callId) => gotoCallId(agent, callId).catch(() => {})),
     regulatorsCard(d.regulators, (agent, k) => gotoCall(agent, k).catch(() => {})),
-    levelsPanel(d.levels, roles, row.task_name, { cheatbench, row, open: openLink }),
+    levelsPanel(d.levels, roles, row.task_name, { cheatbench, row, open: openLink, star: a => starOf(d.hand_ins, a) }),
     cheatingPanel(d.levels, roles, { evidence: evidenceText, cheatbench, row,
       routes: Object.fromEntries(d.agents.map(a => [a.agent, a.routes || []])) }),
     coordinationPanel(d.levels, roles),
     collusionPanel(d.levels, roles, { evidence: evidenceText }),
     judgeLabelsPanel(d.levels, roles, openLink),
-    presenceCard(d.presence, roles),
+    presenceCard(d.presence, roles, d.hand_ins),
     // the strip's legend, in the case layout its rules are scoped to
     h('section', { class: 'card' }, h('h2', null, 'Legend'), h('div', { class: 'case' }, stripLegend(d.levels.ladders, d.levels.order))),
     // the run record last: the run's labels, its settings and each agent's record
@@ -430,6 +442,8 @@ export async function viewRun(id, q, view) {
       cheating.alarm ? alarmBadge(cheating.alarm) : null,
       alertsBadge(d.presence && d.presence.alerts, () => selectTab('details')
         .then(() => flash(stage.querySelector('#sec-alerts'))).catch(() => {})),
+      handInsBadge(d.hand_ins, () => selectTab('details')
+        .then(() => flash(stage.querySelector('#sec-hand-ins'))).catch(() => {})),
       views.size ? h('span', { class: ['rp-tabs', 'rp-view-tabs'] }, viewTabs) : null),
     h('div', { class: 'rp-row' },
       h('span', { class: 'rp-picks' }, pickers.flatMap((sel, i) => (i ? [h('span', { class: 'rp-sep' }), sel] : [sel]))),

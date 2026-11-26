@@ -71,7 +71,7 @@ def test_the_chip_lane_and_card_read_each_answer_a_dash_for_a_missing_one():
 def test_only_a_workers_tab_with_answers_gets_beliefs_and_every_string_is_a_text_node():
     run = (STATIC / "tv_view_run.js").read_text()
     assert "a.role === 'worker' && d.beliefs && d.beliefs.agents && d.beliefs.agents[a.agent]" in run
-    assert "beliefs: beliefsOf(a) });" in run
+    assert "beliefs: beliefsOf(a)," in run
     case = (STATIC / "tv_case_view.js").read_text()
     assert "innerHTML" not in case
     assert "belief ? beliefChip(belief) : null" in case and "belief ? beliefCard(belief) : null" in case

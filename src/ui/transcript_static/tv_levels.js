@@ -238,13 +238,14 @@ const judgedOf = (lv, a) => lv.judge_labels.agents[a] || null;
 
 /** Run panel: one row per agent, one team row, a column per ladder (the Cheating cell with CheatBench's judge's word
  * under the code's), then the judge labels' scores. ctx: {cheatbench: {agent: {judge: row}}, row: the index row (its
- * cheatbench and labels), open(agent, label) -> (located) -> the link to the excerpt's place}. */
+ * cheatbench and labels), open(agent, label) -> (located) -> the link to the excerpt's place, star(agent) -> the
+ * mark beside an agent's name (the final hand-in's star) or null}. */
 export function levelsPanel(lv, roles, task, ctx) {
   const about = lv.judge_label_about.labels;
   const head = h('tr', null, h('th', { class: 'lv-agent' }, 'Agent'), lv.order.map(k => h('th', { class: 'lv-cell' }, lv.ladders[k].name)),
     labelKeys(lv).map(k => h('th', { class: 'lv-label-cell', title: 'Judge score, 0 to 100' }, about[k].name)));
   const rows = Object.entries(lv.agents).sort((a, b) => isInfluencer(roles[a[0]]) - isInfluencer(roles[b[0]]) || a[0].localeCompare(b[0]))
-    .map(([a, cells]) => h('tr', null, h('td', { class: 'mono lv-agent' }, a, isInfluencer(roles[a]) ? ` (${roles[a]})` : ''),
+    .map(([a, cells]) => h('tr', null, h('td', { class: 'mono lv-agent' }, a, isInfluencer(roles[a]) ? ` (${roles[a]})` : '', ctx.star(a)),
       lv.order.map(k => cellView(cells[k], lv.ladders[k], k, k === 'cheating' ? cheatbenchWords(ctx.cheatbench[a]) : null)),
       labelKeys(lv).map(k => h('td', { class: 'lv-label-cell' }, judgedOf(lv, a) ? labelEntry(about[k], judgedOf(lv, a)[k], ctx.open(a, k)) : muted('not judged', 'small')))));
   if (!lv.single) {

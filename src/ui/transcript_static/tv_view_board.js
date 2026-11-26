@@ -34,7 +34,10 @@
  * a small triangle at its time (a cross-agent connection in the bad colour, an attempt in the warning colour), whose
  * hover names it and whose click opens its call. Each lane hatches the stretch before its agent entered and after it
  * exited and ticks the entry and the exit with its reason; an alert is a line across the timeline flagged on the board
- * and on its agent's lane (tv_presence.js, the payload's presence); a tick's or a flag's click opens its call. It
+ * and on its agent's lane (tv_presence.js, the payload's presence); a tick's or a flag's click opens its call. A
+ * submit call stands under a ▲ at its lane's top edge and an unsubmit call under a ▼, filled when it made a hand-in or
+ * a take-back (the call's hand_in, the payload's hand_ins), hollow when it did not, the final hand-in a star; the
+ * agent that made the final hand-in is starred in the selects, its lane's name and its card. It
  * returns {moveTo(position), showPost(label),
  * state}: showPost moves to post P<n> (the board's own numbering) and, when the post holds a judge's excerpt, brings
  * the marked excerpt into view. */
@@ -46,7 +49,7 @@ import { excerptSpan, markedNodes } from './tv_excerpt.js';
 import { ROLE_LABEL } from './tv_labels.js';
 import { levelChip, lineMark, misleadMark, scoreChip } from './tv_levels.js';
 import { at as netAt, callWords, marksLane, netPanel } from './tv_net_panel.js';
-import { laneMarks, presenceKeys } from './tv_presence.js';
+import { finalOf, handInChip, handInKeys, laneMarks, presenceKeys, shortSha, starOf, starText } from './tv_presence.js';
 import { tmpPanel } from './tv_tmp_panel.js';
 
 const GUTTER = 150;
@@ -209,10 +212,22 @@ export function renderBoard(el, d, opts) {
     : `round ${c.round} · ${d.calls_per_round != null ? `${c.pos}/${d.calls_per_round}` : c.pos}`);
   const callLink = (agent, k) => h('a', { class: 'bd-call-link', href: callHref(agent, k),
     title: `open call ${k} in ${agent}'s tab` }, `call ${k}`);
+  // A submit or unsubmit call's event (the payload's hand_ins), null for a call that made none; undefined for any
+  // other call.
+  const hi = d.hand_ins || null;
+  const eventOf = c => (!('hand_in' in c) ? undefined : c.hand_in != null && hi ? hi.events[c.hand_in] : null);
+  // The hover line of a submit or unsubmit call: what it did; null for any other call.
+  const handWords = c => {
+    const e = eventOf(c);
+    if (e === undefined) return null;
+    if (!e) return c.tool === 'submit' ? 'not handed in' : 'nothing taken back';
+    const sha = shortSha(e.kind === 'submit' ? e.snapshot : e.took_back && e.took_back.snapshot);
+    return [e.kind === 'submit' ? 'handed in' : 'taken back', sha, e.final ? 'final hand-in' : null].filter(Boolean).join(' · ');
+  };
 
   // ---- controls
   const agentOption = a => h('option', { value: a.agent },
-    `${a.agent} (${ROLE_LABEL[a.role] || a.role}, ${plural(a.calls.length, 'call')})`);
+    `${a.agent}${starText(hi, a.agent)} (${ROLE_LABEL[a.role] || a.role}, ${plural(a.calls.length, 'call')})`);
   const agentSelect = (side, label) => h('select', { class: ['bd-sel', `bd-sel-${side}`], 'aria-label': label,
     title: d.pair_why.split(', ')[0], onchange: e => choose(side, e.target.value) }, d.agents.map(agentOption));
   const selA = agentSelect('a', 'first agent');
@@ -430,7 +445,9 @@ export function renderBoard(el, d, opts) {
       const y = laneY[side];
       lanes.append(svgEl('rect', { class: `bd-lane bd-lane-${side}`, x: x0, y, width: x1 - x0, height: LANE_H }),
         svgEl('rect', { class: `bd-swatch-${side}`, x: 6, y: y + 8, width: 6, height: LANE_H - 16, rx: 2 }),
-        svgEl('text', { x: 18, y: y + 19, class: 'bd-name' }, ag.agent),
+        svgEl('text', { x: 18, y: y + 19, class: 'bd-name' }, ag.agent,
+          finalOf(hi, ag.agent) ? [svgEl('tspan', { class: 'bd-star' }, ' ★'),
+            svgEl('title', null, `final hand-in, round ${finalOf(hi, ag.agent).round}`)] : null),
         svgEl('text', { x: 18, y: y + 33, class: 'bd-role' },
           `${ROLE_LABEL[ag.role] || ag.role}, ${plural(ag.calls.length, 'call')}`));
       // the agent's rounds (src/ui/transcript_rounds.py): a band each, shaded every other one, its edge at its start
@@ -490,6 +507,7 @@ export function renderBoard(el, d, opts) {
     // and under the Coordination lens each call from which the agent holds a new level (the payload's held, which can
     // fall); heavier where it crosses the ladder's line, with the level's name, set in rows so none covers another.
     const callsG = svgEl('g', { class: 'bd-calls' });
+    const handG = svgEl('g', { class: 'hi-marks' });
     const reachG = svgEl('g', { class: 'bd-reaches' });
     const keys = { a: [], b: [] };
     const calls = { a: [], b: [] };
@@ -533,6 +551,19 @@ export function renderBoard(el, d, opts) {
           reach(coord, ramp.coordLine, held, c.held);
           held = c.held;
         }
+        // a submit or unsubmit call: ▲ or ▼ on the lane's top edge, filled when it made its event; the final hand-in
+        // a star in its place
+        const e = eventOf(c);
+        if (e !== undefined) {
+          const xm = left(c) + W(c) / 2;
+          const ym = laneY[side] - 1;
+          const up = c.tool === 'submit';
+          handG.appendChild(svgEl('g', { class: ['hi-mark', up ? 'hi-submit' : 'hi-unsubmit', !e && 'hi-none'],
+            'data-side': side, 'data-k': c.k },
+          e && e.final ? svgEl('text', { x: xm, y: ym + 2, 'text-anchor': 'middle' }, '★')
+            : svgEl('path', { d: up ? `M${xm - 5},${ym} L${xm + 5},${ym} L${xm},${ym - 8} z`
+              : `M${xm - 5},${ym - 8} L${xm + 5},${ym - 8} L${xm},${ym} z` })));
+        }
         keys[side].push(state.mode === 'time' ? c.t : c.u);
         calls[side].push(c);
       }
@@ -559,7 +590,7 @@ export function renderBoard(el, d, opts) {
       });
     }
     reachG.append(reachText);
-    svg.append(callsG, reachG);
+    svg.append(callsG, reachG, handG);
 
     // the network log's calls (marksLane): a triangle at the foot of the lane of the agent whose call made it, at the
     // row's own time; in steps, at its call's step, or for a row of no call the step its time falls in; a cross-agent
@@ -728,7 +759,7 @@ export function renderBoard(el, d, opts) {
       } else if (t.hasAttribute('data-k')) {
         const side = t.getAttribute('data-side');
         const c = callOf[side].get(Number(t.getAttribute('data-k')));
-        tip.show(ev, [`${state[side]} · call ${c.k} · ${c.tool}`, roundPlace(c),
+        tip.show(ev, [`${state[side]} · call ${c.k} · ${c.tool}`, handWords(c), roundPlace(c),
           timed ? `${fmtSecs(c.t)} · ${fmtSecs(c.dur)}` : `#${c.t + 1}`, firstLine(c.summary, CLIP),
           ...fewOf(state.lens === 'all' ? c.labels.map(l => `${d.ladders[l.ladder].name} ${l.level}`)
             : c.marks[state.lens].map(m => markWords(state.lens, m, d)))]);
@@ -940,9 +971,10 @@ export function renderBoard(el, d, opts) {
         : [h('span', { class: 'bd-ladder' }, 'Judge labels'), h('span'), h('span', { class: 'bd-score muted small' }, 'not judged')]));
     }
     function at(c, top) {
-      head.replaceChildren(h('b', { class: `bd-key-${side}` }, ag.agent),
+      head.replaceChildren(h('b', { class: `bd-key-${side}` }, ag.agent, starOf(hi, ag.agent)),
         muted(ROLE_LABEL[ag.role] || ag.role, 'small'),
         ...(c ? [callLink(state[side], c.k), c.round != null ? muted(roundPlace(c), 'small') : null, muted(c.tool, 'small'),
+          eventOf(c) !== undefined ? handInChip(c.tool, eventOf(c), hi) : null,
           c.summary !== c.tool ? h('span', { class: 'bd-sum', title: firstLine(c.summary, CLIP) }, c.summary) : null]
           : [muted('no call yet', 'small')]).filter(Boolean));
       for (const [key, lad] of Object.entries(d.ladders)) {
@@ -1063,7 +1095,8 @@ export function renderBoard(el, d, opts) {
       net ? netKey(null, 'connection') : null,
       net ? netKey('bd-net-cross', 'cross-agent connection') : null,
       net ? netKey('bd-net-try', 'cross-agent attempt') : null,
-      ...presenceKeys(d.presence, item)));
+      ...presenceKeys(d.presence, item),
+      ...handInKeys(hi, item)));
 
   // The key of the lens in force, under the controls: its colours as chips and samples, how many of the two agents'
   // calls it marks, and how many of its records name no call (the payload's unplaced; the names on hover).

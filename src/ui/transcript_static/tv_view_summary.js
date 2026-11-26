@@ -5,8 +5,10 @@
  * (role, instruction level and model, stacked on three lines in the header), the positive control (told to cheat), the
  * two negative controls (a rule), and a column per other combination the collection holds. A cell: its runs (a link
  * to the runs page filtered to exactly them, when the server found such filters), cheated, accessed and passed as k of
- * n with a bar each, and the teams' level counts on the three ladders as chips in the ladders' colours. A last row
- * totals each column. Labels and values only: every definition is on the Ladders page. */
+ * n with a bar each, and the teams' level counts on the three ladders as chips in the ladders' colours. The toggle
+ * teams | members (&by=members) counts the runs' workers instead of the runs: each worker's own levels (the cell's
+ * members), its alert row still the runs'. A last row totals each column. Labels and values only: every definition is
+ * on the Ladders page. */
 import { fmtInt, h, plural } from '/static/app/dom.js';
 import { badge, muted, select } from '/static/app/components.js';
 import { RAMP, inkOn } from './tv_case_view.js';
@@ -58,13 +60,13 @@ function ladderChips(key, lad, counts) {
   return h('div', { class: 'sum-lad' }, h('span', { class: 'sum-lad-name', title: lad.name }, SHORT[key]), h('span', { class: 'sum-chips' }, chips));
 }
 
-/** One ladder's share of teams at or above its line, as a row: the ladder's letter, the rate, a bar in the colour of
- * the line's level. */
-function lineShare(key, lad, counts, n) {
+/** One ladder's share of teams (or of workers: `unit`) at or above its line, as a row: the ladder's letter, the rate,
+ * a bar in the colour of the line's level. */
+function lineShare(key, lad, counts, n, unit) {
   const at = lad.levels.indexOf(lad.line);
   const k = counts.reduce((t, [v, c]) => t + (lad.levels.indexOf(v) >= at ? c : 0), 0);
   const pct = n ? Math.round((100 * k) / n) : 0;
-  return h('div', { class: 'sum-share', title: `${lad.name}, ${lad.line} or above: ${k} of ${n}` },
+  return h('div', { class: 'sum-share', title: `${lad.name}, ${lad.line} or above: ${k} of ${plural(n, unit)}` },
     h('span', { class: `sum-lad-name sum-lad-${key}` }, SHORT[key]),
     h('span', { class: ['sum-share-k', k > 0 && 'is-some'] }, `${pct}%`),
     h('span', { class: 'sum-bar' }, h('span', { style: `width:${pct}%;background:${RAMP[key][at]}` })));
@@ -85,18 +87,23 @@ function alertShare(c, detailed) {
     h('span', { class: 'sum-bar' }, h('span', { class: 'sum-bar-alerts', style: `width:${pct}%` })));
 }
 
-/** A cell, centred: each ladder's share at or above its line, or with `detailed` each ladder's level chips; in a column
- * with influencers (`col.influencers`) the alert row after them; then its runs (linked when the server found the
- * filters that keep exactly them). */
-function cellView(c, d, detailed, col) {
+/** A cell, centred: each ladder's share at or above its line, or with `detailed` each ladder's level chips, of its
+ * teams or, with `members`, of their workers (the cell's members); in a column with influencers (`col.influencers`)
+ * the alert row after them; then its runs (linked when the server found the filters that keep exactly them), and with
+ * `members` its workers. */
+function cellView(c, d, detailed, col, members) {
   if (!c) return h('td', { class: 'sum-cell sum-empty' }, muted('–'));
   const n = plural(c.n, 'run');
+  const u = members ? c.members : c;
+  const unit = members ? 'worker' : 'team';
   const alerts = col && col.influencers.length ? alertShare(c, detailed) : null;
   return h('td', { class: 'sum-cell' }, h('div', { class: ['sum-stack', detailed && 'is-detailed'] },
-    detailed ? h('div', { class: 'sum-lads' }, d.order.map(L => ladderChips(L, d.ladders[L], c.levels[L])), alerts)
-      : [d.order.map(L => lineShare(L, d.ladders[L], c.levels[L], c.n)), alerts],
-    c.filters ? h('a', { class: 'sum-n', href: runsHref(c.filters), title: 'Open these runs' }, n)
-      : h('span', { class: 'sum-n', title: 'No runs-page filter keeps exactly these' }, n)));
+    detailed ? h('div', { class: 'sum-lads' }, d.order.map(L => ladderChips(L, d.ladders[L], u.levels[L])), alerts)
+      : [d.order.map(L => lineShare(L, d.ladders[L], u.levels[L], u.n, unit)), alerts],
+    h('span', { class: 'sum-ns' },
+      c.filters ? h('a', { class: 'sum-n', href: runsHref(c.filters), title: 'Open these runs' }, n)
+        : h('span', { class: 'sum-n', title: 'No runs-page filter keeps exactly these' }, n),
+      members ? h('span', { class: 'sum-n sum-n-workers' }, plural(u.n, 'worker')) : null)));
 }
 
 /** A column's header: its label, or for influencers three short lines: the role chip, the level chip, the model; with
@@ -133,24 +140,31 @@ const colTitle = c => [c.worker, ...(c.influencers.length
   ? c.influencers.map(x => `${x.share}% ${x.role}s ${x.level || 'no level'} ${modelLabel({ model: x.model })}`)
   : ['no influencer'])].join('; ');
 
-/** The All row over some rows: each column's cells summed, the ladders' level counts in each ladder's order; no
- * link, since the runs page has no filter for a set of rows. */
+/** Counts summed over some cells (or their members): n, cheated, accessed and the ladders' level counts, each
+ * ladder's in its order. */
+function sumCounts(cs, d) {
+  const add = k => cs.reduce((t, x) => t + x[k], 0);
+  const levels = {};
+  for (const L of d.order) {
+    const by = new Map();
+    for (const x of cs) for (const [v, n] of x.levels[L] || []) by.set(v, (by.get(v) || 0) + n);
+    const order = d.ladders[L].levels;
+    levels[L] = [...by.entries()].sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]));
+  }
+  return { n: add('n'), cheated: add('cheated'), accessed: add('accessed'), levels };
+}
+
+/** The All row over some rows: each column's cells summed, their teams and their workers (members); no link, since
+ * the runs page has no filter for a set of rows. */
 function summed(rows, columns, d) {
   const out = {};
   for (const c of columns) {
     const cs = rows.map(r => r.cells[c.key]).filter(Boolean);
     if (!cs.length) continue;
     const add = k => cs.reduce((t, x) => t + x[k], 0);
-    const levels = {};
-    for (const L of d.order) {
-      const by = new Map();
-      for (const x of cs) for (const [v, n] of x.levels[L] || []) by.set(v, (by.get(v) || 0) + n);
-      const order = d.ladders[L].levels;
-      levels[L] = [...by.entries()].sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]));
-    }
     const alerts = Object.fromEntries(['n', 'true', 'false'].map(k => [k, cs.reduce((t, x) => t + x.alerts[k], 0)]));
-    out[c.key] = { n: add('n'), cheated: add('cheated'), accessed: add('accessed'), passed: add('passed'),
-      alerted: add('alerted'), alerts, levels, filters: null };
+    out[c.key] = { ...sumCounts(cs, d), passed: add('passed'), alerted: add('alerted'), alerts,
+      members: sumCounts(cs.map(x => x.members), d), filters: null };
   }
   return out;
 }
@@ -174,6 +188,7 @@ export async function viewSummary(q) {
   const known = (v, list) => (list.includes(v) ? v : '');
   const wmodel = known(q.get('wmodel') || '', s.rows.map(r => r.model));
   const detailed = q.get('detail') === '1';
+  const members = q.get('by') === 'members';
   const task = known(q.get('task') || '', s.rows.map(r => r.task));
   const imodel = known(q.get('imodel') || '', s.columns.flatMap(c => c.influencers.map(x => x.model)));
   // A seed is its pack's name, the same over the tasks (swe/revealing, creative_writing/revealing).
@@ -195,14 +210,20 @@ export async function viewSummary(q) {
   const keptRuns = runsIn(kept);
   const nav = (over = {}) => {
     const p = new URLSearchParams({ col, hide: [...hidden].join(','), task, wmodel, imodel, seed, size,
-      detail: detailed ? '1' : '', ...over });
+      detail: detailed ? '1' : '', by: members ? 'members' : '', ...over });
     for (const [k, v] of [...p.entries()]) if (!v) p.delete(k);
     location.hash = `#/summary?${p}`;
   };
-  // The column toggles, then a rule, then Detailed in the corner: a view switch, drawn apart from the toggles.
+  // The column toggles, then a rule, then teams | members and Detailed in the corner: view switches, drawn apart from
+  // the toggles.
   const detailBtn = h('button', { type: 'button', class: 'sum-detail', 'aria-pressed': String(detailed),
     title: 'each ladder\'s levels instead of its rate at the line', onclick: () => nav({ detail: detailed ? '' : '1' }) },
   'Detailed');
+  // Teams or members: what a cell counts, its runs or their workers.
+  const byPick = h('span', { class: 'seg sum-by', role: 'group', 'aria-label': 'count' },
+    [['', 'teams'], ['members', 'members']].map(([v, label]) => h('button', { type: 'button',
+      class: ['seg-btn', (v === 'members') === members && 'active'], 'aria-pressed': String((v === 'members') === members),
+      title: v ? 'workers, influencers left out' : 'runs', onclick: () => nav({ by: v }) }, label)));
   const toggles = h('span', { class: 'rp-togs' }, BANDS.map(([g, label]) => h('button', {
     type: 'button', class: 'rp-tog', 'aria-pressed': String(!hidden.has(g)), title: { regulator: 'regulators and the negative controls', disregulator: 'disregulators and the positive control',
       both: 'regulator and disregulator together' }[g],
@@ -262,7 +283,7 @@ export async function viewSummary(q) {
   }
   const head = h('tr', null, C.filter(c => !spanned.has(c.key)).map(c => colHead(c)));
   const cells = cs => C.map(c => {
-    const td = cellView(cs[c.key], ladders, detailed, c);
+    const td = cellView(cs[c.key], ladders, detailed, c, members);
     if (starts.has(c.key)) td.classList.add('sum-group-start');
     for (const k of levelClasses(c)) if (k) td.classList.add(k);
     return td;
@@ -295,6 +316,6 @@ export async function viewSummary(q) {
   return h('div', { class: 'page wide' },
     h('div', { class: 'idx-head' }, h('div', { class: 'idx-title' }, h('h1', null, shownRuns === keptRuns ? `Summary: ${fmtInt(keptRuns)} runs` : `Summary: ${fmtInt(shownRuns)} of ${fmtInt(keptRuns)} runs`), picker, tPick, wPick, iPick, sPick, zPick,
       counted !== all.total ? badge(`cells hold ${counted}`, 'bad', 'Cells and the collection disagree') : null),
-    h('span', { class: 'sum-corner' }, toggles, h('span', { class: 'rp-sep' }), detailBtn)),
+    h('span', { class: 'sum-corner' }, toggles, h('span', { class: 'rp-sep' }), byPick, detailBtn)),
     h('div', { class: 'table-wrap sum-wrap' }, table));
 }

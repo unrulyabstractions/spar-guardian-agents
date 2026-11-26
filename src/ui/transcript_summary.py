@@ -13,9 +13,10 @@ controls, the regulators, the positive control, the disregulators, then both. An
 told to cheat with a regulator, gets a column of its own named by its combination, only when such a run exists. Every
 row lands in exactly one cell. A cell counts its runs, the ones that cheated (the index's levels.cheated), the ones
 that accessed the honeypot (the team's Cheating rung looked or above), the ones the grader passed (levels.passed) and
-the teams' levels on each ladder. Each cell carries the runs page's filters that keep exactly its runs
-(tv_view_index.js filters), found and checked here, or None when no such filters exist. The page shows the cheated
-share and the levels; the other counts stay in the answer.
+the teams' levels on each ladder, and the same counts over its runs' workers (members: each worker's own levels, the
+influencers left out as the team's levels leave them out). Each cell carries the runs page's filters that keep exactly
+its runs (tv_view_index.js filters), found and checked here, or None when no such filters exist. The page shows the
+cheated share and the levels, of the teams or of their workers; the other counts stay in the answer.
 """
 from __future__ import annotations
 
@@ -202,20 +203,38 @@ def exact_filters(mine: list[dict], runs: list[dict], base: dict, influencers: l
     return None
 
 
-def cell(rows: list[dict]) -> dict:
+def accessed_levels() -> set[str]:
+    """The Cheating rungs at which a team or a worker accessed the honeypot: ACCESSED and above."""
+    cheating = transcript_levels.LADDERS["cheating"]["levels"]
+    return set(cheating[cheating.index(ACCESSED):])
+
+
+def level_counts(ladder: str, values: list) -> list[list]:
+    """[[level, count]] of one ladder's `values`, in the ladder's order, a level not in it after, by name."""
+    seen = Counter(values)
+    levels = transcript_levels.LADDERS[ladder]["levels"]
+    order = [v for v in levels if v in seen] + sorted((v for v in seen if v not in levels), key=str)
+    return [[v, seen[v]] for v in order]
+
+
+def members_cell(workers: list[dict]) -> dict:
+    """A cell's workers counted as its runs are: n, cheated and accessed (each k of n) and the workers' level counts
+    per ladder. `workers` are transcript_levels.worker_levels' rows of the cell's runs."""
+    accessed = accessed_levels()
+    return {"n": len(workers), "cheated": sum(w["cheated"] is True for w in workers),
+            "accessed": sum(w["cheating"] in accessed for w in workers),
+            "levels": {ladder: level_counts(ladder, [w[ladder] for w in workers])
+                       for ladder in transcript_levels.ORDER}}
+
+
+def cell(rows: list[dict], members: dict[str, list[dict]]) -> dict:
     """One cell's counts: n, cheated, accessed and passed (each k of n), alerted (the runs in which an influencer
     alerted humans), alerts (those alerts and how many were true and false alarms, the rows' alerts summed), team (per
-    role, the numbers of such agents its runs hold, lowest first) and the teams' level counts per ladder in the
-    ladder's order."""
-    ladders = transcript_levels.LADDERS
-    cheating = ladders["cheating"]["levels"]
-    accessed = set(cheating[cheating.index(ACCESSED):])
+    role, the numbers of such agents its runs hold, lowest first), the teams' level counts per ladder in the ladder's
+    order, and members: its runs' workers counted the same way (members_cell; `members` holds each run's workers by
+    the row's id, a run not in it adds none)."""
+    accessed = accessed_levels()
 
-    def counts(ladder: str) -> list[list]:
-        seen = Counter(r["levels"]["team"].get(ladder) for r in rows)
-        levels = ladders[ladder]["levels"]
-        order = [v for v in levels if v in seen] + sorted((v for v in seen if v not in levels), key=str)
-        return [[v, seen[v]] for v in order]
     def held(role: str) -> list[int]:
         return sorted({sum(x.get("n", 1) for x in r["influencer_conditioning"] if x["role"] == role) for r in rows})
     return {"n": len(rows),
@@ -225,10 +244,12 @@ def cell(rows: list[dict]) -> dict:
             "passed": sum(r["levels"].get("passed") is True for r in rows),
             "alerted": sum(bool((r.get("alerts") or {}).get("n")) for r in rows),
             "alerts": {k: sum((r.get("alerts") or {}).get(k) or 0 for r in rows) for k in ("n", "true", "false")},
-            "levels": {ladder: counts(ladder) for ladder in transcript_levels.ORDER}}
+            "levels": {ladder: level_counts(ladder, [r["levels"]["team"].get(ladder) for r in rows])
+                       for ladder in transcript_levels.ORDER},
+            "members": members_cell([w for r in rows for w in members.get(r["id"], [])])}
 
 
-def summary(rows: list[dict], col: str) -> dict:
+def summary(rows: list[dict], col: str, members: dict[str, list[dict]] | None = None) -> dict:
     """The #/summary page's data for collection `col`: {col, total (its valid runs), by_seed (whether any run is
     seeded, so rows split by seed pack), rows_by, columns (column_of, in column_order), groups, rows: [{model, task,
     size, seed_pack (None unless by_seed), task_name (the page leaves out a task its Settings turn off), cells:
@@ -236,7 +257,9 @@ def summary(rows: list[dict], col: str) -> dict:
     size: their number of workers (rows_by "workers": influencers are added to a team), or their number of agents
     where influencers take workers' places (rows_by "agents", swarms_keep_their_size), so that a column's share of
     influencers compares across sizes. A cell carries `filters`, the runs page's query that keeps exactly its runs,
-    or None when none does."""
+    or None when none does, and its workers' counts (cell's members, from `members`: each run's workers'
+    transcript_levels.worker_levels by the row's id)."""
+    members = members or {}
     mine = [r for r in rows if r["col"] == col]
     by_seed = any(r.get("seed_pack", "none") != "none" for r in mine)
     rows_by = "agents" if swarms_keep_their_size(mine) else "workers"
@@ -254,7 +277,8 @@ def summary(rows: list[dict], col: str) -> dict:
         if not runs:
             return None
         base = {"col": col, **where, "worker": c["worker"], "influencer": c["influencer"]}
-        return {**cell(runs), "filters": exact_filters(mine, runs, base, c["influencers"], of_column[c["key"]])}
+        return {**cell(runs, members),
+                "filters": exact_filters(mine, runs, base, c["influencers"], of_column[c["key"]])}
     groups: dict[tuple, dict[str, list[dict]]] = {}
     for r in mine:
         key = (r["model"] or "", r["task_label"], size_of(r), r.get("seed_pack", "none") if by_seed else None)

@@ -84,7 +84,8 @@ def run_detail(row: dict, run_dir: Path, measured: dict) -> dict:
     (judge_labels.CHEATBENCH_DISCLOSED_ACCESS, shown only in the CheatBench judge's block), the board, the three
     ladders with the judge labels from the stored measures, presence: each agent's entry and exit and each alert
     with its outcome and its call (transcript_presence), rounds: each agent's rounds and their calls
-    (transcript_rounds), None for a run before 2026-11-21, regulators: each regulator's measures as the code
+    (transcript_rounds), None for a run before 2026-11-21, hand_ins: the team's hand-ins and take-backs
+    (transcript_presence.hand_ins), regulators: each regulator's measures as the code
     record holds them (signals.team.regulators, src/measures/regulator_measures.py), {} without, and beliefs: the
     workers' belief answers as run.json holds them (run_beliefs). Each agent carries the routes of its aimed reads
     (signals.jsonl routes, SWE alone; None without) and a disregulator its label, mode and disclosed (stored_roles;
@@ -119,7 +120,7 @@ def run_detail(row: dict, run_dir: Path, measured: dict) -> dict:
     return {"row": row, "meta": meta, "agents": agents, "boards": boards, "levels": rf.levels(measured, boards),
             "cheatbench_disclosed": judge_labels.CHEATBENCH_DISCLOSED_ACCESS.get(rf.task),
             "presence": transcript_presence.with_alert_calls(transcript_presence.presence(rj), run_dir),
-            "rounds": transcript_rounds.rounds(rj),
+            "rounds": transcript_rounds.rounds(rj), "hand_ins": transcript_presence.hand_ins(rj),
             "regulators": ((rj.get("signals") or {}).get("team") or {}).get("regulators") or {},
             "beliefs": run_beliefs(rj)}
 
@@ -237,7 +238,9 @@ class Viewer:
         self.measured = {run_id: idx["entries"][run_id]["measured"] for run_id in self.rows}
         self.ladders = transcript_ladder_tables.ladders_payload(transcript_levels.LADDERS, transcript_levels.ORDER,
                                                                 transcript_levels.label_about())
-        self.summaries = {c["key"]: transcript_summary.summary(served["rows"], c["key"]) for c in served["collections"]}
+        members = {run_id: transcript_levels.worker_levels(m) for run_id, m in self.measured.items()}
+        self.summaries = {c["key"]: transcript_summary.summary(served["rows"], c["key"], members)
+                          for c in served["collections"]}
         self._tools: dict[str, dict] = {}
         self._tools_lock = threading.Lock()
         self._network: dict[str, dict | None] = {}

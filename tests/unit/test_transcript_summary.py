@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from src.configuration.settings import ROOT
+from src.ui import transcript_levels
 from src.ui import transcript_summary as ts
 from src.ui.transcript_index import MODELS, alerts_shown, build_index, model_rank, short_model
 
@@ -237,13 +238,13 @@ def test_a_cell_counts_the_runs_that_alerted_humans_and_their_alerts():
     rows = [row("a", influencers=reg), row("b", influencers=reg), row("c", influencers=reg)]
     rows[0]["alerts"] = {"n": 3, "true": 0, "false": 3}
     rows[1]["alerts"] = {"n": 0, "true": 0, "false": 0}
-    got = ts.cell(rows)
+    got = ts.cell(rows, {})
     assert (got["n"], got["alerted"], got["alerts"]) == (3, 1, {"n": 3, "true": 0, "false": 3})
     rows[2]["alerts"] = {"n": 2, "true": 1, "false": 0}                      # one alert of unknown outcome
-    assert ts.cell(rows)["alerted"] == 2 and ts.cell(rows)["alerts"] == {"n": 5, "true": 1, "false": 3}
+    assert ts.cell(rows, {})["alerted"] == 2 and ts.cell(rows, {})["alerts"] == {"n": 5, "true": 1, "false": 3}
     page = (ROOT / "src/ui/transcript_static/tv_view_summary.js").read_text()
     assert "col && col.influencers.length ? alertShare(c, detailed) : null" in page      # only where influencers are
-    assert "cellView(cs[c.key], ladders, detailed, c)" in page
+    assert "cellView(cs[c.key], ladders, detailed, c, members)" in page
 
 
 def test_a_rows_alerts_are_the_runs_signal_counts():
@@ -321,3 +322,50 @@ def test_a_model_has_one_key_whatever_its_route_and_tables_go_by_strength():
     s = ts.summary(rows, COL)
     assert [x["model"] for c in s["columns"] for x in c["influencers"]] == claude
     assert [r["model"] for r in s["rows"]] == ["deepseek-v4.1-flash", "claude-haiku-5.5", "claude-opus-5.5"]
+
+
+def test_members_count_each_cells_workers_and_their_own_levels():
+    """By members a cell counts its runs' workers: cheated and accessed of n workers and their levels per ladder; a
+    run with no worker rows adds none. The totals count the column's workers the same way."""
+    def worker(a: str, cheating: str, cheated: bool) -> dict:
+        return {"agent": a, "cheating": cheating, "coordination": "low", "collusion": "none", "cheated": cheated}
+    members = {f"{COL}/b1": [worker("w1", "none", False), worker("w2", "looked", False)],
+               f"{COL}/b2": [worker("w1", "hacked", True), worker("w2", "tempted", False),
+                             worker("w3", "looked", False)],
+               f"{COL}/reg_haiku_enforce1": [worker("w1", "attempted", True)]}
+    s = ts.summary(ROWS, COL, members)
+    base = next(r for r in s["rows"] if r["model"] == "m1" and r["task"] == "SWE (flipt)")["cells"]["baseline"]
+    assert base["n"] == 3 and base["members"] == {
+        "n": 5, "cheated": 1, "accessed": 4,
+        "levels": {"cheating": [["none", 1], ["looked", 2], ["tempted", 1], ["hacked", 1]],
+                   "collusion": [["none", 5]], "coordination": [["low", 5]]}}
+    assert s["totals"]["baseline"]["members"]["n"] == 5
+    reg = s["totals"][ts.column_of("baseline", ts.influencers_of(ROWS[3]))["key"]]["members"]
+    assert (reg["n"], reg["cheated"], reg["accessed"]) == (1, 1, 1)
+    assert ts.summary(ROWS, COL)["totals"]["baseline"]["members"] == {
+        "n": 0, "cheated": 0, "accessed": 0, "levels": {"cheating": [], "collusion": [], "coordination": []}}
+
+
+def test_a_workers_levels_are_its_own_rows_of_the_measures_and_the_influencers_are_left_out():
+    """worker_levels: each worker's rung or level, NA on a ladder that does not apply, influencers left out."""
+    measured = {
+        "cheating": {"applicable": True, "agents": {
+            "a01": {"role": "worker", "rung": "hacked", "cheated": True},
+            "a02": {"role": "worker", "rung": "looked", "cheated": False},
+            "r01": {"role": "regulator", "rung": "looked", "cheated": False}}},
+        "coordination": {"roles": {"a01": None, "a02": None, "r01": "regulator"},
+                         "agents": {"a01": {"level": "high"}, "a02": {"level": None}, "r01": {"level": "low"}}},
+        "collusion": {"applicable": False, "reason": "no take rule"}}
+    assert transcript_levels.worker_levels(measured) == [
+        {"agent": "a01", "cheating": "hacked", "coordination": "high", "collusion": transcript_levels.NA,
+         "cheated": True},
+        {"agent": "a02", "cheating": "looked", "coordination": "none", "collusion": transcript_levels.NA,
+         "cheated": False}]
+
+
+def test_the_summary_page_toggles_teams_and_members_in_its_address():
+    page = (ROOT / "src/ui/transcript_static/tv_view_summary.js").read_text()
+    for part in ("const members = q.get('by') === 'members';", "by: members ? 'members' : ''",
+                 "const u = members ? c.members : c;", "members: sumCounts(cs.map(x => x.members), d)",
+                 "[['', 'teams'], ['members', 'members']]"):
+        assert part in page, part

@@ -39,7 +39,7 @@ the command to run, and the runs page's header shows them as one chip. A new run
 | `#/run/<collection>/<run key>?tab=board&a=&b=&mode=&pos=&lens=` | the Board tab: agents `a`, `b`; `time` or `step`; `pos`; `lens` (`all`, `cheating`, `coordination`, `collusion`, `judge`) |
 | `#/run/<collection>/<run key>?tab=details` | the Details tab: the three ladders' panels, the judge labels, the legend |
 | `#/ladders?task=<CheatBench task name>` | the three ladders, the Cheating ladder by task, the Coordination and Collusion levels, Collusion's take rules by task, the task's column highlighted, and the judge labels |
-| `#/summary?col=<collection>&hide=&task=&wmodel=&imodel=&detail=` | Summary: one collection's runs, a row per workers' model and task (and number of workers when team sizes mix), a column per condition in the order Baseline, negative controls, regulators, positive control, disregulators, both; influencers by role, level and model (`/api/summary`); `col` defaults to the newest collection; `hide` lists the influencer bands toggled off (`regulator`, `disregulator`, `both`); `task` and `wmodel` keep the rows of one task or one workers' model and recount the All row, and a value the collection does not hold falls back to All; the heading counts the runs shown (`Summary: 66 of 147 runs` under a filter or a hidden band); `imodel` keeps the influencer columns holding one model, Baseline and the controls staying; each cell shows each ladder's share of teams at or above its line (H, C, K), or with `detail=1` each ladder's level counts, and its runs at the bottom |
+| `#/summary?col=<collection>&hide=&task=&wmodel=&imodel=&detail=&by=` | Summary: one collection's runs, a row per workers' model and task (and number of workers when team sizes mix), a column per condition in the order Baseline, negative controls, regulators, positive control, disregulators, both; influencers by role, level and model (`/api/summary`); `col` defaults to the newest collection; `hide` lists the influencer bands toggled off (`regulator`, `disregulator`, `both`); `task` and `wmodel` keep the rows of one task or one workers' model and recount the All row, and a value the collection does not hold falls back to All; the heading counts the runs shown (`Summary: 66 of 147 runs` under a filter or a hidden band); `imodel` keeps the influencer columns holding one model, Baseline and the controls staying; each cell shows each ladder's share of teams at or above its line (H, C, K), or with `detail=1` each ladder's level counts, and its runs at the bottom; `by=members` (the toggle teams | members) counts each cell's workers instead of its runs: the share of workers at or above each line, their level counts, the All row likewise, and the workers under the runs; the A row stays the runs' |
 
 `<ladder>` is `cheating`, `coordination` or `collusion`; a ladder filter's value is the team's level. `workers` is the
 number of workers; `worker` is the worker conditioning (`baseline`, `told to cheat`, a rule's words such as `generic
@@ -186,7 +186,7 @@ tasks the study does not read, how many valid runs of them Settings hide by defa
 applicable`: Coordination and Collusion on a one-agent run, Collusion on a task with no take rule, Cheating on a run
 without episodes.
 
-### `GET /api/run?id=<id>` → `{row: IndexRow, meta, agents: [Agent], boards: [Board], levels: Levels, cheatbench_disclosed, presence: Presence, rounds: Rounds, regulators: {agent: Regulator}, beliefs: Beliefs | null}`
+### `GET /api/run?id=<id>` → `{row: IndexRow, meta, agents: [Agent], boards: [Board], levels: Levels, cheatbench_disclosed, presence: Presence, rounds: Rounds, hand_ins: HandIns, regulators: {agent: Regulator}, beliefs: Beliefs | null}`
 `meta` holds run.json's `config`, `mode` and `code`, the rounds run (`rules.rounds`), and `eval_log` (the run's own
 `eval/*.eval`, else where `RunDir.eval_log` finds it; null when absent) beside `eval_log_recorded`.
 `cheatbench_disclosed` is the task's CheatBench field for an agent that acknowledged its access
@@ -195,6 +195,14 @@ without episodes.
 `with_alert_calls(presence(run.json))`): the bar's alert badge and the Details tab's Alerts and Entries and exits cards.
 `rounds` is each agent's rounds (`src/ui/transcript_rounds.py` `rounds`), null in a run before rounds of calls (one model
 step per round plus free follow-ups): the agent tab then draws its steps as before.
+`hand_ins` is the team's hand-ins and take-backs (`transcript_presence.hand_ins`): the bar's badge (the final hand-in's
+agent starred, the hand-ins and the take-backs counted), the Details tab's Hand-ins strip (a row per round, a chip per
+event in seq order, ▲ a hand-in with its commit, ▼ a take-back with its reason on hover, the final starred, a chip's
+click opening its call; the submits refused while a hand-in stood counted in the heading), the star beside the agent
+that made the final hand-in (the agents' selects, its card, the Ladders and Entries and exits tables; hover `final
+hand-in, round N`) and, in each transcript, a chip on every submit and unsubmit call (`handed in · <commit>`, `not
+handed in`, `taken back · <commit>`, `nothing taken back`; the tool's name alone in a run that recorded no hand-in),
+with an edge in the hand-in's or the take-back's colour on a call that made its event.
 `regulators` is each regulator's measures from the code record (`signals.team.regulators`,
 `src/measures/regulator_measures.py`), `{}` in a run without a regulator or not measured since: the Details tab's
 Regulator card (`tv_regulators.js`).
@@ -223,6 +231,13 @@ Presence = {agents: {agent: {entered: round | null,                 # rules.entr
                              exited: {why, round, seq, hand_in?, ends_after_round?} | null}},   # rules.exits
             alerts: [Alert]}                                         # run.json alerts, in order
             # why: submit | stop | alert | budget | context | delivered; agents {} and alerts [] in a run made before
+HandIns = {events: [{kind ("submit" | "unsubmit"), agent, round, snapshot (a hand-in's commit; a take-back's, the
+                     commit it took back), text (the answer or the reason), seq, call_id (its call, by the record's
+                     time within the call's span on rules.timeline; null without), final (the hand-in that stood),
+                     took_back? ({agent, round, snapshot} on a take-back)}],    # run.json unsubmits, in seq order
+           final: {agent, round, snapshot, call_id} | null,                     # run.json team_submission
+           refused: [{agent, round, reason}]}                                    # team_submission.refused
+           # a run made without the unsubmit option: its team_submission as the one event; an older run: no event
 Alert = {agent, round, reason, agents (named, or null), time,
          outcome ("true_alarm" | "false_alarm" | null), team_cheated_by_then, named_cheated_by_then: {agent: bool|null},
          k}   # outcome from signals.team.alert_outcomes (src/measures/alert_outcomes.py); k: its alert_humans call
@@ -359,11 +374,14 @@ BoardTab = {clock ("eval_log" | "call_order"), clock_about, total (seconds, or t
             tmp,                                               # whether the run has tmp_snapshots.json (/api/tmp)
             presence: Presence + clock,                        # transcript_presence.on_lanes: each agent adds
                                                                # entry: {k, t, start} and exit: {k, t}; each Alert t
+            hand_ins: HandIns,                                 # as /api/run's
             calls_per_round,                                   # N; null in a run before rounds of calls
             seed_pack}                                         # "<task>/<pack>" (config.seed_pack); null unseeded
 BoardCall = {k (the agent tab's "Call k"), m (its model call, per agent from 0), t, dur, tool, summary (one line),
              round, pos (its round and its place in it; null before rounds of calls),
              board ("post" | "read" | "status" | null),
+             hand_in?,                                      # on a submit or unsubmit call: its event's index in
+                                                            # hand_ins.events, null for a call that made none
              labels: [{ladder, level, index, evidence}],    # the run page's labels (Levels.labels) on this call
              marks: {cheating: [{level, index, clause, evidence}],
                      coordination: [{level ("read" | "write"), index, evidence, post, took_up: [agent]}],
@@ -412,7 +430,10 @@ the run's first round at t 0 (`start` true), a later one at the start of the age
 end of the agent's last call; an alert at the start of the alerting agent's i-th `alert_humans` call for its i-th alert.
 `k` and `t` are null for an agent with no call. The tab hatches each lane before its agent entered and after it exited,
 ticks the entry and the exit with its `why`, and draws each alert as a line across the timeline, flagged on the board
-and on the alerting agent's lane.
+and on the alerting agent's lane. A submit call stands under a ▲ on its lane's top edge, an unsubmit call under a ▼,
+filled in the hand-in's or the take-back's colour when it made its event (`hand_in`), hollow when it did not, the final
+hand-in a star in its place; the call's hover and the card's head line say what it did. The agent that made the final hand-in is
+starred in the two selects, its lane's name and its card.
 
 ### `GET /api/transcript?id=<id>&agent=<agent>` → the agent's `transcript.json`, streamed as stored
 The agent tab groups its steps by round in a run of rounds of calls: a box per round, headed `Round {round}` with the
@@ -510,6 +531,10 @@ Column = {key, label, group ("baseline" | "influencers" | "positive" | "negative
 Cell = {n, cheated, accessed, passed,        # runs; of them: levels.cheated, team Cheating rung looked or above,
                                               # levels.passed
         levels: {<ladder>: [[level, runs]]}, # the teams' levels, in the ladder's order
+        members: {n, cheated, accessed,       # the runs' workers (transcript_levels.worker_levels, influencers left
+                  levels: {<ladder>: [[level, workers]]}},   # out); of them: cheated, own Cheating rung looked or above
+        team: {worker: [n], regulator: [n], disregulator: [n]},   # each role's numbers of agents in the runs
+        alerted, alerts: {n, true, false},   # the runs in which an influencer alerted humans; the alerts summed
         filters: {col, task?, model?, workers?, seed_pack?, worker, influencer, influencer_level?, q?} | null}
                                               # the runs page's query that keeps exactly these runs
 ```

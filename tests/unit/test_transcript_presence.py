@@ -1,11 +1,13 @@
-"""Entries, exits and alerts for the transcript viewer (src/ui/transcript_presence.py): what /api/run and /api/board
-carry as "presence", from synthetic run.json records and, when this checkout has it, the presence smoke's real run."""
+"""Entries, exits, alerts and hand-ins for the transcript viewer (src/ui/transcript_presence.py): what /api/run and
+/api/board carry as "presence" and "hand_ins", from synthetic run.json records and, when this checkout has it, the
+presence smoke's real run."""
 from __future__ import annotations
 
 import json
 import re
 import shutil
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -181,3 +183,79 @@ def test_the_chips_of_a_rounds_message_say_what_the_agent_read():
     assert json.loads(done.stdout) == ["posts on the board", "board changed since the agent was last told",
                                        "posts on the board", None, "a01 exited · stop", "The board changed.", None]
     assert "since the last round" not in source
+
+
+def at_time(seconds: float) -> str:
+    """An ISO time, as run.json records a hand-in's, `seconds` after the epoch."""
+    return datetime.fromtimestamp(seconds, timezone.utc).isoformat()
+
+
+HAND_IN_RUN = {
+    "rules": {"timeline": [
+        {"agent": "a01", "calls": [{"id": "s1", "tool": "submit", "t0": 100.0, "t1": 100.5},
+                                   {"id": "s2", "tool": "submit", "t0": 300.0, "t1": 300.2}]},
+        {"agent": "a02", "calls": [{"id": "u1", "tool": "unsubmit", "t0": 200.0, "t1": 200.1},
+                                   {"id": "s3", "tool": "submit", "t0": 250.0, "t1": 250.1}]}]},
+    "unsubmits": {
+        "submits": [{"agent": "a01", "round": 3, "answer": "first", "snapshot": "aaaaaaaa11", "time": at_time(100.2),
+                     "seq": 0},
+                    {"agent": "a01", "round": 6, "answer": "again", "snapshot": "bbbbbbbb22", "time": at_time(300.1),
+                     "seq": 2}],
+        "unsubmits": [{"agent": "a02", "round": 4, "reason": "the fixtures are wrong", "time": at_time(200.05),
+                       "seq": 1, "submit": {"agent": "a01", "round": 3, "snapshot": "aaaaaaaa11"}}]},
+    "team_submission": {"agent": "a01", "round": 6, "answer": "again", "snapshot": "bbbbbbbb22",
+                        "time": at_time(300.1), "refused": [{"agent": "a02", "round": 5, "reason": "already in"}]},
+}
+
+
+def test_hand_ins_are_the_runs_submits_and_unsubmits_in_seq_order_each_with_its_call():
+    """The take-back sits between the two hand-ins by seq; each event's call is the agent's call of its tool whose
+    span holds the record's time; the final is team_submission, and the submit refused while it stood is kept."""
+    h = tp.hand_ins(HAND_IN_RUN)
+    assert [(e["kind"], e["agent"], e["round"], e["call_id"], e["final"]) for e in h["events"]] == [
+        ("submit", "a01", 3, "s1", False), ("unsubmit", "a02", 4, "u1", False), ("submit", "a01", 6, "s2", True)]
+    assert h["events"][1]["text"] == "the fixtures are wrong" and h["events"][1]["snapshot"] == "aaaaaaaa11"
+    assert h["events"][1]["took_back"] == {"agent": "a01", "round": 3, "snapshot": "aaaaaaaa11"}
+    assert h["events"][0]["text"] == "first" and "took_back" not in h["events"][0]
+    assert h["final"] == {"agent": "a01", "round": 6, "snapshot": "bbbbbbbb22", "call_id": "s2"}
+    assert h["refused"] == [{"agent": "a02", "round": 5, "reason": "already in"}]
+
+
+def test_a_run_without_the_unsubmit_option_has_its_one_hand_in_and_an_older_run_none():
+    alone = {k: v for k, v in HAND_IN_RUN.items() if k != "unsubmits"}
+    h = tp.hand_ins(alone)
+    assert [(e["kind"], e["agent"], e["call_id"], e["final"]) for e in h["events"]] == [("submit", "a01", "s2", True)]
+    assert h["final"]["call_id"] == "s2"
+    assert tp.hand_ins({"agents": ["a01"]}) == {"events": [], "final": None, "refused": []}
+    taken = {**HAND_IN_RUN, "team_submission": None}         # the last hand-in was taken back: none stood
+    assert tp.hand_ins(taken)["final"] is None and not any(e["final"] for e in tp.hand_ins(taken)["events"])
+
+
+def test_a_record_with_no_time_or_no_call_in_its_span_has_no_call():
+    timeline = HAND_IN_RUN["rules"]["timeline"]
+    assert tp.call_at(timeline, "a01", "submit", None) is None
+    assert tp.call_at(timeline, "a01", "submit", at_time(150.0)) is None          # between its two calls
+    assert tp.call_at(timeline, "a02", "submit", at_time(100.2)) is None          # another agent's time
+    assert tp.call_at(timeline, "a02", "unsubmit", at_time(200.05)) == "u1"
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node runs the page's own functions")
+def test_a_submit_or_unsubmit_calls_chip_says_what_the_call_did():
+    """handInChip: handed in with its commit, taken back with the commit it took back, not handed in and nothing taken
+    back for a call that made no event, the tool alone in a run that recorded no hand-in; the star only on the final."""
+    h = tp.hand_ins(HAND_IN_RUN)
+    source = (STATIC / "tv_presence.js").read_text()
+    consts = "\n".join(re.search(rf"^export const {name} = .*?;$", source, flags=re.M).group(0).removeprefix("export ")
+                       for name in ("shortSha",))
+    stub = ("const h = (tag, attrs, ...kids) => ({tag, attrs, text: kids.flat(9).map(k => k && k.text !== undefined "
+            "? k.text : k).filter(k => k != null && k !== false).join('')});")
+    calls = [("submit", h["events"][0]), ("submit", h["events"][2]), ("unsubmit", h["events"][1]), ("submit", None),
+             ("unsubmit", None)]
+    script = "\n".join([stub, "const SHORT_SHA = 7;", consts, js_function("handInChip"), "console.log(JSON.stringify(["
+                        + ", ".join(f"handInChip({json.dumps(t)}, {json.dumps(e)}, {json.dumps(h)}).text"
+                                    for t, e in calls)
+                        + f", handInChip('submit', null, {json.dumps(tp.hand_ins({}))}).text]));"])
+    done = subprocess.run(["node", "-e", script], capture_output=True, text=True, timeout=60)
+    assert done.returncode == 0, done.stderr
+    assert json.loads(done.stdout) == ["▲handed in · aaaaaaa", "▲★ handed in · bbbbbbb", "▼taken back · aaaaaaa",
+                                       "▲not handed in", "▼nothing taken back", "▲submit"]

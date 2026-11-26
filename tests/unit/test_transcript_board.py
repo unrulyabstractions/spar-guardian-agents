@@ -125,15 +125,42 @@ def test_calls_are_in_order_with_the_eval_logs_times(tmp_path):
     # each ladder as levelChip and lineMark read it, with its line, and nothing more; no field the tab does not read
     assert p["ladders"] == {"cheating": {k: LADDERS["cheating"][k] for k in ("name", "levels", "line", "line_words")}}
     assert set(p) == {"clock", "clock_about", "total", "agents", "posts", "pair", "pair_why", "ladders", "label_names",
-                      "notes", "presence", "calls_per_round", "seed_pack"}   # the network log comes on its own
+                      "notes", "presence", "hand_ins", "calls_per_round", "seed_pack"}   # the network log: its own
     assert p["seed_pack"] is None                                   # an unseeded run
     assert p["presence"] == {"agents": {}, "alerts": []}   # a run.json with no entry, exit or alert
+    assert p["hand_ins"] == {"events": [], "final": None, "refused": []}   # nor any hand-in
     assert set(by["a01"]["calls"][0]) == {"k", "m", "t", "dur", "tool", "summary", "board", "labels", "marks",
                                           "held", "after", "round", "pos"}   # round, pos: None before rounds
     assert {c["after"] == {} for a in p["agents"] for c in a["calls"]} == {True}   # no timeline read after every call
     assert set(by["a01"]["calls"][0]["marks"]) == set(tb.LENSES) and set(by["a01"]["unplaced"]) == set(tb.LENSES)
     assert set(p["posts"][0]) == {"label", "writer", "role", "kind", "t", "call", "text", "reads", "labels"}
     assert p["label_names"] == {"disclosure": "Disclosure", "manipulation": "Manipulation"}
+
+
+def test_a_submit_call_carries_its_hand_ins_event_and_a_refused_one_none(tmp_path):
+    """a02's call 3 is a submit whose record's time falls in its span: its event, the final hand-in; a01's call 2, a
+    submit with no record, carries None; no other call carries hand_in."""
+    run = write_run(tmp_path)
+    for agent, k in (("a02", 3), ("a01", 2)):
+        path = run / "processed/trajectories" / f"{SAMPLE}@{agent}" / "transcript.json"
+        t = json.loads(path.read_text())
+        t["trajectory"]["steps"][k + 1]["tool_calls"][0]["function_name"] = "submit"
+        path.write_text(json.dumps(t))
+    rj = json.loads((run / "processed/run.json").read_text())
+    when = (START + timedelta(seconds=20.1)).isoformat()
+    t0 = (START + timedelta(seconds=20.0)).timestamp()
+    rj["rules"] = {"timeline": [{"agent": "a02", "calls": [{"id": cid("a02", 3), "tool": "submit", "t0": t0,
+                                                            "t1": t0 + 0.3}]}]}
+    rj["team_submission"] = {"agent": "a02", "round": 3, "answer": "done", "snapshot": "abc1234def", "time": when,
+                             "refused": [{"agent": "a01", "round": 3, "reason": "already in"}]}
+    (run / "processed/run.json").write_text(json.dumps(rj))
+    p = payload(run)
+    by = {a["agent"]: a for a in p["agents"]}
+    assert by["a02"]["calls"][3]["hand_in"] == 0 and by["a01"]["calls"][2]["hand_in"] is None
+    assert not any("hand_in" in c for a in p["agents"] for c in a["calls"] if c["tool"] != "submit")
+    assert p["hand_ins"]["final"] == {"agent": "a02", "round": 3, "snapshot": "abc1234def", "call_id": cid("a02", 3)}
+    assert p["hand_ins"]["events"][0]["final"] and p["hand_ins"]["refused"] == [
+        {"agent": "a01", "round": 3, "reason": "already in"}]
 
 
 def test_a_seed_packs_post_is_flagged_seeded_and_the_payload_names_the_pack(tmp_path):
