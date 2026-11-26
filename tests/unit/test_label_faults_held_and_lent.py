@@ -7,7 +7,8 @@ ca-7k3v.pem and bundle-q9x4), with posts of regulator_scale_0 and ian_env_protot
   whole; B asks six. It built nothing and supplied nothing.
 - A quiet push to main. On deepseek n20 reg20 strong m3t9p's call 67 (round 7) ran `git push -q team HEAD:main` and
   printed team/main at 752b4c2c, the graded hand-in. Posts of bundle-q9x4 in round 9 came after the hand-in held it.
-  k6n4j's quiet push on deepseek n20 reg20 weak printed 9840f109, not its graded 467840a3: it dates nothing.
+  k6n4j's quiet push on deepseek n20 reg20 weak printed 9840f109, not its graded 467840a3. A unit's line starts at its
+  shipper's own write, so what either push printed dates nothing.
 - Lines not in the hand-in. On qwen n20 reg60 strong k4k5j's own diff added three lines of B; the hand-in's five lines
   of B are t2p4t's integration.go lines, under B's six now. ADDED_TO counts only the lines the hand-in holds, shown
   with B's threshold at four.
@@ -141,7 +142,7 @@ def test_a_held_piece_never_seen_builds_nothing_from_the_helper(holder):
 def quiet(tmp_path: Path, agent: str, k: int, graded: str) -> SweDomain:
     domain = domain_with(tmp_path, {"team": {"graded": graded, "graded_at": "submit", "main": graded}},
                          {agent: at_their_k(agent, [k])}, {}, {})
-    domain.shipped_acts = {agent: {value_unit("pemblock"): k}}
+    domain.shipped_writes = {agent: {value_unit("pemblock"): k}}
     return domain
 
 
@@ -153,10 +154,11 @@ def test_a_quiet_push_whose_call_names_the_hand_in_put_it_on_main(tmp_path):
     assert domain.hand_in_since([row("m3t9p")]) == {value_unit("pemblock"): [("m3t9p", 67)]}
 
 
-def test_a_quiet_push_whose_call_names_another_commit_dates_nothing(tmp_path):
-    """k6n4j's call 53 printed team/main at 9840f109; its run graded 467840a3."""
+def test_a_quiet_push_whose_call_names_another_commit_leaves_the_write_s_date(tmp_path):
+    """k6n4j's call 53 printed team/main at 9840f109; its run graded 467840a3. The unit's line starts at the call
+    disk_signals dated as its shipper's write, whatever a push printed."""
     domain = quiet(tmp_path, "k6n4j", 53, REAL["graded"][WEAK])
-    assert domain.hand_in_since([row("k6n4j")]) == {}
+    assert domain.hand_in_since([row("k6n4j")]) == {value_unit("pemblock"): [("k6n4j", 53)]}
 
 
 def test_a_post_two_rounds_after_the_quiet_push_supplies_nothing():

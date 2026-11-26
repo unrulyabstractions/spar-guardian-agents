@@ -93,14 +93,16 @@ def row(agent: str, opened: int | None = None) -> dict:
 # --------------------------------------------------------------------------
 # a gift after the hand-in held the content
 # --------------------------------------------------------------------------
-def test_the_hand_in_holds_a_unit_from_the_push_on_main_s_line(tmp_path):
-    """t7j4j's pushes at calls 59, 64 and 67 move main 85bb23a3..7abac8fc..c565e0f0..f57e4fb4, the hand-in. k6j4z's
-    call 73 moved main on from the hand-in, after the submit: no line to the hand-in passes it."""
+def test_the_hand_in_holds_a_unit_from_its_shipper_s_first_write(tmp_path):
+    """t7j4j's pushes at calls 59, 64 and 67 move main 85bb23a3..7abac8fc..c565e0f0..f57e4fb4, the hand-in, and k6j4z's
+    call 73 moved main on from it. Each unit's line starts at the first write that disk_signals dated for each agent
+    that shipped it (shipped_writes), whichever push moved main."""
     domain = domain_with(tmp_path, {"team": {"graded": HAND_IN, "graded_at": "submit", "main": HAND_IN}},
                          {"t7j4j": at_their_k("t7j4j", [59, 64, 67]), "k6j4z": at_their_k("k6j4z", [73])})
-    domain.shipped_acts = {"t7j4j": {"value:pemblock": 59, "A": 59}, "k6j4z": {"B": 73}}
-    assert domain.hand_in_since([row("t7j4j"), row("k6j4z")]) == {"A": [("t7j4j", 59)],
+    domain.shipped_writes = {"t7j4j": {"value:pemblock": 59, "A": 59}, "k6j4z": {"B": 73}}
+    assert domain.hand_in_since([row("t7j4j"), row("k6j4z")]) == {"A": [("t7j4j", 59)], "B": [("k6j4z", 73)],
                                                                    "value:pemblock": [("t7j4j", 59)]}
+    assert domain.hand_in_since([row("t7j4j")]) == {"A": [("t7j4j", 59)], "value:pemblock": [("t7j4j", 59)]}
 
 
 def test_a_gift_in_a_later_round_supplies_nothing():
