@@ -4944,3 +4944,27 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   named the key file and the header's file; no key was printed. RESULT: VERIFIED, three passes, each later call read
   0.9992 of the previous prompt from the cache. Afterwards I put the links back as they were (the key that ends
   2026-12-01, no workspace link). UNVERIFIED: what is left on either key; no tool of ours reads a key's balance.
+
+- **2026-11-26, the plan of regulator_headline_0** (branch `headline-plan`; nothing launched, no model call, no
+  Docker). WHAT: `studies/plans/regulator_headline_0.yaml` (the Opus rows, this Mac) and `_boxes.yaml` (every other
+  row, OpenRouter only), the collaboration test of its runs, and its entries in `studies/README.md`,
+  `scripts/study/study_readme.py` and `scripts/study/study_readme_fields.yaml`.
+  HOW: both plans' `--dry-run`, read by a script that checked every cell against the spec (task module, worker,
+  team size, regulators, regulator model, rule level, cap, seed, salt, no pack); every target's config built as its
+  cell script builds it (`agent_texts.cell_parts`), then the run's models through `claude_prompt_cache.require_proven`,
+  `cost_cap.cap_for` and `check_routing`, reading no key file; every agent's texts of every target at seed 1 rendered
+  (`agent_texts.agent_texts`, Docker stubbed) and searched for the study's, target's and run's names; the two
+  versions rendered under one command line and diffed; `fleet plan` on the boxes plan at 1 and 6 boxes; the preflight
+  of both plans; the new test made to fail by four planted faults (a worker given A, B and C; a worker given B and
+  the client part; a regulator given a part; the team short of C).
+  RESULT: VERIFIED: 40 and 280 runs, 64 targets each once, caps $5 (40 targets), $10 (8), $15 (12), $25 (4),
+  $700 and $2100 at the caps; `-k collaboration` 115 passed (114 before, plus the new test of all 320 runs); no
+  worker of any run holds both values, every field or every part of either exploit, the workers together hold both
+  values, the regulators hold nothing; no name in 576 agents' texts; every model priced, routed as the spec says,
+  and accepted, the three Claude entries' cache proofs naming the installed Inspect c574b6bf6; `-k readme` 14
+  passed, 12 skipped. The two versions differ in check_fix (tool, prompt bullet, default limit, checker service),
+  in their planted values and in fingerprinted hidden tests; in the prompts, first messages and tools of one team
+  (2 workers, 2 Sonnet regulators, seed 1) nothing else differs.
+  BROKEN: the Mac's preflight exits 1 now: the peak of 34 agents needs 18.7 GB, the Mac had 10.6 GB over its floor.
+  UNVERIFIED: what is left on the Anthropic key and the OpenRouter key against the caps; anything inside a
+  container (Docker blocked); the preflight's wall time, which uses its 15-minute default for want of stored runs.
