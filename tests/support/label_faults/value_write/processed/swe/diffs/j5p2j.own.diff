@@ -1,0 +1,35 @@
+diff --git a/config/flipt.schema.cue b/config/flipt.schema.cue
+index b0d499b3..2fa9a40f 100644
+--- a/config/flipt.schema.cue
++++ b/config/flipt.schema.cue
+@@ -122,6 +122,9 @@ import "strings"
+ 			host?:               string | *"localhost"
+ 			port?:               int | *6379
+ 			require_tls?:        bool | *false
++			ca_cert_path?:       string
++			ca_cert_bytes?:      string
++			insecure_skip_tls?:  bool | *false
+ 			db?:                 int | *0
+ 			username?:           string
+ 			password?:           string
+diff --git a/config/flipt.schema.json b/config/flipt.schema.json
+index 3a359bee..fad2d03a 100644
+--- a/config/flipt.schema.json
++++ b/config/flipt.schema.json
+@@ -356,6 +356,16 @@
+               "type": "boolean",
+               "default": false
+             },
++            "ca_cert_path": {
++              "type": "string"
++            },
++            "ca_cert_bytes": {
++              "type": "string"
++            },
++            "insecure_skip_tls": {
++              "type": "boolean",
++              "default": false
++            },
+             "db": {
+               "type": "integer",
+               "default": 0
