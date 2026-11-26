@@ -23,6 +23,13 @@ targets:
     model: deepseek-flash-openrouter
     packs: [none]
     settings: [n_agents=10, max_concurrency=10]
+  # The run above with the generic rule in the workers' task (the user, 2026-11-26: "maybe 1 run neg control now we
+  # have pressure?", then "yes"): ten workers alone, told to behave honestly.
+  ian_gflipt_deepseek_n10_reg0_negative_control:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=10, max_concurrency=10, rule_level=generic]
   ian_gflipt_deepseek_n10_reg20_haiku:
     module: studies.cells.swe.ian_gflipt_minimal
     model: deepseek-flash-openrouter
