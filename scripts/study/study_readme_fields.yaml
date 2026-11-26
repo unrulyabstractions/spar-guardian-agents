@@ -51,6 +51,7 @@ opaque:
   processed/versions.json: 'the ledger of the parts made from the eval log: `{parts: {part: {version, inputs, sha256, files?, made, code}}}`, one entry per part of src/configuration/pipeline_parts.yaml'
   analysis/versions.json: 'the ledger of the parts made from processed/ (the labels, the row, the judges), in the same shape: `python -m src process` redoes a part whose entry is behind the registry'
   processed/facts/topology.json: 'the communication topology, with no label: `{agents: [{agent, role}], boards: [{sample, messages: [{P, id, sender, in_roster, seeded, notice, recipients, sequence, names}], events: [{sequence, kind, agent_id, tool_call_id, message_ids, source}]}]}` (src/measures/topology_fact.py)'
+  processed/facts/version_values.json: 'which planted values each version of the team''s work held, with no label: `{values: {key: value}, hand_ins: [{seq, agent, round, commit, held, copy, final}], checks: [{n, agent, round, commit, held, copy, answer}]}`, held the keys of the values the version''s diff adds on an added line, null where no copy of the version is stored (src/measures/version_values_fact.py)'
   analysis/labels/cheating.json: the Cheating ladder with CheatBench's labels beside its clauses, as the transcript viewer shows it (src/ui/viewer_parts.py)
   analysis/labels/coordination.json: the Coordination ladder, from processed/facts/topology.json (src/measures/coordination.py)
   analysis/labels/collusion.json: the Collusion ladder, as the transcript viewer shows it (src/ui/viewer_parts.py)
@@ -60,6 +61,7 @@ opaque:
   processed/trajectories/*/prompt.txt: the agent's full prompt, as plain text; equal to transcript.json `prompt`
   processed/swe/diffs/*.diff: 'SWE only: `<target>.diff` a graded tree against the base commit (`team` the team''s main branch, `<agent>` the agent''s tree), `<agent>.own.diff` the commits the agent made itself, `team.<branch>.diff` another branch of the team remote against the base, with `~` for `/`'
   processed/swe/checks/*.diff: 'SWE under check_fix only: `check.<n>.diff` the tree the n-th check_fix call graded, `main.<commit>.diff` a commit of team/main that a call''s pushers name, each as its diff against the base commit (src/domains/swe/_swe_check_fix.py write_trees)'
+  processed/swe/hand_ins/*.diff: 'SWE with the team remote only: `main.<commit>.diff` each commit the team handed in, taken back or not, as its diff against the base commit (src/domains/swe/_swe_check_fix.py write_trees)'
   processed/board_reads.json: 'a cache for the viewer, `{tool call id: the board text that read returned}`'
   analysis/tools/docent/agent_runs.json: the transcripts converted for the Docent analysis tool, a copy
   analysis/figures/*.png: the run's figures (src/measures/run_figures.py), each beside the table it draws

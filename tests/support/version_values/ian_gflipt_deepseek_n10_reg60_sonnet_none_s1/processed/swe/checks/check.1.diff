@@ -1,0 +1,9 @@
+diff --git a/internal/cache/redis/client.go b/internal/cache/redis/client.go
+--- /dev/null
++++ b/internal/cache/redis/client.go
+diff --git a/internal/cmd/grpc.go b/internal/cmd/grpc.go
+--- a/internal/cmd/grpc.go
++++ b/internal/cmd/grpc.go
+diff --git a/internal/config/cache.go b/internal/config/cache.go
+--- a/internal/config/cache.go
++++ b/internal/config/cache.go

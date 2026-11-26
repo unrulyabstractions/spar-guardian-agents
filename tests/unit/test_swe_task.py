@@ -251,12 +251,12 @@ class FakeService:
         return b"+agents' work\n"
 
 
-def graded(monkeypatch) -> tuple[list[tuple[str, str]], dict]:
+def graded(monkeypatch, store: dict | None = None) -> tuple[list[tuple[str, str]], dict]:
     log: list[tuple[str, str]] = []
     monkeypatch.setattr(_swe_scoring, "sandbox", lambda name="default": FakeService(name, log))
     swe = {"issue": ISSUE, "base_commit": "base0", "fix_commit": "fix0", "agents": ["a01", "a02"],
            "mode": "shared_task", "instance": load_split(ISSUE)["task"]}
-    state = SimpleNamespace(metadata={"cheatbench": {"swe": swe}}, store=SimpleNamespace(get=lambda key: None))
+    state = SimpleNamespace(metadata={"cheatbench": {"swe": swe}}, store=SimpleNamespace(get=(store or {}).get))
     score = asyncio.run(swe_grader()(state, None))
     return log, score.metadata
 
@@ -282,6 +282,20 @@ def test_every_diff_is_read_before_the_grader_touches_its_tree(monkeypatch):
     first = next(k for k, (_, cmd) in enumerate(log) if "bash /tests/test.sh" in cmd)
     assert not [cmd for _, cmd in log[first:] if cmd.startswith("read ") or " diff " in cmd]
     assert [cmd for _, cmd in log[:first] if cmd == "read /tmp/grade/team.git.diff"]
+
+
+def test_the_grader_keeps_the_tree_of_every_handed_in_commit(monkeypatch):
+    """Under unsubmit every hand-in's commit, taken back or not, is kept as its diff, read in the grader before the
+    first tree is tested; a run with no hand-in keeps none."""
+    store = {"Unsubmits:submits": [{"snapshot": "c1"}, {"snapshot": "c2"}],
+             "TeamSubmission:agent": "a02", "TeamSubmission:snapshot": "c2"}
+    log, metadata = graded(monkeypatch, store)
+    assert metadata["hand_in_trees"] == {"c1": "+agents' work\n", "c2": "+agents' work\n"}
+    first = next(k for k, (_, cmd) in enumerate(log) if "bash /tests/test.sh" in cmd)
+    reads = [cmd for _, cmd in log[:first] if " diff " in cmd and "hand_in.git.diff" in cmd]
+    assert [cmd.split(" > ")[0].split()[-1] for cmd in reads] == ["c1", "c2"]
+    assert all(service == "default" for service, cmd in log if "hand_in.git.diff" in cmd)
+    assert graded(monkeypatch)[1]["hand_in_trees"] == {}
 
 
 def test_run_json_names_no_file_of_the_grader(monkeypatch):

@@ -727,10 +727,11 @@ def test_each_ladder_draws_its_line_between_its_two_sides():
 
 
 def test_the_run_page_has_a_board_tab_and_a_details_tab_and_serves_the_board():
-    """Tabs: each agent, Board, Details; the old Team tab and its board card are gone; the bar's button that opens
-    the run record is named apart from the Details tab; the page links every stylesheet of its own."""
+    """Tabs: each agent, Board, Monitoring, Details; the old Team tab and its board card are gone; the bar's button
+    that opens the run record is named apart from the Details tab; the page links every stylesheet of its own."""
     run = (STATIC / "tv_view_run.js").read_text()
-    assert "['board', { label: 'Board', draw: boardView }], ['details', { label: 'Details', draw: detailsView }]" in run
+    assert ("['board', { label: 'Board', draw: boardView }], ['monitoring', { label: 'Monitoring', draw: monitorView }],"
+            "\n      ['details', { label: 'Details', draw: detailsView }]") in run
     assert "'Team'" not in run and "boardCard" not in run and "'Run record'" in run and "}, 'Details'))" not in run
     page = (STATIC / "tv_index.html").read_text()
     assert all(f'href="/tv/{path.name}"' in page for path in STATIC.glob("tv_*.css"))
@@ -1051,7 +1052,9 @@ def test_a_run_of_a_task_the_study_does_not_read_opens_and_its_summary_row_names
     assert set(viewer.rows) == {"study_x/poem_minimal_luna1", "study_x/binder_minimal_luna1"}
     assert viewer.dirs["study_x/binder_minimal_luna1"] == study / "binder_minimal_luna1"
     s = viewer.summaries["study_x"]
-    assert s == tv.transcript_summary.summary(list(viewer.rows.values()), "study_x")
+    members = {run_id: tv.transcript_levels.worker_levels(m) for run_id, m in viewer.measured.items()}
+    assert s == tv.transcript_summary.summary(list(viewer.rows.values()), "study_x", members)
+    assert s["totals"]["baseline"]["members"]["n"] == sum(r["workers"] for r in viewer.rows.values())
     assert sorted(r["task_name"] for r in s["rows"]) == ["creative_writings", "protein_design"]
 
 

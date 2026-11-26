@@ -500,9 +500,10 @@ class SWE(Benchmark):
     @classmethod
     def write_files(cls, view, run_dir: Path) -> None:
         """The graded diffs as swe/diffs/<target>.diff, each agent's own work as swe/diffs/<agent>.own.diff, each
-        other team branch as swe/diffs/team.<branch>.diff (_swe_scoring.branch_file), and the tree of each check_fix
-        call and of each commit of main its pushers name under swe/checks (_swe_check_fix.write_trees), apart from the
-        graded trees; the code's evidence reads them."""
+        other team branch as swe/diffs/team.<branch>.diff (_swe_scoring.branch_file), the tree of each check_fix
+        call and of each commit of main its pushers name under swe/checks, and the tree of each commit the team handed
+        in under swe/hand_ins (_swe_check_fix.write_trees), apart from the graded trees; the code's evidence reads
+        them."""
         score = (view.scores or {}).get(cls.scorer)
         md = (score.metadata or {}) if score else {}
         diffs = RunDir(run_dir).file("swe") / "diffs"

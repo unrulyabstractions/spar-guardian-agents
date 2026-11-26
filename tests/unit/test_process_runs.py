@@ -63,7 +63,8 @@ def study_with_run(tmp_path: Path) -> tuple[Path, Path]:
     return study, write_run(study / "poem_minimal_luna1")
 
 
-COMPUTED = ["signals", "topology", "cheating", "coordination", "collusion", "judged", "disregulator_roles", "row"]
+COMPUTED = ["signals", "topology", "version_values", "cheating", "coordination", "collusion", "judged",
+            "disregulator_roles", "row"]
 
 
 def test_topology_is_the_board_without_labels_and_coordination_reads_it(tmp_path):
@@ -96,8 +97,8 @@ def test_a_run_is_processed_once_and_nothing_is_redone_after(tmp_path, stood_in)
     assert stored.output("row") == run / "analysis/row.json"
     assert stored.output("signals") == run / "analysis/signals.jsonl"
     ledgers = {layer: json.loads(path.read_text())["parts"] for layer, path in stored.versions().items()}
-    assert set(ledgers["processed"]) == {"export", "topology"}
-    assert set(ledgers["analysis"]) == set(COMPUTED) - {"topology"}
+    assert set(ledgers["processed"]) == {"export", "topology", "version_values"}
+    assert set(ledgers["analysis"]) == set(COMPUTED) - {"topology", "version_values"}
     assert ledgers["analysis"]["coordination"]["inputs"] == {
         "topology": [1, stored_versions.sha256_file(stored.output("topology"))]}
     row = json.loads(stored.output("row").read_text())

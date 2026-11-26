@@ -19,16 +19,28 @@ true): the agent was present before its first call. A later entry sits at the st
 at the end of its last call, and an alert at the start of its alert_humans call (the agent's i-th such call for its i-th
 alert). An agent with no call, or an alert whose call is not found, has k and t None there.
 
-presence and on_lanes read only what they are given; with_alert_calls reads the alerting agents' transcripts. None
-writes.
+The team's hand-ins and take-backs (hand_ins, /api/run and /api/board "hand_ins") come from run.json too: unsubmits
+(src/swarm/unsubmit.py: submits and unsubmits, each with its seq on one count) and team_submission, the hand-in that
+stood at the end, with the submits the harness refused (its refused). A run made without the unsubmit option has
+team_submission alone, its one hand-in; an older run may have neither, and then no event. Each event carries the id of
+its call: the agent's submit or unsubmit call in rules.timeline whose span holds the record's time.
+
+    h = hand_ins(run_json)
+    h["events"][0]      # {kind: "submit" | "unsubmit", agent, round, snapshot, text, seq, call_id, final[, took_back]}
+    h["final"]          # {agent, round, snapshot, call_id} of the hand-in that stood, or None
+    h["refused"]        # [{agent, round, reason}]: the submits refused while a hand-in stood
+
+presence, on_lanes and hand_ins read only what they are given; with_alert_calls reads the alerting agents'
+transcripts. None writes.
 """
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 from src.measures.run_directory import RunDir, episode_agent
 from src.measures.shell_commands import tool_calls_of
-from src.swarm.turn_rules import ALERT_TOOL
+from src.swarm.turn_rules import ALERT_TOOL, SUBMIT, UNSUBMIT_TOOL
 
 EXIT_WHY = ("submit", "stop", "alert", "rounds", "budget", "context", "delivered")
 """An exit's reasons as rules.exits records them (src/swarm/turn_rules/_turn_presence.py record_exit); "budget" is a
@@ -37,6 +49,10 @@ ALERT_KEYS = ("agent", "round", "reason", "agents", "time")
 """What the page shows of an alert of run.json's alerts."""
 OUTCOME_KEYS = ("outcome", "team_cheated_by_then", "named_cheated_by_then")
 """What the page shows of an alert's outcome (alert_outcomes.alert_outcomes)."""
+HAND_IN_TOOLS = {"submit": SUBMIT, "unsubmit": UNSUBMIT_TOOL}
+"""The tool of each kind of hand-in event."""
+CALL_SLACK = 0.05
+"""Seconds a record's time may fall outside its call's span on the timeline (the timeline keeps milliseconds)."""
 
 
 def outcomes_of(run_json: dict) -> list[dict]:
@@ -65,6 +81,53 @@ def presence(run_json: dict) -> dict:
         alerts.append({**{k: alert.get(k) for k in ALERT_KEYS},
                        **{k: row.get(k) if same else None for k in OUTCOME_KEYS}})
     return {"agents": agents, "alerts": alerts}
+
+
+def call_at(timeline: list[dict], agent: str, tool: str, when) -> str | None:
+    """The id of `agent`'s `tool` call in rules.timeline whose span (t0 to t1, UTC seconds) holds the ISO time `when`;
+    None without a time or without such a call."""
+    if not isinstance(when, str):
+        return None
+    t = datetime.fromisoformat(when).timestamp()
+    found = [c.get("id") for e in timeline if e.get("agent") == agent for c in e.get("calls") or []
+             if c.get("tool") == tool and c.get("t0") is not None
+             and c["t0"] - CALL_SLACK <= t <= (c.get("t1") if c.get("t1") is not None else c["t0"]) + CALL_SLACK]
+    return found[0] if len(found) == 1 else None
+
+
+def hand_ins(run_json: dict) -> dict:
+    """{"events", "final", "refused"} on the module's terms, the events in their seq order (their time where a record
+    has no seq). An event's text is a hand-in's answer or a take-back's reason; a take-back's took_back is the hand-in
+    it took back ({agent, round, snapshot}). The final event is the last hand-in that is team_submission."""
+    timeline = (run_json.get("rules") or {}).get("timeline") or []
+    stood = run_json.get("team_submission") or None
+    recorded = run_json.get("unsubmits") or {}
+    rows = [("submit", r) for r in recorded.get("submits") or []] + [("unsubmit", r) for r in recorded.get("unsubmits")
+                                                                    or []]
+    if not rows and stood:
+        rows = [("submit", stood)]
+    rows.sort(key=lambda kr: (kr[1].get("seq") is None, kr[1].get("seq") or 0, str(kr[1].get("time") or "")))
+    events = []
+    for kind, r in rows:
+        event = {"kind": kind, "agent": r.get("agent"), "round": r.get("round"),
+                 "snapshot": r.get("snapshot") if kind == "submit" else (r.get("submit") or {}).get("snapshot"),
+                 "text": r.get("answer") if kind == "submit" else r.get("reason"), "seq": r.get("seq"),
+                 "call_id": call_at(timeline, r.get("agent"), HAND_IN_TOOLS[kind], r.get("time")), "final": False}
+        if kind == "unsubmit":
+            took = r.get("submit") or {}
+            event["took_back"] = {k: took.get(k) for k in ("agent", "round", "snapshot")}
+        events.append((event, r.get("time")))
+    final = None
+    if stood:
+        key = (stood.get("agent"), stood.get("round"), stood.get("snapshot"))
+        same = [e for e, when in events if e["kind"] == "submit" and (
+            (when is not None and when == stood.get("time")) or (e["agent"], e["round"], e["snapshot"]) == key)]
+        if same:
+            same[-1]["final"] = True
+        final = {"agent": stood.get("agent"), "round": stood.get("round"), "snapshot": stood.get("snapshot"),
+                 "call_id": same[-1]["call_id"] if same else None}
+    refused = [{k: r.get(k) for k in ("agent", "round", "reason")} for r in (stood or {}).get("refused") or []]
+    return {"events": [e for e, _ in events], "final": final, "refused": refused}
 
 
 def on_lanes(p: dict, calls: dict[str, list], at: dict[tuple[str, int], tuple[float, float]]) -> dict:

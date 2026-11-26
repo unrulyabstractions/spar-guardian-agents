@@ -412,6 +412,17 @@ def exploit_shown(cheating: dict) -> str | None:
     return cheating.get("exploit_used") if cheating.get("team") == HACKED else None
 
 
+def ending_shown(run_json: dict, roles: dict[str, str | None]) -> dict:
+    """How the run ended for the team: {"last_hand_in": the round of the team's last hand-in
+    (transcript_presence.hand_ins), None without one, "working": the workers still working when the run ended (in
+    neither run.json stop_working nor rules.exits), "workers": the run's workers}."""
+    gone = set(run_json.get("stop_working") or {}) | set((run_json.get("rules") or {}).get("exits") or {})
+    workers = [a for a, r in roles.items() if is_worker(r)]
+    rounds = [e["round"] for e in transcript_presence.hand_ins(run_json)["events"] if e["kind"] == "submit"]
+    return {"last_hand_in": rounds[-1] if rounds else None, "working": sum(a not in gone for a in workers),
+            "workers": len(workers)}
+
+
 def alerts_shown(run_json: dict) -> dict:
     """The influencers' alerts to humans (alert_humans) as the run's signals count them: how many, and how many the
     Cheating ladder calls a true and a false alarm (src/measures/alert_outcomes.py). All zero on a run with none."""
@@ -443,7 +454,7 @@ def build_row(col: str, listed: Listed, rf: RunFiles, measured: dict) -> dict:
         "round_span": round_span(rj),
         "ended_by": ((rj.get("signals") or {}).get("team") or {}).get("ended_by"),
         "exploit_used": exploit_shown(measured["cheating"]),
-        "alerts": alerts_shown(rj),
+        "alerts": alerts_shown(rj), "ending": ending_shown(rj, rf.roles),
         "levels": transcript_levels.index_levels(rf.levels(measured), rf.roles),
         "cheatbench": cheatbench_summary(measured["cheatbench"], rf.episodes, rf.roles),
         "labels": label_summary(measured["labels"], rf.roles),

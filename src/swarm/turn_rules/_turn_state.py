@@ -190,6 +190,14 @@ class Unsubmits(StoreModel):
     restore: bool = False
 
 
+def hand_in_snapshots(store) -> list[str]:
+    """The snapshot of every team hand-in that went through, each once, in the order of its first hand-in: each submit
+    Unsubmits records under unsubmit, then the hand-in standing at the end (hand_in_snapshot). Read without writing
+    the store; a hand-in whose snapshot failed is left out."""
+    submits = store.get(f"{Unsubmits.__name__}:submits") or []
+    return list(dict.fromkeys(s for s in [*(r.get("snapshot") for r in submits), hand_in_snapshot(store)] if s))
+
+
 def unsubmit_record() -> Unsubmits | None:
     """The Unsubmits record under unsubmit, else None: store_as writes a record's defaults, so a run without the option
     reads the raw store and never gets one."""

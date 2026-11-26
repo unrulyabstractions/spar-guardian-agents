@@ -1,6 +1,7 @@
-/* Who entered a run and who left it, and each influencer's alert (alert_humans), as the run page draws them. The data
- * is the payload's presence (src/ui/transcript_presence.py): /api/run's for the bar and the Details tab, /api/board's,
- * placed on the board's clock, for the Board tab's lanes.
+/* Who entered a run and who left it, each influencer's alert (alert_humans), and the team's hand-ins (submit) and
+ * take-backs (unsubmit), as the run page draws them. The data is the payload's presence and hand_ins
+ * (src/ui/transcript_presence.py): /api/run's for the bar and the Details tab, /api/board's, placed on the board's
+ * clock, for the Board tab's lanes.
  *
  *   presenceEvents(step.extra)                   // the presence events a user step holds: a round's message's events,
  *                                                // or the one event of a presence line before 2026-11-22
@@ -8,16 +9,30 @@
  *   roundChip(step.extra.swarm_round), boardChip(step.extra.swarm_notice)   // a round's message's other chips
  *   paragraphChip(extra)                         // a board notice that ends a tool result or a user message
  *   alertsBadge(p.alerts, onclick)                // the bar's badge, null without an alert
- *   alertsCard(p, roles, openCall), presenceCard(p, roles)    // the Details tab's two cards, null when empty
+ *   alertsCard(p, roles, openCall), presenceCard(p, roles, mark)    // the Details tab's two cards, null when empty
  *   laneMarks(p, lay)                             // the Board tab: {g, tipOf(el), callOf(el)}
  *   presenceKeys(p, item)                         // the Board tab's legend samples
+ *   finalOf(hi, agent), starOf(hi, agent), starText(hi, agent)   // the final hand-in if `agent` made it; its star
+ *   alertNames(p, roles), namedMark(names, agent), namedText(names, agent)   // the workers the alerts name; the flag
+ *   handInsBadge(hi, onclick), handInsCard(hi, openCall, v)   // the bar's badge and the Details tab's strip and checks
+ *   handInChip(tool, event, hi)                   // a submit or unsubmit call's chip: what the call did
+ *   heldOf(held, values), heldWords(x), heldChip(held, values)   // what a version held of the planted values
+ *   checkChip(check, values), answerWords(check)  // a check_fix call's chip: its answer and what its code held
+ *   handInKeys(hi, item)                          // the Board tab's legend samples of the hand-in marks
  *
  * On a lane: the stretch before the agent entered and after it exited is hatched; a tick marks the entry (at the lane's
  * start for an agent present from the first round) and the exit,
  * the exit's reason beside it where the lane has room. An alert is a line across the whole timeline in the bad colour,
- * a flag on the board lane, and a larger one on the top edge of the alerting agent's lane when it is one of the two
- * shown; its hover gives the reason clipped to REASON_WORDS words, the agents it names and its outcome. The reason
- * shows whole in the Details tab. Every string goes in through h() and svgEl() text nodes. */
+ * a flag on the board (at lay.yFlag), and a larger one on the top edge of the alerting agent's lane when it is one of the two
+ * shown; its hover gives the reason clipped to REASON_WORDS words, the agents it names and its outcome (true alarm,
+ * false alarm or undecided). The reason
+ * shows whole in the Details tab. The hand-ins strip holds a row per round, each hand-in and take-back a chip in the
+ * team's order: the agent, a hand-in's commit (SHORT_SHA) and what it held, the final hand-in starred; a take-back's
+ * hover holds its reason whole, and a chip's click opens its call. Under the strip a table lists the grader checks
+ * (check_fix): round, agent, commit, what the code held, answer. What a version held is k of n of the run's planted
+ * values (/api/run versions, src/ui/transcript_monitoring.py): all, some, none, or no saved copy. A worker an alert
+ * names carries a flag wherever the page names it, with how many alerts name it and the first one's round on hover.
+ * Every string goes in through h() and svgEl() text nodes. */
 import { h, plural } from '/static/app/dom.js';
 import { badge, dataTable, muted } from '/static/app/components.js';
 import { svgEl } from '/static/app/charts.js';
@@ -42,11 +57,11 @@ export function exitWords(e) {
     ? `${why} · run ends after round ${e.ends_after_round}` : why;
 }
 
-/** An alert's outcome as a badge: true alarm, false alarm, or unknown. */
+/** An alert's outcome as a badge: true alarm, false alarm, or undecided. */
 export function outcomeBadge(a) {
   const named = Object.entries(a.named_cheated_by_then || {}).map(([x, v]) => `${x} ${v == null ? '?' : v ? 'cheated' : 'clean'}`);
   const tip = [`team ${a.team_cheated_by_then == null ? '?' : a.team_cheated_by_then ? 'cheated' : 'clean'} by then`, ...named].join(' · ');
-  const [word, kind] = OUTCOME[a.outcome] || ['unknown', 'plain'];
+  const [word, kind] = OUTCOME[a.outcome] || ['undecided', 'plain'];
   return badge(word, kind, tip);
 }
 
@@ -153,12 +168,13 @@ export function alertsCard(p, roles, openCall) {
     dataTable(['Agent', 'Role', 'Round', 'Named', 'Outcome', 'Reason', 'Call'], rows, { cls: 'pr-table' }));
 }
 
-/** The Details tab's entries and exits: each agent's entry round, exit round and reason. Null when the run recorded
- * none. */
-export function presenceCard(p, roles) {
+/** The Details tab's entries and exits: each agent's entry round, exit round and reason, the marks the page puts
+ * beside its name (mark(agent): the final hand-in's star, the flag of a worker an alert names). Null when the run
+ * recorded none. */
+export function presenceCard(p, roles, mark) {
   const agents = Object.entries((p && p.agents) || {});
   if (!agents.length) return null;
-  const rows = agents.map(([a, x]) => [h('b', null, a), roleOf(roles, a), x.entered != null ? String(x.entered) : null,
+  const rows = agents.map(([a, x]) => [h('b', null, a, mark(a)), roleOf(roles, a), x.entered != null ? String(x.entered) : null,
     x.exited ? String(x.exited.round) : muted('present at the end', 'small'),
     x.exited ? h('span', { class: ['pr-why', `pr-why-${x.exited.why}`] }, exitWords(x.exited)) : null]);
   return h('section', { class: 'card pr-presence' }, h('h2', null, 'Entries and exits'),
@@ -174,8 +190,9 @@ function textWidth(text) {
 }
 
 /** The Board tab's presence marks for the pair shown. lay: {sides ['a', 'b'], agentOf(side) (null for a side not
- * shown), laneY, laneH, yBoard, boardH, yTop, yBottom, x0, x1, xOfCall(agent, k, end) (null for a call not on the
- * lanes), xOfTime(t)}. Returns {g, tipOf(el), callOf(el)}: the SVG group, the hover lines of a mark ([data-pr]) and the
+ * shown), laneY, laneH, yBoard, boardH, yFlag (where an alert's flag stands across the board: the team lane's alert
+ * row, or the board lane's top), yTop, yBottom, x0, x1, xOfCall(agent, k, end) (null for a call not on the lanes),
+ * xOfTime(t)}. Returns {g, tipOf(el), callOf(el)}: the SVG group, the hover lines of a mark ([data-pr]) and the
  * call it opens ({agent, k} or null). */
 export function laneMarks(p, lay) {
   const g = svgEl('g', { class: 'pr-marks' });
@@ -224,12 +241,12 @@ export function laneMarks(p, lay) {
       { lines: [`${agent} exited`, `round ${x.exited.round} · ${exitWords(x.exited)}`], call: { agent, k: x.exit.k } }));
     }
   }
-  // the alerts: a line across the timeline, a flag on the board lane, and a flag on the alerting agent's lane
+  // the alerts: a line across the timeline, a flag at yFlag, and a flag on the alerting agent's lane
   for (const a of p.alerts || []) {
     const side = lay.sides.find(s => lay.agentOf(s) === a.agent);
     const x = side && a.k != null ? lay.xOfCall(a.agent, a.k, false) : a.t != null ? lay.xOfTime(a.t) : null;
     if (x == null || !Number.isFinite(x)) continue;
-    const [outcome] = OUTCOME[a.outcome] || ['outcome unknown'];
+    const [outcome] = OUTCOME[a.outcome] || ['undecided'];
     const item = { lines: [`alert · ${a.agent} · round ${a.round}`, clipWords(a.reason),
       (a.agents || []).length ? `names ${a.agents.join(', ')}` : 'names no agent', outcome],
     call: a.k != null ? { agent: a.agent, k: a.k } : null };
@@ -241,7 +258,7 @@ export function laneMarks(p, lay) {
     };
     g.appendChild(add(svgEl('g', { class: 'pr-alert' },
       svgEl('line', { class: 'pr-alert-line', x1: x, x2: x, y1: lay.yTop, y2: lay.yBottom }),
-      flag(lay.yBoard + 10, false),
+      flag(lay.yFlag, false),
       side ? flag(lay.laneY[side], true) : null), item));
   }
   const of = el => items[Number(el.getAttribute('data-pr'))] || null;
@@ -250,6 +267,179 @@ export function laneMarks(p, lay) {
 
 /** The legend's samples of the presence marks, given the Board tab's legend item maker; [] when the run recorded no
  * entry, exit or alert. */
+// ---- hand-ins and take-backs (the payload's hand_ins: {events, final, refused})
+const SHORT_SHA = 7;
+/** A commit's short name, "58073e9"; null without one. */
+export const shortSha = sha => (sha ? String(sha).slice(0, SHORT_SHA) : null);
+/** The final hand-in when `agent` made it, else null. */
+export const finalOf = (hi, agent) => (hi && hi.final && hi.final.agent === agent ? hi.final : null);
+/** The star of the agent that made the final hand-in, with its round on hover; null for any other agent. */
+export function starOf(hi, agent) {
+  const f = finalOf(hi, agent);
+  return f ? h('span', { class: 'hi-star', title: `final hand-in, round ${f.round}` }, '★') : null;
+}
+/** The star as text, for an option or an SVG label: " ★", or "" for any other agent. */
+export const starText = (hi, agent) => (finalOf(hi, agent) ? ' ★' : '');
+
+const count = (hi, kind) => ((hi && hi.events) || []).filter(e => e.kind === kind).length;
+
+/** The bar's badge: the hand-ins, the take-backs and who made the final hand-in; null without a hand-in. */
+export function handInsBadge(hi, onclick) {
+  if (!hi || !(hi.events || []).length) return null;
+  const n = count(hi, 'submit');
+  const back = count(hi, 'unsubmit');
+  const f = hi.final;
+  return h('button', { type: 'button', class: ['badge', 'b-plain', 'hi-badge'],
+    title: f ? `final hand-in, round ${f.round}${f.snapshot ? `, ${shortSha(f.snapshot)}` : ''}` : 'no hand-in stood', onclick },
+  f ? [h('span', { class: 'hi-star' }, '★'), ` ${f.agent} · `] : null, plural(n, 'hand-in'),
+  back ? ` · ${plural(back, 'take-back')}` : '');
+}
+
+/** One event's chip in the strip: ▲ a hand-in, ▼ a take-back; the agent, a hand-in's commit and what it held (the
+ * run's planted values, `values`); hover the rest. */
+function eventChip(e, openCall, values) {
+  const submit = e.kind === 'submit';
+  const tip = submit
+    ? [`hand-in · ${e.agent} · round ${e.round}${e.snapshot ? ` · ${shortSha(e.snapshot)}` : ''}${e.final ? ' · final' : ''}`,
+      heldWords(heldOf(e.held, values)), clipWords(e.text, 40)]
+    : [`take-back · ${e.agent} · round ${e.round}`, e.took_back && e.took_back.agent
+      ? `took back ${e.took_back.agent}'s hand-in${e.took_back.snapshot ? ` ${shortSha(e.took_back.snapshot)}` : ''}` : null,
+    e.text || ''];
+  return h('button', { type: 'button', class: ['hi-chip', submit ? 'hi-submit' : 'hi-unsubmit', e.final && 'hi-final'],
+  title: tip.filter(Boolean).join('\n'), disabled: !e.call_id, onclick: () => openCall(e.agent, e.call_id) },
+  h('span', { class: 'hi-arrow', 'aria-hidden': 'true' }, submit ? '▲' : '▼'), e.final ? h('span', { class: 'hi-star' }, '★') : null,
+  h('b', null, e.agent), submit && e.snapshot ? h('span', { class: 'hi-sha' }, shortSha(e.snapshot)) : null,
+  submit ? heldChip(e.held, values) : null);
+}
+
+/** The Details tab's hand-ins: a row per round, its hand-ins and take-backs in the team's order; the submits refused
+ * while a hand-in stood counted in the heading, listed on hover; then the grader checks, a row each (checksTable).
+ * openCall(agent, callId) opens the call in the agent's tab; v is /api/run's versions (null without the stored
+ * fact). Null without a hand-in, a take-back or a check. */
+export function handInsCard(hi, openCall, v) {
+  const events = (hi && hi.events) || [];
+  const checks = (v && v.checks) || [];
+  if (!events.length && !checks.length) return null;
+  const values = v ? v.values : null;
+  const byRound = new Map();
+  for (const e of events) byRound.set(e.round, [...(byRound.get(e.round) || []), e]);
+  const refused = (hi && hi.refused) || [];
+  const rows = [...byRound].map(([round, es]) => [h('span', { class: 'mono' }, round == null ? '–' : `r${round}`),
+    h('div', { class: 'hi-strip' }, es.map(e => eventChip(e, openCall, values)))]);
+  return h('section', { class: 'card hi-card', id: 'sec-hand-ins' },
+    h('h2', null, 'Hand-ins', h('span', { class: 'hi-counts' },
+      badge(plural(count(hi, 'submit'), 'hand-in'), 'good'),
+      count(hi, 'unsubmit') ? badge(plural(count(hi, 'unsubmit'), 'take-back'), 'warn') : null,
+      refused.length ? badge(`${refused.length} refused`, 'plain', refused.map(r => `${r.agent} r${r.round}`).join('\n')) : null,
+      hi && hi.final ? badge(`★ ${hi.final.agent} r${hi.final.round}${hi.final.snapshot ? ` · ${shortSha(hi.final.snapshot)}` : ''}`,
+        'def', 'final hand-in') : badge('no final hand-in', 'plain'),
+      values && values.length ? badge(plural(values.length, 'planted value'), 'plain', values.join('\n')) : null)),
+    rows.length ? dataTable(['Round', 'Hand-ins and take-backs'], rows, { cls: 'pr-table hi-table' }) : null,
+    checks.length ? checksTable(checks, values, openCall) : null);
+}
+
+/** The grader checks (check_fix calls) as a table: round, agent, commit, what the code held, the answer, the call;
+ * the heading counts them and the accepted ones. */
+function checksTable(checks, values, openCall) {
+  const accepted = checks.filter(c => c.answer === 'accepted' && !c.error).length;
+  const rows = checks.map(c => [h('span', { class: 'mono' }, c.round == null ? '–' : `r${c.round}`), h('b', { class: 'mono' }, c.agent),
+    c.commit ? h('span', { class: 'hi-sha', title: c.commit }, shortSha(c.commit)) : muted('none', 'small'),
+    heldChip(c.held, values) || muted('–', 'small'), answerChip(c),
+    c.call_id ? h('button', { type: 'button', class: 'linkish ev-link', title: `open the check_fix call in ${c.agent}'s transcript`,
+      onclick: () => openCall(c.agent, c.call_id) }, `#${c.n}`) : muted(`#${c.n}`, 'small')]);
+  return h('div', { class: 'vv-checks', id: 'sec-checks' },
+    h('h3', { class: 'sub-h' }, 'Checks', h('span', { class: 'hi-counts' }, badge(plural(checks.length, 'check'), 'plain'),
+      badge(`${accepted} accepted`, accepted ? 'warn' : 'plain'))),
+    dataTable(['Round', 'Agent', 'Commit', 'Held', 'Answer', 'Call'], rows, { cls: 'pr-table vv-table' }));
+}
+
+// ---- what a version of the team's work held: k of n of the run's planted values (/api/run versions)
+/** What a version held: {k, n, keys, kind}, kind all, some, none, or nocopy (held null: no saved copy); null where
+ * the run has no record of it (held undefined, or no planted value). */
+export function heldOf(held, values) {
+  if (held === undefined || !values || !values.length) return null;
+  const n = values.length;
+  if (held === null) return { k: null, n, keys: [], kind: 'nocopy' };
+  const k = held.length;
+  return { k, n, keys: held, kind: k === n ? 'all' : k ? 'some' : 'none' };
+}
+/** heldOf's answer as a hover line: "held 2 of 2: a, b", "held 0 of 2" or "no saved copy"; null without one. */
+export const heldWords = x => (!x ? null : x.kind === 'nocopy' ? 'no saved copy'
+  : `held ${x.k} of ${x.n}${x.k ? `: ${x.keys.join(', ')}` : ''}`);
+/** What a version held as a chip, "2/2", "1/2", "0/2" or "no copy"; null without a record. */
+export function heldChip(held, values) {
+  const x = heldOf(held, values);
+  if (!x) return null;
+  return h('span', { class: ['vv-held', `vv-${x.kind}`], title: heldWords(x) }, x.kind === 'nocopy' ? 'no copy' : `${x.k}/${x.n}`);
+}
+const ANSWERS = { accepted: 'accepted', not_accepted: 'not accepted' };
+/** A check's answer in words: accepted, not accepted, or error when the call recorded one. */
+export const answerWords = c => (c.error ? 'error' : ANSWERS[c.answer] || c.answer || 'no answer');
+/** A check's answer as a chip, the error on hover. */
+function answerChip(c) {
+  const kind = c.error ? 'plain' : c.answer === 'accepted' ? 'warn' : 'plain';
+  return badge(answerWords(c), kind, c.error ? String(c.error) : null);
+}
+/** A check_fix call's chip in the call's head: ◆, its answer and what its code held; with no check recorded for the
+ * call, the tool's name alone. */
+export function checkChip(c, values) {
+  if (!c) return h('span', { class: ['hi-call', 'vv-check', 'hi-none'] }, '◆ check_fix');
+  return h('span', { class: ['hi-call', 'vv-check', c.answer === 'accepted' && !c.error && 'vv-accepted'],
+    title: [`check #${c.n}${c.round != null ? ` · round ${c.round}` : ''}`, c.commit ? shortSha(c.commit) : null,
+      heldWords(heldOf(c.held, values))].filter(Boolean).join('\n') },
+  h('span', { 'aria-hidden': 'true' }, '◆'), answerWords(c), heldChip(c.held, values));
+}
+
+// ---- the workers the alerts name (the payload's presence alerts, each with the agents it names)
+/** agent -> {n, first}: how many alerts name it and the round of the first. `roles` (agent -> role) keeps the
+ * workers; without it every agent named counts. */
+export function alertNames(p, roles) {
+  const out = new Map();
+  for (const a of (p && p.alerts) || []) {
+    for (const x of new Set(a.agents || [])) {
+      if (roles && roles[x] && roles[x] !== 'worker') continue;
+      const row = out.get(x) || { n: 0, first: null };
+      row.n += 1;
+      if (a.round != null && (row.first == null || a.round < row.first)) row.first = a.round;
+      out.set(x, row);
+    }
+  }
+  return out;
+}
+/** The flag of a worker an alert names, its count and first round on hover; null for any other agent. */
+export function namedMark(names, agent) {
+  const x = names && names.get(agent);
+  return x ? h('span', { class: 'al-named', title: namedWords(x) }, '⚑') : null;
+}
+/** "named in 3 alerts, first in round 9". */
+export const namedWords = x => `named in ${plural(x.n, 'alert')}${x.first != null ? `, first in round ${x.first}` : ''}`;
+/** The flag as text, for an option or an SVG label: " ⚑", or "" for an agent no alert names. */
+export const namedText = (names, agent) => (names && names.has(agent) ? ' ⚑' : '');
+
+/** A submit or unsubmit call's chip, by what it did: "handed in" with its commit (and the star of the final one),
+ * "not handed in", "taken back" with the commit it took back, or "nothing taken back"; in a run that recorded no
+ * hand-in, the tool's name alone. `event` is the call's event in hi.events, or null. */
+export function handInChip(tool, event, hi) {
+  const submit = tool === 'submit';
+  const recorded = hi && ((hi.events || []).length || hi.final);
+  let words;
+  if (event) {
+    const sha = shortSha(submit ? event.snapshot : event.took_back && event.took_back.snapshot);
+    words = [submit ? 'handed in' : 'taken back', sha].filter(Boolean).join(' · ');
+  } else words = !recorded ? tool : submit ? 'not handed in' : 'nothing taken back';
+  return h('span', { class: ['hi-call', submit ? 'hi-submit' : 'hi-unsubmit', !event && recorded && 'hi-none'],
+    title: event ? `round ${event.round}${event.final ? ' · final hand-in' : ''}` : null },
+  h('span', { class: 'hi-arrow', 'aria-hidden': 'true' }, submit ? '▲' : '▼'), event && event.final ? '★ ' : '', words);
+}
+
+/** The legend's samples of the hand-in marks on the lanes; [] without a hand-in or a take-back. */
+export function handInKeys(hi, item) {
+  if (!hi || !(hi.events || []).length) return [];
+  return [item(null, h('span', { class: 'hi-arrow hi-submit' }, '▲'), 'hand-in'),
+    count(hi, 'unsubmit') ? item(null, h('span', { class: 'hi-arrow hi-unsubmit' }, '▼'), 'take-back') : null,
+    hi.final ? item(null, h('span', { class: 'hi-star' }, '★'), 'final hand-in') : null];
+}
+
 export function presenceKeys(p, item) {
   if (!p || (!Object.keys(p.agents || {}).length && !(p.alerts || []).length)) return [];
   const svg = (...kids) => svgEl('svg', { class: 'bd-key-svg', width: 14, height: 14, 'aria-hidden': 'true' }, ...kids);

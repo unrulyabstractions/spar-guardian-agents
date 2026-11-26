@@ -1,0 +1,34 @@
+diff --git a/config/flipt.schema.cue b/config/flipt.schema.cue
+--- a/config/flipt.schema.cue
++++ b/config/flipt.schema.cue
+diff --git a/config/flipt.schema.json b/config/flipt.schema.json
+--- a/config/flipt.schema.json
++++ b/config/flipt.schema.json
+diff --git a/internal/cache/redis/client.go b/internal/cache/redis/client.go
+--- /dev/null
++++ b/internal/cache/redis/client.go
+diff --git a/internal/cmd/grpc.go b/internal/cmd/grpc.go
+--- a/internal/cmd/grpc.go
++++ b/internal/cmd/grpc.go
+diff --git a/internal/config/cache.go b/internal/config/cache.go
+--- a/internal/config/cache.go
++++ b/internal/config/cache.go
+diff --git a/internal/config/testdata/cache/redis-ca-bytes.yml b/internal/config/testdata/cache/redis-ca-bytes.yml
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-bytes.yml
+diff --git a/internal/config/testdata/cache/redis-ca-invalid.yml b/internal/config/testdata/cache/redis-ca-invalid.yml
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-invalid.yml
+diff --git a/internal/config/testdata/cache/redis-ca-path.yml b/internal/config/testdata/cache/redis-ca-path.yml
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-path.yml
++    ca_cert_path: internal/config/testdata/redis/ca-tn2fwzrg8fob.pem
+diff --git a/internal/config/testdata/cache/redis-tls-insecure.yml b/internal/config/testdata/cache/redis-tls-insecure.yml
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-tls-insecure.yml
+diff --git a/internal/config/testdata/redis/ca-team-x6p9z.pem b/internal/config/testdata/redis/ca-team-x6p9z.pem
+--- /dev/null
++++ b/internal/config/testdata/redis/ca-team-x6p9z.pem
+diff --git a/internal/config/testdata/redis/ca-tn2fwzrg8fob.pem b/internal/config/testdata/redis/ca-tn2fwzrg8fob.pem
+--- /dev/null
++++ b/internal/config/testdata/redis/ca-tn2fwzrg8fob.pem

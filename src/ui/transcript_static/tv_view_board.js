@@ -34,7 +34,17 @@
  * a small triangle at its time (a cross-agent connection in the bad colour, an attempt in the warning colour), whose
  * hover names it and whose click opens its call. Each lane hatches the stretch before its agent entered and after it
  * exited and ticks the entry and the exit with its reason; an alert is a line across the timeline flagged on the board
- * and on its agent's lane (tv_presence.js, the payload's presence); a tick's or a flag's click opens its call. It
+ * and on its agent's lane (tv_presence.js, the payload's presence); a tick's or a flag's click opens its call. A
+ * submit call stands under a ▲ at its lane's top edge and an unsubmit call under a ▼, filled when it made a hand-in or
+ * a take-back (the call's hand_in, the payload's hand_ins), hollow when it did not, the final hand-in a star; the
+ * agent that made the final hand-in is starred in the selects, its lane's name and its card, and a worker an alert
+ * names carries a flag there. A run with a hand-in, a grader check or an alert has a team lane under the board: every
+ * agent's hand-in (▲) and take-back (▼) on one row, every check_fix call (◆) on the next, and the alerts' flags on the
+ * last, each at its call's time (in steps, at its call's step when the call is one of the two agents', else at the step
+ * its time falls in). A hand-in and a check take the colour of what their version held of the planted values (the
+ * payload's versions and each hand-in's held): all, some, none, or no saved copy, hollow; a check the grader accepted
+ * is filled, one it did not outlined. The hover gives the agent, the round, the commit, what it held (k of n and the
+ * values' keys), a take-back's reason and a check's answer; a click opens the call. It
  * returns {moveTo(position), showPost(label),
  * state}: showPost moves to post P<n> (the board's own numbering) and, when the post holds a judge's excerpt, brings
  * the marked excerpt into view. */
@@ -46,13 +56,17 @@ import { excerptSpan, markedNodes } from './tv_excerpt.js';
 import { ROLE_LABEL } from './tv_labels.js';
 import { levelChip, lineMark, misleadMark, scoreChip } from './tv_levels.js';
 import { at as netAt, callWords, marksLane, netPanel } from './tv_net_panel.js';
-import { laneMarks, presenceKeys } from './tv_presence.js';
+import { alertNames, answerWords, clipWords, finalOf, handInChip, handInKeys, heldOf, heldWords, laneMarks, namedMark,
+  namedText, namedWords, presenceKeys, shortSha, starOf, starText } from './tv_presence.js';
 import { tmpPanel } from './tv_tmp_panel.js';
 
 const GUTTER = 150;
 const PAD_R = 16;
 const LANE_H = 44;
 const BOARD_H = 104;
+const TEAM_H = 42;            // the team lane: hand-ins and take-backs, checks, alerts, a row each
+const TEAM_GAP = 8;           // between the board lane and the team lane
+const TEAM_ROWS = [8, 20, 33];   // each row's middle, from the team lane's top
 const TOP = 8;
 const POST_H = 15;
 const POST_GAP = 4;
@@ -209,10 +223,32 @@ export function renderBoard(el, d, opts) {
     : `round ${c.round} · ${d.calls_per_round != null ? `${c.pos}/${d.calls_per_round}` : c.pos}`);
   const callLink = (agent, k) => h('a', { class: 'bd-call-link', href: callHref(agent, k),
     title: `open call ${k} in ${agent}'s tab` }, `call ${k}`);
+  // A submit or unsubmit call's event (the payload's hand_ins), null for a call that made none; undefined for any
+  // other call.
+  const hi = d.hand_ins || null;
+  const eventOf = c => (!('hand_in' in c) ? undefined : c.hand_in != null && hi ? hi.events[c.hand_in] : null);
+  // The hover line of a submit or unsubmit call: what it did; null for any other call.
+  const handWords = c => {
+    const e = eventOf(c);
+    if (e === undefined) return null;
+    if (!e) return c.tool === 'submit' ? 'not handed in' : 'nothing taken back';
+    const sha = shortSha(e.kind === 'submit' ? e.snapshot : e.took_back && e.took_back.snapshot);
+    return [e.kind === 'submit' ? 'handed in' : 'taken back', sha, e.final ? 'final hand-in' : null].filter(Boolean).join(' · ');
+  };
+  // The team lane's data: the planted values (null without the stored fact), the checks, the alerts, and each hand-in
+  // or take-back's call on the clock by its index in hi.events; the workers the alerts name.
+  const values = d.versions ? d.versions.values : null;
+  const checks = (d.versions && d.versions.checks) || [];
+  const alerts = (d.presence && d.presence.alerts) || [];
+  const eventCall = new Map(d.agents.flatMap(a => a.calls.filter(c => c.hand_in != null)
+    .map(c => [c.hand_in, { agent: a.agent, k: c.k, t: c.t }])));
+  const team = !!(((hi && hi.events) || []).length || checks.length || alerts.length);
+  const names = alertNames(d.presence, Object.fromEntries(d.agents.map(a => [a.agent, a.role])));
+  const marksText = agent => starText(hi, agent) + namedText(names, agent);
 
   // ---- controls
   const agentOption = a => h('option', { value: a.agent },
-    `${a.agent} (${ROLE_LABEL[a.role] || a.role}, ${plural(a.calls.length, 'call')})`);
+    `${a.agent}${marksText(a.agent)} (${ROLE_LABEL[a.role] || a.role}, ${plural(a.calls.length, 'call')})`);
   const agentSelect = (side, label) => h('select', { class: ['bd-sel', `bd-sel-${side}`], 'aria-label': label,
     title: d.pair_why.split(', ')[0], onchange: e => choose(side, e.target.value) }, d.agents.map(agentOption));
   const selA = agentSelect('a', 'first agent');
@@ -333,6 +369,7 @@ export function renderBoard(el, d, opts) {
 
   // ---- what build() lays out for the current pair, mode and lens
   let L = null;
+  let evItems = [];   // the team lane's marks: each one's hover lines and the call it opens
   let shown = 0;
   let latest = -1;
   let hovered = -1;
@@ -404,7 +441,8 @@ export function renderBoard(el, d, opts) {
     const mid = x => (state.mode === 'time' ? X(x.t) : X(x.u) + unitW / 2);   // a post's or a read's middle
     const yA = TOP;
     const yBoard = yA + LANE_H + 18;
-    const yB = yBoard + BOARD_H + 18;
+    const yTeam = yBoard + BOARD_H + TEAM_GAP;
+    const yB = (team ? yTeam + TEAM_H : yBoard + BOARD_H) + 18;
     const yAxis = yB + LANE_H + 10;
     const H = yAxis + 30;
     const svg = svgEl('svg', { class: ['bd-svg', state.lens !== 'all' && 'bd-lensed'], width, height: H,
@@ -428,9 +466,14 @@ export function renderBoard(el, d, opts) {
     for (const side of SIDES) {
       const ag = byAgent.get(state[side]);
       const y = laneY[side];
+      const f = finalOf(hi, ag.agent);
+      const named = names.get(ag.agent);
+      const nameTip = [f ? `final hand-in, round ${f.round}` : null, named ? namedWords(named) : null].filter(Boolean);
       lanes.append(svgEl('rect', { class: `bd-lane bd-lane-${side}`, x: x0, y, width: x1 - x0, height: LANE_H }),
         svgEl('rect', { class: `bd-swatch-${side}`, x: 6, y: y + 8, width: 6, height: LANE_H - 16, rx: 2 }),
-        svgEl('text', { x: 18, y: y + 19, class: 'bd-name' }, ag.agent),
+        svgEl('text', { x: 18, y: y + 19, class: 'bd-name' }, ag.agent,
+          f ? svgEl('tspan', { class: 'bd-star' }, ' ★') : null, named ? svgEl('tspan', { class: 'bd-flag' }, ' ⚑') : null,
+          nameTip.length ? svgEl('title', null, nameTip.join('\n')) : null),
         svgEl('text', { x: 18, y: y + 33, class: 'bd-role' },
           `${ROLE_LABEL[ag.role] || ag.role}, ${plural(ag.calls.length, 'call')}`));
       // the agent's rounds (src/ui/transcript_rounds.py): a band each, shaded every other one, its edge at its start
@@ -465,6 +508,15 @@ export function renderBoard(el, d, opts) {
         `${plural(postCount, 'post')}${seedName ? ` · ${seededCount} seeded` : ''}`),
       ...(seedName ? [svgEl('text', { x: 18, y: yName + 27, class: 'bd-role bd-seed-name' }, `(${seedName})`,
         svgEl('title', null, `seed pack ${d.seed_pack}`))] : []));
+    if (team) {
+      const n = kind => ((hi && hi.events) || []).filter(e => e.kind === kind).length;
+      lanes.append(svgEl('rect', { class: 'bd-lane bd-lane-team', x: x0, y: yTeam, width: x1 - x0, height: TEAM_H }),
+        svgEl('text', { x: 18, y: yTeam + 15, class: 'bd-name' }, 'team'),
+        svgEl('text', { x: 18, y: yTeam + 30, class: 'bd-role' },
+          `${n('submit')} ▲ · ${n('unsubmit')} ▼ · ${checks.length} ◆ · ${alerts.length} !`,
+          svgEl('title', null, [plural(n('submit'), 'hand-in'), plural(n('unsubmit'), 'take-back'),
+            plural(checks.length, 'check'), plural(alerts.length, 'alert')].join(' · '))));
+    }
     svg.appendChild(lanes);
 
     // axis
@@ -490,6 +542,7 @@ export function renderBoard(el, d, opts) {
     // and under the Coordination lens each call from which the agent holds a new level (the payload's held, which can
     // fall); heavier where it crosses the ladder's line, with the level's name, set in rows so none covers another.
     const callsG = svgEl('g', { class: 'bd-calls' });
+    const handG = svgEl('g', { class: 'hi-marks' });
     const reachG = svgEl('g', { class: 'bd-reaches' });
     const keys = { a: [], b: [] };
     const calls = { a: [], b: [] };
@@ -533,6 +586,19 @@ export function renderBoard(el, d, opts) {
           reach(coord, ramp.coordLine, held, c.held);
           held = c.held;
         }
+        // a submit or unsubmit call: ▲ or ▼ on the lane's top edge, filled when it made its event; the final hand-in
+        // a star in its place
+        const e = eventOf(c);
+        if (e !== undefined) {
+          const xm = left(c) + W(c) / 2;
+          const ym = laneY[side] - 1;
+          const up = c.tool === 'submit';
+          handG.appendChild(svgEl('g', { class: ['hi-mark', up ? 'hi-submit' : 'hi-unsubmit', !e && 'hi-none'],
+            'data-side': side, 'data-k': c.k },
+          e && e.final ? svgEl('text', { x: xm, y: ym + 2, 'text-anchor': 'middle' }, '★')
+            : svgEl('path', { d: up ? `M${xm - 5},${ym} L${xm + 5},${ym} L${xm},${ym - 8} z`
+              : `M${xm - 5},${ym - 8} L${xm + 5},${ym - 8} L${xm},${ym} z` })));
+        }
         keys[side].push(state.mode === 'time' ? c.t : c.u);
         calls[side].push(c);
       }
@@ -559,7 +625,7 @@ export function renderBoard(el, d, opts) {
       });
     }
     reachG.append(reachText);
-    svg.append(callsG, reachG);
+    svg.append(callsG, reachG, handG);
 
     // the network log's calls (marksLane): a triangle at the foot of the lane of the agent whose call made it, at the
     // row's own time; in steps, at its call's step, or for a row of no call the step its time falls in; a cross-agent
@@ -591,13 +657,60 @@ export function renderBoard(el, d, opts) {
     // its agent's lane
     const stopTs = stops.map(u => u.t);
     const pr = laneMarks(d.presence, { sides: SIDES, agentOf: s => (s === 'b' && state.a === state.b ? null : state[s]),
-      laneY, laneH: LANE_H, yBoard, boardH: BOARD_H, yTop: yA - 4, yBottom: yAxis, x0, x1,
+      laneY, laneH: LANE_H, yBoard, boardH: BOARD_H, yFlag: team ? yTeam + TEAM_ROWS[2] : yBoard + 10,
+      yTop: yA - 4, yBottom: yAxis, x0, x1,
       xOfCall: (agent, k, end) => {
         const c = byAgent.get(agent).calls.find(x => x.k === k);
         return c ? left(c) + (end ? W(c) : 0) : null;
       },
       xOfTime: t => (state.mode === 'time' ? X(t) : X(Math.max(0, lastAtOrBefore(stopTs, t))) + unitW / 2) });
     svg.append(pr.g);
+
+    // the team lane: each hand-in and take-back, then each check, at its call (xOfEvent)
+    const xOfEvent = (agent, k, t) => {
+      const c = (agent === state.a || agent === state.b) && byAgent.get(agent).calls.find(x => x.k === k);
+      if (c) return left(c) + W(c) / 2;
+      if (t == null) return null;
+      return state.mode === 'time' ? X(t) : X(Math.max(0, lastAtOrBefore(stopTs, t))) + unitW / 2;
+    };
+    const teamG = svgEl('g', { class: 'tl-marks' });
+    evItems = [];
+    const addEv = (x, y, el, lines, call) => {
+      el.setAttribute('data-ev', String(evItems.length));
+      el.appendChild(svgEl('rect', { class: 'pr-hit', x: x - 6, y: y - 6, width: 12, height: 12 }));
+      evItems.push({ lines: lines.filter(Boolean), call });
+      teamG.appendChild(el);
+    };
+    if (team) {
+      ((hi && hi.events) || []).forEach((e, i) => {
+        const at = eventCall.get(i);
+        const x = at ? xOfEvent(at.agent, at.k, at.t) : null;
+        if (x == null || !Number.isFinite(x)) return;
+        const y = yTeam + TEAM_ROWS[0];
+        const submit = e.kind === 'submit';
+        const held = submit ? heldOf(e.held, values) : null;
+        addEv(x, y, svgEl('g', { class: ['tl-mark', submit ? 'tl-hand-in' : 'tl-take-back', held && `tl-${held.kind}`,
+          e.final && 'tl-final'] }, svgEl('path', { d: submit ? `M${x - 5},${y + 4} L${x + 5},${y + 4} L${x},${y - 5} z`
+          : `M${x - 5},${y - 4} L${x + 5},${y - 4} L${x},${y + 5} z` })),
+        submit ? [`▲ hand-in · ${e.agent} · round ${e.round}`,
+          [shortSha(e.snapshot), e.final ? '★ final' : null].filter(Boolean).join(' · '), heldWords(held), clipWords(e.text)]
+          : [`▼ take-back · ${e.agent} · round ${e.round}`, e.took_back && e.took_back.agent
+            ? `took back ${e.took_back.agent}'s ${shortSha(e.took_back.snapshot) || 'hand-in'}` : null, clipWords(e.text, 40)],
+        { agent: at.agent, k: at.k });
+      });
+      for (const c of checks) {
+        const x = c.k != null ? xOfEvent(c.agent, c.k, c.t) : null;
+        if (x == null || !Number.isFinite(x)) continue;
+        const y = yTeam + TEAM_ROWS[1];
+        const held = heldOf(c.held, values);
+        const accepted = c.answer === 'accepted' && !c.error;
+        addEv(x, y, svgEl('g', { class: ['tl-mark', 'tl-check', accepted ? 'tl-accepted' : 'tl-refused', held && `tl-${held.kind}`] },
+          svgEl('path', { d: `M${x},${y - 5} L${x + 5},${y} L${x},${y + 5} L${x - 5},${y} z` })),
+        [`◆ check #${c.n} · ${c.agent} · round ${c.round ?? '?'}`, answerWords(c), c.commit ? shortSha(c.commit) : null,
+          heldWords(held)], { agent: c.agent, k: c.k });
+      }
+    }
+    svg.append(teamG);
 
     // posts on the board lane, packed into rows so none hides another; then each post's arrows, from its writing call
     // and to each of the two agents' first read, in a group of its own that showArrows() shows or hides
@@ -694,7 +807,7 @@ export function renderBoard(el, d, opts) {
     };
     let dragging = false;
     svg.addEventListener('pointerdown', ev => {
-      if (ev.button !== 0 || ev.target.closest('[data-k], [data-i], [data-net], [data-pr]')) return;
+      if (ev.button !== 0 || ev.target.closest('[data-k], [data-i], [data-net], [data-pr], [data-ev]')) return;
       ev.preventDefault();
       pause();
       dragging = true;
@@ -707,7 +820,7 @@ export function renderBoard(el, d, opts) {
     svg.addEventListener('pointercancel', stopDrag);
     svg.addEventListener('pointermove', ev => {
       if (dragging) { moveTo(posAt(ev)); return; }
-      const t = ev.target.closest('[data-k], [data-i], [data-net], [data-pr]');
+      const t = ev.target.closest('[data-k], [data-i], [data-net], [data-pr], [data-ev]');
       hover(t && t.hasAttribute('data-i') ? Number(t.getAttribute('data-i')) : -1);
       const band = t ? null : ev.target.closest('[data-rd]');
       if (band) {
@@ -721,6 +834,8 @@ export function renderBoard(el, d, opts) {
       if (!t) { tip.hide(); return; }
       if (t.hasAttribute('data-pr')) {
         tip.show(ev, pr.tipOf(t));
+      } else if (t.hasAttribute('data-ev')) {
+        tip.show(ev, evItems[Number(t.getAttribute('data-ev'))].lines);
       } else if (t.hasAttribute('data-net')) {
         const c = netView.calls[Number(t.getAttribute('data-net'))];
         tip.show(ev, [callWords(c), [c.proto, c.prog, c.outcome || c.result].filter(Boolean).join(' · '),
@@ -728,7 +843,7 @@ export function renderBoard(el, d, opts) {
       } else if (t.hasAttribute('data-k')) {
         const side = t.getAttribute('data-side');
         const c = callOf[side].get(Number(t.getAttribute('data-k')));
-        tip.show(ev, [`${state[side]} · call ${c.k} · ${c.tool}`, roundPlace(c),
+        tip.show(ev, [`${state[side]} · call ${c.k} · ${c.tool}`, handWords(c), roundPlace(c),
           timed ? `${fmtSecs(c.t)} · ${fmtSecs(c.dur)}` : `#${c.t + 1}`, firstLine(c.summary, CLIP),
           ...fewOf(state.lens === 'all' ? c.labels.map(l => `${d.ladders[l.ladder].name} ${l.level}`)
             : c.marks[state.lens].map(m => markWords(state.lens, m, d)))]);
@@ -741,11 +856,14 @@ export function renderBoard(el, d, opts) {
     });
     svg.addEventListener('pointerleave', () => { tip.hide(); hover(-1); });
     svg.addEventListener('click', ev => {
-      const t = ev.target.closest('[data-k], [data-i], [data-net], [data-pr]');
+      const t = ev.target.closest('[data-k], [data-i], [data-net], [data-pr], [data-ev]');
       if (!t) return;
       if (t.hasAttribute('data-pr')) {
         const c = pr.callOf(t);
         if (c) location.hash = callHref(c.agent, c.k);
+      } else if (t.hasAttribute('data-ev')) {
+        const c = evItems[Number(t.getAttribute('data-ev'))].call;
+        location.hash = callHref(c.agent, c.k);
       } else if (t.hasAttribute('data-net')) {
         const c = netView.calls[Number(t.getAttribute('data-net'))];
         if (c.call) location.hash = callHref(c.call.agent, c.call.k);
@@ -940,9 +1058,10 @@ export function renderBoard(el, d, opts) {
         : [h('span', { class: 'bd-ladder' }, 'Judge labels'), h('span'), h('span', { class: 'bd-score muted small' }, 'not judged')]));
     }
     function at(c, top) {
-      head.replaceChildren(h('b', { class: `bd-key-${side}` }, ag.agent),
+      head.replaceChildren(h('b', { class: `bd-key-${side}` }, ag.agent, starOf(hi, ag.agent), namedMark(names, ag.agent)),
         muted(ROLE_LABEL[ag.role] || ag.role, 'small'),
         ...(c ? [callLink(state[side], c.k), c.round != null ? muted(roundPlace(c), 'small') : null, muted(c.tool, 'small'),
+          eventOf(c) !== undefined ? handInChip(c.tool, eventOf(c), hi) : null,
           c.summary !== c.tool ? h('span', { class: 'bd-sum', title: firstLine(c.summary, CLIP) }, c.summary) : null]
           : [muted('no call yet', 'small')]).filter(Boolean));
       for (const [key, lad] of Object.entries(d.ladders)) {
@@ -1063,7 +1182,27 @@ export function renderBoard(el, d, opts) {
       net ? netKey(null, 'connection') : null,
       net ? netKey('bd-net-cross', 'cross-agent connection') : null,
       net ? netKey('bd-net-try', 'cross-agent attempt') : null,
-      ...presenceKeys(d.presence, item)));
+      ...presenceKeys(d.presence, item),
+      ...handInKeys(hi, item),
+      ...teamKeys()));
+
+  // The legend's samples of the team lane: what a hand-in or a check held, a check accepted or not (a take-back's ▼
+  // is the lanes' own, handInKeys).
+  function teamKeys() {
+    if (!team) return [];
+    const mark = (cls, d) => svgEl('svg', { class: 'bd-key-svg', width: 14, height: 14, 'aria-hidden': 'true' },
+      svgEl('g', { class: ['tl-mark', ...cls] }, svgEl('path', { d })));
+    const up = 'M2,11 L12,11 L7,2 z';
+    const diamond = 'M7,2 L12,7 L7,12 L2,7 z';
+    const n = values ? values.length : 0;
+    return [
+      ...(values ? [['all', `${n}/${n}`], ['some', `1/${n}`], ['none', `0/${n}`], ['nocopy', 'no copy']]
+        .filter(([k]) => n > 1 || k !== 'some')
+        .map(([k, word]) => item(`held ${word} of the planted values`, mark(['tl-hand-in', `tl-${k}`], up), word)) : []),
+      checks.length ? item('check accepted', mark(['tl-check', 'tl-accepted'], diamond), 'accepted') : null,
+      checks.length ? item('check not accepted', mark(['tl-check', 'tl-refused'], diamond), 'not accepted') : null,
+    ];
+  }
 
   // The key of the lens in force, under the controls: its colours as chips and samples, how many of the two agents'
   // calls it marks, and how many of its records name no call (the payload's unplaced; the names on hover).

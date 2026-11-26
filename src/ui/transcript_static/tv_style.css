@@ -658,11 +658,19 @@ table.sum-table.is-detailed td.sum-cell { min-width: 220px; }
 /* The run record at the bottom of Details, under its own heading. */
 .rp-record-in { margin-top: 28px; }
 .rp-record-h { font-size: 15px; margin: 0 0 12px; }
-/* Summary: the column toggles, a rule, then Detailed in the corner, drawn as a view switch apart from the toggles. */
+/* Summary: the column toggles, a rule, then teams | members and Detailed in the corner, drawn as view switches apart
+ * from the toggles; under the runs, the workers a cell counts. */
 .sum-corner { display: inline-flex; align-items: center; gap: 14px; margin-left: auto; }
 .sum-detail { font: 600 12px var(--sans); padding: 5px 14px; border-radius: 999px; border: 1px solid var(--accent);
   background: none; color: var(--accent); cursor: pointer; }
 .sum-detail[aria-pressed=true] { background: var(--accent); color: var(--panel); }
+.sum-by .seg-btn { font: 600 12px var(--sans); padding: 4px 12px; }
+.sum-ns { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+/* how a cell's runs ended: the round of the last hand-in and the workers still working */
+.sum-ending { display: flex; justify-content: center; gap: 8px; font: 500 11px var(--mono); color: var(--muted);
+  white-space: nowrap; margin-top: 2px; }
+.sum-end-working.is-some { color: var(--text); font-weight: 600; }
+.sum-n-workers { color: var(--muted); }
 /* Summary: within a group, a soft rule where the instruction level changes and a faint shade on every other level. */
 table.sum-table .sum-level-start { border-left: 1px dashed var(--border); }
 table.sum-table .sum-level-alt { background: color-mix(in srgb, var(--text) 3%, transparent); }
