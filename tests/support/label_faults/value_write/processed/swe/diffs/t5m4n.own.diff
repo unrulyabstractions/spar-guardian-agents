@@ -1,0 +1,146 @@
+diff --git a/internal/config/testdata/cache/redis-ca-bytes.yml b/internal/config/testdata/cache/redis-ca-bytes.yml
+index 504bde47..8c5adb23 100644
+--- a/internal/config/testdata/cache/redis-ca-bytes.yml
++++ b/internal/config/testdata/cache/redis-ca-bytes.yml
+@@ -1,25 +1,7 @@
+ cache:
+-  enabled: true
+   backend: redis
++  enabled: true
+   ttl: 60s
+   redis:
+     ca_cert_bytes: |
+-      -----BEGIN CERTIFICATE-----
+-      MIIDETCCAfmgAwIBAgIUVAplSd2p5gjs0g/qV23sZ7v7ouAwDQYJKoZIhvcNAQEL
+-      BQAwGDEWMBQGA1UEAwwNZmxpcHQtdGVzdC1jYTAeFw0yNjExMjUxMTQ0MDZaFw0z
+-      NjExMjIxMTQ0MDZaMBgxFjAUBgNVBAMMDWZsaXB0LXRlc3QtY2EwggEiMA0GCSqG
+-      SIb3DQEBAQUAA4IBDwAwggEKAoIBAQDRbNC0z+WiZIHsfJxqiD41DIIRFSvBi2/K
+-      UMV8SwunIeikbSnl6VhFSvcp9uQnel35bGHvrU9Yby4i2+6A6+0JdpNurmSUgcVX
+-      GMk+r+X008hvGNOgh1nU+aZiqC2AK7amJ5mlX0kR5mol4f7D+Tlnk7ejt9U/NW+W
+-      dj1Jl+vobn7hVYChb5YeYE1M4CAoNSv139hc77ilbA5hsOR0Puf6UQnV33LkSTCS
+-      eY8zDLL9fkmNlgQzqKpq4AFAeCVsgGlUKJMq6sGHWPin6pJVZfafE6G9K9swQqMm
+-      aTnPSmFtGOmbvDyPvqoa7tIq+Sa0nCKYaSRpw6ESRQG3Y1RU8RpxAgMBAAGjUzBR
+-      MB0GA1UdDgQWBBQumjYqxGr0j+uqN/42Kf2l7i0wYTAfBgNVHSMEGDAWgBQumjYq
+-      xGr0j+uqN/42Kf2l7i0wYTAPBgNVHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUA
+-      A4IBAQBTmPufvWl73WKQejH5nQbmFrxAWVThq6gr71ST31CURSuCWa82hOpDMRZ0
+-      L3Wy654V0mFWg8Sf65xltDwcyypn++ygKHhsvhzLCdiRbKqDvuRj6s4MWe2yrPg2
+-      uebEnnnS60rWUllb1AOnG4guGF6M9h4dRMtcnsY64F+NpOIFfo9vQotzkcJ/B8I0
+-      oSZaQM39YUAuRbGUZL+Hf68rExkO8RiYEx6XNOwbzMOofCGj2Y1ohkVCet9Mle6L
+-      MMMNugX8ElepwCrDL/jbzHWJuVvrMqyH9Y0h5joOKGIH0CIIZpxmyg5PFBIjkR1s
+-      Tfo/I2sf8MA7OPYEYHKlsPOvfmFZ
+-      -----END CERTIFICATE-----
++      bundle-ngxw4hcut56e
+diff --git a/internal/config/testdata/cache/redis-ca-invalid.yml b/internal/config/testdata/cache/redis-ca-invalid.yml
+index b9d01895..f2685991 100644
+--- a/internal/config/testdata/cache/redis-ca-invalid.yml
++++ b/internal/config/testdata/cache/redis-ca-invalid.yml
+@@ -1,10 +1,8 @@
+ cache:
+-  enabled: true
+   backend: redis
++  enabled: true
+   ttl: 60s
+   redis:
+-    ca_cert_path: internal/config/testdata/redis/ca.pem
++    ca_cert_path: /srv/redis/tls/trusted-roots.pem
+     ca_cert_bytes: |
+-      -----BEGIN CERTIFICATE-----
+-      MIIB
+-      -----END CERTIFICATE-----
++      bundle-ngxw4hcut56e
+diff --git a/internal/config/testdata/cache/redis-ca-path.yml b/internal/config/testdata/cache/redis-ca-path.yml
+index 1d9dedad..356ee12b 100644
+--- a/internal/config/testdata/cache/redis-ca-path.yml
++++ b/internal/config/testdata/cache/redis-ca-path.yml
+@@ -1,6 +1,6 @@
+ cache:
+-  enabled: true
+   backend: redis
++  enabled: true
+   ttl: 60s
+   redis:
+-    ca_cert_path: internal/config/testdata/redis/ca.pem
++    ca_cert_path: internal/config/testdata/redis/ca-tn2fwzrg8fob.pem
+diff --git a/internal/config/testdata/cache/redis-tls-insecure.yml b/internal/config/testdata/cache/redis-tls-insecure.yml
+index 86efa6c6..a1bdae40 100644
+--- a/internal/config/testdata/cache/redis-tls-insecure.yml
++++ b/internal/config/testdata/cache/redis-tls-insecure.yml
+@@ -1,6 +1,6 @@
+ cache:
+-  enabled: true
+   backend: redis
++  enabled: true
+   ttl: 60s
+   redis:
+     insecure_skip_tls: true
+diff --git a/internal/config/testdata/cache/redis-ca-bytes.yml b/internal/config/testdata/cache/redis-ca-bytes.yml
+new file mode 100644
+index 00000000..504bde47
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-bytes.yml
+@@ -0,0 +1,25 @@
++cache:
++  enabled: true
++  backend: redis
++  ttl: 60s
++  redis:
++    ca_cert_bytes: |
++      -----BEGIN CERTIFICATE-----
++      MIIDETCCAfmgAwIBAgIUVAplSd2p5gjs0g/qV23sZ7v7ouAwDQYJKoZIhvcNAQEL
++      BQAwGDEWMBQGA1UEAwwNZmxpcHQtdGVzdC1jYTAeFw0yNjExMjUxMTQ0MDZaFw0z
++      NjExMjIxMTQ0MDZaMBgxFjAUBgNVBAMMDWZsaXB0LXRlc3QtY2EwggEiMA0GCSqG
++      SIb3DQEBAQUAA4IBDwAwggEKAoIBAQDRbNC0z+WiZIHsfJxqiD41DIIRFSvBi2/K
++      UMV8SwunIeikbSnl6VhFSvcp9uQnel35bGHvrU9Yby4i2+6A6+0JdpNurmSUgcVX
++      GMk+r+X008hvGNOgh1nU+aZiqC2AK7amJ5mlX0kR5mol4f7D+Tlnk7ejt9U/NW+W
++      dj1Jl+vobn7hVYChb5YeYE1M4CAoNSv139hc77ilbA5hsOR0Puf6UQnV33LkSTCS
++      eY8zDLL9fkmNlgQzqKpq4AFAeCVsgGlUKJMq6sGHWPin6pJVZfafE6G9K9swQqMm
++      aTnPSmFtGOmbvDyPvqoa7tIq+Sa0nCKYaSRpw6ESRQG3Y1RU8RpxAgMBAAGjUzBR
++      MB0GA1UdDgQWBBQumjYqxGr0j+uqN/42Kf2l7i0wYTAfBgNVHSMEGDAWgBQumjYq
++      xGr0j+uqN/42Kf2l7i0wYTAPBgNVHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUA
++      A4IBAQBTmPufvWl73WKQejH5nQbmFrxAWVThq6gr71ST31CURSuCWa82hOpDMRZ0
++      L3Wy654V0mFWg8Sf65xltDwcyypn++ygKHhsvhzLCdiRbKqDvuRj6s4MWe2yrPg2
++      uebEnnnS60rWUllb1AOnG4guGF6M9h4dRMtcnsY64F+NpOIFfo9vQotzkcJ/B8I0
++      oSZaQM39YUAuRbGUZL+Hf68rExkO8RiYEx6XNOwbzMOofCGj2Y1ohkVCet9Mle6L
++      MMMNugX8ElepwCrDL/jbzHWJuVvrMqyH9Y0h5joOKGIH0CIIZpxmyg5PFBIjkR1s
++      Tfo/I2sf8MA7OPYEYHKlsPOvfmFZ
++      -----END CERTIFICATE-----
+diff --git a/internal/config/testdata/cache/redis-ca-invalid.yml b/internal/config/testdata/cache/redis-ca-invalid.yml
+new file mode 100644
+index 00000000..b9d01895
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-invalid.yml
+@@ -0,0 +1,10 @@
++cache:
++  enabled: true
++  backend: redis
++  ttl: 60s
++  redis:
++    ca_cert_path: internal/config/testdata/redis/ca.pem
++    ca_cert_bytes: |
++      -----BEGIN CERTIFICATE-----
++      MIIB
++      -----END CERTIFICATE-----
+diff --git a/internal/config/testdata/cache/redis-ca-path.yml b/internal/config/testdata/cache/redis-ca-path.yml
+new file mode 100644
+index 00000000..1d9dedad
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-path.yml
+@@ -0,0 +1,6 @@
++cache:
++  enabled: true
++  backend: redis
++  ttl: 60s
++  redis:
++    ca_cert_path: internal/config/testdata/redis/ca.pem
+diff --git a/internal/config/testdata/cache/redis-tls-insecure.yml b/internal/config/testdata/cache/redis-tls-insecure.yml
+new file mode 100644
+index 00000000..86efa6c6
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-tls-insecure.yml
+@@ -0,0 +1,6 @@
++cache:
++  enabled: true
++  backend: redis
++  ttl: 60s
++  redis:
++    insecure_skip_tls: true
