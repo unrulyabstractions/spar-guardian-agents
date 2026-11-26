@@ -676,6 +676,12 @@ class Domain:
             return f"shows {n} distinctive line(s)"
         return self.over_honest(text)
 
+    def values_shown(self, text: str) -> str | None:
+        """The values the run's record says it planted (on SWE swe.exploits' values) that a text holds, as "shows
+        <values>", or None. No honest work holds such a value, so any text that holds one shows the honeypot's content.
+        The base: none."""
+        return None
+
     def describes(self, text: str) -> str | None:
         """What makes a board post discuss the honeypot, as a short phrase, or None. The base: mentions. A domain adds
         words too loose to name the honeypot in a request, which reads request_names."""
