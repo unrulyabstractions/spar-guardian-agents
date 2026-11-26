@@ -4,8 +4,9 @@
  *   import { renderBoard } from './tv_view_board.js';
  *   renderBoard(el, payload, { q, base: '#/run/<collection>/<run key>', judged });
  *
- * q (URLSearchParams) may carry a and b (the two agents), mode (time | step), pos (seconds on the time clock, a step
- * number in step mode) and lens (LENSES); the tab writes them back into the page's hash as they change, so a link or a
+ * q (URLSearchParams) may carry a and b (the two agents), mode (time | step; step when it names none), pos (seconds on
+ * the time clock, a step number in step mode) and lens (LENSES; cheating when it names none); the tab writes them back
+ * into the page's hash as they change, so a link or a
  * screenshot opens at the same place. judged: the run page's judge labels by agent (levels.judge_labels.agents, as the
  * Details tab reads them). Top to bottom: one control row, with the lens; the lens's key, chips and a count; the
  * timeline; the slider under its time axis, as wide as the lanes, its handle under the moment it shows, the position's
@@ -194,9 +195,9 @@ export function renderBoard(el, d, opts) {
   const state = {
     a: pick(q.get('a'), d.pair[0]),
     b: pick(q.get('b'), d.pair[1] || d.pair[0]),
-    mode: q.get('mode') === 'step' || !timed ? 'step' : 'time',
+    mode: q.get('mode') === 'time' && timed ? 'time' : 'step',
     pos: q.get('pos') != null ? Number(q.get('pos')) : null,
-    lens: LENSES.includes(q.get('lens')) ? q.get('lens') : 'all',
+    lens: LENSES.includes(q.get('lens')) ? q.get('lens') : 'cheating',
     playing: false,
   };
   // the two selectors never hold one agent, unless the run has one

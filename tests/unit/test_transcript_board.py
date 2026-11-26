@@ -487,13 +487,15 @@ def test_a_judge_label_is_placed_at_its_model_calls_tools_or_at_the_call_that_wr
 
 
 def test_the_board_tab_has_a_lens_per_ladder_in_the_url_and_never_one_agent_twice():
-    """The Board tab's lenses are All and the payload's LENSES, kept in the URL; each colours from the page's own
-    ramps and score colours and defines no colour of its own; an agent chosen in one selector that the other holds
-    swaps the two."""
+    """The Board tab's lenses are All and the payload's LENSES, kept in the URL, Cheating where the URL names none,
+    as the clock is steps there (the user, 2026-11-26: "make steps and cheating the default"); each colours from the
+    page's own ramps and score colours and defines no colour of its own; an agent chosen in one selector that the
+    other holds swaps the two."""
     board = (Path(tb.__file__).parent / "transcript_static" / "tv_view_board.js").read_text()
     assert "const LENSES = ['all', 'cheating', 'collusion', 'coordination', 'judge'];" in board
     assert list(tb.LENSES) == ["cheating", "collusion", "coordination", "judge"]
-    assert "lens: LENSES.includes(q.get('lens')) ? q.get('lens') : 'all'" in board and "lens: state.lens" in board
+    assert "lens: LENSES.includes(q.get('lens')) ? q.get('lens') : 'cheating'" in board and "lens: state.lens" in board
+    assert "mode: q.get('mode') === 'time' && timed ? 'time' : 'step'" in board
     assert "if (state[other] === agent) state[other] = state[side];" in board
     assert "RAMP[lens][top]" in board and "scoreColour(topOf(marks, 'score'))" in board
     assert "RAMP.collusion[ramp.collLine]" in board and "coll.levels.indexOf(coll.line)" in board
