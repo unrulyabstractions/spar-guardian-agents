@@ -4935,3 +4935,12 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   Also noted: the run without the rule was launched 129 commits earlier (50c68aab); the verifier read the changed
   run-time files as docstrings, key sourcing and refusal checks and did not trace all 44.
   UNVERIFIED: the figures of the new run were not viewed; the 392 MB sample file inside the raw log was not opened.
+
+- **2026-11-26, the other temporary Anthropic key through the project's route** (the user: "get the second
+  Anthropic key working"). WHAT: whether a run can use the key in `anthropic_temp_key`, which Anthropic accepts only
+  with its workspace header. HOW: with no run live I pointed `~/.config/spar-guardian-agents/anthropic_key` at that
+  key and `anthropic_key.workspace` at its workspace file, then ran `scripts/check_anthropic_cache.py --yes` for
+  `claude-haiku-5-5`, `claude-sonnet-5-5` and `claude-opus-5-5` (three calls each, $0.022 in all). Each plan line
+  named the key file and the header's file; no key was printed. RESULT: VERIFIED, three passes, each later call read
+  0.9992 of the previous prompt from the cache. Afterwards I put the links back as they were (the key that ends
+  2026-12-01, no workspace link). UNVERIFIED: what is left on either key; no tool of ours reads a key's balance.
