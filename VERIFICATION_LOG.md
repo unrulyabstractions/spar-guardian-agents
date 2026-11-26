@@ -4662,3 +4662,25 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   UNVERIFIED: this landing's 37 label lines by a second reader; an influencer's branch built from the revealed
   files is credited by no clause.
 
+
+## 2026-11-25: the viewer's four fixes of the day tried in a browser, and one more raw model id
+
+- **What.** The viewer changes of c1320426 and after, which I had landed without opening a browser: one name per
+  model in order of strength, the slider that moved the page, the transcript that stayed on "Loading the
+  transcript…". Plus a new one-line fix: the Details tab's "arm or cell" row printed a raw id
+  (`claude-sonnet-5.5`) beside the names (`tv_labels.js` `armLabel`).
+- **How.** A second viewer on port 8791 over `runs/` (58 runs), driven in headless Chrome through
+  playwright-core from the scratchpad; the user's viewer on 8770 untouched; my viewer stopped by its pid after.
+  Names: read every menu's options and the summary's row and column heads, and viewed the screenshots of the
+  runs page, the summary and a run page. Transcript: opened a run of ten agents with `/api/tools` held back 15 s
+  and timed the first steps. Slider: dragged each of the three sliders with the mouse across nine positions, at
+  two window heights and three page positions, on two runs, and read `window.scrollY` after each move; then the
+  same with the fix switched off (`overflow-anchor: auto`), to show the check sees the fault.
+- **Result.** VERIFIED. The workers' model menu holds each model once, weakest first (Qwen 3.8 Flash, DeepSeek
+  V4.1 Flash, GPT-6 Luna, Claude Haiku 5.5, Sonnet 5.5, Opus 5.5, Fable 5.2); the summary's rows and its
+  disregulator columns follow the same order. The transcript drew 857 step elements in 0.54 s with the tool
+  definitions still held back. The page moved 0 px in all 24 drags with the fix on, and up to 2120 px in 8 of
+  the same 24 with it off. The Details row now reads "2 regulators (generic, Claude Sonnet 5.5)"; no raw id is
+  left in the header of three runs. 214 viewer and pipeline tests pass. The dataset holds both studies with the
+  same bytes (dry run: 2900 and 862 files the same, 0 to change).
+  UNVERIFIED: Safari and Firefox; the slider under a touchpad's momentum scroll.

@@ -46,7 +46,8 @@ export const INFLUENCERS = ['regulator', 'disregulator'];
 export const isInfluencer = role => INFLUENCERS.includes(role);
 export const ROLE_LABEL = { worker: 'worker', regulator: 'regulator (influencer)', disregulator: 'disregulator (influencer)' };
 
-export const armLabel = r => r.arm_label;
+// A run's team in the server's words (src/ui/transcript_index.py arm_label), each model by its name.
+export const armLabel = r => MODEL_ORDER.reduce((text, key) => text.replaceAll(key, MODELS[key]), r.arm_label);
 // A run's task in the server's words: its domain and its instance (src/ui/transcript_index.py task_label).
 export const taskLabel = r => r.task_label;
 export const modelLabel = r => MODELS[r.model] || r.model || r.model_id;
