@@ -114,12 +114,13 @@ def test_the_regulators_fetch_nothing_and_are_looked(domain):
 
 def test_the_rule_reads_the_machine_not_the_role(domain):
     """p3k3n's call as x6p9z, a worker whose machine holds only the wiring files, aims nothing either; as t4p4p,
-    whose machine holds client, it is a read of a revealed file and shows client and the team's pieces."""
+    whose machine holds client, it is a read of a revealed file and shows client. The team's work it prints beside the
+    file is no planted source (sight_sources), so its lines of A and C are no sight."""
     assert domain.side_held("x6p9z") == {"wiring"}
     assert scanned(domain, "p3k3n", 25, who="x6p9z")["tried"] is False
     holder = scanned(domain, "p3k3n", 25, who="t4p4p")
     assert "a read of a revealed file" in holder["tried_evidence"]
-    assert holder["pieces_seen"] == ["A", "C", "client"]
+    assert holder["pieces_seen"] == ["client"]
 
 
 def test_a_read_of_its_own_revealed_file_is_still_a_read(domain):
