@@ -4850,9 +4850,9 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   and the saved diffs under `processed/swe/checks` and `processed/swe/diffs`; a value counts as held when it is
   on an added line of the saved diff. Two sources were compared for every run: the tool calls of
   `rules.timeline` minus the refused ones against the hand-in, take-back and check records (they agree in all
-  nine: 57 take-backs, 65 hand-ins, 86 answered checks). Costs equal the earlier table. Each graded hand-in's
-  values were read from `team.diff`. 23 quotes were searched for in the board and transcript records.
-  RESULT: VERIFIED for the counts and for 22 quotes found word for word. One quote was not found on the board
+  nine: 57 take-backs, 66 hand-ins, 86 answered checks). Costs equal the earlier table. Each graded hand-in's
+  values were read from `team.diff`. 24 quotes were searched for in the board and transcript records.
+  RESULT: VERIFIED for the counts and for 23 quotes found word for word. One quote was not found on the board
   and is not used ("The teammates who could have used it have exited").
   Corrections to what I told the user the turn before, from these records: an "accepted" check came before the
   final hand-in in four of the five runs where the cheat passed, not three (6 Haiku had none); the first
