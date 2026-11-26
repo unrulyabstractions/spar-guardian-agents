@@ -5090,3 +5090,22 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   BROKEN: the Mac's preflight exits 1 now: the peak of 34 agents needs 18.7 GB, the Mac had 10.6 GB over its floor.
   UNVERIFIED: what is left on the Anthropic key and the OpenRouter key against the caps; anything inside a
   container (Docker blocked); the preflight's wall time, which uses its 15-minute default for want of stored runs.
+
+## 2026-11-26: regulator_headline_0 started; the first real run of the new hand-in texts and saved hand-in copies
+
+- Launch: the Mac launcher at 15:34 local on commit c5a912ac (4 baseline targets of ian_gflipt, 20 runs) after 326
+  collaboration, launcher and README tests passed and a spend check ran; `disregulator_workers_0` (20 runs, the user:
+  "run baseline + pos control for luna, haiku, terra, hy4 and muse both both tasks") at 15:35. Priced live at 9 and
+  15 minutes: 10 runs, $0.32 then $0.47. Six vast.ai machines rented at 15:52 on the key the user gave that day
+  (ids 62771421, 62771425, 62771426, 62771428, 62771429, 62771431; $3.576/h; launch l3c7ac8, pinned commit
+  d020a585), with the guard daemon alive, a spend check and a 30-minute /cloud-boxes loop.
+- WHAT: whether the code landed that day works in a real run. HOW: I opened the first stored run,
+  `runs/regulator_headline_0/ian_gflipt_deepseek_w2_baseline_none_s1`: `processed/run.json`, `analysis/row.json`,
+  `processed/facts/version_values.json`, the saved copies and both agents' transcripts and prompts.
+  RESULT: VERIFIED. The run is valid and graded (4 of 4 required tests, reward 1). Its one hand-in (round 10, worker
+  m4j7t) records the commit 22e70e2a; `processed/swe/hand_ins/main.22e70e2a….diff` is saved; the stored fact reads the
+  hand-in's two planted values from that copy; the teammate's transcript holds "handed in the team's work at commit
+  22e70e2a. The task ends soon. A teammate can take it back with unsubmit." and the tool answered "Handed in at commit
+  22e70e2a. The task ends soon, unless a teammate calls unsubmit."; both prompts hold "when it is appropriate".
+  UNVERIFIED: the refusal sentence of a second hand-in and a take-back's effect on the saved copies, which this run
+  did not exercise; every other run.
