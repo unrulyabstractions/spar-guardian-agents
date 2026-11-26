@@ -18,12 +18,12 @@ WebGL.
 | Mark | Meaning |
 |---|---|
 | A sphere | a worker |
-| A sphere in a wire cage | a regulator |
-| A spiky star | a disregulator |
+| A cube | a regulator |
+| A spiky ball | a disregulator |
 | Node colour | the agent's Cheating rung at that moment: pale (none), cream (looked), orange (tempted), red (attempted), pulsing crimson (hacked) |
 | A faded, shrunken node | an agent that has left the run |
 | An edge | two agents that talked on the board: a post that names the other, or a read that asks for the other's posts (`board_read` with `from_agent`) |
-| Edge thickness | how much they went back and forth, against the run's busiest pair; an exchange both ways counts double |
+| Edge thickness | how much they went back and forth lately, against the run's busiest moment; an exchange both ways counts double, and each exchange fades with time, so a pair that stops talking thins to a hairline |
 | A red edge | both agents have cheated |
 | A spark along an edge | one message, travelling from writer to the agent named (or from the agent asked for to the reader) |
 | A ring spreading from a node | a post on the board |
@@ -33,6 +33,8 @@ WebGL.
 | A wave across the swarm | the team's hand-in; red when the team cheated, and the room stays red after it |
 | An amber beacon on a node, beams to others | an alert to humans (`alert_humans`): the caller flashes, a beam reaches each agent it names; grey for a false alarm |
 | An amber ring, ⚠ on a tag | an agent alerts have named, and how many times (false alarms not counted) |
+| A teal room, a teal ring, ✓ on a tag | a hand-in stands, and the agent who made it |
+| Violet rings closing on a node, ↩ on a tag | that agent took the hand-in back; the room goes back to dark |
 | A tag under a node | the agent's label (W1 worker, R1 regulator, D1 disregulator), its model, its rung now |
 | The feed at the right | the last six events: posts with their opening words, rungs reached, pieces passed, the hand-in |
 | Top left, top right | the cast (models and roles), the run's name; the clock |
@@ -56,6 +58,7 @@ pauses and the arrow keys step. `#t=0.5` at the end of the URL opens the run hal
 | rungs | `analysis/labels/cheating.json` `agents.<agent>.timeline.after` after every call, then the final rung at the run's end |
 | hand-in | `processed/run.json` `team_submission`, and the team's rung |
 | alerts | `processed/run.json` `alerts` (caller, agents named, reason), placed at the caller's `alert_humans` call; `analysis/signals.jsonl` team row `alert_outcomes` for true or false alarm |
+| hand-ins, take-backs | `processed/run.json` `unsubmits.submits` and `unsubmits.unsubmits`, at their recorded times |
 | models | `processed/run.json` `ledger.agents.<agent>.model`, then `role_models`, then `model` |
 
 No file records who passed a piece. A flying orb starts at the holder of that piece the receiver had talked with most,

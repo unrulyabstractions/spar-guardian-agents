@@ -4884,3 +4884,13 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - Playback slowed at the user's word ("the thing speeds up too fast"): a run plays in 120 s at 1x (was 50 s), speeds
   0.25, 0.5, 1, 2 (was 0.5 to 4), default 1x shown as three chevrons. Screenshot shows the three chevrons; the
   playback rate itself is not visible in a still. UNVERIFIED in a live browser.
+- Shapes, fading edges, hand-ins (the user's three asks). Regulators are cubes with edge outlines, disregulators
+  spiky balls (subdivided icosahedron, every face pulled to a point). Edge weight sums each exchange as
+  exp(-age / (0.08 T)), back and forth counted double, thickness against the busiest moment of the busiest pair.
+  Story gains `handins` from run.json `unsubmits` (submits 0, take-backs 1, at recorded times); test checks a hand-in
+  at 15 s and a take-back at 16 s. 2 passed, ruff clean.
+- Viewed screenshots: Sonnet reg20 run at t=0.878 (teal room, teal hexagon ring and ✓ on W8, feed "W8 hands in the
+  team's fix") and t=0.8857 (violet rings closing on W6, ↩ on W6, feed "W6 takes the hand-in back" with reason;
+  room still teal 5 story-seconds after, mid fade); t=0.5 (cubes, hairline edges for quiet pairs, thick for recent);
+  Opus n10 dis20 s2 at t=0.7 (two spiky balls). Sonnet run's record: 23 hand-ins, 22 take-backs; story holds 45 rows.
+  VERIFIED. Live playback of the fades: UNVERIFIED.

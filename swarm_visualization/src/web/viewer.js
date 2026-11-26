@@ -24,6 +24,18 @@ const ASK_COLOR = new THREE.Color('#7fe8ff');
 const ALERT_COLOR = new THREE.Color('#ffc21a');          // an alert to humans; a false alarm is grey
 const FALSE_ALARM = new THREE.Color('#a3abc2');
 const ALERTS = (S.alerts || []).slice().sort((a, b) => a[0] - b[0]);
+const HANDIN_COLOR = new THREE.Color('#2fe0b0');          // a hand-in standing: the room turns teal
+const TAKEBACK_COLOR = new THREE.Color('#d68cff');        // a hand-in taken back
+const HANDINS = (S.handins || []).slice().sort((a, b) => a[0] - b[0]);
+const TAU = 0.08 * T;                                     // an exchange's weight halves in about 0.7 TAU
+function handinAt(t) {                                    // who holds the hand-in at t, since when; last take-back
+  let holder = -1, since = -Infinity, back = null;
+  for (const row of HANDINS) {
+    if (row[0] > t) break;
+    if (row[2] === 0) { holder = row[1]; since = row[0]; } else { holder = -1; since = row[0]; back = row; }
+  }
+  return {holder, since, back};
+}
 
 // ---------- scene ----------
 const canvas = document.getElementById('scene');
@@ -97,15 +109,15 @@ const orbPool = new Pool(() => new THREE.Mesh(orbGeometry, new THREE.MeshStandar
 const pools = [glowPool, ringPool, orbPool];
 
 // ---------- agents ----------
-function starGeometry() {
-  // A spiky star: an icosahedron whose every face is pulled out into a point.
-  const base = new THREE.IcosahedronGeometry(0.75, 0).toNonIndexed();
+function spikyGeometry() {
+  // A spiky ball: a once-subdivided icosahedron whose every face is pulled out into a point.
+  const base = new THREE.IcosahedronGeometry(0.9, 1).toNonIndexed();
   const p = base.getAttribute('position');
   const out = [];
   const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), tip = new THREE.Vector3();
   for (let f = 0; f < p.count; f += 3) {
     a.fromBufferAttribute(p, f); b.fromBufferAttribute(p, f + 1); c.fromBufferAttribute(p, f + 2);
-    tip.copy(a).add(b).add(c).normalize().multiplyScalar(1.45);
+    tip.copy(a).add(b).add(c).normalize().multiplyScalar(1.5);
     for (const [u, v] of [[a, b], [b, c], [c, a]]) out.push(u.x, u.y, u.z, v.x, v.y, v.z, tip.x, tip.y, tip.z);
   }
   const geometry = new THREE.BufferGeometry();
@@ -123,12 +135,14 @@ const nodes = S.agents.map((agent, i) => {
                                                    transparent: true, flatShading: agent.role === 'disregulator'});
   let core, cage = null;
   if (agent.role === 'disregulator') {
-    core = new THREE.Mesh(starGeometry(), material);
+    core = new THREE.Mesh(spikyGeometry(), material);
   } else if (agent.role === 'regulator') {
-    core = new THREE.Mesh(new THREE.SphereGeometry(0.82, 48, 32), material);
-    cage = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(1.42, 0)),
-                                  new THREE.LineBasicMaterial({color: 0xa9ccff, transparent: true, opacity: 0.85}));
-    group.add(cage);
+    const box = new THREE.BoxGeometry(1.5, 1.5, 1.5);
+    core = new THREE.Mesh(box, material);
+    material.flatShading = true;
+    cage = new THREE.LineSegments(new THREE.EdgesGeometry(box),
+                                  new THREE.LineBasicMaterial({color: 0xcfe2ff, transparent: true, opacity: 0.9}));
+    core.add(cage);
   } else {
     core = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), material);
   }
@@ -155,6 +169,10 @@ for (const node of nodes) {
                              new THREE.MeshBasicMaterial({color: ALERT_COLOR, transparent: true, opacity: 0,
                                                           blending: THREE.AdditiveBlending, depthWrite: false}));
   node.group.add(node.flag);
+  node.hold = new THREE.Mesh(new THREE.TorusGeometry(2.25, 0.11, 8, 6),
+                             new THREE.MeshBasicMaterial({color: HANDIN_COLOR, transparent: true, opacity: 0,
+                                                          blending: THREE.AdditiveBlending, depthWrite: false}));
+  node.group.add(node.hold);
 }
 function alertsUpTo(t) {                     // agent -> how many true or unknown alerts named it, and raised by it
   const named = new Array(N).fill(0), raised = new Array(N).fill(0);
@@ -186,7 +204,7 @@ const tags = S.agents.map(agent => {
     : `<b style="color:${ROLE_ACCENT[agent.role] || '#fff'}">${esc(agent.label)}</b> <span class="model">${esc(agent.model || '')} ${ROLE_WORDS[agent.role] || agent.role}</span><br><span class="rung"></span>`;
   labelsBox.appendChild(el);
   el.insertAdjacentHTML('beforeend', ' <span class="flagged"></span>');
-  return {el, rung: el.querySelector('.rung'), flagged: el.querySelector('.flagged'), shown: -1, flags: -1};
+  return {el, rung: el.querySelector('.rung'), flagged: el.querySelector('.flagged'), shown: -1, flags: ''};
 });
 {
   const groups = new Map();
@@ -196,13 +214,16 @@ const tags = S.agents.map(agent => {
   }
   document.getElementById('cast').textContent = [...groups].map(([k, n]) => `${n} ${k}${n > 1 ? 's' : ''}`).join(' · ');
   document.getElementById('runName').textContent = S.run;
-  const shapes = [['worker', '● worker'], ['regulator', '◎ regulator'], ['disregulator', '✶ disregulator']]
+  const shapes = [['worker', '● worker'], ['regulator', '■ regulator'], ['disregulator', '✹ disregulator']]
     .filter(([role]) => S.agents.some(a => a.role === role)).map(([, word]) => word).join('&nbsp;&nbsp;');
   const swatches = RUNG_WORDS.map((w, k) => `<span class="sw${k ? '' : ' first'}" style="background:${hex(RUNG_COLORS[k])}"></span>${w}`).join('');
   const line = '<span class="line"></span>talk';
   const orb = S.pieces ? `<span class="sw" style="background:${hex(PIECE_COLORS[0])}"></span>piece` : '';
   const alarm = ALERTS.length ? `<span class="alarm">⚠</span>alert` : '';
-  document.getElementById('legend').innerHTML = `${shapes}<br>${swatches}<br>${line}${orb}${alarm}`;
+  const hands = HANDINS.length
+    ? `<br><span class="sw first" style="background:${hex(HANDIN_COLOR)}"></span>handed in` +
+      `<span class="sw" style="background:${hex(TAKEBACK_COLOR)}"></span>taken back` : '';
+  document.getElementById('legend').innerHTML = `${shapes}<br>${swatches}<br>${line}${orb}${alarm}${hands}`;
 }
 const events = [];
 for (const [te, a, text] of S.said || []) {
@@ -229,6 +250,16 @@ if (S.submit) {
                html: `${nameOf(S.submit.agent)} hands in the team's fix: <b>${S.submit.passed ? 'passed' : 'failed'}</b>` +
                      `${S.submit.cheated ? ', <b style="color:#ff5a6a">by cheating</b>' : ', honestly'}`});
 }
+{
+  const finalAt = S.submit ? HANDINS.filter(r => r[2] === 0 && r[1] === S.submit.agent).map(r => r[0]).pop() : undefined;
+  for (const [th, a, kind, reason] of HANDINS) {
+    if (kind === 0 && th === finalAt) continue;
+    events.push(kind === 0
+      ? {t: th, accent: hex(HANDIN_COLOR), html: `${nameOf(a)} hands in the team's fix`}
+      : {t: th, accent: hex(TAKEBACK_COLOR),
+         html: `${nameOf(a)} takes the hand-in back${reason ? `<br><span class="quote">“${esc(reason)}”</span>` : ''}`});
+  }
+}
 for (const [ta, caller, who, outcome, reason] of ALERTS) {
   const verdict = outcome === 1 ? 'true alarm' : outcome === 0 ? 'false alarm' : '';
   events.push({t: ta, accent: outcome === 0 ? hex(FALSE_ALARM) : hex(ALERT_COLOR),
@@ -242,7 +273,7 @@ const feed = document.getElementById('feed');
 const clockEl = document.getElementById('clock');
 const FEED_SIZE = 4;
 let feedShown = -2;
-function drawWords(rungs, here, alive, focus, flags) {
+function drawWords(rungs, here, alive, focus, flags, hand) {
   clockEl.textContent = `${clockText(t)} / ${clockText(T)}`;
   let last = -1;
   while (last + 1 < events.length && events[last + 1].t <= t) last++;
@@ -270,9 +301,12 @@ function drawWords(rungs, here, alive, focus, flags) {
     tag.el.style.top = `${(-below.y * 0.5 + 0.5) * h + 4}px`;
     tag.el.style.opacity = String((1 - 0.6 * here[i].gone) * (focus(i) < 1 ? 0.25 : 1));
     const rung = rungs[i].rung;
-    if (tag.flags !== flags.named[i]) {
-      tag.flags = flags.named[i];
-      tag.flagged.textContent = tag.flags ? `⚠${tag.flags > 1 ? tag.flags : ''}` : '';
+    const badge = (flags.named[i] ? `⚠${flags.named[i] > 1 ? flags.named[i] : ''}` : '') +
+                  (hand.holder === i ? ' <b style="color:#2fe0b0">✓</b>' : '') +
+                  (hand.back && hand.back[1] === i && t - hand.back[0] < D.flash * 1.5 ? ' <b style="color:#d68cff">↩</b>' : '');
+    if (tag.flags !== badge) {
+      tag.flags = badge;
+      tag.flagged.innerHTML = badge;
     }
     if (tag.shown !== rung) {
       tag.shown = rung;
@@ -300,7 +334,17 @@ for (const pair of pairs.values()) {
   scene.add(pair.mesh);
 }
 // The busiest pair's final weight: edge thickness is read against it.
-const W_MAX = Math.max(1, ...[...pairs.values()].map(p => p.ij.length + p.ji.length + 2 * Math.min(p.ij.length, p.ji.length)));
+function decayed(sorted, t) {                 // each exchange counts 1 when it happens and fades with time
+  let sum = 0;
+  for (const te of sorted) { if (te > t) break; sum += Math.exp(-(t - te) / TAU); }
+  return sum;
+}
+function pairWeight(pair, t) {                // back and forth counts double
+  const ij = decayed(pair.ij, t), ji = decayed(pair.ji, t);
+  return ij + ji + 2 * Math.min(ij, ji);
+}
+// The busiest moment of the busiest pair: edge thickness is read against it.
+const W_MAX = Math.max(1, ...[...pairs.values()].flatMap(p => p.all.map(te => pairWeight(p, te))));
 const talkSorted = S.talk.slice().sort((a, b) => a[0] - b[0]);
 const postsSorted = S.posts.slice().sort((a, b) => a[0] - b[0]);
 
@@ -434,6 +478,7 @@ function pick() {
 // ---------- the frame ----------
 let t = 0, playing = false, speedIndex = 2, clock = 0, last = performance.now();
 const tint = document.getElementById('tint');
+const handinRoom = document.getElementById('handinRoom');
 const arc = new THREE.Vector3(), up = new THREE.Vector3(), from = new THREE.Vector3(), to = new THREE.Vector3();
 
 function update(dt) {
@@ -442,8 +487,7 @@ function update(dt) {
   const here = S.agents.map(a => presence(a, t));
 
   for (const pair of pairs.values()) {
-    const ij = countUpTo(pair.ij, t), ji = countUpTo(pair.ji, t);
-    pair.w = ij + ji + 2 * Math.min(ij, ji);                    // back and forth counts double
+    pair.w = pairWeight(pair, t);
     const n = countUpTo(pair.all, t);
     pair.last = n ? pair.all[n - 1] : -Infinity;
   }
@@ -477,7 +521,7 @@ function update(dt) {
     node.glow.material.opacity = (0.28 + 0.1 * rung + 0.35 * pulse) * look * focus(i);
     node.glow.scale.setScalar(3.4 + 0.75 * rung + 0.8 * pulse);
     node.core.rotation.y += dt * 0.3;
-    if (node.cage) { node.cage.rotation.y -= dt * 0.5; node.cage.rotation.x += dt * 0.2; node.cage.material.opacity = 0.85 * look * focus(i); }
+    if (node.cage) { node.core.rotation.x += dt * 0.15; node.cage.material.opacity = 0.9 * look * focus(i); }
   });
 
   // Edges: thickness from the back and forth so far, bright for a moment after each exchange.
@@ -490,14 +534,14 @@ function update(dt) {
     m.position.addVectors(from, to).multiplyScalar(0.5);
     m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tmp.subVectors(to, from).normalize());
     const share = Math.min(1, pair.w / W_MAX);                 // against the run's busiest pair
-    const thick = 0.03 + 0.5 * Math.pow(share, 0.85);
+    const thick = 0.012 + 0.5 * Math.pow(share, 0.85);
     m.scale.set(thick, length, thick);
     const fresh = Math.max(0, 1 - (t - pair.last) / (D.spark * 2.5));
     const both = Math.min(rungs[pair.i].rung, rungs[pair.j].rung);
     m.material.color.copy(EDGE_COLOR).lerp(EDGE_RED, both >= CHEATED ? 0.85 : 0);
     const faded = 1 - 0.6 * Math.max(here[pair.i].gone, here[pair.j].gone);
     const lit = hovered < 0 ? 1 : (pair.i === hovered || pair.j === hovered ? 1.3 : 0.1);
-    m.material.opacity = Math.min(1, (0.18 + 0.4 * share + 0.5 * fresh) * faded * lit);
+    m.material.opacity = Math.min(1, (0.1 + 0.5 * share + 0.5 * fresh) * faded * lit);
   }
 
   for (const pool of pools) pool.begin();
@@ -664,9 +708,36 @@ function update(dt) {
     tint.style.opacity = S.submit.cheated ? String(0.9 * smooth(p * 2)) : '0';
   }
 
+  // Hand-ins: the room turns teal while a hand-in stands and the agent who made it wears a teal ring; a take-back
+  // flashes violet rings closing in on the agent who took it, and the room goes back.
+  const hand = handinAt(t);
+  const redRoom = S.submit && S.submit.cheated && t >= S.submit.t;
+  const roomOn = hand.holder >= 0 ? smooth((t - hand.since) / D.fade) : 1 - smooth((t - hand.since) / D.fade);
+  handinRoom.style.opacity = String(redRoom ? 0 : Math.max(0, roomOn));
+  nodes.forEach((node, i) => {
+    const holding = alive[i] && hand.holder === i;
+    node.hold.material.opacity = holding ? 0.85 * smooth((t - hand.since) / D.fade) * focus(i) : 0;
+    node.hold.rotation.set(Math.PI / 2, 0, clock * 0.8);
+  });
+  if (hand.back && alive[hand.back[1]]) {
+    const p = (t - hand.back[0]) / D.flash;
+    if (p >= 0 && p < 1) {
+      for (let wave = 0; wave < 3; wave++) {
+        const q = p * 1.6 - wave * 0.25;
+        if (q < 0 || q > 1) continue;
+        const r = ringPool.get();
+        r.position.copy(pos[hand.back[1]]); r.material.color.copy(TAKEBACK_COLOR);
+        r.material.opacity = 0.95 * (1 - p); r.scale.setScalar(2.2 + 9 * (1 - smooth(q)));
+      }
+      const g = glowPool.get();
+      g.position.copy(pos[hand.back[1]]); g.material.color.copy(TAKEBACK_COLOR);
+      g.material.opacity = 0.9 * (1 - p); g.scale.setScalar(6);
+    }
+  }
+
   for (const pool of pools) pool.end();
   placeCamera(alive, dt);
-  drawWords(rungs, here, alive, focus, flags);
+  drawWords(rungs, here, alive, focus, flags, hand);
 }
 
 // ---------- controls: play, timeline, speed (icons only) ----------
@@ -738,6 +809,19 @@ function buildBackdrop() {
       before = value;
     }
   }
+  // Hand-ins: a teal band along the track while one stood; a violet tick at each take-back.
+  {
+    let from = null;
+    for (const [th, , kind] of HANDINS) {
+      if (kind === 0 && from === null) from = th;
+      if (kind === 1 && from !== null) {
+        g.fillStyle = 'rgba(47,224,176,0.75)'; g.fillRect(x(from), h / 2 - 3, Math.max(2, x(th) - x(from)), 6);
+        from = null;
+      }
+      if (kind === 1) { g.fillStyle = '#d68cff'; g.fillRect(x(th) - 1, h / 2 - 7, 2, 14); }
+    }
+    if (from !== null) { g.fillStyle = 'rgba(47,224,176,0.75)'; g.fillRect(x(from), h / 2 - 3, Math.max(2, x(T) - x(from)), 6); }
+  }
   // Alerts: a triangle above the track, amber (grey for a false alarm).
   for (const [ta, , , outcome] of ALERTS) {
     const ax = x(ta), ay = h * 0.08;
@@ -808,8 +892,7 @@ drawSpeed();
 {
   const alive = S.agents.map(a => t >= a.start);
   for (const pair of pairs.values()) {
-    const ij = countUpTo(pair.ij, t), ji = countUpTo(pair.ji, t);
-    pair.w = ij + ji + 2 * Math.min(ij, ji);
+    pair.w = pairWeight(pair, t);
   }
   for (let s = 0; s < 400; s++) stepLayout(alive);
   placeCamera(alive, 10);

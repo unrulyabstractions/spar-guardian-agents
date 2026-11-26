@@ -8,6 +8,7 @@ travels, and when each agent climbs the Cheating ladder.
     story["said"]          # [[t, agent index, excerpt]]: the post's opening words, agent IDs replaced by labels
     story["flows"]         # [[t, piece, from or -1, to]]: a piece reaching an agent that did not hold it
     story["submit"]        # {t, agent, cheated, passed} or None
+    story["handins"]       # [[t, agent, 0 hand-in | 1 take-back, reason excerpt for a take-back]]
     story["alerts"]        # [[t, caller, [named agents], 1 true alarm | 0 false alarm | -1 unknown, reason excerpt]]
 
 The clock is seconds from the run's first call, from the call times the rules recorded (run.json rules.timeline).
@@ -120,6 +121,14 @@ def call_times(run_json: dict, calls: dict[str, list[dict]]) -> dict[str, list[t
             out.append((start, start + 1 / per_round[c["round"]]))
         times[agent] = out
     return times
+
+
+def clock_origin(run_json: dict, calls: dict[str, list[dict]]) -> float | None:
+    """The epoch second the story's clock counts from (the first recorded call), or None without recorded times."""
+    ids = {c["id"] for rows in calls.values() for c in rows}
+    starts = [float(c["t0"]) for entry in (run_json.get("rules") or {}).get("timeline") or []
+              for c in entry.get("calls") or [] if c.get("id") in ids and isinstance(c.get("t0"), (int, float))]
+    return min(starts) if ids and len(starts) >= 0.9 * len(ids) else None
 
 
 def iso_seconds(value: str | None) -> float | None:
@@ -283,6 +292,25 @@ def build_story(files: RunFiles) -> dict:
                        excerpt(str(alert.get("reason") or ""))])
     alerts.sort(key=lambda row: row[:2])
 
+    # Every hand-in (0) and take-back (1), from run.json unsubmits, at its recorded time (or, without recorded
+    # call times, at the agent's first call in that round). A take-back carries the opening words of its reason.
+    origin = clock_origin(run_json, calls)
+    record = run_json.get("unsubmits") or {}
+    handins: list[list] = []
+    for kind, rows in ((0, record.get("submits") or []), (1, record.get("unsubmits") or [])):
+        for row in rows:
+            agent = row.get("agent")
+            if agent not in index:
+                continue
+            at = iso_seconds(row.get("time"))
+            if origin is not None and at is not None:
+                t = min(max(at - origin, 0.0), end_of_run)
+            else:
+                k = next((k for k, c in enumerate(calls[agent]) if c["round"] >= (row.get("round") or 1)), None)
+                t = start_of(agent, k) if k is not None else end_of_run
+            handins.append([round(t, 3), index[agent], kind, excerpt(str(row.get("reason") or "")) if kind else ""])
+    handins.sort(key=lambda row: row[:3])
+
     return {"run": files.name, "duration": round(end_of_run, 3), "agents": agents, "pieces": len(pieces),
             "piece_names": pieces, "talk": talk, "posts": posts, "said": said, "flows": flows, "submit": submit,
-            "alerts": alerts, "team_rung": rung_index(cheating.get("team"))}
+            "alerts": alerts, "handins": handins, "team_rung": rung_index(cheating.get("team"))}

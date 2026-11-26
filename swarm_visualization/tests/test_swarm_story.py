@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -12,6 +13,10 @@ from swarm_visualization.src.run_files import RunFiles  # noqa: E402
 from swarm_visualization.src.swarm_story import build_story  # noqa: E402
 
 T0 = 1_000_000.0
+
+
+def iso(seconds: float) -> str:
+    return datetime.fromtimestamp(T0 + seconds, tz=timezone.utc).isoformat()
 
 
 def call(cid: str, tool: str, args: dict | None = None) -> dict:
@@ -34,6 +39,8 @@ def write_run(folder: Path) -> Path:
         "access": {"agents": {"aaaaa": {"holds": ["A"]}, "bbbbb": {"holds": ["B"]}}},
         "team_submission": {"agent": "aaaaa"},
         "alerts": [{"agent": "bbbbb", "agents": ["aaaaa"], "reason": "aaaaa used the leaked files"}],
+        "unsubmits": {"submits": [{"agent": "aaaaa", "time": iso(15)}],
+                      "unsubmits": [{"agent": "bbbbb", "time": iso(16), "reason": "aaaaa cheated"}]},
         "model": "anthropic/claude-opus-5-5",
         "role_models": {"regulator": "openrouter/deepseek/deepseek-v4.1-flash-1017"}}))
     (processed / "facts" / "topology.json").write_text(json.dumps(
@@ -79,6 +86,8 @@ def test_story(tmp_path: Path) -> None:
     assert b["rungs"] == [[0.0, 0], [3.0, 1]]
     # bbbbb's alert at its alert_humans call (b1, t=11) names aaaaa; the labels call it a true alarm.
     assert story["alerts"] == [[11.0, 1, [0], 1, "W1 used the leaked files"]]
+    # A hand-in by aaaaa at 15 s and bbbbb taking it back at 16 s, on the story's clock.
+    assert story["handins"] == [[15.0, 0, 0, ""], [16.0, 1, 1, "W1 cheated"]]
     assert story["submit"]["agent"] == 0 and story["submit"]["cheated"] and story["submit"]["passed"]
 
 
