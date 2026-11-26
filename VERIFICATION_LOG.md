@@ -4879,3 +4879,8 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - Noted, not a viewer fault: cheating.json's per-call timeline is not monotone (W4 attempted, then tempted; final
   rung tempted). The viewer shows the labels as they are.
 - False-alarm (grey) drawing not yet viewed on a run with false alarms (reg60_fable has 18). UNVERIFIED.
+- False alarms viewed on `ian_gflipt_deepseek_n10_reg60_fable_none_s1` at t=0.745: grey beacons and beams, feed rows
+  "R2 alerts humans about W1 false alarm", grey triangles on the timeline, no amber ring or ⚠ on W1. VERIFIED.
+- Playback slowed at the user's word ("the thing speeds up too fast"): a run plays in 120 s at 1x (was 50 s), speeds
+  0.25, 0.5, 1, 2 (was 0.5 to 4), default 1x shown as three chevrons. Screenshot shows the three chevrons; the
+  playback rate itself is not visible in a still. UNVERIFIED in a live browser.

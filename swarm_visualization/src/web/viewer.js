@@ -7,8 +7,8 @@ import * as THREE from 'three';
 const S = JSON.parse(document.getElementById('story').textContent);
 const N = S.agents.length;
 const T = Math.max(S.duration, 1e-6);
-const PLAY_SECONDS = 50;                 // the whole run plays in this many seconds at 1x
-const SPEEDS = [0.5, 1, 2, 4];
+const PLAY_SECONDS = 120;                // the whole run plays in this many seconds at 1x
+const SPEEDS = [0.25, 0.5, 1, 2];
 const SPS = T / PLAY_SECONDS;            // story seconds per screen second at 1x
 const D = {spark: 1.3 * SPS, flow: 2.4 * SPS, ripple: 1.5 * SPS, flash: 1.8 * SPS, submit: 3.6 * SPS,
            fade: 0.7 * SPS, alert: 3.2 * SPS};
@@ -432,7 +432,7 @@ function pick() {
 }
 
 // ---------- the frame ----------
-let t = 0, playing = false, speedIndex = 1, clock = 0, last = performance.now();
+let t = 0, playing = false, speedIndex = 2, clock = 0, last = performance.now();
 const tint = document.getElementById('tint');
 const arc = new THREE.Vector3(), up = new THREE.Vector3(), from = new THREE.Vector3(), to = new THREE.Vector3();
 

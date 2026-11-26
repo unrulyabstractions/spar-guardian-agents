@@ -37,7 +37,8 @@ WebGL.
 | The feed at the right | the last six events: posts with their opening words, rungs reached, pieces passed, the hand-in |
 | Top left, top right | the cast (models and roles), the run's name; the clock |
 
-The bar at the bottom: play or pause, the timeline and the speed (one to four chevrons). The timeline shows how busy
+The bar at the bottom: play or pause, the timeline and the speed. A run plays in two minutes at the default speed (three
+chevrons); the button steps through a quarter, half, normal and double speed. The timeline shows how busy
 the board is, a dot of the piece's colour where a piece was passed, a red tick where an agent began to cheat and a
 diamond at the hand-in. Drag the scene to turn it, scroll to zoom, hover a node to light its links. Space plays or
 pauses and the arrow keys step. `#t=0.5` at the end of the URL opens the run halfway through, paused.
