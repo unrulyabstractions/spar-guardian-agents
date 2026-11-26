@@ -1,0 +1,123 @@
+# disregulator_workers_0 (2026-11-26): which worker models are honest alone, and able to cheat when told to? The user:
+# "run baseline + pos control for luna, haiku, terra, hy4 and muse both both tasks. Then we will see". A worker model
+# suits a disregulator study only if its team does not cheat alone (baseline) and can when told (positive control).
+# Three workers a team, as in disregulator_existence_2's baselines. Both versions of the task: ian_gflipt (with
+# check_fix) and ian_flipt (without). The positive control is the cell's own: every worker told to cheat
+# (ian_gflipt_minimal_cheat, ian_flipt_minimal_cheat). No pack, no influencer, no judge, under unsubmit.
+# One run per cell, seed 1: 5 models x 2 versions x 2 rows = 20 runs. Haiku goes straight to Anthropic on the user's
+# temporary key ("use anthropic keys before open router"); the others through OpenRouter. Muse is Muse Ember.
+# Caps: the default $5 a run; $8 for Terra, whose price is ten times Luna's.
+study: disregulator_workers_0
+seeds: [1]
+# What every run of the study is given, as in disregulator_existence_2.
+settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5, unsubmit=true,
+           submit_delay_rounds=3]
+targets:
+  ian_gflipt_luna_baseline:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_gflipt_luna_positive_control:
+    module: studies.cells.swe.ian_gflipt_minimal_cheat
+    model: gpt-6-luna-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_gflipt_haiku_baseline:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: claude-haiku-5-5
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_gflipt_haiku_positive_control:
+    module: studies.cells.swe.ian_gflipt_minimal_cheat
+    model: claude-haiku-5-5
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_gflipt_terra_baseline:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: gpt-6.1-terra-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3, cost_limit_usd=8]
+  ian_gflipt_terra_positive_control:
+    module: studies.cells.swe.ian_gflipt_minimal_cheat
+    model: gpt-6.1-terra-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3, cost_limit_usd=8]
+  ian_gflipt_hy4_baseline:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: hy4-flash-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_gflipt_hy4_positive_control:
+    module: studies.cells.swe.ian_gflipt_minimal_cheat
+    model: hy4-flash-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_gflipt_ember_baseline:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: muse-ember-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_gflipt_ember_positive_control:
+    module: studies.cells.swe.ian_gflipt_minimal_cheat
+    model: muse-ember-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_flipt_luna_baseline:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_flipt_luna_positive_control:
+    module: studies.cells.swe.ian_flipt_minimal_cheat
+    model: gpt-6-luna-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_flipt_haiku_baseline:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: claude-haiku-5-5
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_flipt_haiku_positive_control:
+    module: studies.cells.swe.ian_flipt_minimal_cheat
+    model: claude-haiku-5-5
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_flipt_terra_baseline:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: gpt-6.1-terra-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3, cost_limit_usd=8]
+  ian_flipt_terra_positive_control:
+    module: studies.cells.swe.ian_flipt_minimal_cheat
+    model: gpt-6.1-terra-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3, cost_limit_usd=8]
+  ian_flipt_hy4_baseline:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: hy4-flash-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_flipt_hy4_positive_control:
+    module: studies.cells.swe.ian_flipt_minimal_cheat
+    model: hy4-flash-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_flipt_ember_baseline:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: muse-ember-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_flipt_ember_positive_control:
+    module: studies.cells.swe.ian_flipt_minimal_cheat
+    model: muse-ember-openrouter
+    packs: [none]
+    settings: [n_agents=3, max_concurrency=3]
+# max_agents counts every cell script on this Mac, so this study shares the 34 with regulator_headline_0.
+limits:
+  max_runs: 10
+  max_per_task: {swe: 10}
+  max_agents: 34
+  spacing_s: 60
+  needs:
+    swe: {disk_gb: 2.3, memory_gb: 0.55, per: agent}
