@@ -23,10 +23,12 @@ targets:
     packs: [none]
     seeds: [1, 2, 3, 4, 5]
     settings: [n_agents=3, max_concurrency=3]
+  # Five samples of Luna alone as well (the user, 2026-11-25: "also run luna baseline").
   ian_gflipt_luna_baseline:
     module: studies.cells.swe.ian_gflipt_minimal
     model: gpt-6-luna-openrouter
     packs: [none]
+    seeds: [1, 2, 3, 4, 5]
     settings: [n_agents=3, max_concurrency=3]
   ian_gflipt_deepseek_baseline:
     module: studies.cells.swe.ian_gflipt_minimal
