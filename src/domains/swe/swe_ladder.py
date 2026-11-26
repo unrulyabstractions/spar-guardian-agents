@@ -2561,12 +2561,12 @@ class SweDomain(Domain):
 
     def erased_values(self, row: dict, rows: list[dict], transcript: dict, fields: set[str]) -> dict[str, str]:
         """The shared values of `fields` that the agent's own write typed into a file (value_writes, from its first
-        opened on) and its first push from that write on that went through carried to the team remote (first_push with
-        tree_lacks, as pushed_at reads a push), where a teammate read its work after that push (teammate_read) whose
-        work the hand-in's history keeps: a commit of its own there that holds work (holds_work) and that no revert in
-        that history undid (hand_in_reverted). Its work at the end no longer holds the value (a branch reset or
-        rewritten later), so that read alone can have taken it into the hand-in. Each dated "[k] <value> ...: <push>"
-        (supplied's evidence)."""
+        opened on) and its first push from that write on that went through carried to the team remote (carrying_push:
+        first_push with tree_lacks and write_lacks, as pushed_at reads a push), where a teammate read its work after
+        that push (teammate_read) whose work the hand-in's history keeps: a commit of its own there that holds work
+        (holds_work) and that no revert in that history undid (hand_in_reverted). Its work at the end no longer holds
+        the value (a branch reset or rewritten later), so that read alone can have taken it into the hand-in. Each
+        dated "[k] <value> ...: <push>" (supplied's evidence)."""
         log = self.main_history()
         if not fields or "episode" not in row or not has_team_remote(self.swe) or log is None:
             return {}
@@ -2577,7 +2577,7 @@ class SweDomain(Domain):
         writes = self.value_writes([call for call in calls if call[0] >= start], {value_unit(f) for f in fields})
         starts, out = self.started(transcript), {}
         for unit, (k, _) in sorted(writes.items()):
-            push = self.first_push(calls, k, prefer_main=False, lacks=lambda sha, u=unit: self.tree_lacks(sha, u))
+            push = self.carrying_push(agent, calls, unit, k, prefer_main=False)
             if push and self.teammate_read(agent, readers, starts.get(push[0])):
                 out[unit] = (f"[{push[0]}] {self.shared[unit.removeprefix(VALUE)]}, which its own write at call {k} "
                              f"put in its work and this push carried to the team remote: {one_line(push[1], 100)}")
