@@ -11,7 +11,7 @@ const PLAY_SECONDS = 50;                 // the whole run plays in this many sec
 const SPEEDS = [0.5, 1, 2, 4];
 const SPS = T / PLAY_SECONDS;            // story seconds per screen second at 1x
 const D = {spark: 1.3 * SPS, flow: 2.4 * SPS, ripple: 1.5 * SPS, flash: 1.8 * SPS, submit: 3.6 * SPS,
-           fade: 0.7 * SPS};
+           fade: 0.7 * SPS, alert: 3.2 * SPS};
 const ASK = 1;
 const CHEATED = 3;
 
@@ -21,6 +21,9 @@ const EDGE_COLOR = new THREE.Color('#8fb3ff');
 const EDGE_RED = new THREE.Color('#ff2f45');
 const TALK_COLOR = new THREE.Color('#eaf2ff');
 const ASK_COLOR = new THREE.Color('#7fe8ff');
+const ALERT_COLOR = new THREE.Color('#ffc21a');          // an alert to humans; a false alarm is grey
+const FALSE_ALARM = new THREE.Color('#a3abc2');
+const ALERTS = (S.alerts || []).slice().sort((a, b) => a[0] - b[0]);
 
 // ---------- scene ----------
 const canvas = document.getElementById('scene');
@@ -147,6 +150,21 @@ const nodes = S.agents.map((agent, i) => {
   return {agent, group, core, material, cage, glow, complete, tilt, spin: 0.6 + (i % 5) * 0.12};
 });
 const cores = nodes.map(n => n.core);
+for (const node of nodes) {
+  node.flag = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.07, 8, 72),
+                             new THREE.MeshBasicMaterial({color: ALERT_COLOR, transparent: true, opacity: 0,
+                                                          blending: THREE.AdditiveBlending, depthWrite: false}));
+  node.group.add(node.flag);
+}
+function alertsUpTo(t) {                     // agent -> how many true or unknown alerts named it, and raised by it
+  const named = new Array(N).fill(0), raised = new Array(N).fill(0);
+  for (const [ta, caller, who, outcome] of ALERTS) {
+    if (ta > t) break;
+    raised[caller]++;
+    if (outcome !== 0) for (const j of who) named[j]++;
+  }
+  return {named, raised};
+}
 
 // ---------- words: a tag under each agent, the cast, the clock, a feed of events, a legend ----------
 const RUNG_WORDS = ['none', 'looked', 'tempted', 'attempted', 'hacked'];
@@ -167,7 +185,8 @@ const tags = S.agents.map(agent => {
     ? `<b style="color:${ROLE_ACCENT[agent.role] || '#fff'}">${esc(agent.label)}</b> <span class="rung"></span>`
     : `<b style="color:${ROLE_ACCENT[agent.role] || '#fff'}">${esc(agent.label)}</b> <span class="model">${esc(agent.model || '')} ${ROLE_WORDS[agent.role] || agent.role}</span><br><span class="rung"></span>`;
   labelsBox.appendChild(el);
-  return {el, rung: el.querySelector('.rung'), shown: -1};
+  el.insertAdjacentHTML('beforeend', ' <span class="flagged"></span>');
+  return {el, rung: el.querySelector('.rung'), flagged: el.querySelector('.flagged'), shown: -1, flags: -1};
 });
 {
   const groups = new Map();
@@ -182,7 +201,8 @@ const tags = S.agents.map(agent => {
   const swatches = RUNG_WORDS.map((w, k) => `<span class="sw${k ? '' : ' first'}" style="background:${hex(RUNG_COLORS[k])}"></span>${w}`).join('');
   const line = '<span class="line"></span>talk';
   const orb = S.pieces ? `<span class="sw" style="background:${hex(PIECE_COLORS[0])}"></span>piece` : '';
-  document.getElementById('legend').innerHTML = `${shapes}<br>${swatches}<br>${line}${orb}`;
+  const alarm = ALERTS.length ? `<span class="alarm">⚠</span>alert` : '';
+  document.getElementById('legend').innerHTML = `${shapes}<br>${swatches}<br>${line}${orb}${alarm}`;
 }
 const events = [];
 for (const [te, a, text] of S.said || []) {
@@ -209,12 +229,20 @@ if (S.submit) {
                html: `${nameOf(S.submit.agent)} hands in the team's fix: <b>${S.submit.passed ? 'passed' : 'failed'}</b>` +
                      `${S.submit.cheated ? ', <b style="color:#ff5a6a">by cheating</b>' : ', honestly'}`});
 }
+for (const [ta, caller, who, outcome, reason] of ALERTS) {
+  const verdict = outcome === 1 ? 'true alarm' : outcome === 0 ? 'false alarm' : '';
+  events.push({t: ta, accent: outcome === 0 ? hex(FALSE_ALARM) : hex(ALERT_COLOR),
+               html: `<span class="alarm">⚠</span>${nameOf(caller)} alerts humans` +
+                     `${who.length ? ` about ${who.map(nameOf).join(', ')}` : ''}` +
+                     `${verdict ? ` <b style="color:${outcome === 0 ? hex(FALSE_ALARM) : hex(ALERT_COLOR)}">${verdict}</b>` : ''}` +
+                     `<br><span class="quote">“${esc(reason)}”</span>`});
+}
 events.sort((a, b) => a.t - b.t);
 const feed = document.getElementById('feed');
 const clockEl = document.getElementById('clock');
 const FEED_SIZE = 4;
 let feedShown = -2;
-function drawWords(rungs, here, alive, focus) {
+function drawWords(rungs, here, alive, focus, flags) {
   clockEl.textContent = `${clockText(t)} / ${clockText(T)}`;
   let last = -1;
   while (last + 1 < events.length && events[last + 1].t <= t) last++;
@@ -242,6 +270,10 @@ function drawWords(rungs, here, alive, focus) {
     tag.el.style.top = `${(-below.y * 0.5 + 0.5) * h + 4}px`;
     tag.el.style.opacity = String((1 - 0.6 * here[i].gone) * (focus(i) < 1 ? 0.25 : 1));
     const rung = rungs[i].rung;
+    if (tag.flags !== flags.named[i]) {
+      tag.flags = flags.named[i];
+      tag.flagged.textContent = tag.flags ? `⚠${tag.flags > 1 ? tag.flags : ''}` : '';
+    }
     if (tag.shown !== rung) {
       tag.shown = rung;
       tag.rung.textContent = RUNG_WORDS[rung];
@@ -573,6 +605,48 @@ function update(dt) {
     }
   });
 
+  // Alerts to humans: the caller flashes a beacon and a beam reaches every agent it names; a named agent keeps an
+  // amber ring from then on. A false alarm is grey.
+  const flags = alertsUpTo(t);
+  nodes.forEach((node, i) => {
+    if (!alive[i]) return;
+    node.flag.quaternion.copy(camera.quaternion);
+    const on = flags.named[i] ? 0.35 + 0.12 * Math.min(flags.named[i], 4) : 0;
+    node.flag.material.opacity = on * (0.75 + 0.25 * Math.sin(clock * 4)) * focus(i);
+  });
+  for (const [ta, caller, who, outcome] of windowed(ALERTS, t, D.alert)) {
+    if (!alive[caller]) continue;
+    const p = (t - ta) / D.alert;
+    const color = outcome === 0 ? FALSE_ALARM : ALERT_COLOR;
+    for (let wave = 0; wave < 3; wave++) {           // the beacon: three quick rings
+      const q = (p * 3 - wave * 0.35);
+      if (q < 0 || q > 1) continue;
+      const r = ringPool.get();
+      r.position.copy(pos[caller]); r.material.color.copy(color);
+      r.material.opacity = 0.95 * (1 - q); r.scale.setScalar(2.4 + 7 * q);
+    }
+    const g = glowPool.get();
+    g.position.copy(pos[caller]); g.material.color.copy(color);
+    g.material.opacity = 0.9 * (1 - p) * (0.6 + 0.4 * Math.sin(clock * 14)); g.scale.setScalar(6);
+    for (const j of who) {                           // a beam of light to each agent named
+      if (!alive[j]) continue;
+      const reach = smooth(p / 0.35);
+      for (let k = 0; k <= 10; k++) {
+        const q = (k / 10) * reach;
+        const s2 = glowPool.get();
+        s2.position.lerpVectors(pos[caller], pos[j], q);
+        s2.material.color.copy(color);
+        s2.material.opacity = 0.85 * (1 - p);
+        s2.scale.setScalar(0.9);
+      }
+      if (reach >= 1) {
+        const r = ringPool.get();
+        r.position.copy(pos[j]); r.material.color.copy(color);
+        r.material.opacity = 0.9 * (1 - p); r.scale.setScalar(2.5 + 4 * smooth((p - 0.35) / 0.65));
+      }
+    }
+  }
+
   // The hand-in: a wave across the swarm, red when the team cheated; the room stays red after.
   if (S.submit) {
     const p = (t - S.submit.t) / D.submit;
@@ -592,7 +666,7 @@ function update(dt) {
 
   for (const pool of pools) pool.end();
   placeCamera(alive, dt);
-  drawWords(rungs, here, alive, focus);
+  drawWords(rungs, here, alive, focus, flags);
 }
 
 // ---------- controls: play, timeline, speed (icons only) ----------
@@ -663,6 +737,12 @@ function buildBackdrop() {
       }
       before = value;
     }
+  }
+  // Alerts: a triangle above the track, amber (grey for a false alarm).
+  for (const [ta, , , outcome] of ALERTS) {
+    const ax = x(ta), ay = h * 0.08;
+    g.fillStyle = outcome === 0 ? '#a3abc2' : '#ffc21a';
+    g.beginPath(); g.moveTo(ax, ay + 7); g.lineTo(ax - 4, ay); g.lineTo(ax + 4, ay); g.closePath(); g.fill();
   }
   // The hand-in: a diamond.
   if (S.submit) {

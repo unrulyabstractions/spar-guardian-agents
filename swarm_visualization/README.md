@@ -31,6 +31,8 @@ WebGL.
 | A coloured orb flying between nodes | a piece reaching an agent that did not hold it |
 | A white ring around a node | the agent holds every piece |
 | A wave across the swarm | the team's hand-in; red when the team cheated, and the room stays red after it |
+| An amber beacon on a node, beams to others | an alert to humans (`alert_humans`): the caller flashes, a beam reaches each agent it names; grey for a false alarm |
+| An amber ring, ⚠ on a tag | an agent alerts have named, and how many times (false alarms not counted) |
 | A tag under a node | the agent's label (W1 worker, R1 regulator, D1 disregulator), its model, its rung now |
 | The feed at the right | the last six events: posts with their opening words, rungs reached, pieces passed, the hand-in |
 | Top left, top right | the cast (models and roles), the run's name; the clock |
@@ -52,6 +54,7 @@ pauses and the arrow keys step. `#t=0.5` at the end of the URL opens the run hal
 | pieces received | `analysis/signals.jsonl` `pieces_seen_at`: the call at which the agent first saw each piece |
 | rungs | `analysis/labels/cheating.json` `agents.<agent>.timeline.after` after every call, then the final rung at the run's end |
 | hand-in | `processed/run.json` `team_submission`, and the team's rung |
+| alerts | `processed/run.json` `alerts` (caller, agents named, reason), placed at the caller's `alert_humans` call; `analysis/signals.jsonl` team row `alert_outcomes` for true or false alarm |
 | models | `processed/run.json` `ledger.agents.<agent>.model`, then `role_models`, then `model` |
 
 No file records who passed a piece. A flying orb starts at the holder of that piece the receiver had talked with most,

@@ -8,6 +8,7 @@ travels, and when each agent climbs the Cheating ladder.
     story["said"]          # [[t, agent index, excerpt]]: the post's opening words, agent IDs replaced by labels
     story["flows"]         # [[t, piece, from or -1, to]]: a piece reaching an agent that did not hold it
     story["submit"]        # {t, agent, cheated, passed} or None
+    story["alerts"]        # [[t, caller, [named agents], 1 true alarm | 0 false alarm | -1 unknown, reason excerpt]]
 
 The clock is seconds from the run's first call, from the call times the rules recorded (run.json rules.timeline).
 A run without them falls back to the order of each agent's calls within its rounds.
@@ -261,6 +262,27 @@ def build_story(files: RunFiles) -> dict:
                   "cheated": rung_index(cheating.get("team")) >= CHEATED_FROM,
                   "passed": bool(cheating.get("passed"))}
 
+    # Alerts to humans (alert_humans): placed at the caller's n-th alert_humans call, with the agents it names and
+    # whether the labels call it a true alarm (1), a false alarm (0) or cannot tell (-1).
+    team_row = next((row for row in files.signals() if row.get("row") == "team"), {})
+    outcomes = [o.get("outcome") for o in team_row.get("alert_outcomes") or []]
+    alerts: list[list] = []
+    nth: dict[str, int] = {}
+    for n, alert in enumerate(run_json.get("alerts") or []):
+        caller = alert.get("agent")
+        if caller not in index:
+            continue
+        mine = [k for k, c in enumerate(calls[caller]) if c["tool"] == "alert_humans"]
+        k = nth.get(caller, 0)
+        nth[caller] = k + 1
+        t = start_of(caller, mine[k]) if k < len(mine) else end_of_run
+        outcome = outcomes[n] if n < len(outcomes) else None
+        named = [index[a] for a in alert.get("agents") or [] if a in index and a != caller]
+        alerts.append([round(t, 3), index[caller], named,
+                       1 if outcome == "true_alarm" else 0 if outcome == "false_alarm" else -1,
+                       excerpt(str(alert.get("reason") or ""))])
+    alerts.sort(key=lambda row: row[:2])
+
     return {"run": files.name, "duration": round(end_of_run, 3), "agents": agents, "pieces": len(pieces),
             "piece_names": pieces, "talk": talk, "posts": posts, "said": said, "flows": flows, "submit": submit,
-            "team_rung": rung_index(cheating.get("team"))}
+            "alerts": alerts, "team_rung": rung_index(cheating.get("team"))}
