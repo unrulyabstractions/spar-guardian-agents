@@ -334,7 +334,8 @@ def alerts_block(view: SampleView) -> list[dict] | None:
 
 def unsubmits_block(view: SampleView) -> dict | None:
     """Every hand-in of the team's work and every worker's unsubmit (SwarmConfig.unsubmit; src/swarm/unsubmit.py,
-    Unsubmits): submits in order, each {agent, round, answer, time, ends_after_round, snapshot, seq}, and unsubmits in
+    Unsubmits): submits in order, each {agent, round, answer, time, ends_after_round, snapshot, commit (a run's after
+    2026-11-26: the snapshot where it is a commit, else None), seq}, and unsubmits in
     order, each {agent, round, reason, time, submit: the hand-in it took back, seq}; seq numbers both in one order.
     The graded hand-in is the last submit no unsubmit took back (team_submission). None for a run without the
     option, every run made before it among them."""

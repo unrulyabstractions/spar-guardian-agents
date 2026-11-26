@@ -179,7 +179,8 @@ class Unsubmits(StoreModel):
     option applies (gives_unsubmit).
 
     submits holds each submit of the team's work that went through, in order: {agent, round, answer, time,
-    ends_after_round, snapshot, seq}. unsubmits holds each unsubmit that went through, in order: {agent, round, reason,
+    ends_after_round, snapshot, commit: the snapshot where it is a commit (Benchmark.snapshot_is_commit), else None,
+    seq}. unsubmits holds each unsubmit that went through, in order: {agent, round, reason,
     time, submit: the hand-in it took back, as TeamSubmission held it, seq}. seq numbers both in one order. An
     unsubmit takes the hand-in out of TeamSubmission, lifts the plan's cut and asks after_activation to put the plan's
     steps back (restore)."""

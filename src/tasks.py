@@ -192,10 +192,12 @@ def first_messages(sample: Sample, plan: Plan, benchmark: Benchmark) -> dict[str
 
 def deliverable(benchmark: Benchmark, plan: Plan) -> Deliverable:
     """What submit reads from the benchmark: its text for the run's kind of agent (SwarmConfig.submit_kind), the
-    guard (Benchmark.gradable), the snapshot and whether the prompts tell the agents of their team."""
+    guard (Benchmark.gradable), the snapshot, whether the prompts tell the agents of their team and whether the
+    snapshot is a commit."""
     return Deliverable(text=benchmark.submit_text(plan, plan.config.submit_kind),
                        missing=lambda agent: benchmark.gradable(plan, agent),
-                       snapshot=lambda agent: benchmark.snapshot(plan, agent), told=benchmark.tells_team(plan))
+                       snapshot=lambda agent: benchmark.snapshot(plan, agent), told=benchmark.tells_team(plan),
+                       snapshot_is_commit=benchmark.snapshot_is_commit)
 
 
 def observers(benchmark: Benchmark, plan: Plan, tools: AgentTools) -> dict[str, int]:

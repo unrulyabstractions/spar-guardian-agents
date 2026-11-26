@@ -183,13 +183,14 @@ async def nothing_missing(agent: str) -> None:
 def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | None = None,
                missing=nothing_missing, groups: list[AgentGroup] | None = None,
                time_limit_s: int | None = None, round_end=None, team_head=None, snapshot=nothing_missing,
-               told: bool = True) -> Task:
+               told: bool = True, snapshot_is_commit: bool = False) -> Task:
     """The test task; on a pull board each agent also gets the board tools, and every agent submit, stop_working and
     unsubmit as it holds them and end_round, bound as src/tasks.py binds them, each with the run's cap
     (tool_output_caps.capped_bindings) and the run's tool limits (tool_limits.limited_bindings).
-    `missing` is submit's guard (Benchmark.gradable) and `snapshot` its snapshot (Benchmark.snapshot); `told` whether
-    the agents are told of their team (Benchmark.tells_team); `groups` are ORBIT's agent groups (first messages);
-    time_limit_s is the turn rules' time limit."""
+    `missing` is submit's guard (Benchmark.gradable) and `snapshot` its snapshot (Benchmark.snapshot), a commit with
+    snapshot_is_commit (Benchmark.snapshot_is_commit); `told` whether the agents are told of their team
+    (Benchmark.tells_team); `groups` are ORBIT's agent groups (first messages); time_limit_s is the turn rules' time
+    limit."""
     names = config.names
     extra = board.agent_tool_names(config, roles)
     agents = [AgentSpec(name=n, role="engineer",
@@ -202,7 +203,7 @@ def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | Non
         setup=SetupConfig(agents=agents),
         tool_bindings=limited_bindings(capped_bindings(
             {"work": ToolFactory(lambda ctx: work(ctx.agent_name)), **board.board_bindings(config, roles=roles),
-             **submit_bindings(config, Deliverable("hand in the work.", missing, snapshot, told)),
+             **submit_bindings(config, Deliverable("hand in the work.", missing, snapshot, told, snapshot_is_commit)),
              **unsubmit_bindings(config, told), **end_round_bindings(config.knows_team)}, config),
             config, {agent.name: agent.tools for agent in agents}),
         communication=board_communication(names, max_message_chars=config.max_message_chars) if config.board else None,
@@ -226,12 +227,13 @@ def build_task(config: SwarmConfig, *, scorer_=None, roles: dict[str, str] | Non
 
 def run(config: SwarmConfig, scripts: dict, tmp_path, *, scorer_=None, roles=None, with_log=False,
         missing=nothing_missing, groups=None, time_limit_s=None, round_end=None, team_head=None,
-        snapshot=nothing_missing, told=True, **generate):
+        snapshot=nothing_missing, told=True, snapshot_is_commit=False, **generate):
     """Run the test task on the scripts: (the sample, the provider calls recorded), and the log with_log."""
     recorder: list[dict] = []
     [log] = inspect_eval(build_task(config, scorer_=scorer_, roles=roles, missing=missing,
                                     groups=groups, time_limit_s=time_limit_s, round_end=round_end,
-                                    team_head=team_head, snapshot=snapshot, told=told),
+                                    team_head=team_head, snapshot=snapshot, told=told,
+                                    snapshot_is_commit=snapshot_is_commit),
                          model=scripted_model(scripts, recorder),
                          log_dir=str(tmp_path), display="none", log_realtime=False, max_retries=0, **generate)
     assert log.status == "success", log.error

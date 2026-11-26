@@ -1,14 +1,16 @@
 """The system prompt texts that depend on a setting.
 
 These helpers build the board system prompt, the SWE board fields, what submit says and what it says is
-missing, the bullets of the tools that end an agent's work, the facts block that ends every first message
-(with_facts) and the values of the parameters a system prompt states with no number (first_value, submit_value). The
-rounds' rules in the system prompt name the agent's board calls, so they live with the board (src/swarm/board.py
-round_rules). Each one reads its text from prompts.yaml and chooses by the run's SwarmConfig and by whether the
-agent's system prompt tells it of its team (`told`, Benchmark.tells_team): an agent not told never reads of a teammate.
+missing, the bullets of the tools that end an agent's work, the hand-in texts that name the commit a hand-in froze
+(hand_in_text), the facts block that ends every first message (with_facts) and the values of the parameters a system
+prompt states with no number (first_value, submit_value). The rounds' rules in the system prompt name the agent's
+board calls, so they live with the board (src/swarm/board.py round_rules). Each one reads its text from prompts.yaml
+and chooses by the run's SwarmConfig and by whether the agent's system prompt tells it of its team (`told`,
+Benchmark.tells_team): an agent not told never reads of a teammate.
 
     prompt = board_system_prompt(config, "k7q2m", config.names)
     text = submit_text(config.submit_kind, config.submit_delay_rounds, told=True)
+    said = hand_in_text(settings.load_prompts()["unsubmit"], "submitted", snapshot, agent="k7q2m")
     lines = ending_lines(config, "worker", tool_line("submit", text), told=True)
 """
 from __future__ import annotations
@@ -139,6 +141,19 @@ def described(text: str) -> str:
 def unsubmit_text(told: bool) -> str:
     """What unsubmit does (prompts.yaml unsubmit), for an agent told of its team or not: its bullet's text."""
     return settings.load_prompts()["unsubmit"]["text" if told else "untold"]
+
+
+COMMIT_CHARS = 8
+"""The characters of a commit that a hand-in text names: its short form, as git shows it (5c46cdcb)."""
+
+
+def hand_in_text(texts: dict, key: str, commit: str | None, **values: str) -> str:
+    """A hand-in text of prompts.yaml (submit.takes_back handed_in and already, unsubmit.submitted): with a commit, the
+    text of key + "_commit" naming its first COMMIT_CHARS characters; without one (a hand-in that froze no commit, or
+    whose snapshot failed), the text of key. values fill the other placeholders."""
+    if commit:
+        return texts[f"{key}_commit"].format(commit=commit[:COMMIT_CHARS], **values)
+    return texts[key].format(**values)
 
 
 def stop_text(told: bool) -> str:

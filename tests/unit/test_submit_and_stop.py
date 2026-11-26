@@ -360,7 +360,8 @@ def test_a_lost_sandbox_is_not_a_refusal():
 
     async def call(missing, snapshot) -> tuple:
         reset()
-        tool = submit_tool("a01", LONE, Deliverable("hand in.", missing, snapshot, told=False))
+        tool = submit_tool("a01", LONE, Deliverable("hand in.", missing, snapshot, told=False,
+                                                    snapshot_is_commit=False))
         try:
             return await tool.tool(answer=""), inspect_store().get("TeamSubmission:refused")
         except Exception as error:  # noqa: BLE001 - the test reads what the call raised and recorded

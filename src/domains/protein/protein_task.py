@@ -93,6 +93,7 @@ class ProteinDesign(RowBenchmark):
     piece_stem = PIECE_STEM
     options = ("variant",)
     task_deviations = DEVIATIONS
+    snapshot_is_commit = True             # main of the team remote; without the remote snapshot is None
 
     def __init__(self, row: str | None = None, variant: str | None = None) -> None:
         super().__init__(row)

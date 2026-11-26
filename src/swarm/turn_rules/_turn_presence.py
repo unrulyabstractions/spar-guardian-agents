@@ -37,7 +37,8 @@ cached prefix holds. A peer whose round is under way when another agent exits he
 
 Under SwarmConfig.unsubmit a submit ends nobody's turns and records no exit (src/swarm/unsubmit.py): every agent
 present, the caller included, hears each hand-in of the team's work and each unsubmit in the words of the board's
-notice of it (prompts.yaml unsubmit.submitted, unsubmit.notice; ids handed_in:<i>, taken_back:<i>).
+notice of it (prompts.yaml unsubmit.submitted, naming the commit the hand-in froze where there is one, and
+unsubmit.notice; ids handed_in:<i>, taken_back:<i>).
 
 A recipient hears only of what happened while it was present: an exit in a round before its own entry round is not
 delivered, and neither is the entry of a peer that left then. The peer tools still answer for that peer, with status
@@ -54,7 +55,7 @@ from inspect_ai.log import transcript
 from inspect_ai.model import ChatMessageUser
 from inspect_ai.util import store_as
 
-from src.configuration.prompt_texts import joined, rounds_text
+from src.configuration.prompt_texts import hand_in_text, joined, rounds_text
 from src.configuration.settings import load_prompts
 from src.swarm.turn_rules._turn_messages import Part, presence_events
 from src.swarm.turn_rules._turn_pushes import push_events
@@ -163,7 +164,8 @@ def unsubmit_events(own: int) -> list[dict]:
         return []
     texts = load_prompts()["unsubmit"]
     handed = [{"id": f"handed_in:{i}", "agent": s["agent"], "kind": "handed_in", "why": "submit", "round": s["round"],
-               "order": (s["round"] or 0, 2, s["seq"]), "text": texts["submitted"].format(agent=s["agent"])}
+               "order": (s["round"] or 0, 2, s["seq"]),
+               "text": hand_in_text(texts, "submitted", s["commit"], agent=s["agent"])}
               for i, s in enumerate(record.submits) if (s["round"] or 0) >= own]
     taken = [{"id": f"taken_back:{i}", "agent": u["agent"], "kind": "taken_back", "why": "unsubmit",
               "round": u["round"], "order": (u["round"] or 0, 2, u["seq"]),
