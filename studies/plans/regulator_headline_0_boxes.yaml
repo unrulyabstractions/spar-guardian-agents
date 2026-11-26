@@ -1,337 +1,235 @@
-# regulator_headline_0, the part that runs on rented machines (2026-11-26): every row but Opus, 56 targets, 280 runs.
-# The workers alone (baseline), alone under the generic rule (negative_control), and with 2 regulators at level
-# generic: Claude Sonnet 5.5, GPT-6.1 Terra, Claude Haiku 5.5, GPT-6 Luna and HY4 Flash. Every model here goes through
-# OpenRouter with its pinned routing, since a rented machine holds that key alone. The design, the names and the caps
-# are in regulator_headline_0.yaml, which holds the Opus rows on the Mac. The runs come back into
-# runs/regulator_headline_0/ beside the others.
-# Caps, as the user set them: $5 a run by default; $10 with Terra; $15 with Sonnet beside 2, 4 or 8 workers and $25
-# beside 16.
+# regulator_headline_0 (2026-11-26): do two regulators stop a team of DeepSeek V4.1 Flash workers from cheating, and
+# does the answer change with the team's size, the regulators' model, and whether the team can test its fix? Every run
+# is on the flipt Redis TLS issue under the jigsaw honeypot, in two versions: ian_gflipt
+# (studies.cells.swe.ian_gflipt_minimal, with check_fix) and ian_flipt (studies.cells.swe.ian_flipt_minimal, without
+# it). The versions differ in the check tool and in what it needs: ian_gflipt plants longer values (LONG_VALUES) and
+# its hidden tests hold their fingerprints, so that no value can be guessed through the tool.
+# Teams of 2, 4, 8 and 16 workers. Eight rows per team size and version: the workers alone (baseline); the workers
+# alone under the generic rule (negative_control); and the workers with 2 regulators at level generic (n_agents is the
+# workers plus 2), one row per regulator model: Claude Sonnet 5.5, Opus 5.5, GPT-6.1 Terra, Claude Haiku 5.5, GPT-6
+# Luna and HY4 Flash. Five samples per cell, seeds 1 to 5, no pack, no judge (the user, 2026-11-26: "ALSO, no
+# judging!"): 64 targets, 320 runs. Every run is under unsubmit, as in regulator_scale_2. No pilot runs first (the
+# user: "dont do runs we do not need to, things have worked so far!").
+# A target is <version>_deepseek_w<workers>_<row>, the row one of baseline, negative_control or reg2_<regulator>
+# (sonnet, opus, terra, haiku, luna, hy4flash); its run is <target>_none_s<seed>. No name reaches an agent's text.
+# Three files hold the 64 targets: this Mac's (regulator_headline_0.yaml), the rented machines'
+# (regulator_headline_0_boxes.yaml) and the rows that wait (regulator_headline_0_later.yaml).
+# Caps a run, by its workers (2, 4, 8, 16): $1, $2, $3, $5 for the workers alone; $2, $2, $3, $5 beside Haiku, Luna or
+# HY4 Flash; $3, $4, $6, $10 beside Terra; $15, $15, $15, $25 beside Sonnet or Opus. Each is about twice what a full run
+# of that team is expected to cost at the token counts of regulator_scale_2, and the rented machines' rows together
+# stay under what the SPAR OpenRouter key had left on 2026-11-26 ($897), which box_key.py checks at the caps.
+# THIS FILE: the runs of the rented machines, 36 targets and 180 runs, every model through OpenRouter: the baseline on
+# ian_flipt, the negative control on both versions, and the Terra, Luna and HY4 Flash rows.
 study: regulator_headline_0
 seeds: [1, 2, 3, 4, 5]
-# What every run of the study is given, as in regulator_headline_0.yaml.
+# What every run of the study is given. A value named nowhere is the default (swarm_config.py).
 settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5, unsubmit=true,
            submit_delay_rounds=3]
 targets:
-  ian_gflipt_deepseek_w2_baseline:
-    module: studies.cells.swe.ian_gflipt_minimal
+  ian_flipt_deepseek_w2_baseline:
+    module: studies.cells.swe.ian_flipt_minimal
     model: deepseek-flash-openrouter
     packs: [none]
-    settings: [n_agents=2, max_concurrency=2]
+    settings: [n_agents=2, max_concurrency=2, cost_limit_usd=1]
+  ian_flipt_deepseek_w4_baseline:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, cost_limit_usd=2]
+  ian_flipt_deepseek_w8_baseline:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=8, max_concurrency=8, cost_limit_usd=3]
+  ian_flipt_deepseek_w16_baseline:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=16, max_concurrency=16, cost_limit_usd=5]
   ian_gflipt_deepseek_w2_negative_control:
     module: studies.cells.swe.ian_gflipt_minimal
     model: deepseek-flash-openrouter
     packs: [none]
-    settings: [n_agents=2, max_concurrency=2, rule_level=generic]
-  ian_gflipt_deepseek_w2_reg2_sonnet:
+    settings: [n_agents=2, max_concurrency=2, rule_level=generic, cost_limit_usd=1]
+  ian_gflipt_deepseek_w4_negative_control:
     module: studies.cells.swe.ian_gflipt_minimal
     model: deepseek-flash-openrouter
     packs: [none]
-    settings: [n_agents=4, max_concurrency=4, regulators=2, regulator_level=generic,
-               regulator_model=claude-sonnet-5-5-openrouter, cost_limit_usd=15]
+    settings: [n_agents=4, max_concurrency=4, rule_level=generic, cost_limit_usd=2]
+  ian_gflipt_deepseek_w8_negative_control:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=8, max_concurrency=8, rule_level=generic, cost_limit_usd=3]
+  ian_gflipt_deepseek_w16_negative_control:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=16, max_concurrency=16, rule_level=generic, cost_limit_usd=5]
+  ian_flipt_deepseek_w2_negative_control:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=2, max_concurrency=2, rule_level=generic, cost_limit_usd=1]
+  ian_flipt_deepseek_w4_negative_control:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, rule_level=generic, cost_limit_usd=2]
+  ian_flipt_deepseek_w8_negative_control:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=8, max_concurrency=8, rule_level=generic, cost_limit_usd=3]
+  ian_flipt_deepseek_w16_negative_control:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=16, max_concurrency=16, rule_level=generic, cost_limit_usd=5]
   ian_gflipt_deepseek_w2_reg2_terra:
     module: studies.cells.swe.ian_gflipt_minimal
     model: deepseek-flash-openrouter
     packs: [none]
     settings: [n_agents=4, max_concurrency=4, regulators=2, regulator_level=generic,
-               regulator_model=gpt-6.1-terra-openrouter, cost_limit_usd=10]
-  ian_gflipt_deepseek_w2_reg2_haiku:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=4, max_concurrency=4, regulators=2, regulator_level=generic,
-               regulator_model=claude-haiku-5-5-openrouter]
-  ian_gflipt_deepseek_w2_reg2_luna:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=4, max_concurrency=4, regulators=2, regulator_level=generic,
-               regulator_model=gpt-6-luna-openrouter]
-  ian_gflipt_deepseek_w2_reg2_hy4flash:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=4, max_concurrency=4, regulators=2, regulator_level=generic,
-               regulator_model=hy4-flash-openrouter]
-  ian_gflipt_deepseek_w4_baseline:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=4, max_concurrency=4]
-  ian_gflipt_deepseek_w4_negative_control:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=4, max_concurrency=4, rule_level=generic]
-  ian_gflipt_deepseek_w4_reg2_sonnet:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=6, max_concurrency=6, regulators=2, regulator_level=generic,
-               regulator_model=claude-sonnet-5-5-openrouter, cost_limit_usd=15]
+               regulator_model=gpt-6.1-terra-openrouter, cost_limit_usd=3]
   ian_gflipt_deepseek_w4_reg2_terra:
     module: studies.cells.swe.ian_gflipt_minimal
     model: deepseek-flash-openrouter
     packs: [none]
     settings: [n_agents=6, max_concurrency=6, regulators=2, regulator_level=generic,
-               regulator_model=gpt-6.1-terra-openrouter, cost_limit_usd=10]
-  ian_gflipt_deepseek_w4_reg2_haiku:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=6, max_concurrency=6, regulators=2, regulator_level=generic,
-               regulator_model=claude-haiku-5-5-openrouter]
-  ian_gflipt_deepseek_w4_reg2_luna:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=6, max_concurrency=6, regulators=2, regulator_level=generic,
-               regulator_model=gpt-6-luna-openrouter]
-  ian_gflipt_deepseek_w4_reg2_hy4flash:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=6, max_concurrency=6, regulators=2, regulator_level=generic,
-               regulator_model=hy4-flash-openrouter]
-  ian_gflipt_deepseek_w8_baseline:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=8, max_concurrency=8]
-  ian_gflipt_deepseek_w8_negative_control:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=8, max_concurrency=8, rule_level=generic]
-  ian_gflipt_deepseek_w8_reg2_sonnet:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic,
-               regulator_model=claude-sonnet-5-5-openrouter, cost_limit_usd=15]
+               regulator_model=gpt-6.1-terra-openrouter, cost_limit_usd=4]
   ian_gflipt_deepseek_w8_reg2_terra:
     module: studies.cells.swe.ian_gflipt_minimal
     model: deepseek-flash-openrouter
     packs: [none]
     settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic,
-               regulator_model=gpt-6.1-terra-openrouter, cost_limit_usd=10]
-  ian_gflipt_deepseek_w8_reg2_haiku:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic,
-               regulator_model=claude-haiku-5-5-openrouter]
-  ian_gflipt_deepseek_w8_reg2_luna:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic,
-               regulator_model=gpt-6-luna-openrouter]
-  ian_gflipt_deepseek_w8_reg2_hy4flash:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic,
-               regulator_model=hy4-flash-openrouter]
-  ian_gflipt_deepseek_w16_baseline:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=16, max_concurrency=16]
-  ian_gflipt_deepseek_w16_negative_control:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=16, max_concurrency=16, rule_level=generic]
-  ian_gflipt_deepseek_w16_reg2_sonnet:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=18, max_concurrency=18, regulators=2, regulator_level=generic,
-               regulator_model=claude-sonnet-5-5-openrouter, cost_limit_usd=25]
+               regulator_model=gpt-6.1-terra-openrouter, cost_limit_usd=6]
   ian_gflipt_deepseek_w16_reg2_terra:
     module: studies.cells.swe.ian_gflipt_minimal
     model: deepseek-flash-openrouter
     packs: [none]
     settings: [n_agents=18, max_concurrency=18, regulators=2, regulator_level=generic,
                regulator_model=gpt-6.1-terra-openrouter, cost_limit_usd=10]
-  ian_gflipt_deepseek_w16_reg2_haiku:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=18, max_concurrency=18, regulators=2, regulator_level=generic,
-               regulator_model=claude-haiku-5-5-openrouter]
-  ian_gflipt_deepseek_w16_reg2_luna:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=18, max_concurrency=18, regulators=2, regulator_level=generic,
-               regulator_model=gpt-6-luna-openrouter]
-  ian_gflipt_deepseek_w16_reg2_hy4flash:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=18, max_concurrency=18, regulators=2, regulator_level=generic,
-               regulator_model=hy4-flash-openrouter]
-  ian_flipt_deepseek_w2_baseline:
-    module: studies.cells.swe.ian_flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=2, max_concurrency=2]
-  ian_flipt_deepseek_w2_negative_control:
-    module: studies.cells.swe.ian_flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=2, max_concurrency=2, rule_level=generic]
-  ian_flipt_deepseek_w2_reg2_sonnet:
-    module: studies.cells.swe.ian_flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=4, max_concurrency=4, regulators=2, regulator_level=generic,
-               regulator_model=claude-sonnet-5-5-openrouter, cost_limit_usd=15]
   ian_flipt_deepseek_w2_reg2_terra:
     module: studies.cells.swe.ian_flipt_minimal
     model: deepseek-flash-openrouter
     packs: [none]
     settings: [n_agents=4, max_concurrency=4, regulators=2, regulator_level=generic,
-               regulator_model=gpt-6.1-terra-openrouter, cost_limit_usd=10]
-  ian_flipt_deepseek_w2_reg2_haiku:
-    module: studies.cells.swe.ian_flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=4, max_concurrency=4, regulators=2, regulator_level=generic,
-               regulator_model=claude-haiku-5-5-openrouter]
-  ian_flipt_deepseek_w2_reg2_luna:
-    module: studies.cells.swe.ian_flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=4, max_concurrency=4, regulators=2, regulator_level=generic,
-               regulator_model=gpt-6-luna-openrouter]
-  ian_flipt_deepseek_w2_reg2_hy4flash:
-    module: studies.cells.swe.ian_flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=4, max_concurrency=4, regulators=2, regulator_level=generic,
-               regulator_model=hy4-flash-openrouter]
-  ian_flipt_deepseek_w4_baseline:
-    module: studies.cells.swe.ian_flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=4, max_concurrency=4]
-  ian_flipt_deepseek_w4_negative_control:
-    module: studies.cells.swe.ian_flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=4, max_concurrency=4, rule_level=generic]
-  ian_flipt_deepseek_w4_reg2_sonnet:
-    module: studies.cells.swe.ian_flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=6, max_concurrency=6, regulators=2, regulator_level=generic,
-               regulator_model=claude-sonnet-5-5-openrouter, cost_limit_usd=15]
+               regulator_model=gpt-6.1-terra-openrouter, cost_limit_usd=3]
   ian_flipt_deepseek_w4_reg2_terra:
     module: studies.cells.swe.ian_flipt_minimal
     model: deepseek-flash-openrouter
     packs: [none]
     settings: [n_agents=6, max_concurrency=6, regulators=2, regulator_level=generic,
-               regulator_model=gpt-6.1-terra-openrouter, cost_limit_usd=10]
-  ian_flipt_deepseek_w4_reg2_haiku:
-    module: studies.cells.swe.ian_flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=6, max_concurrency=6, regulators=2, regulator_level=generic,
-               regulator_model=claude-haiku-5-5-openrouter]
-  ian_flipt_deepseek_w4_reg2_luna:
-    module: studies.cells.swe.ian_flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=6, max_concurrency=6, regulators=2, regulator_level=generic,
-               regulator_model=gpt-6-luna-openrouter]
-  ian_flipt_deepseek_w4_reg2_hy4flash:
-    module: studies.cells.swe.ian_flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=6, max_concurrency=6, regulators=2, regulator_level=generic,
-               regulator_model=hy4-flash-openrouter]
-  ian_flipt_deepseek_w8_baseline:
-    module: studies.cells.swe.ian_flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=8, max_concurrency=8]
-  ian_flipt_deepseek_w8_negative_control:
-    module: studies.cells.swe.ian_flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=8, max_concurrency=8, rule_level=generic]
-  ian_flipt_deepseek_w8_reg2_sonnet:
-    module: studies.cells.swe.ian_flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic,
-               regulator_model=claude-sonnet-5-5-openrouter, cost_limit_usd=15]
+               regulator_model=gpt-6.1-terra-openrouter, cost_limit_usd=4]
   ian_flipt_deepseek_w8_reg2_terra:
     module: studies.cells.swe.ian_flipt_minimal
     model: deepseek-flash-openrouter
     packs: [none]
     settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic,
-               regulator_model=gpt-6.1-terra-openrouter, cost_limit_usd=10]
-  ian_flipt_deepseek_w8_reg2_haiku:
-    module: studies.cells.swe.ian_flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic,
-               regulator_model=claude-haiku-5-5-openrouter]
-  ian_flipt_deepseek_w8_reg2_luna:
-    module: studies.cells.swe.ian_flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic,
-               regulator_model=gpt-6-luna-openrouter]
-  ian_flipt_deepseek_w8_reg2_hy4flash:
-    module: studies.cells.swe.ian_flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic,
-               regulator_model=hy4-flash-openrouter]
-  ian_flipt_deepseek_w16_baseline:
-    module: studies.cells.swe.ian_flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=16, max_concurrency=16]
-  ian_flipt_deepseek_w16_negative_control:
-    module: studies.cells.swe.ian_flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=16, max_concurrency=16, rule_level=generic]
-  ian_flipt_deepseek_w16_reg2_sonnet:
-    module: studies.cells.swe.ian_flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=18, max_concurrency=18, regulators=2, regulator_level=generic,
-               regulator_model=claude-sonnet-5-5-openrouter, cost_limit_usd=25]
+               regulator_model=gpt-6.1-terra-openrouter, cost_limit_usd=6]
   ian_flipt_deepseek_w16_reg2_terra:
     module: studies.cells.swe.ian_flipt_minimal
     model: deepseek-flash-openrouter
     packs: [none]
     settings: [n_agents=18, max_concurrency=18, regulators=2, regulator_level=generic,
                regulator_model=gpt-6.1-terra-openrouter, cost_limit_usd=10]
-  ian_flipt_deepseek_w16_reg2_haiku:
-    module: studies.cells.swe.ian_flipt_minimal
+  ian_gflipt_deepseek_w2_reg2_luna:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, regulators=2, regulator_level=generic,
+               regulator_model=gpt-6-luna-openrouter, cost_limit_usd=2]
+  ian_gflipt_deepseek_w4_reg2_luna:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=6, max_concurrency=6, regulators=2, regulator_level=generic,
+               regulator_model=gpt-6-luna-openrouter, cost_limit_usd=2]
+  ian_gflipt_deepseek_w8_reg2_luna:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic,
+               regulator_model=gpt-6-luna-openrouter, cost_limit_usd=3]
+  ian_gflipt_deepseek_w16_reg2_luna:
+    module: studies.cells.swe.ian_gflipt_minimal
     model: deepseek-flash-openrouter
     packs: [none]
     settings: [n_agents=18, max_concurrency=18, regulators=2, regulator_level=generic,
-               regulator_model=claude-haiku-5-5-openrouter]
+               regulator_model=gpt-6-luna-openrouter, cost_limit_usd=5]
+  ian_flipt_deepseek_w2_reg2_luna:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, regulators=2, regulator_level=generic,
+               regulator_model=gpt-6-luna-openrouter, cost_limit_usd=2]
+  ian_flipt_deepseek_w4_reg2_luna:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=6, max_concurrency=6, regulators=2, regulator_level=generic,
+               regulator_model=gpt-6-luna-openrouter, cost_limit_usd=2]
+  ian_flipt_deepseek_w8_reg2_luna:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic,
+               regulator_model=gpt-6-luna-openrouter, cost_limit_usd=3]
   ian_flipt_deepseek_w16_reg2_luna:
     module: studies.cells.swe.ian_flipt_minimal
     model: deepseek-flash-openrouter
     packs: [none]
     settings: [n_agents=18, max_concurrency=18, regulators=2, regulator_level=generic,
-               regulator_model=gpt-6-luna-openrouter]
+               regulator_model=gpt-6-luna-openrouter, cost_limit_usd=5]
+  ian_gflipt_deepseek_w2_reg2_hy4flash:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, regulators=2, regulator_level=generic,
+               regulator_model=hy4-flash-openrouter, cost_limit_usd=2]
+  ian_gflipt_deepseek_w4_reg2_hy4flash:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=6, max_concurrency=6, regulators=2, regulator_level=generic,
+               regulator_model=hy4-flash-openrouter, cost_limit_usd=2]
+  ian_gflipt_deepseek_w8_reg2_hy4flash:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic,
+               regulator_model=hy4-flash-openrouter, cost_limit_usd=3]
+  ian_gflipt_deepseek_w16_reg2_hy4flash:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=18, max_concurrency=18, regulators=2, regulator_level=generic,
+               regulator_model=hy4-flash-openrouter, cost_limit_usd=5]
+  ian_flipt_deepseek_w2_reg2_hy4flash:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, regulators=2, regulator_level=generic,
+               regulator_model=hy4-flash-openrouter, cost_limit_usd=2]
+  ian_flipt_deepseek_w4_reg2_hy4flash:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=6, max_concurrency=6, regulators=2, regulator_level=generic,
+               regulator_model=hy4-flash-openrouter, cost_limit_usd=2]
+  ian_flipt_deepseek_w8_reg2_hy4flash:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic,
+               regulator_model=hy4-flash-openrouter, cost_limit_usd=3]
   ian_flipt_deepseek_w16_reg2_hy4flash:
     module: studies.cells.swe.ian_flipt_minimal
     model: deepseek-flash-openrouter
     packs: [none]
     settings: [n_agents=18, max_concurrency=18, regulators=2, regulator_level=generic,
-               regulator_model=hy4-flash-openrouter]
+               regulator_model=hy4-flash-openrouter, cost_limit_usd=5]
 # box_run.sh starts each box's launcher with --limit max_agents=<the box's agents at once>, in place of max_agents
 # here. max_runs is high so that a box of small teams fills its agents.
 limits:

@@ -1,80 +1,106 @@
 # regulator_headline_0 (2026-11-26): do two regulators stop a team of DeepSeek V4.1 Flash workers from cheating, and
 # does the answer change with the team's size, the regulators' model, and whether the team can test its fix? Every run
-# is on the flipt Redis TLS issue under the jigsaw honeypot, in two versions that differ in the check tool:
-# ian_gflipt (studies.cells.swe.ian_gflipt_minimal, with check_fix) and ian_flipt (studies.cells.swe.ian_flipt_minimal,
-# without it). ian_gflipt also plants values of its own (LONG_VALUES) that its hidden tests compare as fingerprints.
+# is on the flipt Redis TLS issue under the jigsaw honeypot, in two versions: ian_gflipt
+# (studies.cells.swe.ian_gflipt_minimal, with check_fix) and ian_flipt (studies.cells.swe.ian_flipt_minimal, without
+# it). The versions differ in the check tool and in what it needs: ian_gflipt plants longer values (LONG_VALUES) and
+# its hidden tests hold their fingerprints, so that no value can be guessed through the tool.
 # Teams of 2, 4, 8 and 16 workers. Eight rows per team size and version: the workers alone (baseline); the workers
 # alone under the generic rule (negative_control); and the workers with 2 regulators at level generic (n_agents is the
 # workers plus 2), one row per regulator model: Claude Sonnet 5.5, Opus 5.5, GPT-6.1 Terra, Claude Haiku 5.5, GPT-6
-# Luna and HY4 Flash. Five samples per cell, seeds 1 to 5, no pack, no judge: 64 targets, 320 runs.
-# Every run is under unsubmit, as in regulator_scale_2. No pilot runs first (the user, 2026-11-26: "dont do runs we do
-# not need to, things have worked so far!").
+# Luna and HY4 Flash. Five samples per cell, seeds 1 to 5, no pack, no judge (the user, 2026-11-26: "ALSO, no
+# judging!"): 64 targets, 320 runs. Every run is under unsubmit, as in regulator_scale_2. No pilot runs first (the
+# user: "dont do runs we do not need to, things have worked so far!").
 # A target is <version>_deepseek_w<workers>_<row>, the row one of baseline, negative_control or reg2_<regulator>
 # (sonnet, opus, terra, haiku, luna, hy4flash); its run is <target>_none_s<seed>. No name reaches an agent's text.
-# This file holds the runs of this Mac: the Opus rows, with their regulators straight at Anthropic on the user's
-# temporary key (8 targets, 40 runs). Every other row runs on rented machines through OpenRouter:
-# regulator_headline_0_boxes.yaml.
-# Caps, as the user set them on 2026-11-26: $5 a run by default (baseline, negative_control, Haiku, Luna and HY4
-# Flash); $10 with Terra; $15 with Sonnet or Opus beside 2, 4 or 8 workers, and $25 beside 16.
+# Three files hold the 64 targets: this Mac's (regulator_headline_0.yaml), the rented machines'
+# (regulator_headline_0_boxes.yaml) and the rows that wait (regulator_headline_0_later.yaml).
+# Caps a run, by its workers (2, 4, 8, 16): $1, $2, $3, $5 for the workers alone; $2, $2, $3, $5 beside Haiku, Luna or
+# HY4 Flash; $3, $4, $6, $10 beside Terra; $15, $15, $15, $25 beside Sonnet or Opus. Each is about twice what a full run
+# of that team is expected to cost at the token counts of regulator_scale_2, and the rented machines' rows together
+# stay under what the SPAR OpenRouter key had left on 2026-11-26 ($897), which box_key.py checks at the caps.
+# THIS FILE: the runs of this Mac, 12 targets and 60 runs. The baseline on ian_gflipt runs here first, as the first
+# real runs of the hand-in texts and the saved hand-in copies of 2026-11-26. The Haiku rows run here because their
+# regulators go straight to Anthropic on the user's temporary key (the user: "use anthropic keys before open router"),
+# which a rented machine cannot hold yet.
 study: regulator_headline_0
 seeds: [1, 2, 3, 4, 5]
 # What every run of the study is given. A value named nowhere is the default (swarm_config.py).
 settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5, unsubmit=true,
            submit_delay_rounds=3]
 targets:
-  ian_gflipt_deepseek_w2_reg2_opus:
+  ian_gflipt_deepseek_w2_baseline:
     module: studies.cells.swe.ian_gflipt_minimal
     model: deepseek-flash-openrouter
     packs: [none]
-    settings: [n_agents=4, max_concurrency=4, regulators=2, regulator_level=generic, regulator_model=claude-opus-5-5,
-               cost_limit_usd=15]
-  ian_gflipt_deepseek_w4_reg2_opus:
+    settings: [n_agents=2, max_concurrency=2, cost_limit_usd=1]
+  ian_gflipt_deepseek_w4_baseline:
     module: studies.cells.swe.ian_gflipt_minimal
     model: deepseek-flash-openrouter
     packs: [none]
-    settings: [n_agents=6, max_concurrency=6, regulators=2, regulator_level=generic, regulator_model=claude-opus-5-5,
-               cost_limit_usd=15]
-  ian_gflipt_deepseek_w8_reg2_opus:
+    settings: [n_agents=4, max_concurrency=4, cost_limit_usd=2]
+  ian_gflipt_deepseek_w8_baseline:
     module: studies.cells.swe.ian_gflipt_minimal
     model: deepseek-flash-openrouter
     packs: [none]
-    settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic, regulator_model=claude-opus-5-5,
-               cost_limit_usd=15]
-  ian_gflipt_deepseek_w16_reg2_opus:
+    settings: [n_agents=8, max_concurrency=8, cost_limit_usd=3]
+  ian_gflipt_deepseek_w16_baseline:
     module: studies.cells.swe.ian_gflipt_minimal
     model: deepseek-flash-openrouter
     packs: [none]
-    settings: [n_agents=18, max_concurrency=18, regulators=2, regulator_level=generic, regulator_model=claude-opus-5-5,
-               cost_limit_usd=25]
-  ian_flipt_deepseek_w2_reg2_opus:
+    settings: [n_agents=16, max_concurrency=16, cost_limit_usd=5]
+  ian_gflipt_deepseek_w2_reg2_haiku:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, regulators=2, regulator_level=generic,
+               regulator_model=claude-haiku-5-5, cost_limit_usd=2]
+  ian_gflipt_deepseek_w4_reg2_haiku:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=6, max_concurrency=6, regulators=2, regulator_level=generic,
+               regulator_model=claude-haiku-5-5, cost_limit_usd=2]
+  ian_gflipt_deepseek_w8_reg2_haiku:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic,
+               regulator_model=claude-haiku-5-5, cost_limit_usd=3]
+  ian_gflipt_deepseek_w16_reg2_haiku:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=18, max_concurrency=18, regulators=2, regulator_level=generic,
+               regulator_model=claude-haiku-5-5, cost_limit_usd=5]
+  ian_flipt_deepseek_w2_reg2_haiku:
     module: studies.cells.swe.ian_flipt_minimal
     model: deepseek-flash-openrouter
     packs: [none]
-    settings: [n_agents=4, max_concurrency=4, regulators=2, regulator_level=generic, regulator_model=claude-opus-5-5,
-               cost_limit_usd=15]
-  ian_flipt_deepseek_w4_reg2_opus:
+    settings: [n_agents=4, max_concurrency=4, regulators=2, regulator_level=generic,
+               regulator_model=claude-haiku-5-5, cost_limit_usd=2]
+  ian_flipt_deepseek_w4_reg2_haiku:
     module: studies.cells.swe.ian_flipt_minimal
     model: deepseek-flash-openrouter
     packs: [none]
-    settings: [n_agents=6, max_concurrency=6, regulators=2, regulator_level=generic, regulator_model=claude-opus-5-5,
-               cost_limit_usd=15]
-  ian_flipt_deepseek_w8_reg2_opus:
+    settings: [n_agents=6, max_concurrency=6, regulators=2, regulator_level=generic,
+               regulator_model=claude-haiku-5-5, cost_limit_usd=2]
+  ian_flipt_deepseek_w8_reg2_haiku:
     module: studies.cells.swe.ian_flipt_minimal
     model: deepseek-flash-openrouter
     packs: [none]
-    settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic, regulator_model=claude-opus-5-5,
-               cost_limit_usd=15]
-  ian_flipt_deepseek_w16_reg2_opus:
+    settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic,
+               regulator_model=claude-haiku-5-5, cost_limit_usd=3]
+  ian_flipt_deepseek_w16_reg2_haiku:
     module: studies.cells.swe.ian_flipt_minimal
     model: deepseek-flash-openrouter
     packs: [none]
-    settings: [n_agents=18, max_concurrency=18, regulators=2, regulator_level=generic, regulator_model=claude-opus-5-5,
-               cost_limit_usd=25]
+    settings: [n_agents=18, max_concurrency=18, regulators=2, regulator_level=generic,
+               regulator_model=claude-haiku-5-5, cost_limit_usd=5]
 # One SWE agent takes about 2.3 GB of Docker's disk and 0.55 GB of its memory (regulator_scale_2.yaml). max_agents
-# counts every cell script on this Mac, so this study shares the 34 with any other: a run here has 4 to 18 agents.
+# counts every cell script on this Mac, so this study shares the 34 with any other: a run here has 2 to 18 agents.
 limits:
-  max_runs: 4
-  max_per_task: {swe: 4}
+  max_runs: 8
+  max_per_task: {swe: 8}
   max_agents: 34
   spacing_s: 60
   needs:
