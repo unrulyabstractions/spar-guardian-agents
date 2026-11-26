@@ -4894,3 +4894,14 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   room still teal 5 story-seconds after, mid fade); t=0.5 (cubes, hairline edges for quiet pairs, thick for recent);
   Opus n10 dis20 s2 at t=0.7 (two spiky balls). Sonnet run's record: 23 hand-ins, 22 take-backs; story holds 45 rows.
   VERIFIED. Live playback of the fades: UNVERIFIED.
+- Stepping (the user: "allow me to step (both thru steps but also rounds)"). Story gains `steps` (every call:
+  t, agent, tool, round; 1830 in the Sonnet reg20 run) and `rounds` (round starts from the rules' timeline turns;
+  31). Buttons: previous round, previous call, play, next call, next round, hold to repeat; arrow keys step calls,
+  Shift+arrows rounds; `#round=N` and `#step=N` open paused. Tests 2 passed (steps and rounds of the small run).
+- Viewed screenshots: `#step=1500` reads "round 23 / 31 · step 1500 / 1830: W2 board_read" at 130:01 with a white
+  ring on W2; the story says step 1500 is W2 board_read, round 23, t=7801 s (130:01). `#round=22` reads step 1413
+  W4 board_read at 119:45; the story's first call at or after round 22's start (7180.4 s) is step 1413, W4,
+  board_read, 7185.3 s. The first version landed on step 1412 (the previous round's last call): fixed. VERIFIED.
+- Ran the stepping functions in Node on the real 1830 steps: next/prev call, next round x2, prev round to this
+  round's first call then to the previous round, step after a scrub, clamp at round 31. First version skipped
+  call 1 on the first forward step: fixed and rerun. VERIFIED. Clicks and keys in a live browser: UNVERIFIED.

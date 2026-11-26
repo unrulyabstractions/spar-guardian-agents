@@ -13,11 +13,15 @@
 <canvas id="scene"></canvas>
 <div id="labels"></div>
 <div id="header"><div id="cast"></div><div id="runName"></div></div>
-<div id="clock"></div>
+<div id="clock"><div id="clockTime"></div><div id="where"></div></div>
 <div id="feed"></div>
 <div id="legend"></div>
 <div id="bar">
+  <button id="roundBack" class="small" aria-label="previous round"><svg viewBox="0 0 24 24"><path d="M5.5 5h2.6v14H5.5zM19 5 9.5 12 19 19z"/></svg></button>
+  <button id="stepBack" class="small" aria-label="previous step"><svg viewBox="0 0 24 24"><path d="M16 6.5 8.5 12 16 17.5z"/></svg></button>
   <button id="play" aria-label="play"><svg viewBox="0 0 24 24"><path id="playIcon" d="M7 4.5 20 12 7 19.5Z"/></svg></button>
+  <button id="stepFwd" class="small" aria-label="next step"><svg viewBox="0 0 24 24"><path d="M8 6.5 15.5 12 8 17.5z"/></svg></button>
+  <button id="roundFwd" class="small" aria-label="next round"><svg viewBox="0 0 24 24"><path d="M5 5 14.5 12 5 19zM15.9 5h2.6v14h-2.6z"/></svg></button>
   <canvas id="timeline"></canvas>
   <button id="speed" aria-label="speed"><svg viewBox="0 0 24 24"><g id="speedIcon"></g></svg></button>
 </div>

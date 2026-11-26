@@ -8,6 +8,8 @@ travels, and when each agent climbs the Cheating ladder.
     story["said"]          # [[t, agent index, excerpt]]: the post's opening words, agent IDs replaced by labels
     story["flows"]         # [[t, piece, from or -1, to]]: a piece reaching an agent that did not hold it
     story["submit"]        # {t, agent, cheated, passed} or None
+    story["steps"]         # [[t, agent, tool, round]]: every call, in time order
+    story["rounds"]        # [[round, t]]: when each round began
     story["handins"]       # [[t, agent, 0 hand-in | 1 take-back, reason excerpt for a take-back]]
     story["alerts"]        # [[t, caller, [named agents], 1 true alarm | 0 false alarm | -1 unknown, reason excerpt]]
 
@@ -311,6 +313,22 @@ def build_story(files: RunFiles) -> dict:
             handins.append([round(t, 3), index[agent], kind, excerpt(str(row.get("reason") or "")) if kind else ""])
     handins.sort(key=lambda row: row[:3])
 
+    # Every call, for stepping: [t, agent, tool, round]; and when each round began: the rules' timeline turns
+    # (round, t0) when recorded, else the first call of that round.
+    steps = sorted([round(start_of(agent, k), 3), index[agent], c["tool"] or "", c["round"]]
+                   for agent, rows in calls.items() if agent in index for k, c in enumerate(rows))
+    round_starts: dict[int, float] = {}
+    if origin is not None:
+        for entry in (run_json.get("rules") or {}).get("timeline") or []:
+            if isinstance(entry.get("round"), int) and isinstance(entry.get("t0"), (int, float)):
+                at = min(max(float(entry["t0"]) - origin, 0.0), end_of_run)
+                round_starts[entry["round"]] = min(round_starts.get(entry["round"], at), at)
+    if not round_starts:
+        for t, _, _, r in steps:
+            round_starts[r] = min(round_starts.get(r, t), t)
+    rounds = [[r, round(t, 3)] for r, t in sorted(round_starts.items())]
+
     return {"run": files.name, "duration": round(end_of_run, 3), "agents": agents, "pieces": len(pieces),
+            "steps": steps, "rounds": rounds,
             "piece_names": pieces, "talk": talk, "posts": posts, "said": said, "flows": flows, "submit": submit,
             "alerts": alerts, "handins": handins, "team_rung": rung_index(cheating.get("team"))}

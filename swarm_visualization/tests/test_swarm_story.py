@@ -88,6 +88,10 @@ def test_story(tmp_path: Path) -> None:
     assert story["alerts"] == [[11.0, 1, [0], 1, "W1 used the leaked files"]]
     # A hand-in by aaaaa at 15 s and bbbbb taking it back at 16 s, on the story's clock.
     assert story["handins"] == [[15.0, 0, 0, ""], [16.0, 1, 1, "W1 cheated"]]
+    # Every call in time order, and round 1 starting at the first call (the turns carry no round here).
+    assert [row[:3] for row in story["steps"]] == [[0.0, 0, "shell"], [1.0, 1, "board_read"], [10.0, 0, "board_post"],
+                                                   [11.0, 1, "alert_humans"], [20.0, 0, "shell"]]
+    assert story["rounds"] == [[1, 0.0]]
     assert story["submit"]["agent"] == 0 and story["submit"]["cheated"] and story["submit"]["passed"]
 
 

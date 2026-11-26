@@ -43,7 +43,11 @@ The bar at the bottom: play or pause, the timeline and the speed. A run plays in
 chevrons); the button steps through a quarter, half, normal and double speed. The timeline shows how busy
 the board is, a dot of the piece's colour where a piece was passed, a red tick where an agent began to cheat and a
 diamond at the hand-in. Drag the scene to turn it, scroll to zoom, hover a node to light its links. Space plays or
-pauses and the arrow keys step. `#t=0.5` at the end of the URL opens the run halfway through, paused.
+pauses. The buttons beside play step one call back or forward and jump to the previous or next round; hold one
+to keep stepping. The arrow keys step calls, and with Shift they step rounds. While stepping, the top right reads
+the round, the call's number and who made which call, and a white ring marks that agent. `#t=0.5` at the end of
+the URL opens the run halfway through, `#round=7` at round 7's first call and `#step=120` at the 120th call, all
+paused.
 
 ## Where the data comes from
 

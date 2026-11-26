@@ -270,11 +270,16 @@ for (const [ta, caller, who, outcome, reason] of ALERTS) {
 }
 events.sort((a, b) => a.t - b.t);
 const feed = document.getElementById('feed');
-const clockEl = document.getElementById('clock');
+const clockTime = document.getElementById('clockTime');
+const whereEl = document.getElementById('where');
 const FEED_SIZE = 4;
 let feedShown = -2;
 function drawWords(rungs, here, alive, focus, flags, hand) {
-  clockEl.textContent = `${clockText(t)} / ${clockText(T)}`;
+  clockTime.textContent = `${clockText(t)} / ${clockText(T)}`;
+  const r = roundAt(t), step = stepShown();
+  const whereText = (ROUNDS.length ? `round ${ROUNDS[r] ? ROUNDS[r][0] : 0} / ${ROUNDS[ROUNDS.length - 1][0]}` : '') +
+                    (step ? ` · step ${cursor + 1} / ${STEPS.length}: ${nameOf(step[1])} ${esc(step[2])}` : '');
+  if (whereEl.innerHTML !== whereText) whereEl.innerHTML = whereText;
   let last = -1;
   while (last + 1 < events.length && events[last + 1].t <= t) last++;
   if (last !== feedShown) {
@@ -735,6 +740,15 @@ function update(dt) {
     }
   }
 
+  // The call being stepped: a white ring on the agent making it.
+  syncCursor();
+  const shown = stepShown();
+  if (shown && alive[shown[1]]) {
+    const r = ringPool.get();
+    r.position.copy(pos[shown[1]]); r.material.color.setRGB(1, 1, 1);
+    r.material.opacity = 0.75 + 0.25 * Math.sin(clock * 6); r.scale.setScalar(4.6);
+  }
+
   for (const pool of pools) pool.end();
   placeCamera(alive, dt);
   drawWords(rungs, here, alive, focus, flags, hand);
@@ -748,6 +762,64 @@ const speedIcon = document.getElementById('speedIcon');
 const timeline = document.getElementById('timeline');
 const tctx = timeline.getContext('2d');
 let backdrop = null;
+
+// ---------- stepping: one call at a time, or one round at a time ----------
+const STEPS = S.steps || [];
+const ROUNDS = S.rounds || [];
+let cursor = -1, cursorT = NaN, stepped = false;   // the call shown; stepped while the user steps and nothing moves t
+function syncCursor() {
+  if (t !== cursorT) { cursor = firstFrom(STEPS, t) - 1; cursorT = t; stepped = false; }
+}
+function stepShown() { return stepped && cursor >= 0 ? STEPS[cursor] : null; }
+function roundAt(v) {                            // index of the round under way at v
+  let k = -1;
+  for (let j = 0; j < ROUNDS.length && ROUNDS[j][1] <= v + 1e-9; j++) k = j;
+  return k;
+}
+function goStep(dir) {
+  setPlaying(false);
+  syncCursor();
+  if (!stepped && dir > 0) cursor = firstFrom(STEPS, t - 1e-9) - 1;   // the next step is the first call at or after t
+  cursor = Math.max(0, Math.min(STEPS.length - 1, cursor + dir));
+  if (cursor >= 0) t = cursorT = STEPS[cursor][0];
+  stepped = cursor >= 0;
+}
+function landing(k) {                            // the first call of round k (index into STEPS), or -1
+  if (k < 0 || k >= ROUNDS.length) return -1;
+  const j = firstFrom(STEPS, ROUNDS[k][1] - 1e-9);
+  const end = k + 1 < ROUNDS.length ? ROUNDS[k + 1][1] : Infinity;
+  return j < STEPS.length && STEPS[j][0] < end ? j : -1;
+}
+function landOnRound(k) {
+  k = Math.max(0, Math.min(ROUNDS.length - 1, k));
+  const j = landing(k);
+  if (j >= 0) { cursor = j; t = STEPS[j][0]; stepped = true; } else { t = ROUNDS[k][1]; stepped = false; }
+  cursorT = t;
+}
+function goRound(dir) {
+  setPlaying(false);
+  if (!ROUNDS.length) return;
+  syncCursor();
+  const k = Math.max(0, roundAt(t));
+  if (dir > 0) { if (k + 1 < ROUNDS.length) landOnRound(k + 1); return; }
+  const j = landing(k);                          // back: to this round's first call, or the round before
+  const atStart = j >= 0 ? stepped && cursor === j : t <= ROUNDS[k][1] + 1e-6;
+  landOnRound(atStart ? k - 1 : k);
+}
+function holdToRepeat(id, action) {              // press to step once, hold to keep stepping
+  const button = document.getElementById(id);
+  let delay = null, repeat = null;
+  const stop = () => { clearTimeout(delay); clearInterval(repeat); };
+  button.addEventListener('pointerdown', e => {
+    e.preventDefault(); action();
+    delay = setTimeout(() => { repeat = setInterval(action, 70); }, 350);
+  });
+  for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) button.addEventListener(ev, stop);
+}
+holdToRepeat('stepBack', () => goStep(-1));
+holdToRepeat('stepFwd', () => goStep(1));
+holdToRepeat('roundBack', () => goRound(-1));
+holdToRepeat('roundFwd', () => goRound(1));
 
 function setPlaying(on) {
   if (on && t >= T) t = 0;
@@ -767,8 +839,8 @@ playButton.addEventListener('click', () => setPlaying(!playing));
 speedButton.addEventListener('click', () => { speedIndex = (speedIndex + 1) % SPEEDS.length; drawSpeed(); });
 window.addEventListener('keydown', e => {
   if (e.code === 'Space') { e.preventDefault(); setPlaying(!playing); }
-  if (e.code === 'ArrowRight') t = Math.min(T, t + T / 100);
-  if (e.code === 'ArrowLeft') t = Math.max(0, t - T / 100);
+  if (e.code === 'ArrowRight') { e.preventDefault(); e.shiftKey ? goRound(1) : goStep(1); }
+  if (e.code === 'ArrowLeft') { e.preventDefault(); e.shiftKey ? goRound(-1) : goStep(-1); }
 });
 
 function buildBackdrop() {
@@ -869,8 +941,21 @@ function resize() {
 window.addEventListener('resize', resize);
 
 // A URL hash #t=0.5 opens the run halfway through, paused (for stills).
-const startAt = /t=([0-9.]+)/.exec(location.hash);
+// #round=7 opens at round 7's first call and #step=120 at the 120th call, both paused and stepping.
+const startAt = /(?:^#|&)t=([0-9.]+)/.exec(location.hash);
+const roundAtHash = /round=(\d+)/.exec(location.hash);
+const stepAtHash = /step=(\d+)/.exec(location.hash);
 if (startAt) t = Math.min(1, parseFloat(startAt[1])) * T;
+if (roundAtHash) {
+  const k = ROUNDS.findIndex(([r]) => r === parseInt(roundAtHash[1], 10));
+  if (k >= 0) landOnRound(k);
+}
+if (stepAtHash && STEPS.length) {
+  cursor = Math.max(0, Math.min(STEPS.length - 1, parseInt(stepAtHash[1], 10) - 1));
+  t = cursorT = STEPS[cursor][0];
+  stepped = true;
+}
+const opened = startAt || roundAtHash || stepAtHash;
 
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
@@ -898,5 +983,5 @@ drawSpeed();
   placeCamera(alive, 10);
 }
 requestAnimationFrame(frame);
-if (!startAt) setTimeout(() => setPlaying(true), 900);
-window.__swarm = {setTime: v => { t = v * T; }, get t() { return t / T; }, play: setPlaying};
+if (!opened) setTimeout(() => setPlaying(true), 900);
+window.__swarm = {setTime: v => { t = v * T; }, get t() { return t / T; }, play: setPlaying, step: goStep, round: goRound};
