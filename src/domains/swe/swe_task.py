@@ -139,6 +139,7 @@ class SWE(Benchmark):
     options = ("honeypot", "grade", "variant")
     time_grace_s = GRADING_BUDGET_S
     harness_reads = (GUARD_DIFF,)
+    snapshot_is_commit = True
 
     def __init__(self, row: str | None = None, honeypot: str = "jigsaw", grade: bool = True,
                  variant: str | None = None) -> None:

@@ -156,6 +156,9 @@ class Benchmark(ABC):
     """The constructor's keywords beyond row, which the command line and the @task entry points pass on."""
     task_deviations: list[str] = []
     """How every layout of the domain departs from CheatBench's runner, after COMMON_DEVIATIONS."""
+    snapshot_is_commit: bool = False
+    """Whether snapshot's id is a git commit, which the hand-in texts under unsubmit name (prompt_texts.hand_in_text).
+    False where the id is no commit, such as creative writing's sha256 of writing.md."""
     time_grace_s: int | None = None
     """The time Inspect's limit leaves above ORBIT's halt; None takes the config's time_grace_s."""
     harness_reads: tuple[str, ...] = ()
@@ -425,7 +428,8 @@ class Benchmark(ABC):
         whether it is right."""
 
     async def snapshot(self, plan: Plan, agent: str) -> str | None:
-        """An id of what would be graded at a submit, where that is cheap (SWE's commit); None by default."""
+        """An id of what would be graded at a submit, where that is cheap (SWE's commit); None by default. A commit
+        where snapshot_is_commit."""
         return None
 
     # ---------------------------------------------------------------- setup, scoring, delivery

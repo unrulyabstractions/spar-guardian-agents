@@ -23,7 +23,8 @@ so of two concurrent submits one goes through. Otherwise:
     caller's own turns end at once (TurnState.ended "submit"), and turn_activation.after_activation cuts the plan
     after round r + submit_delay_rounds, or after the plan's last round when that comes first (turn_rules.last_round).
     Under SwarmConfig.unsubmit (gives_unsubmit) nobody's turns end, the caller's included, and its round goes on;
-    Unsubmits.submits records the hand-in too, and the texts are submit.takes_back's and unsubmit.submitted. A
+    Unsubmits.submits records the hand-in too, with the commit it froze (Deliverable.snapshot_is_commit), and the
+    texts are submit.takes_back's and unsubmit.submitted, which name that commit where there is one. A
     worker's unsubmit (src/swarm/unsubmit.py) takes the hand-in back and lifts the cut; a submit after it is a new
     hand-in with a new wait.
   * lone agent: the same record; the run ends after the round of the call.
@@ -40,7 +41,7 @@ tagged TEAM_SUBMIT_TAG records each submit that went through. A guard or snapsho
 ORBIT ends the sample as for any tool. The texts come from src/configuration/prompts.yaml `submit`, `stop_working`,
 `alert` and `tools`.
 
-    bindings = submit_bindings(config, Deliverable(text, missing, snapshot, told))
+    bindings = submit_bindings(config, Deliverable(text, missing, snapshot, told, snapshot_is_commit))
     names = ending_tools(config, "worker")       # ["team_submit", "stop_working"]
     names = ending_tools(config, "regulator")    # ["alert_humans"]
 """
@@ -56,7 +57,7 @@ from inspect_ai.tool import ToolDef
 from inspect_ai.util import SandboxUnavailableError, store_as
 from orbit.tools import ToolFactory
 
-from src.configuration.prompt_texts import described, stop_text
+from src.configuration.prompt_texts import described, hand_in_text, stop_text
 from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import INFLUENCERS, SwarmConfig
 from src.swarm.board import system_post
@@ -95,6 +96,13 @@ class Deliverable:
     told: bool
     """Whether the agents' system prompts tell them of their team (Benchmark.tells_team); the texts of an agent not
     told name no teammate."""
+    snapshot_is_commit: bool
+    """Whether the snapshot's id is a git commit (Benchmark.snapshot_is_commit), which the texts under unsubmit
+    name."""
+
+    def commit(self, snapshot: str | None) -> str | None:
+        """The commit a hand-in with this snapshot froze, or None where the snapshot is no commit or failed."""
+        return snapshot if self.snapshot_is_commit else None
 
 
 def holds_alert(config: SwarmConfig, role: str) -> bool:
@@ -174,10 +182,11 @@ def submit(agent: str, config: SwarmConfig, deliverable: Deliverable) -> ToolDef
                 _refuse(submission, agent, round_number,
                         texts["already_own"].format(round=submission.own[agent]["round"]))
             if kind != "solo" and submission.agent is not None:
-                text = texts["takes_back"]["already"] if takes_back else texts["already" if kind == "team" else
-                                                                                "already_own"]
-                _refuse(submission, agent, round_number, text.format(
-                    agent=submission.agent, round=submission.round, end=submission.ends_after_round))
+                values = {"agent": submission.agent, "round": submission.round, "end": submission.ends_after_round}
+                text = hand_in_text(texts["takes_back"], "already", deliverable.commit(submission.snapshot),
+                                    **values) if takes_back else \
+                    texts["already" if kind == "team" else "already_own"].format(**values)
+                _refuse(submission, agent, round_number, text)
 
         refuse_a_second_hand_in()
         missing = await _missing(deliverable, agent)
@@ -200,9 +209,11 @@ def submit(agent: str, config: SwarmConfig, deliverable: Deliverable) -> ToolDef
         if kind == "lone":
             return texts["handed_in_lone"]
         if takes_back:
-            record_submit({"agent": agent, **record, "ends_after_round": end})
-            system_post(load_prompts()["unsubmit"]["submitted"].format(agent=agent), config.names)
-            return texts["takes_back"]["handed_in" if deliverable.told else "handed_in_untold"]
+            commit = deliverable.commit(snapshot)
+            record_submit({"agent": agent, **record, "ends_after_round": end, "commit": commit})
+            system_post(hand_in_text(load_prompts()["unsubmit"], "submitted", commit, agent=agent), config.names)
+            return hand_in_text(texts["takes_back"], "handed_in", commit) if deliverable.told \
+                else texts["takes_back"]["handed_in_untold"]
         end_turns(agent, SUBMIT)
         record_exit(agent, "submit", round_number, hand_in="team", ends_after_round=end)
         system_post(texts["notice"].format(agent=agent, round=round_number, end=end), config.names)

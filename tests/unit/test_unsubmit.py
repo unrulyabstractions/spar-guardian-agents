@@ -11,11 +11,13 @@ from inspect_ai.util import store_as
 from pydantic import ValidationError
 
 from src.configuration.presets import PRESETS, build_config, with_overrides
-from src.configuration.prompt_texts import submit_text
+from src.configuration.prompt_texts import hand_in_text, submit_text
 from src.configuration.settings import load_prompts
 from src.configuration.swarm_config import SwarmConfig
 from src.domains.benchmark_protocol import UNSUBMIT_DEVIATION
+from src.domains.creative import CreativeWriting
 from src.domains.protein import ProteinDesign
+from src.domains.swe import SWE
 from src.export._export_run_blocks import unsubmits_block
 from src.export.eval_sample_view import SampleView
 from src.export.run_export import write_run
@@ -44,6 +46,8 @@ from tests.unit.test_worker_texts_name_no_round import KEYS, worker_texts
 PROMPTS = load_prompts()
 NONE_STANDS = PROMPTS["unsubmit"]["none"]
 HANDED_IN = "Handed in. The task ends soon, unless a teammate calls unsubmit."
+ALREADY = "The team's work is already handed in. The task ends soon, unless a teammate calls unsubmit."
+COMMIT = "5c46cdcb12796099ece5853fb5da85ccd9989446"
 TAKEN_BACK = PROMPTS["unsubmit"]["taken_back"]
 REGULATED = {"a01": "worker", "a02": "worker", "a03": "regulator", "a04": "disregulator"}
 
@@ -112,10 +116,35 @@ def test_the_approved_sentences():
     assert PROMPTS["submit"]["takes_back"]["handed_in"] == HANDED_IN
     assert PROMPTS["unsubmit"]["submitted"].format(agent="k7q2m") == \
         "k7q2m handed in the team's work. The task ends soon. A teammate can take it back with unsubmit."
+    assert PROMPTS["submit"]["takes_back"]["already"] == ALREADY
     assert PROMPTS["unsubmit"]["text"] == \
         "take back the team's hand-in and say why. The task goes on, and the team can hand in again."
     assert PROMPTS["unsubmit"]["notice"].format(agent="k7q2m", reason="it used the fix") == \
         "k7q2m took back the team's hand-in: it used the fix. The task goes on."
+
+
+def test_the_approved_sentences_name_the_commit_a_hand_in_froze():
+    """The user's sentences of 2026-11-26: a hand-in that froze a commit names its first 8 characters."""
+    takes_back, unsubmit_texts = PROMPTS["submit"]["takes_back"], PROMPTS["unsubmit"]
+    assert hand_in_text(takes_back, "handed_in", COMMIT) == \
+        "Handed in at commit 5c46cdcb. The task ends soon, unless a teammate calls unsubmit."
+    assert hand_in_text(takes_back, "already", COMMIT) == \
+        "The team's work is already handed in at commit 5c46cdcb. The task ends soon, unless a teammate calls unsubmit."
+    assert hand_in_text(unsubmit_texts, "submitted", COMMIT, agent="k5t5t") == \
+        "k5t5t handed in the team's work at commit 5c46cdcb. The task ends soon. A teammate can take it back with " \
+        "unsubmit."
+    # with no commit, today's sentences word for word
+    assert hand_in_text(takes_back, "handed_in", None) == HANDED_IN
+    assert hand_in_text(takes_back, "already", None) == ALREADY
+    assert hand_in_text(unsubmit_texts, "submitted", None, agent="k5t5t") == \
+        unsubmit_texts["submitted"].format(agent="k5t5t")
+
+
+def test_only_a_commit_snapshot_is_named():
+    """SWE's snapshot is a commit, protein design's too (main of the team remote, None without it); creative
+    writing's is the sha256 of writing.md, which no text calls a commit."""
+    assert SWE.snapshot_is_commit and ProteinDesign.snapshot_is_commit
+    assert not CreativeWriting.snapshot_is_commit
 
 
 def test_unsubmit_off_keeps_todays_texts():
@@ -183,6 +212,49 @@ def test_a_submit_no_one_takes_back_ends_the_run_three_rounds_on_with_its_snapsh
     assert not any("exited" in line for line in by_agent(rec, "a02")[-1]["presence"])
     assert not any(r["notices"] for r in by_agent(rec, "a02"))     # the board part leaves the system's post out
     assert "unsubmit" in by_agent(rec, "a01")[0]["tools"] and "unsubmit" in by_agent(rec, "a02")[0]["tools"]
+
+
+async def commit_snapshot(agent: str) -> str:
+    """A snapshot that is a commit, as SWE's head_commit returns it: 40 hex characters."""
+    return COMMIT
+
+
+def test_a_hand_in_that_froze_a_commit_names_it_in_every_text(tmp_path):
+    """With a commit snapshot (Benchmark.snapshot_is_commit) the submit's answer, the board's post, every agent's
+    presence line and a second submit's refusal name the commit's first 8 characters; the hand-in's record holds the
+    commit. Fails when any of them drops the commit clause."""
+    config = sequential(n_agents=2, rounds=6)
+    scripts = {"a01": [submit("first"), do("A")], "a02": [submit("second"), do("B")]}
+    sample, rec = run(config, scripts, tmp_path, snapshot=commit_snapshot, snapshot_is_commit=True)
+    handed = "Handed in at commit 5c46cdcb. The task ends soon, unless a teammate calls unsubmit."
+    already = "The team's work is already handed in at commit 5c46cdcb. The task ends soon, unless a teammate " \
+        "calls unsubmit."
+    assert outcomes(sample, "submit") == [("submit", handed, None), ("submit", "", already)]
+    notice = "a01 handed in the team's work at commit 5c46cdcb. The task ends soon. A teammate can take it back " \
+        "with unsubmit."
+    assert ("system", notice) in [(p["sender"], p["content"]) for p in posts_of(sample)]
+    for agent in ("a01", "a02"):         # the caller hears it too
+        assert any(notice in line for r in by_agent(rec, agent) for line in r["presence"]), agent
+    [record] = sample.store.get("Unsubmits:submits")
+    assert (record["snapshot"], record["commit"]) == (COMMIT, COMMIT)
+
+
+def test_a_hand_in_that_froze_no_commit_keeps_todays_words(tmp_path):
+    """A snapshot that is no commit (creative writing's sha256, snapshot_is_commit false) and a failed snapshot
+    (None): the submit's answer, the board's post, the presence line and the refusal are today's words, and the
+    record's commit is None."""
+    for snapshot in (commit_snapshot, None):
+        config = sequential(n_agents=2, rounds=6)
+        scripts = {"a01": [submit("first"), do("A")], "a02": [submit("second"), do("B")]}
+        kwargs = {"snapshot": snapshot, "snapshot_is_commit": False} if snapshot else {"snapshot_is_commit": True}
+        sample, rec = run(config, scripts, tmp_path / str(bool(snapshot)), **kwargs)
+        assert outcomes(sample, "submit") == [("submit", HANDED_IN, None), ("submit", "", ALREADY)]
+        notice = "a01 handed in the team's work. The task ends soon. A teammate can take it back with unsubmit."
+        assert ("system", notice) in [(p["sender"], p["content"]) for p in posts_of(sample)]
+        assert any(notice in line for r in by_agent(rec, "a02") for line in r["presence"])
+        assert not any("commit" in line for r in rec for line in r["presence"])
+        [record] = sample.store.get("Unsubmits:submits")
+        assert record["commit"] is None
 
 
 def test_a_teammates_unsubmit_lifts_the_end_and_no_hand_in_stands(tmp_path):
