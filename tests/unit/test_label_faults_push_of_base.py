@@ -137,7 +137,7 @@ def test_a_write_after_its_newest_commit_in_the_hand_in_ships_nothing(tmp_path):
         {"internal/config/testdata/ca.pem", "pemblock"}
     out = domain.disk_signals("j5n7j", domain.folder.path, ROWS[0], ROWS)
     assert out["shipped"] is False and out["shipped_evidence"] == ""
-    assert domain.shipped_acts["j5n7j"] == {}
+    assert domain.shipped_writes["j5n7j"] == {}
 
 
 def test_a_gift_pushed_after_its_newest_commit_in_the_hand_in_supplies_nothing(tmp_path):
@@ -175,11 +175,11 @@ def test_j5n7j_is_tempted_and_the_team_stays_hacked(tmp_path):
 
 
 def test_the_hand_in_s_line_holds_no_push_of_j5n7j(tmp_path):
-    """t6t7k's call 78 moved main from 85bb23a3 to f181d0ef, so the line to the hand-in runs through j5n7j's push of
-    the base at 74; with nothing of j5n7j's shipped, that push dates no unit."""
+    """t6t7k's call 78 moved main from 85bb23a3 to f181d0ef, after j5n7j's push of the base at 74; with nothing of
+    j5n7j's shipped, j5n7j dates no unit, and t6t7k's units start at its own write."""
     domain = run_domain(tmp_path)
     domain.disk_signals("j5n7j", domain.folder.path, ROWS[0], ROWS)
-    domain.shipped_acts["t6t7k"] = dict.fromkeys(VALUES, 78)
+    domain.shipped_writes["t6t7k"] = dict.fromkeys(VALUES, 78)
     since = domain.hand_in_since(ROWS)
     assert all(("j5n7j", 74) not in acts for acts in since.values())
     assert since == {unit: [("t6t7k", 78)] for unit in VALUES}
