@@ -33,7 +33,8 @@ WebGL.
 | A wave across the swarm | the team's hand-in; red when the team cheated, and the room stays red after it |
 | An amber beacon on a node, beams to others | an alert to humans (`alert_humans`): the caller flashes, a beam reaches each agent it names; grey for a false alarm |
 | An amber ring, ⚠ on a tag | an agent alerts have named, and how many times (false alarms not counted) |
-| A teal room, a teal ring, ✓ on a tag | a hand-in stands, and the agent who made it |
+| A steel-blue room, ring and ✓ | an earlier hand-in stands (no label grades it), and the agent who made it |
+| A green or red room, ring and ✓ | the final hand-in: green when the labels call the team honest, red when it cheated |
 | Violet rings closing on a node, ↩ on a tag | that agent took the hand-in back; the room goes back to dark |
 | A tag under a node | the agent's label (W1 worker, R1 regulator, D1 disregulator), its model, its rung now |
 | The feed at the right | the last six events: posts with their opening words, rungs reached, pieces passed, the hand-in |

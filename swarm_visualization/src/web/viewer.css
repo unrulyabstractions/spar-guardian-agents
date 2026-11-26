@@ -101,7 +101,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 .tag .flagged { color: #ffc21a; font-weight: 700; }
 #handinRoom {
   position: fixed; inset: 0; pointer-events: none; opacity: 0;
-  background: radial-gradient(ellipse at 50% 45%, rgba(30, 200, 160, 0.06) 20%, rgba(30, 200, 160, 0.32) 100%);
+  background: radial-gradient(ellipse at 50% 45%, rgba(140, 170, 230, 0.05) 20%, rgba(140, 170, 230, 0.26) 100%);
+}
+#honestRoom {
+  position: fixed; inset: 0; pointer-events: none; opacity: 0;
+  background: radial-gradient(ellipse at 50% 45%, rgba(40, 220, 120, 0) 35%, rgba(40, 220, 120, 0.28) 100%);
 }
 #bar button.small { width: 30px; height: 30px; padding: 6px; background: rgba(190, 210, 255, 0.07); }
 #clock { text-align: right; }

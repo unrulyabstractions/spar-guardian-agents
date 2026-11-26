@@ -24,9 +24,21 @@ const ASK_COLOR = new THREE.Color('#7fe8ff');
 const ALERT_COLOR = new THREE.Color('#ffc21a');          // an alert to humans; a false alarm is grey
 const FALSE_ALARM = new THREE.Color('#a3abc2');
 const ALERTS = (S.alerts || []).slice().sort((a, b) => a[0] - b[0]);
-const HANDIN_COLOR = new THREE.Color('#2fe0b0');          // a hand-in standing: the room turns teal
+// A hand-in: only the final one is graded (the labels), so an earlier one is neutral steel blue and the final one
+// green when the team was honest, red when it cheated.
+const HANDIN_COLOR = new THREE.Color('#9db4e0');
+const HONEST_COLOR = new THREE.Color('#3ddc84');
+const CHEAT_COLOR = new THREE.Color('#ff2f45');
 const TAKEBACK_COLOR = new THREE.Color('#d68cff');        // a hand-in taken back
 const HANDINS = (S.handins || []).slice().sort((a, b) => a[0] - b[0]);
+if (!HANDINS.length && S.submit) HANDINS.push([S.submit.t, S.submit.agent, 0, '']);
+// The final hand-in: the last one no take-back followed.
+const FINAL = (() => {
+  const last = HANDINS[HANDINS.length - 1];
+  return S.submit && last && last[2] === 0 ? last : null;
+})();
+const FINAL_T = FINAL ? FINAL[0] : (S.submit ? S.submit.t : Infinity);
+const VERDICT_COLOR = S.submit && S.submit.cheated ? CHEAT_COLOR : HONEST_COLOR;
 const TAU = 0.08 * T;                                     // an exchange's weight halves in about 0.7 TAU
 function handinAt(t) {                                    // who holds the hand-in at t, since when; last take-back
   let holder = -1, since = -Infinity, back = null;
@@ -222,7 +234,8 @@ const tags = S.agents.map(agent => {
   const alarm = ALERTS.length ? `<span class="alarm">⚠</span>alert` : '';
   const hands = HANDINS.length
     ? `<br><span class="sw first" style="background:${hex(HANDIN_COLOR)}"></span>handed in` +
-      `<span class="sw" style="background:${hex(TAKEBACK_COLOR)}"></span>taken back` : '';
+      (S.submit ? `<span class="sw" style="background:${hex(VERDICT_COLOR)}"></span>final: ${S.submit.cheated ? 'cheated' : 'honest'}` : '') +
+      (HANDINS.some(r => r[2] === 1) ? `<span class="sw" style="background:${hex(TAKEBACK_COLOR)}"></span>taken back` : '') : '';
   document.getElementById('legend').innerHTML = `${shapes}<br>${swatches}<br>${line}${orb}${alarm}${hands}`;
 }
 const events = [];
@@ -246,16 +259,16 @@ for (const [tf, piece, src, dst] of S.flows) {
                html: `${nameOf(dst)} gets piece <b>${esc(name)}</b> of the exploit${src >= 0 ? ` from ${nameOf(src)}` : ''}`});
 }
 if (S.submit) {
-  events.push({t: S.submit.t, accent: S.submit.cheated ? '#ff2d3d' : '#a8ffc4',
+  events.push({t: FINAL_T, accent: S.submit.cheated ? '#ff2d3d' : '#a8ffc4',
                html: `${nameOf(S.submit.agent)} hands in the team's fix: <b>${S.submit.passed ? 'passed' : 'failed'}</b>` +
                      `${S.submit.cheated ? ', <b style="color:#ff5a6a">by cheating</b>' : ', honestly'}`});
 }
 {
-  const finalAt = S.submit ? HANDINS.filter(r => r[2] === 0 && r[1] === S.submit.agent).map(r => r[0]).pop() : undefined;
+  const finalAt = FINAL ? FINAL[0] : undefined;
   for (const [th, a, kind, reason] of HANDINS) {
     if (kind === 0 && th === finalAt) continue;
     events.push(kind === 0
-      ? {t: th, accent: hex(HANDIN_COLOR), html: `${nameOf(a)} hands in the team's fix`}
+      ? {t: th, accent: hex(HANDIN_COLOR), html: `${nameOf(a)} hands in the team's fix (not graded)`}
       : {t: th, accent: hex(TAKEBACK_COLOR),
          html: `${nameOf(a)} takes the hand-in back${reason ? `<br><span class="quote">“${esc(reason)}”</span>` : ''}`});
   }
@@ -307,7 +320,7 @@ function drawWords(rungs, here, alive, focus, flags, hand) {
     tag.el.style.opacity = String((1 - 0.6 * here[i].gone) * (focus(i) < 1 ? 0.25 : 1));
     const rung = rungs[i].rung;
     const badge = (flags.named[i] ? `⚠${flags.named[i] > 1 ? flags.named[i] : ''}` : '') +
-                  (hand.holder === i ? ' <b style="color:#2fe0b0">✓</b>' : '') +
+                  (hand.holder === i ? ` <b style="color:${hand.since === FINAL_T ? hex(VERDICT_COLOR) : hex(HANDIN_COLOR)}">✓</b>` : '') +
                   (hand.back && hand.back[1] === i && t - hand.back[0] < D.flash * 1.5 ? ' <b style="color:#d68cff">↩</b>' : '');
     if (tag.flags !== badge) {
       tag.flags = badge;
@@ -484,6 +497,7 @@ function pick() {
 let t = 0, playing = false, speedIndex = 2, clock = 0, last = performance.now();
 const tint = document.getElementById('tint');
 const handinRoom = document.getElementById('handinRoom');
+const honestRoom = document.getElementById('honestRoom');
 const arc = new THREE.Vector3(), up = new THREE.Vector3(), from = new THREE.Vector3(), to = new THREE.Vector3();
 
 function update(dt) {
@@ -698,29 +712,31 @@ function update(dt) {
 
   // The hand-in: a wave across the swarm, red when the team cheated; the room stays red after.
   if (S.submit) {
-    const p = (t - S.submit.t) / D.submit;
-    const color = S.submit.cheated ? EDGE_RED : new THREE.Color('#a8ffc4');
+    const p = (t - FINAL_T) / D.submit;
+    const color = VERDICT_COLOR;
     if (p >= 0 && p < 1) {
       for (let wave = 0; wave < 3; wave++) {
         const q = p - wave * 0.12;
         if (q < 0) continue;
         const r = ringPool.get();
-        r.position.copy(pos[S.submit.agent]); r.material.color.copy(color);
+        r.position.copy(pos[FINAL ? FINAL[1] : S.submit.agent]); r.material.color.copy(color);
         r.material.opacity = 0.9 * (1 - q);
         r.scale.setScalar(3 + radius * 3.2 * smooth(q));
       }
     }
     tint.style.opacity = S.submit.cheated ? String(0.9 * smooth(p * 2)) : '0';
+    honestRoom.style.opacity = S.submit.cheated ? '0' : String(0.9 * smooth(p * 2));
   }
 
   // Hand-ins: the room turns teal while a hand-in stands and the agent who made it wears a teal ring; a take-back
   // flashes violet rings closing in on the agent who took it, and the room goes back.
   const hand = handinAt(t);
-  const redRoom = S.submit && S.submit.cheated && t >= S.submit.t;
+  const isFinal = hand.holder >= 0 && hand.since === FINAL_T;
   const roomOn = hand.holder >= 0 ? smooth((t - hand.since) / D.fade) : 1 - smooth((t - hand.since) / D.fade);
-  handinRoom.style.opacity = String(redRoom ? 0 : Math.max(0, roomOn));
+  handinRoom.style.opacity = String(t >= FINAL_T ? 0 : Math.max(0, roomOn));
   nodes.forEach((node, i) => {
     const holding = alive[i] && hand.holder === i;
+    node.hold.material.color.copy(isFinal ? VERDICT_COLOR : HANDIN_COLOR);
     node.hold.material.opacity = holding ? 0.85 * smooth((t - hand.since) / D.fade) * focus(i) : 0;
     node.hold.rotation.set(Math.PI / 2, 0, clock * 0.8);
   });
@@ -887,12 +903,15 @@ function buildBackdrop() {
     for (const [th, , kind] of HANDINS) {
       if (kind === 0 && from === null) from = th;
       if (kind === 1 && from !== null) {
-        g.fillStyle = 'rgba(47,224,176,0.75)'; g.fillRect(x(from), h / 2 - 3, Math.max(2, x(th) - x(from)), 6);
+        g.fillStyle = '#' + HANDIN_COLOR.getHexString(); g.fillRect(x(from), h / 2 - 3, Math.max(2, x(th) - x(from)), 6);
         from = null;
       }
       if (kind === 1) { g.fillStyle = '#d68cff'; g.fillRect(x(th) - 1, h / 2 - 7, 2, 14); }
     }
-    if (from !== null) { g.fillStyle = 'rgba(47,224,176,0.75)'; g.fillRect(x(from), h / 2 - 3, Math.max(2, x(T) - x(from)), 6); }
+    if (from !== null) {
+      g.fillStyle = '#' + (from === FINAL_T ? VERDICT_COLOR : HANDIN_COLOR).getHexString();
+      g.fillRect(x(from), h / 2 - 3, Math.max(2, x(T) - x(from)), 6);
+    }
   }
   // Alerts: a triangle above the track, amber (grey for a false alarm).
   for (const [ta, , , outcome] of ALERTS) {
@@ -902,7 +921,7 @@ function buildBackdrop() {
   }
   // The hand-in: a diamond.
   if (S.submit) {
-    const sx = x(S.submit.t), sy = h / 2;
+    const sx = x(FINAL_T), sy = h / 2;
     g.fillStyle = S.submit.cheated ? '#ff2d3d' : '#a8ffc4';
     g.beginPath(); g.moveTo(sx, sy - 7); g.lineTo(sx + 6, sy); g.lineTo(sx, sy + 7); g.lineTo(sx - 6, sy); g.closePath(); g.fill();
   }

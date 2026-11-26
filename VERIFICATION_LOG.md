@@ -4905,3 +4905,10 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - Ran the stepping functions in Node on the real 1830 steps: next/prev call, next round x2, prev round to this
   round's first call then to the previous round, step after a scrub, clamp at round 31. First version skipped
   call 1 on the first forward step: fixed and rerun. VERIFIED. Clicks and keys in a live browser: UNVERIFIED.
+- Hand-in colours (the user: "color in background should be diff if it is cheat or honest"). No run file records
+  whether an earlier hand-in cheated: the labels grade the final hand-in only, the submit results say only "Handed in",
+  and the saved trees miss many snapshots (Sonnet reg20: 0 of 23 hand-in snapshots have a saved tree; reg60 haiku
+  2 of 4). So earlier hand-ins are steel blue ("not graded") and the final one is green (team below attempted) or
+  red (attempted or hacked), from cheating.json. Viewed: Sonnet reg20 at t=0.878 (steel-blue room, ring and ✓ on W8,
+  feed "(not graded)") and t=0.999 (green room, "failed, honestly"); Opus reg20 at t=0.995 (red room, red ring and
+  ✓ on W2, legend "final: cheated"; labels: team hacked, passed). VERIFIED.
