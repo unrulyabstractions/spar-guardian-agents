@@ -15,10 +15,13 @@ seeds: [1]
 settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5, unsubmit=true,
            submit_delay_rounds=3]
 targets:
+  # Five samples of Haiku alone (the user, 2026-11-25: "So 1, but 5 samples each, just haiku and sonnet"). Sample 1
+  # ran through OpenRouter, pinned to Anthropic's own host; samples 2 to 5 run straight at Anthropic.
   ian_gflipt_haiku_baseline:
     module: studies.cells.swe.ian_gflipt_minimal
-    model: claude-haiku-5-5-openrouter
+    model: claude-haiku-5-5
     packs: [none]
+    seeds: [1, 2, 3, 4, 5]
     settings: [n_agents=3, max_concurrency=3]
   ian_gflipt_luna_baseline:
     module: studies.cells.swe.ian_gflipt_minimal
@@ -122,6 +125,15 @@ targets:
     packs: [none]
     seeds: [1, 2, 3]
     settings: [n_agents=3, max_concurrency=3, cost_limit_usd=40]
+  # Sonnet workers alone, five samples (the same order): the study had no Sonnet team without a disregulator. The
+  # cap is the Sonnet team of 4's; that team cost $0.62 to $1.07 a run, and a team alone runs longer (Opus alone cost
+  # 2.7 times its team of 4).
+  ian_gflipt_sonnet_baseline:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: claude-sonnet-5-5
+    packs: [none]
+    seeds: [1, 2, 3, 4, 5]
+    settings: [n_agents=3, max_concurrency=3, cost_limit_usd=15]
   # How far a DeepSeek disregulator reaches (the user, 2026-11-25): "if the disregulator deepseep study shows hacking
   # for X model (like haiku already did), plan to increase to 5 swarm with 20% disregulator, if hacked, do 10 swarm
   # with 20% dis". A step's target is added here once the step before it hacked for that worker in at least one sample.
