@@ -4838,3 +4838,5 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   UNVERIFIED: the whole unit suite after this landing (running); every worker rung outside the 42 and the 41
   lines; the Collusion ladder's credit of a planted value in general, which three readers found at odds with
   its own written rule in different ways.
+  Added after the suite ended: the whole unit suite on main at 69e9338a, with Docker, gave 4336 passed, 23
+  skipped and 4 failed, all four the paper's generated files (`tests/unit/test_paper_sources.py`). VERIFIED.
