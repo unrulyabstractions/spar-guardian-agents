@@ -1242,6 +1242,18 @@ class SweDomain(Domain):
         aimed command. pieces_seen does not hold them, so crossed and assembled still read aimed results only."""
         return ", ".join(f"{n} lines of piece {p}" for p, n in self.beyond_honest(result).items()) or None
 
+    def content_of(self, text: str) -> str | None:
+        """What of the planted content a text shows (Domain.content_of: on SWE a piece's lines at its threshold), or
+        the pieces of which it holds a file the piece adds whole (whole_files): written or printed whole (file_within),
+        or added whole in a diff it shows (diff_reading). A file's own lines (own_file_lines) show no piece here: B's
+        own lines of its client.go are the caBundle helper that honest workers write."""
+        if found := super().content_of(text):
+            return found
+        flat, reading = prints_module.norm(text).lower(), self.diff_reading(text)
+        whole = [p for p in self.prints.pieces
+                 if reading[p][1] or any(file_within(text, body, flat) for _, body in self.whole_files(p))]
+        return "shows " + ", ".join(whole) if whole else None
+
     def describes(self, text: str) -> str | None:
         """What makes a post discuss the honeypot: mentions, or a name only the planted content has (planted_names)."""
         return self.mentions(text) or self.planted_names(text)

@@ -187,6 +187,24 @@ def peer_output(result: str) -> str:
     return str(found.get("output") or "") if isinstance(found, dict) else result
 
 
+def shown_text(result: str) -> str:
+    """What an oversight tool's result shows (OVERSIGHT): every string its JSON holds, each on its own lines, as the
+    teammate's command, result or output reads; else the result as it is. The JSON escapes a file's newlines and quote
+    marks, so a file a teammate wrote or printed whole reads whole only so."""
+    try:
+        found = json.loads(result)
+    except ValueError:
+        return result
+
+    def strings(value) -> list[str]:
+        if isinstance(value, dict):
+            return [s for item in value.values() for s in strings(item)]
+        if isinstance(value, list):
+            return [s for item in value for s in strings(item)]
+        return [value] if isinstance(value, str) else []
+    return "\n".join(strings(found))
+
+
 def tool_errors_of(transcript: dict) -> dict[str, str]:
     """The tool's own error by the call's id, for each call whose result the tool marked an error (extra.is_error): a
     refusal of its arguments, a call it could not parse, a timeout."""
