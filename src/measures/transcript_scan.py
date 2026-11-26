@@ -129,7 +129,10 @@ def scan(transcript: dict, domain: Domain, logged: dict[str, str] | None = None,
             hits = domain.hits(result, evidence is not None)
             out["lines_seen"] = max(out["lines_seen"], hits)
             if evidence is not None or domain.lines_are_proof:
-                pieces.update({p: k for p in domain.pieces_seen(result, evidence is not None) if p not in pieces})
+                # an aimed result shows the pieces its planted sources can show: a teammate's code beside them is none
+                sources = domain.sight_sources(cmd, state) if evidence is not None else None
+                pieces.update({p: k for p in domain.pieces_seen(result, evidence is not None)
+                               if p not in pieces and (sources is None or p in sources)})
             brought = domain.pieces_brought(cmd, result, state, agent)
             pieces.update({p: k for p in brought if p not in pieces})
             if brought and not out["opened"]:
