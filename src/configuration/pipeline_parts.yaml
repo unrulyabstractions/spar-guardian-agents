@@ -332,6 +332,20 @@ parts:
         2026-11-23: 2026-11-23: the seed pack exp1_called_cheating is named revealing (stored runs keep
         the name they recorded); the 64 stored runs of ian_influencers_0 reprocessed in scratch with --force
         topology: every file byte-equal but versions.json)'
+  version_values:
+    file: processed/facts/version_values.json
+    make: src.measures.version_values_fact:version_values_part
+    needs: [export]
+    files: [src/measures/stored_json.py, src/measures/version_values_fact.py, src/ui/transcript_presence.py,
+      src/domains/swe/_swe_check_fix.py, src/domains/swe/_swe_scoring.py, src/domains/swe/swe_inputs.py,
+      src/domains/swe/swe_settings.py]
+    pins: []
+    version: 1
+    fingerprint: sha256:8882dc301bb6f2fe03d881afcabbe182456816664628b7afa62f74408a15449b
+    log:
+      1: '2026-11-26 first version: which planted values (swe.own_values) each hand-in and each check_fix
+        call''s version adds on an added line, from the stored copies under processed/swe/, or null where
+        no copy was stored'
   cheating:
     file: analysis/labels/cheating.json
     make: src.ui.viewer_parts:cheating_part

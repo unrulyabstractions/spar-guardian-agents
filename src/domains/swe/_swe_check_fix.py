@@ -5,7 +5,7 @@
     text = await check_fix("k7q2m", swe, cap)          # "accepted", "not_accepted", or a job's line (command_jobs)
     await reap_checker(["k7q2m"])                      # SWE.round_end: what its ended calls left running
     meta = await settle(sandbox(CHECKER), required)    # the scorer's: every call with its answer, and main's trees
-    exported(meta), write_trees(meta, swe_dir)         # the export: run.json's calls, and swe/checks
+    exported(meta), write_trees(meta, swe_dir)         # the export: run.json's calls, swe/checks and swe/hand_ins
 
 A call takes no argument and runs as a command call in the checker (CHECKER), the grader's image with its pristine
 /app, no team volume and no network: command_jobs.run_command with a view. The command waits in the checker until its
@@ -46,15 +46,14 @@ from orbit.tools import ToolContext, ToolFactory
 
 from src.configuration.settings import load_prompts
 from src.domains.swe._swe_grading import (
-    DIFF_OPTS,
     GIT,
     diff_stats,
     grade_command,
     grade_reading,
     grade_timeout,
+    kept_diff,
     main_diff,
     passes,
-    read_diff,
     stage,
     ungraded,
 )
@@ -85,6 +84,7 @@ ABORTED = "CHECK_ABORTED"       # the summary of a call whose tree was not stage
 DONE = "CHECK_DONE"             # the last line of a finished call's summary file, never in what the view reads
 ZERO = "0" * 40
 CHECKS_FOLDER = "checks"     # under a run's swe/: the trees of the check_fix calls, apart from the graded diffs
+HAND_INS_FOLDER = "hand_ins"     # under a run's swe/: the tree of each commit the team handed in, as main_file names it
 _PREPARES: set[asyncio.Task] = set()
 """The running reads of team/main, held until they end (asyncio keeps only weak references to tasks)."""
 
@@ -95,7 +95,8 @@ def check_file(n: int) -> str:
 
 
 def main_file(commit: str) -> str:
-    """The file of a commit of main that a call's pushers name, under swe/checks: main.<commit>.diff."""
+    """The file of a commit's tree, main.<commit>.diff: under swe/checks a commit of main that a call's pushers name,
+    under swe/hand_ins a commit the team handed in."""
     return f"main.{commit}.diff"
 
 
@@ -162,12 +163,8 @@ async def commit_trees(grader, base: str, commits: list[str], n: int) -> None:
     for commit in commits:
         if commit in (store().get(MAINS_STORE) or {}):
             continue
-        rc, _, _ = await run(grader, f"git --git-dir={TEAM_VIEW} {DIFF_OPTS[0]} diff {DIFF_OPTS[1]} {base} "
-                                     f"{shlex.quote(commit)} > {path}")
-        diff = await read_diff(grader, path) if rc == 0 else None
-        mains = dict(store().get(MAINS_STORE) or {})
-        mains[commit] = diff[:DIFF_KEEP_BYTES].decode(errors="replace") if isinstance(diff, bytes) else None
-        store().set(MAINS_STORE, mains)
+        text = await kept_diff(grader, f"git --git-dir={TEAM_VIEW}", base, commit, path)
+        store().set(MAINS_STORE, {**(store().get(MAINS_STORE) or {}), commit: text})
     await run(grader, f"rm -f {path}")
 
 
@@ -290,11 +287,15 @@ def exported(meta: dict) -> dict:
 
 def write_trees(meta: dict, swe_dir: Path) -> None:
     """The trees of check_fix under `swe_dir`/checks (CHECKS_FOLDER): each call's as check.<n>.diff and each commit of
-    main its pushers name as main.<commit>.diff. Nothing for a run without check_fix."""
-    checks = swe_dir / CHECKS_FOLDER
-    trees = {check_file(call["n"]): call.get("diff_text") or "" for call in meta.get("check_fix") or []}
-    trees.update({main_file(commit): text for commit, text in (meta.get("check_fix_mains") or {}).items()
-                  if text is not None})
-    for name, text in trees.items():
-        checks.mkdir(parents=True, exist_ok=True)
-        (checks / name).write_text(text)
+    main its pushers name as main.<commit>.diff; and each commit the team handed in under `swe_dir`/hand_ins
+    (HAND_INS_FOLDER) as main.<commit>.diff (the scorer's hand_in_trees, _swe_scoring._hand_in_trees). A tree that
+    could not be read is left out; nothing for a run without check_fix and without a hand-in."""
+    checks = {check_file(call["n"]): call.get("diff_text") or "" for call in meta.get("check_fix") or []}
+    checks.update({main_file(commit): text for commit, text in (meta.get("check_fix_mains") or {}).items()
+                   if text is not None})
+    hand_ins = {main_file(commit): text for commit, text in (meta.get("hand_in_trees") or {}).items()
+                if text is not None}
+    for folder, trees in ((swe_dir / CHECKS_FOLDER, checks), (swe_dir / HAND_INS_FOLDER, hand_ins)):
+        for name, text in trees.items():
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / name).write_text(text)

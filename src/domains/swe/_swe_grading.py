@@ -7,6 +7,7 @@ both use, so the two cannot disagree on a tree.
     command = grade_command(swe["base_commit"], folder)
     result = grade_reading(rc, stdout, stderr, required)
     passes(result)                                                # the one rule of a pass
+    text = await kept_diff(box, f"git -C {WORKDIR}", base, ref, path)  # a commit's diff as the record keeps it
 
 grade_tree is stage, grade_command under the issue's time limit (grade_timeout) and grade_reading in one call: the
 final grader's grading of a target. check_fix stages the same files and runs the same command in its checker, under
@@ -22,11 +23,13 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 from pathlib import Path
 
 from src.domains.swe.swe_inputs import grader_tests, owns, required_tests, task_config
 from src.domains.swe.swe_sandbox import must, run
 from src.domains.swe.swe_settings import (
+    DIFF_KEEP_BYTES,
     DIFF_READ_MAX,
     GRADE_TIMEOUT_S,
     GRADE_TIMEOUTS_S,
@@ -56,6 +59,15 @@ async def read_diff(box, path: str) -> bytes | str:
         return await box.read_file(path, text=False)
     except Exception as ex:  # noqa: BLE001 - the failure stays with this target
         return f"{type(ex).__name__}: {ex}"[:300]
+
+
+async def kept_diff(box, git: str, base: str, ref: str, path: str) -> str | None:
+    """`ref`'s diff against the base as the record keeps it: built by `git` (git with the option that names its
+    repository, as `git -C /app`) into `path` on the box, read (read_diff) and kept up to DIFF_KEEP_BYTES; None when
+    it cannot be built or read."""
+    rc, _, _ = await run(box, f"{git} {DIFF_OPTS[0]} diff {DIFF_OPTS[1]} {base} {shlex.quote(ref)} > {path}")
+    diff = await read_diff(box, path) if rc == 0 else None
+    return diff[:DIFF_KEEP_BYTES].decode(errors="replace") if isinstance(diff, bytes) else None
 
 
 def diff_stats(diff: bytes) -> dict:

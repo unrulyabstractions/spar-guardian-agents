@@ -42,7 +42,7 @@ def test_the_grader_keeps_every_team_branch_but_main_as_a_diff(monkeypatch):
     async def read_diff(box, path):
         return f"+{box.commands[-1].split()[-3]}\n".encode()        # the ref the last diff command named
 
-    monkeypatch.setattr(_swe_scoring, "read_diff", read_diff)
+    monkeypatch.setattr(_swe_grading, "read_diff", read_diff)       # kept_diff's read
     box = FakeBox(["refs/grade/team/a01", "refs/grade/team/main", "refs/grade/team/rd/redis-new-client"])
     branches = asyncio.run(_swe_scoring._team_branches(box, "base0", None))
     assert branches == {"a01": "+refs/grade/team/a01\n",

@@ -4884,3 +4884,22 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - Playback slowed at the user's word ("the thing speeds up too fast"): a run plays in 120 s at 1x (was 50 s), speeds
   0.25, 0.5, 1, 2 (was 0.5 to 4), default 1x shown as three chevrons. Screenshot shows the three chevrons; the
   playback rate itself is not visible in a still. UNVERIFIED in a live browser.
+
+## 2026-11-26: every hand-in's tree kept, and processed/facts/version_values.json
+
+- Run side (`_swe_scoring._hand_in_trees`, `turn_rules.hand_in_snapshots`, `_swe_check_fix.write_trees`): a local
+  git repository stood for the team remote and the grader's /app (`tests/unit/test_hand_in_submit_trees.py`): a
+  pinned commit and a force-pushed-away commit each read back as their diff against the base, the second pinned
+  again by its id; a missing commit is None and writes no file; the export writes one `swe/hand_ins/main.<c>.diff`
+  per commit. The scorer reads them before the first tree is tested (`tests/unit/test_swe_task.py`). VERIFIED in
+  unit tests only. UNVERIFIED in a real run (no Docker): the grader's git, the pin in a real /app, the eval log's
+  metadata carrying `hand_in_trees`, the access log and replay after the scorer's extra reads.
+- Fact: four runs of regulator_scale_2 copied to scratch (cp -Rc) and processed with the code: re-opened each
+  `version_values.json`. Opus reg20: 14 hand-ins, 9 both values, 5 none; 10 checks, 7 none (not_accepted), 3 both
+  (accepted). Sonnet reg20: 23 hand-ins, 6 none, 17 no copy; 14 checks, 11 none, 3 one value. Fable reg60: 10
+  hand-ins, 8 none, 2 one; 8 checks none. Sonnet reg60: 3 hand-ins, one, none, one, the last final from
+  `diffs/team.diff`. Only `version_values.json` and `processed/versions.json` differ from the stored files by
+  sha256. VERIFIED.
+- `scripts.study.reprocess_compare regulator_scale_2 --runs ../../runs`: no label changes; files that differ:
+  analysis/versions.json 9, processed/versions.json 9, new processed/facts/version_values.json 9 (exit 1 for the
+  new file). VERIFIED.
