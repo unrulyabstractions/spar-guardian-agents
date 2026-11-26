@@ -15,7 +15,10 @@ transcript viewer (src/ui/transcript_viewer.py, route /api/board).
     payload["notes"]                        # load_run's notes, then the count of reads of no recorded form
     payload["presence"]                     # each agent's entry and exit and each alert, placed on the clock
                                             # (src/ui/transcript_presence.py on_lanes)
-    payload["hand_ins"]                     # the team's hand-ins and take-backs (transcript_presence.hand_ins)
+    payload["hand_ins"]                     # the team's hand-ins and take-backs (transcript_presence.hand_ins), each
+                                            # hand-in with what it held (transcript_monitoring.with_held)
+    payload["versions"]["checks"][0]        # a check_fix call with what its code held and its call k and time t
+                                            # (transcript_monitoring.versions); payload["versions"] None without
 
     network_payload(run_dir)                # the network log on the board's clock (src/ui/transcript_network.py),
                                             # None without network.jsonl; the viewer's /api/network
@@ -79,6 +82,7 @@ from src.measures.access_evidence import read_evidence
 from src.measures.run_calls import Call, Run, load_run
 from src.measures.run_directory import RunDir, episode_agent, is_worker
 from src.ui.transcript_levels import CITE_RE, own_call, step_text, stepped
+from src.ui.transcript_monitoring import versions, with_held
 from src.ui.transcript_network import network_view
 from src.ui.transcript_presence import HAND_IN_TOOLS, hand_ins, on_lanes, presence
 from src.ui.transcript_rounds import on_clock, rounds
@@ -436,11 +440,24 @@ def notice_time(message: dict, events: list[dict], by_id: dict[str, Call],
     return sum(at[(before[-1].agent, before[-1].k)]) if before else 0.0
 
 
+def placed_checks(stored: dict | None, by_id: dict[str, Call], at: dict[tuple[str, int], tuple[float, float]]) \
+        -> dict | None:
+    """transcript_monitoring.versions' answer with each check placed on the board's clock: the k and the start t of its
+    check_fix call, both None where the call is not found; None without the stored fact."""
+    if stored is None:
+        return None
+
+    def place(c: dict) -> dict:
+        call = by_id.get(c["call_id"]) if c["call_id"] else None
+        return {**c, "k": call.k, "t": at[(call.agent, call.k)][0]} if call else {**c, "k": None, "t": None}
+    return {**stored, "checks": [place(c) for c in stored["checks"]]}
+
+
 def board_payload(run_dir: Path, levels: dict) -> dict:
     """The Board tab's data for one run: {clock, clock_about, total, agents, posts, pair, pair_why, ladders,
     label_names (each judge label's name), notes, presence (transcript_presence.on_lanes), hand_ins
-    (transcript_presence.hand_ins), calls_per_round, seed_pack}. `levels` is the run page's ladders
-    (transcript_levels.compute). The network log comes on its own (network_payload)."""
+    (transcript_presence.hand_ins, each hand-in with what it held), versions (placed_checks), calls_per_round,
+    seed_pack}. `levels` is the run page's ladders (transcript_levels.compute). The network log comes on its own (network_payload)."""
     run = load_run(run_dir, times=True)
     name, at, total = clock(run)
     by_model = model_calls(run_dir)
@@ -484,7 +501,8 @@ def board_payload(run_dir: Path, levels: dict) -> dict:
     coordination_marks(placed, posts, took)
     post_calls = {p["label"]: p["call"] for p in posts if p["call"] is not None}
     lanes, in_round = on_clock(rounds(run.run_json), run.calls, at, name == "eval_log")
-    handed = hand_ins(run.run_json)
+    stored = versions(run_dir, run.run_json)
+    handed = with_held(hand_ins(run.run_json), stored)
     event_of = {e["call_id"]: i for i, e in enumerate(handed["events"]) if e["call_id"]}
     agents = []
     for agent, rows in run.calls.items():
@@ -515,5 +533,6 @@ def board_payload(run_dir: Path, levels: dict) -> dict:
             "ladders": {k: {key: v[key] for key in LADDER_KEYS} for k, v in levels["ladders"].items()},
             "label_names": {k: v["name"] for k, v in levels["judge_label_about"]["labels"].items()},
             "notes": notes, "presence": on_lanes(presence(run.run_json), run.calls, at), "hand_ins": handed,
+            "versions": placed_checks(stored, by_id, at),
             "calls_per_round": (run.run_json.get("rules") or {}).get("calls_per_round"),
             "seed_pack": (run.run_json.get("config") or {}).get("seed_pack") or None}

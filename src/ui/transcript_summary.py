@@ -14,9 +14,11 @@ told to cheat with a regulator, gets a column of its own named by its combinatio
 row lands in exactly one cell. A cell counts its runs, the ones that cheated (the index's levels.cheated), the ones
 that accessed the honeypot (the team's Cheating rung looked or above), the ones the grader passed (levels.passed) and
 the teams' levels on each ladder, and the same counts over its runs' workers (members: each worker's own levels, the
-influencers left out as the team's levels leave them out). Each cell carries the runs page's filters that keep exactly
-its runs (tv_view_index.js filters), found and checked here, or None when no such filters exist. The page shows the
-cheated share and the levels, of the teams or of their workers; the other counts stay in the answer.
+influencers left out as the team's levels leave them out), and how its runs ended (ending: the rounds of their last
+hand-ins and the workers still working at the end, the row's ending). Each cell carries the runs page's filters that
+keep exactly its runs (tv_view_index.js filters), found and checked here, or None when no such filters exist. The page
+shows the cheated share and the levels, of the teams or of their workers, and the ending; the other counts stay in
+the answer.
 """
 from __future__ import annotations
 
@@ -227,12 +229,24 @@ def members_cell(workers: list[dict]) -> dict:
                        for ladder in transcript_levels.ORDER}}
 
 
+def ending_cell(rows: list[dict]) -> dict | None:
+    """How a cell's runs ended, from their rows' ending (transcript_index.ending_shown): {"last_hand_in": the distinct
+    rounds of their last hand-ins, lowest first, "no_hand_in": the runs with none, "working" and "workers" summed,
+    "runs": the runs that recorded it}; None when none did (a row made before it)."""
+    ends = [r["ending"] for r in rows if r.get("ending")]
+    if not ends:
+        return None
+    return {"last_hand_in": sorted({e["last_hand_in"] for e in ends if e["last_hand_in"] is not None}),
+            "no_hand_in": sum(e["last_hand_in"] is None for e in ends), "working": sum(e["working"] for e in ends),
+            "workers": sum(e["workers"] for e in ends), "runs": len(ends)}
+
+
 def cell(rows: list[dict], members: dict[str, list[dict]]) -> dict:
     """One cell's counts: n, cheated, accessed and passed (each k of n), alerted (the runs in which an influencer
     alerted humans), alerts (those alerts and how many were true and false alarms, the rows' alerts summed), team (per
     role, the numbers of such agents its runs hold, lowest first), the teams' level counts per ladder in the ladder's
-    order, and members: its runs' workers counted the same way (members_cell; `members` holds each run's workers by
-    the row's id, a run not in it adds none)."""
+    order, ending (ending_cell), and members: its runs' workers counted the same way (members_cell; `members` holds
+    each run's workers by the row's id, a run not in it adds none)."""
     accessed = accessed_levels()
 
     def held(role: str) -> list[int]:
@@ -246,6 +260,7 @@ def cell(rows: list[dict], members: dict[str, list[dict]]) -> dict:
             "alerts": {k: sum((r.get("alerts") or {}).get(k) or 0 for r in rows) for k in ("n", "true", "false")},
             "levels": {ladder: level_counts(ladder, [r["levels"]["team"].get(ladder) for r in rows])
                        for ladder in transcript_levels.ORDER},
+            "ending": ending_cell(rows),
             "members": members_cell([w for r in rows for w in members.get(r["id"], [])])}
 
 

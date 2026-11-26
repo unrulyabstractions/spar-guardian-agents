@@ -117,7 +117,7 @@ def test_the_export_writes_one_file_per_handed_in_commit_and_the_fact_reads_it(t
                                                                  "time": "2026-11-26T10:02:00+00:00",
                                                                  "submit": submits[0]}]},
                 "team_submission": {k: submits[1][k] for k in ("agent", "round", "time", "snapshot")}}
-    (swe_dir.parent / "run.json").write_text(json.dumps(run_json))
+    RunDir(run).file("run.json").write_text(json.dumps(run_json))
     fact = version_values(RunDir(run))
     assert [(r["agent"], r["round"], r["commit"], r["held"], r["copy"], r["final"]) for r in fact["hand_ins"]] == [
         ("a01", 3, team.two, ["ca", "block"], f"hand_ins/main.{team.two}.diff", False),

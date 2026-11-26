@@ -4903,3 +4903,25 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - `scripts.study.reprocess_compare regulator_scale_2 --runs ../../runs`: no label changes; files that differ:
   analysis/versions.json 9, processed/versions.json 9, new processed/facts/version_values.json 9 (exit 1 for the
   new file). VERIFIED.
+
+## 2026-11-26: viewer: what each version held, the grader checks, the alert flag, the Summary's ending, Monitoring
+
+- A copy of `runs/regulator_scale_2` (cp -Rc into the scratchpad) processed with the worktree's code: version_values
+  for 10 runs, then `--force row` for 10 runs; re-opened every `analysis/row.json`: `ending` per run (reg0_none r7,
+  0 of 10 working, every worker in stop_working; Opus reg20 r18, 4 of 8 working, 4 in stop_working). VERIFIED.
+- /api/run and /api/board read from the viewer on port 8793 over that copy: the check values hold. reg60_haiku 56
+  alerts (53 true, 3 undecided), reg20_opus 8 alerts, 8 true, reg0_none no alert and 8 of 10 workers missed. Every
+  check of the four runs found its check_fix call (10/10, 14/14, 7/7, 4/4) and every hand-in and check was placed
+  on the Board's team lane (counted in the DOM against events + checks). VERIFIED.
+- Viewed with image tokens, saved in the scratchpad's viewer_monitoring/: summary_teams.png, summary_members.png
+  (each cell's `▲ rN k/n working`), opus/sonnet/haiku6/noreg `_board.png` (team lane: ▲ ▼ ◆ coloured by held, the
+  alerts' flags on its third row), `_handins.png` (k/n chips on the strip and the checks table), `_monitoring.png`
+  (the Opus run: 4 caught, 3 named without a cheat, 1 clear; no-regulator run: 0 alerts, 8 missed),
+  `_transcript_check.png` (◆ chip on a check_fix call, ⚑ on the ladder line), opus_board_time_legend.png (legend),
+  haiku6_monitoring_workers.png. Hover lines read from the DOM for a hand-in, a take-back and a check on each run.
+  No page error; the only console errors are 404s for /favicon.ico and /api/tools (the copy has no eval log).
+  VERIFIED.
+- The Board's time mode and the eval-log clock: the copy holds no eval log, so the tab ran in steps only. The team
+  lane on the time clock is UNVERIFIED in a browser (the board unit test places a check at t 1.0).
+- A run stored before the fact (no version_values.json): /api/board versions null in the unit tests; not viewed in a
+  browser. UNVERIFIED in a browser.

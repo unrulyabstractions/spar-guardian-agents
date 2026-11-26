@@ -125,10 +125,12 @@ def test_calls_are_in_order_with_the_eval_logs_times(tmp_path):
     # each ladder as levelChip and lineMark read it, with its line, and nothing more; no field the tab does not read
     assert p["ladders"] == {"cheating": {k: LADDERS["cheating"][k] for k in ("name", "levels", "line", "line_words")}}
     assert set(p) == {"clock", "clock_about", "total", "agents", "posts", "pair", "pair_why", "ladders", "label_names",
-                      "notes", "presence", "hand_ins", "calls_per_round", "seed_pack"}   # the network log: its own
+                      "notes", "presence", "hand_ins", "versions", "calls_per_round",
+                      "seed_pack"}   # the network log: its own
     assert p["seed_pack"] is None                                   # an unseeded run
     assert p["presence"] == {"agents": {}, "alerts": []}   # a run.json with no entry, exit or alert
     assert p["hand_ins"] == {"events": [], "final": None, "refused": []}   # nor any hand-in
+    assert p["versions"] is None                                    # nor the stored fact of what each version held
     assert set(by["a01"]["calls"][0]) == {"k", "m", "t", "dur", "tool", "summary", "board", "labels", "marks",
                                           "held", "after", "round", "pos"}   # round, pos: None before rounds
     assert {c["after"] == {} for a in p["agents"] for c in a["calls"]} == {True}   # no timeline read after every call
@@ -161,6 +163,41 @@ def test_a_submit_call_carries_its_hand_ins_event_and_a_refused_one_none(tmp_pat
     assert p["hand_ins"]["final"] == {"agent": "a02", "round": 3, "snapshot": "abc1234def", "call_id": cid("a02", 3)}
     assert p["hand_ins"]["events"][0]["final"] and p["hand_ins"]["refused"] == [
         {"agent": "a01", "round": 3, "reason": "already in"}]
+
+
+def test_a_check_sits_at_its_check_fix_call_and_a_hand_in_carries_what_it_held(tmp_path):
+    """a02's call 0 is a check_fix call whose record's time falls in its span: the check is placed at k 0, t 1.0; a
+    check with no call in the timeline has k and t None; the hand-in takes held from the stored fact."""
+    run = write_run(tmp_path)
+    path = run / "processed/trajectories" / f"{SAMPLE}@a02" / "transcript.json"
+    t = json.loads(path.read_text())
+    t["trajectory"]["steps"][1]["tool_calls"][0]["function_name"] = "check_fix"
+    t["trajectory"]["steps"][4]["tool_calls"][0]["function_name"] = "submit"
+    path.write_text(json.dumps(t))
+    rj = json.loads((run / "processed/run.json").read_text())
+    t0 = (START + timedelta(seconds=1.0)).timestamp()
+    s0 = (START + timedelta(seconds=20.0)).timestamp()
+    rj["rules"] = {"timeline": [{"agent": "a02", "round": 2, "calls": [
+        {"id": cid("a02", 0), "tool": "check_fix", "t0": t0, "t1": t0 + 1.0},
+        {"id": cid("a02", 3), "tool": "submit", "t0": s0, "t1": s0 + 0.3}]}]}
+    rj["swe"] = {"check_fix_calls": [{"n": 1, "agent": "a02", "time": t0 + 0.5, "main": "abc", "answer": "accepted"},
+                                     {"n": 2, "agent": "a01", "time": t0, "main": "abc", "answer": "not_accepted"}]}
+    rj["team_submission"] = {"agent": "a02", "round": 3, "snapshot": "abc1234def",
+                             "time": (START + timedelta(seconds=20.1)).isoformat()}
+    (run / "processed/run.json").write_text(json.dumps(rj))
+    fact = {"values": {"ca": "x", "block": "y"},
+            "hand_ins": [{"seq": None, "agent": "a02", "round": 3, "commit": "abc1234def", "held": ["ca"],
+                          "copy": "diffs/team.diff", "final": True}],
+            "checks": [{"n": 1, "agent": "a02", "round": 2, "commit": "abc", "held": ["ca", "block"], "copy": "c",
+                        "answer": "accepted"},
+                       {"n": 2, "agent": "a01", "round": None, "commit": "abc", "held": [], "copy": "c",
+                        "answer": "not_accepted"}]}
+    write_text(run / "processed/facts/version_values.json", json.dumps(fact))
+    p = payload(run)
+    assert p["versions"]["values"] == ["ca", "block"]
+    assert [(c["n"], c["call_id"], c["k"], c["t"]) for c in p["versions"]["checks"]] == [
+        (1, cid("a02", 0), 0, pytest.approx(1.0)), (2, None, None, None)]
+    assert [(e["agent"], e["held"], e["final"]) for e in p["hand_ins"]["events"]] == [("a02", ["ca"], True)]
 
 
 def test_a_seed_packs_post_is_flagged_seeded_and_the_payload_names_the_pack(tmp_path):

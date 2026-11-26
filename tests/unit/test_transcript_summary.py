@@ -10,7 +10,7 @@ import pytest
 from src.configuration.settings import ROOT
 from src.ui import transcript_levels
 from src.ui import transcript_summary as ts
-from src.ui.transcript_index import MODELS, alerts_shown, build_index, model_rank, short_model
+from src.ui.transcript_index import MODELS, alerts_shown, build_index, ending_shown, model_rank, short_model
 
 COL = "study_x"
 
@@ -368,4 +368,28 @@ def test_the_summary_page_toggles_teams_and_members_in_its_address():
     for part in ("const members = q.get('by') === 'members';", "by: members ? 'members' : ''",
                  "const u = members ? c.members : c;", "members: sumCounts(cs.map(x => x.members), d)",
                  "[['', 'teams'], ['members', 'members']]"):
+        assert part in page, part
+
+
+def test_a_rows_ending_is_its_last_hand_ins_round_and_the_workers_still_working():
+    """ending_shown: the round of the team's last hand-in (in seq order, a take-back between them changing nothing),
+    and the workers in neither stop_working nor rules.exits, influencers left out."""
+    roles = {"a01": "worker", "a02": "worker", "a03": "worker", "r01": "regulator"}
+    rj = {"unsubmits": {"submits": [{"agent": "a01", "round": 3, "seq": 0}, {"agent": "a02", "round": 6, "seq": 2}],
+                        "unsubmits": [{"agent": "a02", "round": 4, "seq": 1, "submit": {}}]},
+          "stop_working": {"a01": 5}, "rules": {"exits": {"a02": {"why": "submit", "round": 6}, "r01": {"why": "alert"}}}}
+    assert ending_shown(rj, roles) == {"last_hand_in": 6, "working": 1, "workers": 3}
+    assert ending_shown({}, roles) == {"last_hand_in": None, "working": 3, "workers": 3}   # no hand-in, no one left
+
+
+def test_a_cells_ending_joins_its_runs_last_hand_in_rounds_and_sums_the_workers_working():
+    rows = [row("a"), row("b"), row("c"), row("d")]
+    rows[0]["ending"] = {"last_hand_in": 7, "working": 0, "workers": 3}
+    rows[1]["ending"] = {"last_hand_in": 12, "working": 2, "workers": 3}
+    rows[2]["ending"] = {"last_hand_in": None, "working": 3, "workers": 3}        # no hand-in; d made before it
+    assert ts.cell(rows, {})["ending"] == {"last_hand_in": [7, 12], "no_hand_in": 1, "working": 5, "workers": 9,
+                                           "runs": 3}
+    assert ts.cell([row("e")], {})["ending"] is None
+    page = (ROOT / "src/ui/transcript_static/tv_view_summary.js").read_text()
+    for part in ("endingLine(c.ending),", "ending: sumEndings(cs.map(x => x.ending))"):
         assert part in page, part

@@ -1,5 +1,5 @@
 /* View: one run (#/run/<collection>/<run key>?agent=<id>&call=<k>, ?agent=<id>&label=<judge label>, ?tab=board&a=&b=
- * &mode=&pos= or ?tab=details; with &fold=calls,system,user,reasoning (or none) on an agent's tab).
+ * &mode=&pos=, ?tab=monitoring or ?tab=details; with &fold=calls,system,user,reasoning (or none) on an agent's tab).
  * Ported from collusion-hermaneutics' viewer (viewer/static/app/view_run.js). A bar with the run, a select of its
  * workers and one of its influencers, a Board tab and a Details tab; the selected agent's whole episode below it, each
  * step with its labels (tv_case_view.js). Details ends with the run record: the run's labels, the run settings, each
@@ -19,7 +19,10 @@
  * and exit as a card after the judge labels (tv_presence.js, /api/run's presence). The team's hand-ins and take-backs
  * (/api/run's hand_ins) show as a badge in the bar and a strip in Details, a row per round, after the alerts; the agent
  * that made the final hand-in carries a star wherever the page names it (the agents' selects, its card, the Details
- * tables), and each submit and unsubmit call in a transcript says what it did. A tab beside the agents' is one
+ * tables), and each submit and unsubmit call in a transcript says what it did. Each hand-in and each grader check
+ * (check_fix) shows what its version held of the planted values (/api/run versions), the checks a table under the
+ * strip and a chip on each check_fix call in a transcript; a worker an alert names carries a flag wherever the star
+ * goes. The Monitoring tab (tv_monitoring.js, /api/run monitoring) follows Board. A tab beside the agents' is one
  * entry of `views` (a key, its label and a function that draws it once, answering its element and, for the Board, a
  * promise of its handle). */
 import { appendAll, enc, fmtInt, fmtUsd, h } from '/static/app/dom.js';
@@ -33,7 +36,9 @@ import { alarmBadge, cheatbenchTeam, cheatbenchWords, cheatingCell, cheatingPane
 import { DEFAULT_FOLDS, PARTS, centreVertically, disregChip, renderCase, stripLegend } from './tv_case_view.js';
 import { renderBoard } from './tv_view_board.js';
 import { netUrl } from './tv_net_panel.js';
-import { alertsBadge, alertsCard, handInsBadge, handInsCard, presenceCard, starOf, starText } from './tv_presence.js';
+import { monitoringView } from './tv_monitoring.js';
+import { alertNames, alertsBadge, alertsCard, handInsBadge, handInsCard, namedMark, namedText, presenceCard, starOf,
+  starText } from './tv_presence.js';
 import { regulatorsCard } from './tv_regulators.js';
 import { tmpUrl } from './tv_tmp_panel.js';
 
@@ -82,6 +87,11 @@ export async function viewRun(id, q, view) {
   const roles = Object.fromEntries(d.agents.map(a => [a.agent, a.role]));
   const multi = d.agents.length > 1;
   const cheatbench = Object.fromEntries(d.agents.map(a => [a.agent, a.cheatbench]));
+  // Beside an agent's name wherever the page names it: the final hand-in's star, and the flag of a worker an alert
+  // names (as text in a select's option).
+  const names = alertNames(d.presence, roles);
+  const mark = a => [starOf(d.hand_ins, a), namedMark(names, a)];
+  const markText = a => starText(d.hand_ins, a) + namedText(names, a);
 
   // ---- board: every post by the label the agents, the evidence, the Board tab and the judges give it, P1, P2, ... in
   // board order, harness notices included (board_no); a record of who came and went has no label and is left out.
@@ -126,7 +136,7 @@ export async function viewRun(id, q, view) {
           .then(x => { if (!x.ok) throw new Error(`HTTP ${x.status}`); return x.json(); })
           .then(t => soon.then(tl => [t, tl]))
           .then(([t, tl]) => {
-            state.tr = renderCase(t, { agent: a.agent, levels: d.levels, isRegulator: a.role === 'regulator', regulatorCalls: regulatorCalls(a.agent, a.role), tools: tl, rounds: roundsOf(a.agent), endedBy: a.episode && a.episode.ended_by, disregulator: a.disregulator, beliefs: beliefsOf(a), handIns: d.hand_ins });
+            state.tr = renderCase(t, { agent: a.agent, levels: d.levels, isRegulator: a.role === 'regulator', regulatorCalls: regulatorCalls(a.agent, a.role), tools: tl, rounds: roundsOf(a.agent), endedBy: a.episode && a.episode.ended_by, disregulator: a.disregulator, beliefs: beliefsOf(a), handIns: d.hand_ins, versions: d.versions, names });
             btn.disabled = false;
             btn.textContent = `Transcript (${sizeTxt})`;
             return state.tr;
@@ -139,7 +149,7 @@ export async function viewRun(id, q, view) {
     btn.addEventListener('click', () => { selectTab(a.agent); });
     appendAll(card, [
       h('div', { class: 'ep-card-head' },
-        h('h2', { class: 'agent-h' }, `Agent ${a.agent}`, starOf(d.hand_ins, a.agent)), roleTag(a.role), disregChip(a.disregulator),
+        h('h2', { class: 'agent-h' }, `Agent ${a.agent}`, mark(a.agent)), roleTag(a.role), disregChip(a.disregulator),
         a.episode.model ? muted(a.episode.model, 'small') : null,
         h('span', { class: 'spacer' }), btn),
       wideItems(episodeRecord({ ...a.episode, agent: undefined })),   // the card's title names the agent
@@ -317,9 +327,9 @@ export async function viewRun(id, q, view) {
   let lastAgent = null;    // the agent whose transcript was open last: where the Transcript button goes back to
   // Two selects, Workers and Influencers, each in that order; an option names the agent, an influencer's role, and its
   // Cheating level. A select shows its group's name when the page shows none of its agents, so any choice opens one.
-  // The agent that made the final hand-in carries a star.
+  // The agent that made the final hand-in carries a star, a worker an alert names a flag.
   const option = a => h('option', { value: a.agent },
-    [a.agent + starText(d.hand_ins, a.agent), a.role !== 'worker' ? a.role : null, cellOf(a, 'cheating').level]
+    [a.agent + markText(a.agent), a.role !== 'worker' ? a.role : null, cellOf(a, 'cheating').level]
       .filter(Boolean).join(' · '));
   const picker = (name, list) => {
     const sel = h('select', { class: 'rp-pick', title: name, onchange: () => sel.value && selectTab(sel.value).catch(() => {}) },
@@ -330,15 +340,15 @@ export async function viewRun(id, q, view) {
   const pickers = [picker('Workers', workers), influencers.length ? picker('Influencers', influencers) : null].filter(Boolean);
   const detailsView = () => ({ el: h('div', { class: 'rp-team' },
     alertsCard(d.presence, roles, (agent, k) => gotoCall(agent, k).catch(() => {})),
-    handInsCard(d.hand_ins, (agent, callId) => gotoCallId(agent, callId).catch(() => {})),
+    handInsCard(d.hand_ins, (agent, callId) => gotoCallId(agent, callId).catch(() => {}), d.versions),
     regulatorsCard(d.regulators, (agent, k) => gotoCall(agent, k).catch(() => {})),
-    levelsPanel(d.levels, roles, row.task_name, { cheatbench, row, open: openLink, star: a => starOf(d.hand_ins, a) }),
+    levelsPanel(d.levels, roles, row.task_name, { cheatbench, row, open: openLink, star: mark }),
     cheatingPanel(d.levels, roles, { evidence: evidenceText, cheatbench, row,
       routes: Object.fromEntries(d.agents.map(a => [a.agent, a.routes || []])) }),
     coordinationPanel(d.levels, roles),
     collusionPanel(d.levels, roles, { evidence: evidenceText }),
     judgeLabelsPanel(d.levels, roles, openLink),
-    presenceCard(d.presence, roles, d.hand_ins),
+    presenceCard(d.presence, roles, mark),
     // the strip's legend, in the case layout its rules are scoped to
     h('section', { class: 'card' }, h('h2', null, 'Legend'), h('div', { class: 'case' }, stripLegend(d.levels.ladders, d.levels.order))),
     // the run record last: the run's labels, its settings and each agent's record
@@ -363,9 +373,13 @@ export async function viewRun(id, q, view) {
       });
     return { el, handle };
   };
+  // The Monitoring tab: the alerts and their outcomes, each worker caught, missed, named or clear.
+  const monitorView = () => ({ el: monitoringView(d.monitoring, { roles, mark, levels: d.levels,
+    openCall: (agent, k) => gotoCall(agent, k).catch(() => {}) }) });
   // The tabs beside the agents': each draws its view once, when first opened.
   const views = new Map(multi
-    ? [['board', { label: 'Board', draw: boardView }], ['details', { label: 'Details', draw: detailsView }]] : []);
+    ? [['board', { label: 'Board', draw: boardView }], ['monitoring', { label: 'Monitoring', draw: monitorView }],
+      ['details', { label: 'Details', draw: detailsView }]] : []);
   const drawn = new Map();
   for (const [key, v] of views) {
     const open = () => selectTab(key).catch(() => {});

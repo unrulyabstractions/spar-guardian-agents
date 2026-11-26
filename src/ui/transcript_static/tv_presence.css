@@ -1,5 +1,6 @@
 /* Entries, exits, alerts, hand-ins and take-backs (tv_presence.js): the transcript's chips, the bar's badges, the
-   Details tab's cards and the Board tab's lane marks. */
+   Details tab's cards and the Board tab's lane marks; what each version held and the grader checks, the flag of a
+   worker an alert names, the Board tab's team lane and the Monitoring tab (tv_monitoring.js). */
 
 /* a round's message's chips, in its header: the round, each presence event, the board */
 .pr-chip { display: inline-flex; align-items: center; gap: 5px; margin-left: 6px; padding: 0 6px; border-radius: 4px;
@@ -88,3 +89,47 @@
 .hi-mark text { font: 800 15px var(--sans); fill: var(--accent); stroke: var(--bg); stroke-width: .6; }
 .hi-mark { cursor: pointer; }
 .bd-star { fill: var(--accent); font-family: var(--sans); }
+
+/* what a version held of the planted values: all (the bad colour), some (warning), none (good), no saved copy */
+.vv-held { display: inline-flex; align-items: center; padding: 0 5px; border-radius: 3px; font: 700 10.5px var(--mono);
+  line-height: 1.5; border: 1px solid currentColor; background: var(--panel); }
+.vv-all { color: var(--bad); background: var(--bad-bg); }
+.vv-some { color: var(--warn); background: var(--warn-bg); }
+.vv-none { color: var(--good); background: var(--good-bg); }
+.vv-nocopy { color: var(--muted); border-style: dashed; font-family: var(--sans); font-weight: 500; }
+.vv-checks { margin-top: 12px; }
+.vv-checks h3 { display: flex; align-items: center; gap: 10px; }
+.hi-call.vv-check { color: var(--text); background: var(--panel-2); }
+.hi-call.vv-check.vv-accepted { color: var(--warn); background: var(--warn-bg); }
+.case .call.is-check { border-left: 4px solid var(--border-strong); }
+
+/* a worker an alert names */
+.al-named { color: var(--bad); font-weight: 800; margin-left: 3px; cursor: default; }
+.bd-flag { fill: var(--bad); font-family: var(--sans); }
+
+/* the Board tab's team lane: ▲ a hand-in, ▼ a take-back, ◆ a check, coloured by what its version held */
+.bd-lane-team { fill: var(--panel); }
+.tl-mark { cursor: pointer; }
+.tl-mark path { fill: var(--muted); stroke: var(--bg); stroke-width: 1; }
+.tl-mark.tl-all path { fill: var(--bad); }
+.tl-mark.tl-some path { fill: var(--warn); }
+.tl-mark.tl-none path { fill: var(--good); }
+.tl-mark.tl-nocopy path { fill: var(--bg); stroke: var(--muted); stroke-width: 1.3; }
+.tl-mark.tl-final path { stroke: var(--accent); stroke-width: 2; }
+.tl-mark.tl-take-back path { fill: var(--warn); }
+.tl-mark.tl-check.tl-refused path { fill: var(--bg); stroke-width: 1.8; stroke: var(--muted); }
+.tl-mark.tl-check.tl-refused.tl-all path { stroke: var(--bad); }
+.tl-mark.tl-check.tl-refused.tl-some path { stroke: var(--warn); }
+.tl-mark.tl-check.tl-refused.tl-none path { stroke: var(--good); }
+.tl-mark:hover path { stroke: var(--text); stroke-width: 1.8; }
+
+/* the Monitoring tab */
+.mn-card h2 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mn-alerts { border-left: 4px solid var(--bad); }
+.mn-workers { border-left: 4px solid var(--accent); }
+.mn-names { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.mn-name { font: 600 11.5px var(--mono); padding: 0 5px; border-radius: 3px; border: 1px solid var(--border-strong); }
+.mn-caught { color: var(--good); background: var(--good-bg); border-color: var(--good); }
+.mn-missed { color: var(--bad); background: var(--bad-bg); border-color: var(--bad); }
+.mn-named { color: var(--warn); background: var(--warn-bg); border-color: var(--warn); }
+.mn-reason { color: var(--muted); text-decoration: underline dotted; cursor: help; font-size: 12px; }

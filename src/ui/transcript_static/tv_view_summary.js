@@ -7,8 +7,9 @@
  * to the runs page filtered to exactly them, when the server found such filters), cheated, accessed and passed as k of
  * n with a bar each, and the teams' level counts on the three ladders as chips in the ladders' colours. The toggle
  * teams | members (&by=members) counts the runs' workers instead of the runs: each worker's own levels (the cell's
- * members), its alert row still the runs'. A last row totals each column. Labels and values only: every definition is
- * on the Ladders page. */
+ * members), its alert row still the runs'. Under the rates, in both views, how the cell's runs ended: the round of
+ * their last hand-in (▲, a range over several runs) and the workers still working at the end, k of n (the cell's
+ * ending). A last row totals each column. Labels and values only: every definition is on the Ladders page. */
 import { fmtInt, h, plural } from '/static/app/dom.js';
 import { badge, muted, select } from '/static/app/components.js';
 import { RAMP, inkOn } from './tv_case_view.js';
@@ -87,10 +88,24 @@ function alertShare(c, detailed) {
     h('span', { class: 'sum-bar' }, h('span', { class: 'sum-bar-alerts', style: `width:${pct}%` })));
 }
 
+/** How a cell's runs ended (its ending): "▲ r14" or "▲ r9–r14" for the rounds of their last hand-ins, and
+ * "3/8 working", the workers still working at the end of n; null for a cell whose rows recorded none. */
+function endingLine(e) {
+  if (!e) return null;
+  const r = e.last_hand_in;
+  const rounds = !r.length ? 'none' : r.length === 1 ? `r${r[0]}` : `r${r[0]}–r${r[r.length - 1]}`;
+  const tip = [`last hand-in: ${r.length ? r.map(x => `round ${x}`).join(', ') : 'none'}`,
+    e.no_hand_in ? `${plural(e.no_hand_in, 'run')} without a hand-in` : null,
+    `working at the end: ${e.working} of ${plural(e.workers, 'worker')}`].filter(Boolean).join('\n');
+  return h('div', { class: 'sum-ending', title: tip },
+    h('span', { class: 'sum-end-hand' }, h('span', { class: 'hi-arrow hi-submit', 'aria-hidden': 'true' }, '▲'), ` ${rounds}`),
+    h('span', { class: ['sum-end-working', e.working > 0 && 'is-some'] }, `${e.working}/${e.workers} working`));
+}
+
 /** A cell, centred: each ladder's share at or above its line, or with `detailed` each ladder's level chips, of its
  * teams or, with `members`, of their workers (the cell's members); in a column with influencers (`col.influencers`)
- * the alert row after them; then its runs (linked when the server found the filters that keep exactly them), and with
- * `members` its workers. */
+ * the alert row after them; how its runs ended (endingLine); then its runs (linked when the server found the filters
+ * that keep exactly them), and with `members` its workers. */
 function cellView(c, d, detailed, col, members) {
   if (!c) return h('td', { class: 'sum-cell sum-empty' }, muted('–'));
   const n = plural(c.n, 'run');
@@ -100,6 +115,7 @@ function cellView(c, d, detailed, col, members) {
   return h('td', { class: 'sum-cell' }, h('div', { class: ['sum-stack', detailed && 'is-detailed'] },
     detailed ? h('div', { class: 'sum-lads' }, d.order.map(L => ladderChips(L, d.ladders[L], u.levels[L])), alerts)
       : [d.order.map(L => lineShare(L, d.ladders[L], u.levels[L], u.n, unit)), alerts],
+    endingLine(c.ending),
     h('span', { class: 'sum-ns' },
       c.filters ? h('a', { class: 'sum-n', href: runsHref(c.filters), title: 'Open these runs' }, n)
         : h('span', { class: 'sum-n', title: 'No runs-page filter keeps exactly these' }, n),
@@ -154,8 +170,17 @@ function sumCounts(cs, d) {
   return { n: add('n'), cheated: add('cheated'), accessed: add('accessed'), levels };
 }
 
-/** The All row over some rows: each column's cells summed, their teams and their workers (members); no link, since
- * the runs page has no filter for a set of rows. */
+/** Some cells' endings together: the rounds of their last hand-ins joined, the rest summed; null when none has one. */
+function sumEndings(es) {
+  const xs = es.filter(Boolean);
+  if (!xs.length) return null;
+  const add = k => xs.reduce((t, x) => t + x[k], 0);
+  return { last_hand_in: [...new Set(xs.flatMap(x => x.last_hand_in))].sort((a, b) => a - b),
+    no_hand_in: add('no_hand_in'), working: add('working'), workers: add('workers'), runs: add('runs') };
+}
+
+/** The All row over some rows: each column's cells summed, their teams and their workers (members), their endings;
+ * no link, since the runs page has no filter for a set of rows. */
 function summed(rows, columns, d) {
   const out = {};
   for (const c of columns) {
@@ -164,7 +189,7 @@ function summed(rows, columns, d) {
     const add = k => cs.reduce((t, x) => t + x[k], 0);
     const alerts = Object.fromEntries(['n', 'true', 'false'].map(k => [k, cs.reduce((t, x) => t + x.alerts[k], 0)]));
     out[c.key] = { ...sumCounts(cs, d), passed: add('passed'), alerted: add('alerted'), alerts,
-      members: sumCounts(cs.map(x => x.members), d), filters: null };
+      ending: sumEndings(cs.map(x => x.ending)), members: sumCounts(cs.map(x => x.members), d), filters: null };
   }
   return out;
 }

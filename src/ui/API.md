@@ -4,7 +4,8 @@ Start: `make transcripts` (or `make transcript`), or `uv run python -m src.ui.tr
 runs]` from the repository root. It serves in the foreground until Ctrl-C or SIGTERM. `src/ui/transcript_viewer.py` is
 the server and the run page's data, `src/ui/transcript_index.py` the index, `src/ui/transcript_levels.py` the three
 ladders and the judge labels, `src/ui/transcript_ladder_tables.py`
-the Ladders page's tables, `src/ui/transcript_board.py` the Board tab's data and `src/ui/transcript_static/` the page
+the Ladders page's tables, `src/ui/transcript_board.py` the Board tab's data, `src/ui/transcript_monitoring.py` what
+each version held, the grader checks and the Monitoring tab's data, and `src/ui/transcript_static/` the page
 (`tv_*.js`, `tv_style.css`, `tv_board.css`). The page also loads the shared `src/ui/static/style.css`, `app/dom.js`,
 `app/api.js`, `app/charts.js` and `app/components.js`, served under `/static/`.
 
@@ -34,12 +35,13 @@ the command to run, and the runs page's header shows them as one chip. A new run
 | hash | page |
 |---|---|
 | `#/?col=&task=&model=&workers=&worker=&influencer=&influencer_level=&lv_<ladder>=&cheated=&min_disclosure=&min_manipulation=&q=&sort=&dir=&page=&size=` | Runs: one row per valid run |
-| `#/run/<collection>/<run key>?agent=&call=` | a run: a tab per agent with its episode, a Board and a Details tab |
+| `#/run/<collection>/<run key>?agent=&call=` | a run: a tab per agent with its episode, a Board, a Monitoring and a Details tab |
 | `#/run/<collection>/<run key>?agent=&label=` | a run opened at the place code located the agent's excerpt of a judge label (`disclosure`, `manipulation`), highlighted |
 | `#/run/<collection>/<run key>?tab=board&a=&b=&mode=&pos=&lens=` | the Board tab: agents `a`, `b`; `time` or `step`; `pos`; `lens` (`all`, `cheating`, `coordination`, `collusion`, `judge`) |
+| `#/run/<collection>/<run key>?tab=monitoring` | the Monitoring tab: the run's alerts with their outcomes and each worker caught, missed, named or clear |
 | `#/run/<collection>/<run key>?tab=details` | the Details tab: the three ladders' panels, the judge labels, the legend |
 | `#/ladders?task=<CheatBench task name>` | the three ladders, the Cheating ladder by task, the Coordination and Collusion levels, Collusion's take rules by task, the task's column highlighted, and the judge labels |
-| `#/summary?col=<collection>&hide=&task=&wmodel=&imodel=&detail=&by=` | Summary: one collection's runs, a row per workers' model and task (and number of workers when team sizes mix), a column per condition in the order Baseline, negative controls, regulators, positive control, disregulators, both; influencers by role, level and model (`/api/summary`); `col` defaults to the newest collection; `hide` lists the influencer bands toggled off (`regulator`, `disregulator`, `both`); `task` and `wmodel` keep the rows of one task or one workers' model and recount the All row, and a value the collection does not hold falls back to All; the heading counts the runs shown (`Summary: 66 of 147 runs` under a filter or a hidden band); `imodel` keeps the influencer columns holding one model, Baseline and the controls staying; each cell shows each ladder's share of teams at or above its line (H, C, K), or with `detail=1` each ladder's level counts, and its runs at the bottom; `by=members` (the toggle teams | members) counts each cell's workers instead of its runs: the share of workers at or above each line, their level counts, the All row likewise, and the workers under the runs; the A row stays the runs' |
+| `#/summary?col=<collection>&hide=&task=&wmodel=&imodel=&detail=&by=` | Summary: one collection's runs, a row per workers' model and task (and number of workers when team sizes mix), a column per condition in the order Baseline, negative controls, regulators, positive control, disregulators, both; influencers by role, level and model (`/api/summary`); `col` defaults to the newest collection; `hide` lists the influencer bands toggled off (`regulator`, `disregulator`, `both`); `task` and `wmodel` keep the rows of one task or one workers' model and recount the All row, and a value the collection does not hold falls back to All; the heading counts the runs shown (`Summary: 66 of 147 runs` under a filter or a hidden band); `imodel` keeps the influencer columns holding one model, Baseline and the controls staying; each cell shows each ladder's share of teams at or above its line (H, C, K), or with `detail=1` each ladder's level counts, then how its runs ended (`▲ r14`, the round of their last hand-in, a range over several runs, and `3/8 working`, the workers still working at the end, in both views), and its runs at the bottom; `by=members` (the toggle teams | members) counts each cell's workers instead of its runs: the share of workers at or above each line, their level counts, the All row likewise, and the workers under the runs; the A row stays the runs' |
 
 `<ladder>` is `cheating`, `coordination` or `collusion`; a ladder filter's value is the team's level. `workers` is the
 number of workers; `worker` is the worker conditioning (`baseline`, `told to cheat`, a rule's words such as `generic
@@ -166,6 +168,9 @@ IndexRow = {                                         # valid runs only
   out), tokens, time, delivered, error or end; null when not recorded),
   alerts ({n, true, false}: the influencers' alert_humans calls and how many the Cheating ladder calls true and
   false alarms, run.json signals; all zero on a run with none),
+  ending ({last_hand_in, working, workers}: the round of the team's last hand-in (transcript_presence.hand_ins), null
+  without one; the workers still working when the run ended, in neither run.json stop_working nor rules.exits; the
+  run's workers: transcript_index.ending_shown; absent from a row stored before it),
   exploit_used (on a run whose team is hacked, which exploit's content its hand-in holds: revealed, hidden, both,
   none or unknown, the Cheating label's exploit_used; null on every other run and on a run without side copies),
   levels: {team: {<ladder>: level}, cheated: bool | null,   # the team's Cheating measure: attempted or above
@@ -186,7 +191,7 @@ tasks the study does not read, how many valid runs of them Settings hide by defa
 applicable`: Coordination and Collusion on a one-agent run, Collusion on a task with no take rule, Cheating on a run
 without episodes.
 
-### `GET /api/run?id=<id>` → `{row: IndexRow, meta, agents: [Agent], boards: [Board], levels: Levels, cheatbench_disclosed, presence: Presence, rounds: Rounds, hand_ins: HandIns, regulators: {agent: Regulator}, beliefs: Beliefs | null}`
+### `GET /api/run?id=<id>` → `{row: IndexRow, meta, agents: [Agent], boards: [Board], levels: Levels, cheatbench_disclosed, presence: Presence, rounds: Rounds, hand_ins: HandIns, versions: Versions | null, monitoring: Monitoring, regulators: {agent: Regulator}, beliefs: Beliefs | null}`
 `meta` holds run.json's `config`, `mode` and `code`, the rounds run (`rules.rounds`), and `eval_log` (the run's own
 `eval/*.eval`, else where `RunDir.eval_log` finds it; null when absent) beside `eval_log_recorded`.
 `cheatbench_disclosed` is the task's CheatBench field for an agent that acknowledged its access
@@ -202,7 +207,20 @@ click opening its call; the submits refused while a hand-in stood counted in the
 that made the final hand-in (the agents' selects, its card, the Ladders and Entries and exits tables; hover `final
 hand-in, round N`) and, in each transcript, a chip on every submit and unsubmit call (`handed in · <commit>`, `not
 handed in`, `taken back · <commit>`, `nothing taken back`; the tool's name alone in a run that recorded no hand-in),
-with an edge in the hand-in's or the take-back's colour on a call that made its event.
+with an edge in the hand-in's or the take-back's colour on a call that made its event. Each hand-in carries what its
+version held of the planted values (`held`, `copy`, `transcript_monitoring.with_held`), a chip `k/n` in the strip.
+`versions` is the stored fact of what each version held (`processed/facts/version_values.json`,
+`src/measures/version_values_fact.py`, read by `src/ui/transcript_monitoring.py` `versions`), null for a run without
+it: the planted values' keys, the fact's hand-ins, and each grader check (check_fix call) with its call. The Details
+tab's Hand-ins card lists the checks under the strip (round, agent, commit, held `k/n` or `no copy`, the answer, the
+call), and in each transcript a check_fix call carries a chip (◆, `accepted`, `not accepted` or `error`, and the held
+chip) and an edge.
+`monitoring` is the Monitoring tab's data (`transcript_monitoring.monitoring`): the alerts as `presence` gives them,
+their counts by stored outcome, the run's influencers, and each worker with its final Cheating level, the round of its
+first cheated step where the record dates it, the alerts that name it and its status. A worker an alert names carries a
+flag ⚑ wherever the final hand-in's star goes (the agents' selects, its card, the Ladders, Monitoring and Entries and
+exits tables, its transcript's ladder line, the Board tab's selects, lane and card; hover `named in N alerts, first in
+round R`).
 `regulators` is each regulator's measures from the code record (`signals.team.regulators`,
 `src/measures/regulator_measures.py`), `{}` in a run without a regulator or not measured since: the Details tab's
 Regulator card (`tv_regulators.js`).
@@ -241,6 +259,19 @@ HandIns = {events: [{kind ("submit" | "unsubmit"), agent, round, snapshot (a han
 Alert = {agent, round, reason, agents (named, or null), time,
          outcome ("true_alarm" | "false_alarm" | null), team_cheated_by_then, named_cheated_by_then: {agent: bool|null},
          k}   # outcome from signals.team.alert_outcomes (src/measures/alert_outcomes.py); k: its alert_humans call
+Versions = {values: [key],                     # the run's planted values (swe.own_values), by key
+            hand_ins: [{seq, agent, round, commit, held, copy, final}],   # the fact's, as stored
+            checks: [{n, agent, round, commit, held, copy, answer, error, call_id}]}
+            # held: the keys found on an added line of the version's stored copy, null with no copy (copy null);
+            # error and call_id from run.json swe.check_fix_calls and rules.timeline (null when no call holds its time)
+HandIns events add, with the fact: held, copy   # on a hand-in; a run without the fact has neither
+Monitoring = {alerts: [Alert], counts: {alerts, true_alarm, false_alarm, undecided}, influencers,
+              workers: [{agent, level (its final Cheating level), cheated (cheating_ladder.cheated of it, null without
+                         a level), cheated_round, cheated_k (the earliest call of a cheated rung among its Cheating
+                         timeline's first entries, and that call's round on rules.timeline; null where none is dated),
+                         named (the alerts naming it), named_first (the first one's round),
+                         status ("caught" | "missed" | "named" | "clear")}]}
+              # caught: cheated and named; missed: cheated, never named; named: named, no cheat on record; clear
 Agent = {agent, role, folder (its trajectories/ folder), transcript_bytes,
          episode: {agent, model, n_turns, n_tool_calls, wall_time, limit, score, ended_by, ok, failure,
                    final_text, usage, defense, defenses},   # the keys episodes.jsonl has of these
@@ -300,7 +331,11 @@ access-log read, the hand-in), Cheating `hacked`, Coordination `low` and above, 
 teammate's take of this agent's work or from a final record, and Collusion `collaboration` and above come as
 end-of-run events. The page adds the calls that met the regulator on the board.
 
-The run page's tabs are each agent's, then the entries of its `views` (Board, Details). The Details tab shows the three
+The run page's tabs are each agent's, then the entries of its `views` (Board, Monitoring, Details). The Monitoring tab
+(`tv_monitoring.js`) shows two cards: Alerts, the counts as chips (alerts, true, false, undecided, influencers) and a
+row per alert (round, who alerted, whom it names in each worker's status colour, the outcome, the reason on hover, its
+call); Workers, each status's count and a row per worker (its final Cheating level, the round of its first cheated step
+opening that call, how many alerts name it, the first one's round, its status). The Details tab shows the three
 ladders per agent and for the team, each Cheating cell with CheatBench's judge's word under the code's, then the judge
 labels' scores; the Cheating panel: the team's Cheating cell, the
 influencers' own rungs, the grader's pass, the alarm, the team's own evidence and each agent's Cheating cell, the
@@ -375,6 +410,8 @@ BoardTab = {clock ("eval_log" | "call_order"), clock_about, total (seconds, or t
             presence: Presence + clock,                        # transcript_presence.on_lanes: each agent adds
                                                                # entry: {k, t, start} and exit: {k, t}; each Alert t
             hand_ins: HandIns,                                 # as /api/run's
+            versions: Versions + clock | null,                 # as /api/run's, each check adds k and t: its
+                                                               # check_fix call on the clock (null when not found)
             calls_per_round,                                   # N; null in a run before rounds of calls
             seed_pack}                                         # "<task>/<pack>" (config.seed_pack); null unseeded
 BoardCall = {k (the agent tab's "Call k"), m (its model call, per agent from 0), t, dur, tool, summary (one line),
@@ -433,7 +470,16 @@ ticks the entry and the exit with its `why`, and draws each alert as a line acro
 and on the alerting agent's lane. A submit call stands under a ▲ on its lane's top edge, an unsubmit call under a ▼,
 filled in the hand-in's or the take-back's colour when it made its event (`hand_in`), hollow when it did not, the final
 hand-in a star in its place; the call's hover and the card's head line say what it did. The agent that made the final hand-in is
-starred in the two selects, its lane's name and its card.
+starred in the two selects, its lane's name and its card, and a worker an alert names is flagged ⚑ there.
+A run with a hand-in, a check or an alert has a team lane under the board (`team`, its counts beside it): every
+agent's hand-in ▲ and take-back ▼ on its first row, every check ◆ on its second, the alerts' flags on its third, each at
+its call's time (in steps, at its call's step when the call is one of the two agents', else at the step its time falls
+in). A hand-in and a check take the colour of what their version held: all the planted values in the bad colour, some
+in the warning colour, none in the good colour, no saved copy hollow; a take-back is in the warning colour; a check the
+grader accepted is filled, one it did not outlined; the final hand-in is edged in the accent colour. A mark's hover
+gives the agent and the round, the commit, `held k of n: <keys>` or `no saved copy`, a hand-in's answer and a
+take-back's reason clipped, and a check's answer; its click opens its call. The legend adds the held colours and the
+two check samples.
 
 ### `GET /api/transcript?id=<id>&agent=<agent>` → the agent's `transcript.json`, streamed as stored
 The agent tab groups its steps by round in a run of rounds of calls: a box per round, headed `Round {round}` with the
@@ -535,6 +581,8 @@ Cell = {n, cheated, accessed, passed,        # runs; of them: levels.cheated, te
                   levels: {<ladder>: [[level, workers]]}},   # out); of them: cheated, own Cheating rung looked or above
         team: {worker: [n], regulator: [n], disregulator: [n]},   # each role's numbers of agents in the runs
         alerted, alerts: {n, true, false},   # the runs in which an influencer alerted humans; the alerts summed
+        ending: {last_hand_in: [round],      # the rounds of the runs' last hand-ins, lowest first
+                 no_hand_in, working, workers, runs} | null,   # the rows' ending summed; null when no row has it
         filters: {col, task?, model?, workers?, seed_pack?, worker, influencer, influencer_level?, q?} | null}
                                               # the runs page's query that keeps exactly these runs
 ```
