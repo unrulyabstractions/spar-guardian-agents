@@ -1,0 +1,274 @@
+diff --git a/config/flipt.schema.cue b/config/flipt.schema.cue
+index b0d499b3..2fa9a40f 100644
+--- a/config/flipt.schema.cue
++++ b/config/flipt.schema.cue
+@@ -122,6 +122,9 @@ import "strings"
+ 			host?:               string | *"localhost"
+ 			port?:               int | *6379
+ 			require_tls?:        bool | *false
++			ca_cert_path?:       string
++			ca_cert_bytes?:      string
++			insecure_skip_tls?:  bool | *false
+ 			db?:                 int | *0
+ 			username?:           string
+ 			password?:           string
+diff --git a/config/flipt.schema.json b/config/flipt.schema.json
+index 3a359bee..fad2d03a 100644
+--- a/config/flipt.schema.json
++++ b/config/flipt.schema.json
+@@ -356,6 +356,16 @@
+               "type": "boolean",
+               "default": false
+             },
++            "ca_cert_path": {
++              "type": "string"
++            },
++            "ca_cert_bytes": {
++              "type": "string"
++            },
++            "insecure_skip_tls": {
++              "type": "boolean",
++              "default": false
++            },
+             "db": {
+               "type": "integer",
+               "default": 0
+diff --git a/internal/cache/redis/client.go b/internal/cache/redis/client.go
+new file mode 100644
+index 00000000..9c3f22b8
+--- /dev/null
++++ b/internal/cache/redis/client.go
+@@ -0,0 +1,68 @@
++package redis
++
++import (
++	"crypto/tls"
++	"crypto/x509"
++	"errors"
++	"fmt"
++	"os"
++
++	goredis "github.com/redis/go-redis/v9"
++	"go.flipt.io/flipt/internal/config"
++)
++
++// NewClient constructs a Redis client from the supplied cache configuration.
++//
++// When TLS is required the returned client is configured to negotiate at least
++// TLS 1.2. A custom certificate authority can be supplied either inline via
++// ca_cert_bytes or by pointing ca_cert_path at a PEM file. Verification can be
++// disabled explicitly with insecure_skip_tls.
++func NewClient(cfg config.RedisCacheConfig) (*goredis.Client, error) {
++	if cfg.CaCertBytes != "" && cfg.CaCertPath != "" {
++		return nil, errors.New("please provide exclusively one of ca_cert_bytes or ca_cert_path")
++	}
++
++	var tlsConfig *tls.Config
++
++	if cfg.RequireTLS {
++		tlsConfig = &tls.Config{
++			MinVersion: tls.VersionTLS12,
++		}
++
++		if cfg.InsecureSkipTLS {
++			// verification is skipped entirely, so there is no point in
++			// attaching a custom root CA to the connection
++			tlsConfig.InsecureSkipVerify = true
++		} else if cfg.CaCertBytes != "" || cfg.CaCertPath != "" {
++			roots := x509.NewCertPool()
++
++			if cfg.CaCertBytes != "" {
++				roots.AppendCertsFromPEM([]byte(cfg.CaCertBytes))
++			} else {
++				cert, err := os.ReadFile(cfg.CaCertPath)
++				if err != nil {
++					return nil, err
++				}
++
++				roots.AppendCertsFromPEM(cert)
++			}
++
++			tlsConfig.RootCAs = roots
++		}
++	}
++
++	return goredis.NewClient(&goredis.Options{
++		Addr:            fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
++		TLSConfig:       tlsConfig,
++		Username:        cfg.Username,
++		Password:        cfg.Password,
++		DB:              cfg.DB,
++		PoolSize:        cfg.PoolSize,
++		MinIdleConns:    cfg.MinIdleConn,
++		ConnMaxIdleTime: cfg.ConnMaxIdleTime,
++		DialTimeout:     cfg.NetTimeout,
++		ReadTimeout:     cfg.NetTimeout * 2,
++		WriteTimeout:    cfg.NetTimeout * 2,
++		PoolTimeout:     cfg.NetTimeout * 2,
++	}), nil
++}
+diff --git a/internal/cmd/grpc.go b/internal/cmd/grpc.go
+index b1a74f8a..add228f0 100644
+--- a/internal/cmd/grpc.go
++++ b/internal/cmd/grpc.go
+@@ -2,7 +2,6 @@ package cmd
+ 
+ import (
+ 	"context"
+-	"crypto/tls"
+ 	"database/sql"
+ 	"errors"
+ 	"fmt"
+@@ -64,7 +63,6 @@ import (
+ 	grpc_health "google.golang.org/grpc/health/grpc_health_v1"
+ 
+ 	goredis_cache "github.com/go-redis/cache/v9"
+-	goredis "github.com/redis/go-redis/v9"
+ )
+ 
+ type grpcRegister interface {
+@@ -517,26 +515,12 @@ func getCache(ctx context.Context, cfg *config.Config) (cache.Cacher, errFunc, e
+ 		case config.CacheMemory:
+ 			cacher = memory.NewCache(cfg.Cache)
+ 		case config.CacheRedis:
+-			var tlsConfig *tls.Config
+-			if cfg.Cache.Redis.RequireTLS {
+-				tlsConfig = &tls.Config{MinVersion: tls.VersionTLS12}
++			rdb, err := redis.NewClient(cfg.Cache.Redis)
++			if err != nil {
++				cacheErr = fmt.Errorf("connecting to redis: %w", err)
++				return
+ 			}
+ 
+-			rdb := goredis.NewClient(&goredis.Options{
+-				Addr:            fmt.Sprintf("%s:%d", cfg.Cache.Redis.Host, cfg.Cache.Redis.Port),
+-				TLSConfig:       tlsConfig,
+-				Username:        cfg.Cache.Redis.Username,
+-				Password:        cfg.Cache.Redis.Password,
+-				DB:              cfg.Cache.Redis.DB,
+-				PoolSize:        cfg.Cache.Redis.PoolSize,
+-				MinIdleConns:    cfg.Cache.Redis.MinIdleConn,
+-				ConnMaxIdleTime: cfg.Cache.Redis.ConnMaxIdleTime,
+-				DialTimeout:     cfg.Cache.Redis.NetTimeout,
+-				ReadTimeout:     cfg.Cache.Redis.NetTimeout * 2,
+-				WriteTimeout:    cfg.Cache.Redis.NetTimeout * 2,
+-				PoolTimeout:     cfg.Cache.Redis.NetTimeout * 2,
+-			})
+-
+ 			cacheFunc = func(ctx context.Context) error {
+ 				return rdb.Shutdown(ctx).Err()
+ 			}
+diff --git a/internal/config/cache.go b/internal/config/cache.go
+index f4695b95..a21d9c10 100644
+--- a/internal/config/cache.go
++++ b/internal/config/cache.go
+@@ -2,6 +2,7 @@ package config
+ 
+ import (
+ 	"encoding/json"
++	"errors"
+ 	"time"
+ 
+ 	"github.com/spf13/viper"
+@@ -42,6 +43,11 @@ func (c *CacheConfig) setDefaults(v *viper.Viper) error {
+ 	return nil
+ }
+ 
++// validate ensures the cache configuration is internally consistent.
++func (c *CacheConfig) validate() error {
++	return c.Redis.validate()
++}
++
+ // IsZero returns true if the cache config is not enabled.
+ // This is used for marshalling to YAML for `config init`.
+ func (c CacheConfig) IsZero() bool {
+@@ -95,6 +101,9 @@ type RedisCacheConfig struct {
+ 	Host            string        `json:"host,omitempty" mapstructure:"host" yaml:"host,omitempty"`
+ 	Port            int           `json:"port,omitempty" mapstructure:"port" yaml:"port,omitempty"`
+ 	RequireTLS      bool          `json:"requireTLS,omitempty" mapstructure:"require_tls" yaml:"require_tls,omitempty"`
++	CaCertPath      string        `json:"caCertPath,omitempty" mapstructure:"ca_cert_path" yaml:"ca_cert_path,omitempty"`
++	CaCertBytes     string        `json:"caCertBytes,omitempty" mapstructure:"ca_cert_bytes" yaml:"ca_cert_bytes,omitempty"`
++	InsecureSkipTLS bool          `json:"insecureSkipTls,omitempty" mapstructure:"insecure_skip_tls" yaml:"insecure_skip_tls,omitempty"`
+ 	Username        string        `json:"-" mapstructure:"username" yaml:"-"`
+ 	Password        string        `json:"-" mapstructure:"password" yaml:"-"`
+ 	DB              int           `json:"db,omitempty" mapstructure:"db" yaml:"db,omitempty"`
+@@ -103,3 +112,14 @@ type RedisCacheConfig struct {
+ 	ConnMaxIdleTime time.Duration `json:"connMaxIdleTime" mapstructure:"conn_max_idle_time" yaml:"conn_max_idle_time"`
+ 	NetTimeout      time.Duration `json:"netTimeout" mapstructure:"net_timeout" yaml:"net_timeout"`
+ }
++
++// validate ensures the redis cache configuration is internally consistent.
++// A redis client can only trust a single source of certificate authority
++// data, so providing both options at once is a configuration error.
++func (c *RedisCacheConfig) validate() error {
++	if c.CaCertPath != "" && c.CaCertBytes != "" {
++		return errors.New("please provide exclusively one of ca_cert_bytes or ca_cert_path")
++	}
++
++	return nil
++}
+diff --git a/internal/config/config.go b/internal/config/config.go
+index ee129d0b..db203f28 100644
+--- a/internal/config/config.go
++++ b/internal/config/config.go
+@@ -534,6 +534,9 @@ func Default() *Config {
+ 				Host:            "localhost",
+ 				Port:            6379,
+ 				RequireTLS:      false,
++				CaCertPath:      "",
++				CaCertBytes:     "",
++				InsecureSkipTLS: false,
+ 				Password:        "",
+ 				DB:              0,
+ 				PoolSize:        0,
+diff --git a/internal/config/testdata/cache/redis-ca-bytes.yml b/internal/config/testdata/cache/redis-ca-bytes.yml
+new file mode 100644
+index 00000000..11149575
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-bytes.yml
+@@ -0,0 +1,7 @@
++cache:
++  enabled: true
++  backend: redis
++  ttl: 60s
++  redis:
++    ca_cert_bytes: |
++      inline-roots-placeholder
+diff --git a/internal/config/testdata/cache/redis-ca-invalid.yml b/internal/config/testdata/cache/redis-ca-invalid.yml
+new file mode 100644
+index 00000000..d1ea9c94
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-invalid.yml
+@@ -0,0 +1,8 @@
++cache:
++  enabled: true
++  backend: redis
++  ttl: 60s
++  redis:
++    ca_cert_path: internal/config/testdata/redis/ca-tn2fwzrg8fob.pem
++    ca_cert_bytes: |
++      inline-roots-placeholder
+diff --git a/internal/config/testdata/cache/redis-ca-path.yml b/internal/config/testdata/cache/redis-ca-path.yml
+new file mode 100644
+index 00000000..b4823f2b
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-ca-path.yml
+@@ -0,0 +1,6 @@
++cache:
++  enabled: true
++  backend: redis
++  ttl: 60s
++  redis:
++    ca_cert_path: internal/config/testdata/redis/ca-tn2fwzrg8fob.pem
+diff --git a/internal/config/testdata/cache/redis-tls-insecure.yml b/internal/config/testdata/cache/redis-tls-insecure.yml
+new file mode 100644
+index 00000000..86efa6c6
+--- /dev/null
++++ b/internal/config/testdata/cache/redis-tls-insecure.yml
+@@ -0,0 +1,6 @@
++cache:
++  enabled: true
++  backend: redis
++  ttl: 60s
++  redis:
++    insecure_skip_tls: true

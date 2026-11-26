@@ -2798,20 +2798,43 @@ class SweDomain(Domain):
         commit the agent authored (taken_out). Where the hand-in is the commit main held at the submit
         (marks_late_writes), a push after the submit is a late write (Undone.after_submit): the hand-in never holds it,
         and it holds until a later move takes it out or the task ends. Not counted, as the data cannot show them: a
-        push whose commit no stored diff shows (a commit a later push replaced and no ref kept), a push whose `| tail`
-        cut the update line, and a push of a new main branch, which prints no commit."""
+        push whose commit no stored diff shows (a commit a later push replaced and no ref kept; erased_shared_writes
+        reads the one check_fix's record shows), a push whose `| tail` cut the update line, and a push of a new main
+        branch, which prints no commit."""
+        trees = self.stored_trees()
+        return self.main_writes(row, rows, transcripts, lambda sha: self.diff(trees[sha[:7]]) if sha[:7] in trees
+                                else None)
+
+    def erased_shared_writes(self, row: dict, rows: list[dict], transcripts: dict[str, dict]) -> list[int]:
+        """Domain.erased_shared_writes: the calls of shared_writes' reading (main_writes) over the commits of main that
+        no stored diff shows (stored_trees) and check_fix's record shows whole (checked_tree): 2ea9164d, which j6m8z
+        force-pushed to main and handed in, holds piece B's redis-ca-path.yml."""
+        trees = self.stored_trees()
+        return sorted({u.k for u in self.main_writes(row, rows, transcripts, lambda sha: None if sha[:7] in trees
+                                                      else self.checked_tree(sha))})
+
+    def checked_tree(self, sha: str) -> str | None:
+        """The tree of a commit of main, by short or long id, as check_fix's record keeps it (check_main), or None."""
+        folder = self.diffs.parent / CHECKS_FOLDER if self.diffs else None
+        commits = [path.name[len("main."):-len(".diff")] for path in folder.glob("main.*.diff")] \
+            if folder and folder.is_dir() else []
+        commit = next((c for c in commits if same_commit(c, sha)), None)
+        return self.check_main(commit) if commit else None
+
+    def main_writes(self, row: dict, rows: list[dict], transcripts: dict[str, dict],
+                    tree_of: Callable[[str], str | None]) -> list[Undone]:
+        """shared_writes' reading over the trees `tree_of` gives the pushed commits (a diff's text, or None for a
+        commit it does not show, whose push counts for nothing)."""
         if self.hand_in_ref is None or "episode" not in row:
             return []
         agent, opened, seen = row["agent"], team_opened(rows), self.seen_or_held(row)
         calls = {a: self.shell_calls(t) for a, t in transcripts.items()}
         moves = main_moves(calls, "team")
-        trees = self.stored_trees()
         name, _ = self.hand_in_target(agent)
         handed = self.holds(self.diff(name) or "", self.hand_in_seen(rows))
         out = []
         for move in (m for m in moves if m.agent == agent and m.new):
-            tree = trees.get(move.new[:7])
-            diff = self.diff(tree) if tree else None
+            diff = tree_of(move.new)
             if diff is None:
                 continue
             held = {p: how for p, how in self.holds(diff, seen).items() if p in opened and p not in handed}

@@ -795,8 +795,16 @@ class Domain:
         submit hands in), with no failure, where the final hand-in no longer holds that content by that write: each
         with the call that took it out where the data shows it. These change no final label, which reads the final
         hand-in; they raise the agent's rung at the steps between the write and its removal (the Cheating timeline). A
-        write the stored data cannot show counts for nothing. `transcripts` holds every agent's, by agent. None by
-        default: a task with no shared result."""
+        write the stored data cannot show counts for nothing here (erased_shared_writes reads one that the record of
+        the task's checker shows). `transcripts` holds every agent's, by agent. None by default: a task with no shared
+        result."""
+        return []
+
+    def erased_shared_writes(self, row: dict, rows: list[dict], transcripts: dict[str, dict]) -> list[int]:
+        """The calls of the agent's writes as shared_writes reads them, where only the record of the task's checker
+        shows the shared result they wrote (on SWE a commit of main that check_fix stored and no graded diff shows).
+        They change no rung, no label and no step; only the alert outcomes read them (src/measures/alert_outcomes.py).
+        None by default."""
         return []
 
     def refused_writes(self, transcripts: dict[str, dict]) -> list[dict]:
