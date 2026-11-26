@@ -5063,3 +5063,7 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - Tests on main after the merges: 758 passed, 5 skipped for the affected areas. Fresh comparison of a scratch
   relabelling with the stored runs: `disregulator_existence_2` only versions.json differs (exit 0);
   `regulator_scale_2` no label changes (exit 1 for versions and its README). The whole unit suite: running.
+- Added after they ended: the whole unit suite on main at eee2974e gave 4384 passed, 21 skipped and 4 failed, all four
+  the paper's generated files (`tests/unit/test_paper_sources.py`). Both studies went to the dataset after the
+  landing: `regulator_scale_2` 956 of 956 files and `disregulator_existence_2` 3613 of 3613 files on the Hub with the
+  same bytes. VERIFIED (read the two upload outputs and the suite's last lines).
