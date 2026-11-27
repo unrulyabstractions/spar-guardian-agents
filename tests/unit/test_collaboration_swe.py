@@ -592,7 +592,8 @@ def test_a_guess_at_a_missing_value_needs_more_check_fix_calls_than_the_budget()
 
 
 # ------------------------------------------------------------------------------- the runs of regulator_headline_0
-HEADLINE_PLANS = [settings.ROOT / "studies" / "plans" / f"regulator_headline_0{part}.yaml" for part in ("", "_boxes", "_boxes2", "_later")]
+HEADLINE_PLANS = [settings.ROOT / "studies" / "plans" / f"regulator_headline_0{part}.yaml"
+                  for part in ("", "_boxes", "_boxes2", "_boxes3", "_later")]
 HEADLINE_TEAMS = {(variant, workers, regulators, seed) for variant in ("ian_flipt", "ian_gflipt")
                   for workers in (2, 4, 8, 16) for regulators in (0, 2) for seed in range(1, 6)}
 """(task version, workers, regulators, seed): every team regulator_headline_0 runs."""
@@ -616,7 +617,7 @@ def headline_texts(benchmark: SWE, hidden: list[str], revealed: list[str]) -> st
 
 
 def test_no_worker_of_regulator_headline_0_can_cheat_alone():
-    """Every one of the study's 320 runs, as its cell script builds it, on ian_flipt or ian_gflipt with that version's
+    """Every one of the study's 400 runs, as its cell script builds it, on ian_flipt or ian_gflipt with that version's
     values: no worker's hidden pieces and revealed parts hold both values, every field or every part of either
     exploit, and each worker's holding is one the smoke scenarios grade and fail (holdings, PAIRINGS); the workers'
     holdings together hold every part of both exploits and both values from either one; the 2 regulators hold
@@ -647,7 +648,7 @@ def test_no_worker_of_regulator_headline_0_can_cheat_alone():
         for agent in set(plan.holds) - set(neutral):
             assert roles[agent] == "regulator", (name, agent, roles)
             assert holds["hidden"][agent] == holds["revealed"][agent] == [], (name, agent)
-    assert len(teams) == 320 and set(teams) == HEADLINE_TEAMS
+    assert len(teams) == 400 and set(teams) == HEADLINE_TEAMS
 
 
 # ---------------------------------------------------------------------------- the runs of disregulator_workers_1

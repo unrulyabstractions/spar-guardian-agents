@@ -1,0 +1,84 @@
+# regulator_headline_0 (2026-11-26), the negative control under the rule's stronger levels. The study's negative control
+# gives DeepSeek V4.1 Flash workers alone the generic rule. These rows give them the levels guided and identified of
+# src/configuration/instruction_levels.yaml instead (the user, 2026-11-26: "I want the neg control with stronger
+# rules"). Both versions of the task (ian_gflipt with check_fix, ian_flipt without), teams of 2, 4, 8 and 16 workers,
+# five samples per cell, seeds 1 to 5, no pack, no regulator, no judge, under unsubmit: 16 targets, 80 runs. A target
+# is <version>_deepseek_w<workers>_negative_control_<level>; its run is <target>_none_s<seed>. Caps a run are the
+# negative control's: $1, $2, $3, $5 by its workers.
+# THIS FILE: the rows of 4, 8 and 16 workers, 12 targets and 60 runs, on rented machines. The rows of 2 workers run on
+# the Mac from regulator_headline_0.yaml.
+study: regulator_headline_0
+seeds: [1, 2, 3, 4, 5]
+# What every run of the study is given. A value named nowhere is the default (swarm_config.py).
+settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5, unsubmit=true,
+           submit_delay_rounds=3]
+targets:
+  ian_gflipt_deepseek_w4_negative_control_guided:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, rule_level=guided, cost_limit_usd=2]
+  ian_gflipt_deepseek_w8_negative_control_guided:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=8, max_concurrency=8, rule_level=guided, cost_limit_usd=3]
+  ian_gflipt_deepseek_w16_negative_control_guided:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=16, max_concurrency=16, rule_level=guided, cost_limit_usd=5]
+  ian_flipt_deepseek_w4_negative_control_guided:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, rule_level=guided, cost_limit_usd=2]
+  ian_flipt_deepseek_w8_negative_control_guided:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=8, max_concurrency=8, rule_level=guided, cost_limit_usd=3]
+  ian_flipt_deepseek_w16_negative_control_guided:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=16, max_concurrency=16, rule_level=guided, cost_limit_usd=5]
+  ian_gflipt_deepseek_w4_negative_control_identified:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, rule_level=identified, cost_limit_usd=2]
+  ian_gflipt_deepseek_w8_negative_control_identified:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=8, max_concurrency=8, rule_level=identified, cost_limit_usd=3]
+  ian_gflipt_deepseek_w16_negative_control_identified:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=16, max_concurrency=16, rule_level=identified, cost_limit_usd=5]
+  ian_flipt_deepseek_w4_negative_control_identified:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=4, max_concurrency=4, rule_level=identified, cost_limit_usd=2]
+  ian_flipt_deepseek_w8_negative_control_identified:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=8, max_concurrency=8, rule_level=identified, cost_limit_usd=3]
+  ian_flipt_deepseek_w16_negative_control_identified:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=16, max_concurrency=16, rule_level=identified, cost_limit_usd=5]
+# box_run.sh starts each box's launcher with --limit max_agents=<the box's agents at once>, in place of max_agents
+# here. max_runs is high so that a box of small teams fills its agents.
+limits:
+  max_runs: 20
+  max_per_task: {swe: 20}
+  max_agents: 40
+  spacing_s: 60
+  needs:
+    swe: {disk_gb: 2.3, memory_gb: 0.55, per: agent}

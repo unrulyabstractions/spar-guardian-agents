@@ -94,12 +94,15 @@ def test_without_the_flag_the_main_key_is_still_refused_under_the_box_key_s_name
     assert code == 1 and "is the main key" in out
 
 
-def fleet(monkeypatch, *entries: dict) -> list:
-    """A registry of these entries, each box needing what its entry's `caps` say on its pinned commit; the updates."""
-    registry = {"boxes": [{"destroyed": None, **entry} for entry in entries]}
+def fleet(monkeypatch, *entries: dict, stored: tuple[str, ...] = ()) -> list:
+    """A registry of these entries, each box needing what its entry's `caps` say on its pinned commit, split evenly
+    over its `n` runs named <id>_<i>; the runs named in `stored` have their result stored here; the updates."""
+    registry = {"boxes": [{"destroyed": None, "study": "a_study", **entry} for entry in entries]}
     monkeypatch.setattr(box_key.fleet_registry, "load_registry", lambda: registry)
-    monkeypatch.setattr(box_key.fleet_registry, "entry_box", lambda entry: SimpleNamespace(
-        runs=[None] * entry["n"], cap_usd=entry["caps"][entry["commit"]]))
+    monkeypatch.setattr(box_key.fleet_registry, "entry_box", lambda entry: SimpleNamespace(settings=(), runs=[
+        SimpleNamespace(name=f"{entry['id']}_{i}", cap_usd=lambda settings, entry=entry: (
+            entry["caps"][entry["commit"]] / entry["n"])) for i in range(entry["n"])]))
+    monkeypatch.setattr(box_key, "stored_here", lambda study, name: study == "a_study" and name in stored)
     updates = []
     monkeypatch.setattr(box_key.fleet_registry, "update_box", lambda instance_id, **fields: updates.append(
         (instance_id, fields)))
@@ -119,6 +122,26 @@ def test_the_need_is_every_open_box_that_holds_the_key_each_on_its_pinned_commit
     for missing in (9, 11):
         with pytest.raises(ValueError):
             box_key.holders_need(missing, "OPENROUTER_API_KEY")
+
+
+def test_a_run_whose_result_is_stored_here_is_not_counted(monkeypatch):
+    """Box 7 has 5 runs of $12 and box 8 has 4 of $10. Two of box 7's and all of box 8's are stored here, ended: the
+    need is box 7's three open runs. With nothing stored, every run counts."""
+    entries = ({"id": 7, "n": 5, "commit": "a", "caps": {"a": 60.0}},
+               {"id": 8, "n": 4, "commit": "a", "caps": {"a": 40.0}, "key_sent": "OPENROUTER_API_KEY"})
+    fleet(monkeypatch, *entries, stored=("7_0", "7_3", "8_0", "8_1", "8_2", "8_3"))
+    assert box_key.holders_need(7, "OPENROUTER_API_KEY") == [(7, 3, 36.0), (8, 0, 0)]
+    fleet(monkeypatch, *entries)
+    assert box_key.holders_need(7, "OPENROUTER_API_KEY") == [(7, 5, 60.0), (8, 4, 40.0)]
+
+
+def test_stored_here_reads_the_run_directory_of_the_study(monkeypatch, tmp_path):
+    """A run is stored when its folder under runs/<study>/ holds a run; a missing folder is not."""
+    monkeypatch.setattr(box_key.run_study, "RUNS", tmp_path)
+    seen = []
+    monkeypatch.setattr(box_key.RunDir, "is_run", lambda self: seen.append(self.path) or self.path.name == "done_s1")
+    assert box_key.stored_here("a_study", "done_s1") and not box_key.stored_here("a_study", "open_s1")
+    assert seen == [tmp_path / "a_study" / "done_s1", tmp_path / "a_study" / "open_s1"]
 
 
 def test_two_boxes_on_the_main_key_may_not_need_more_than_it_has_left(monkeypatch, capsys):

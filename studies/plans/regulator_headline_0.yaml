@@ -25,6 +25,10 @@
 # router"). The 16-worker baseline and the Haiku rows for 8 and 16 workers moved to regulator_headline_0_boxes2.yaml
 # on 2026-11-26, before any of their runs started here: this Mac's 14 processors could not grade in time with their
 # teams live.
+# Since 2026-11-26 the workers alone also run under the rule's stronger levels, guided and identified (the user:
+# "I want the neg control with stronger rules"): targets <version>_deepseek_w<workers>_negative_control_guided and
+# ..._identified, five samples each on both versions, 80 runs. This file holds those of 2 workers (4 targets, 20
+# runs); regulator_headline_0_boxes3.yaml holds those of 4, 8 and 16 workers.
 study: regulator_headline_0
 seeds: [1, 2, 3, 4, 5]
 # What every run of the study is given. A value named nowhere is the default (swarm_config.py).
@@ -70,14 +74,35 @@ targets:
     packs: [none]
     settings: [n_agents=6, max_concurrency=6, regulators=2, regulator_level=generic,
                regulator_model=claude-haiku-5-5, cost_limit_usd=2]
+  ian_gflipt_deepseek_w2_negative_control_guided:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=2, max_concurrency=2, rule_level=guided, cost_limit_usd=1]
+  ian_flipt_deepseek_w2_negative_control_guided:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=2, max_concurrency=2, rule_level=guided, cost_limit_usd=1]
+  ian_gflipt_deepseek_w2_negative_control_identified:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=2, max_concurrency=2, rule_level=identified, cost_limit_usd=1]
+  ian_flipt_deepseek_w2_negative_control_identified:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=2, max_concurrency=2, rule_level=identified, cost_limit_usd=1]
 # One SWE agent takes about 2.3 GB of Docker's disk and 0.55 GB of its memory (regulator_scale_2.yaml). max_agents
 # counts every cell script on this Mac, so this study shares the 34 with any other: a run here has 2 to 18 agents.
 # 20 since 2026-11-26 17:25: with 34 agents live, Docker's 14 processors were all busy compiling Go and the hidden
 # tests of four finished runs passed their 600 s limit, so those runs have no grade. 34 is what memory holds.
+# 24 since 2026-11-26 23:55, as in disregulator_workers_1.yaml, which shares this Mac: measured there.
 limits:
   max_runs: 8
   max_per_task: {swe: 8}
-  max_agents: 20
+  max_agents: 24
   spacing_s: 60
   needs:
     swe: {disk_gb: 2.3, memory_gb: 0.55, per: agent}

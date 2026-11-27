@@ -12,7 +12,9 @@ and asks OpenRouter's GET /api/v1/key, which costs nothing. It refuses:
 - a key with less left than the runs of every open box that holds it may spend at their caps: this box and each other
   registered box not destroyed whose entry records that it got the key of this variable (key_sent). A box's need is the
   sum of each run's cost_limit_usd (the plan's or the target's or the default in src/models/cost_cap.py) over every run
-  its targets may make, the gated arms too, as its pinned commit's plan and spec give them (fleet_registry.entry_box).
+  its targets may still make, the gated arms too, as its pinned commit's plan and spec give them
+  (fleet_registry.entry_box). A run whose result is stored on this machine has ended and spends nothing more, so it is
+  not counted (stored_here).
 Beside the need it prints what this machine's own live runs may spend at their caps, which the key may share. A pass
 records key_sent in the box's entry, since box_run.sh sends the key next. Exit 0 when the key passes, 1 with every
 reason when it does not.
@@ -28,6 +30,7 @@ from typing import Callable
 
 from scripts.box import fleet_registry
 from scripts.study import run_study
+from src.measures.run_directory import RunDir
 
 KEY_URL = "https://openrouter.ai/api/v1/key"
 
@@ -39,10 +42,16 @@ def key_info(key: str, opener: Callable = urllib.request.urlopen) -> dict:
         return json.load(response)["data"]
 
 
+def stored_here(study: str, name: str) -> bool:
+    """Whether this run's result is stored on this machine. A box's run is copied here only after it has ended, and the
+    box's launcher never starts a stored run again, so the run can spend nothing more."""
+    return RunDir(run_study.RUNS / study / name).is_run()
+
+
 def holders_need(instance_id: int, variable: str) -> list[tuple[int, int, float]]:
     """(id, runs, what they may spend at their caps) of this box, then of every other open box whose entry records the
-    key of this variable, each from its targets on its pinned commit. ValueError for a box not registered or destroyed,
-    or a plan that no longer holds a box's targets."""
+    key of this variable, each from its targets on its pinned commit, counting only the runs whose result is not stored
+    here. ValueError for a box not registered or destroyed, or a plan that no longer holds a box's targets."""
     registry = fleet_registry.load_registry()
     entry = fleet_registry.registered(registry, instance_id)
     if entry is None or entry["destroyed"]:
@@ -52,7 +61,8 @@ def holders_need(instance_id: int, variable: str) -> list[tuple[int, int, float]
     out = []
     for box in [entry, *others]:
         plan = fleet_registry.entry_box(box)
-        out.append((box["id"], len(plan.runs), plan.cap_usd))
+        runs = [run for run in plan.runs if not stored_here(box["study"], run.name)]
+        out.append((box["id"], len(runs), sum(run.cap_usd(list(plan.settings)) for run in runs)))
     return out
 
 
