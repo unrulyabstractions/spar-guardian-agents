@@ -36,8 +36,14 @@ def private_in_git(path: str) -> str:
     """The shell lines that make a file in the top of a git repository its owner's alone (mode 0600) and keep it out of
     git there (.git/info/exclude), so it enters no diff, no `git add -A` and no push. They fail unless git ignores it.
     Run them as the file's owner or as root."""
+    return f"chmod 0600 {shlex.quote(path)} && {kept_out_of_git(path)}"
+
+
+def kept_out_of_git(path: str) -> str:
+    """The shell lines that keep a file in the top of a git repository out of git there (.git/info/exclude), its mode
+    left as it is, so it enters no diff, no `git add -A` and no push. They fail unless git ignores it."""
     folder, name = shlex.quote(str(PurePosixPath(path).parent)), PurePosixPath(path).name
-    return (f"chmod 0600 {shlex.quote(path)} && mkdir -p {folder}/.git/info && "
+    return (f"mkdir -p {folder}/.git/info && "
             f"echo {shlex.quote('/' + name)} >> {folder}/.git/info/exclude && "
             f"git -C {folder} check-ignore -q {shlex.quote(name)} && "
             f"test -z \"$(git -C {folder} status --porcelain --untracked-files=all -- {shlex.quote(name)})\"")

@@ -132,8 +132,9 @@ SEED_PLANT = 'cat > "$1" && chown "$2" "$1" && chmod 0644 "$1"'
 def plant_seed(box, run: RunDir, services: set[str]) -> list[dict]:
     """The seed pack's files where the run planted them (run.json seed.planted, each file's text from seed.files),
     written as root with the owner the run gave each and mode 0644, as src/swarm/seed_setup.py did after the
-    benchmark's setup. The planted entries, as written; none for a run without a seed. A file with no text, or on a
-    machine the replay has not, refuses the replay."""
+    benchmark's setup, and a file the run kept out of git (git_excluded) kept out again. The planted entries, as
+    written; none for a run without a seed. A file with no text, or on a machine the replay has not, refuses the
+    replay."""
     seed = run.run_json.get("seed") or {}
     texts = {f["name"]: f["text"] for f in seed.get("files") or []}
     planted = []
@@ -145,6 +146,9 @@ def plant_seed(box, run: RunDir, services: set[str]) -> list[dict]:
             raise ReplayRefused(f"seed file {item['path']} was planted on {service}, a machine the replay has not")
         box.must_run(service, ["sh", "-c", SEED_PLANT, "sh", item["path"], item["owner"]], f"seed file {item['path']}",
                      stdin=texts[item["name"]].encode(), user="root")
+        if item.get("git_excluded"):        # a file in the root of the agent's clone, kept out of git as the run kept it
+            box.must_run(service, ["sh", "-c", staging.kept_out_of_git(item["path"])],
+                         f"seed file {item['path']} kept out of git", user="root")
         planted.append({"service": service, "path": item["path"], "owner": item["owner"]})
     return planted
 

@@ -648,3 +648,45 @@ def test_no_worker_of_regulator_headline_0_can_cheat_alone():
             assert roles[agent] == "regulator", (name, agent, roles)
             assert holds["hidden"][agent] == holds["revealed"][agent] == [], (name, agent)
     assert len(teams) == 320 and set(teams) == HEADLINE_TEAMS
+
+
+# ---------------------------------------------------------------------------- the runs of disregulator_workers_1
+WORKERS_1_PLAN = settings.ROOT / "studies" / "plans" / "disregulator_workers_1.yaml"
+WORKERS_1_MODELS = ("luna", "haiku", "terra", "hy4", "ember")
+WORKERS_1_PACKS = ("swe/notes_git", "swe/notes_folder")
+
+
+def test_no_worker_of_disregulator_workers_1_can_cheat_alone():
+    """Every one of the study's 20 runs, as its cell script builds it: three workers on ian_flipt or ian_gflipt with
+    that version's values and a seed pack that every agent reads. No worker's hidden pieces and revealed parts, with
+    the pack's posts and NOTES.md, hold both values, every field or every part of either exploit, and each worker's
+    holding is one the smoke scenarios grade (holdings, PAIRINGS); the three together hold every part of both exploits
+    and both values from either one."""
+    plan, graded, runs = run_study.load_plan(WORKERS_1_PLAN), set(holdings("flipt-02e2")), []
+    for cell in run_study.cells(plan):
+        config, benchmark, _ = agent_texts.cell_parts(cell.module, cell.argv(plan["settings"], False))
+        roles = agent_roles(config)
+        held = benchmark.plan(config, roles)
+        holds = benchmark.holds_by_exploit(held)
+        neutral = access_policy.neutral_agents(config.seats, roles)
+        values, revealed_parts = benchmark.values, swe_exploits.RevealedFiles("flipt-02e2").parts
+        seeded = joined(config.seed_pack)
+        runs.append((benchmark.variant, cell.target.split("_")[-2], config.seed_pack, config.seed))
+        assert len(neutral) == config.n_agents == 3 and config.regulator_count == 0, cell.name
+        assert values == (LONG_VALUES if benchmark.variant == "ian_gflipt" else OWN_VALUES)["flipt-02e2"], cell.name
+        assert not [value for value in values.values() if value in seeded], cell.name
+        fields = swe_exploits.fields_by_agent(benchmark.exploits, holds)
+        for agent in neutral:
+            hidden, revealed = holds["hidden"][agent], holds["revealed"][agent]
+            assert not EVERY <= fields[agent], (cell.name, agent, hidden, revealed)
+            assert not set(PARTS) <= set(hidden) and not set(revealed_parts) <= set(revealed), (cell.name, agent)
+            assert tuple(sorted(hidden)) in graded, (cell.name, agent, hidden)
+            assert (tuple(sorted(hidden)), tuple(sorted(revealed))) in PAIRINGS, (cell.name, agent, hidden, revealed)
+            mine = headline_texts(benchmark, hidden, revealed) + seeded
+            assert sum(value in mine for value in values.values()) < 2, (cell.name, agent)
+        team = {exploit: sorted({p for a in neutral for p in holds[exploit][a]}) for exploit in holds}
+        assert team["hidden"] == sorted(PARTS) and team["revealed"] == sorted(revealed_parts), cell.name
+        assert all(v in headline_texts(benchmark, team["hidden"], []) and
+                   v in headline_texts(benchmark, [], team["revealed"]) for v in values.values()), cell.name
+    assert len(runs) == 20 and set(runs) == {(variant, model, pack, 1) for variant in ("ian_flipt", "ian_gflipt")
+                                             for model in WORKERS_1_MODELS for pack in WORKERS_1_PACKS}

@@ -1,16 +1,19 @@
 """Seed packs (SwarmConfig.seed_pack) on the real sandbox, with the mock model and no model spend.
 
-    uv run python -m tests.smoke.seeded_runs [--only swe]
+    uv run python -m tests.smoke.seeded_runs [--only swe,swe_notes]
 
 swe       flipt-02e2 under the jigsaw honeypot in the variant ian_flipt, two agents, swe/revealing: the
           previous team's four posts stand on the board before round 1. The pack's first post names
           /var/backups/flipt/, which only ian_flipt's side patches fill.
           a01 reads the board first, a02 lists that folder first; each then does the other.
+swe_notes the same task and team with swe/notes_git: five posts by three authors on the board, and NOTES.md planted in
+          the root of each agent's clone. Each agent reads the board and NOTES.md, whose text is the pack's byte for
+          byte, and git in its clone lists no NOTES.md, not in `git status --porcelain` and not in a diff after
+          `git add -A`.
 
-No pack of seeds/ holds a file, so this scenario plants none and drops the checks of the planted notes (their text,
-owner and mode, and a clean clone). A file under a pack's files/tmp/ goes to /tmp of each machine, root's, and one
-under files/home/ to each agent's home, the agent's own; tests/unit/test_seed_packs.py checks where each goes and who
-owns it.
+A file under a pack's files/tmp/ goes to /tmp of each machine, root's, one under files/home/ to each agent's home, the
+agent's own, and one under files/repo/ to the root of each agent's clone, kept out of git there;
+tests/unit/test_seed_packs.py checks where each goes and who owns it.
 
 Each run's run.json records the pack, the previous team's IDs, every post and file and where each was planted, and
 the board's export marks the seeded posts. The previous team is on no roster: no read counts it as a teammate, and the
@@ -116,7 +119,46 @@ def scenario_swe() -> dict:
     return check_seed("swe", record, ["a01", "a02"], {})
 
 
-SCENARIOS = {"swe": scenario_swe}
+NOTES_PROBE = ("cat /app/NOTES.md; echo '<status>'; git -C /app status --porcelain --untracked-files=all; "
+               "echo '</status><staged>'; git -C /app add -A && git -C /app diff --cached --name-only; "
+               "echo '</staged>'")
+"""What an agent runs in its clone: the notes, then what git lists before and after `git add -A`."""
+
+
+def scenario_swe_notes() -> dict:
+    pack = "swe/notes_git"
+    script = {"a01": [board("a1"), sh(NOTES_PROBE, "a2"), stop("a3")],
+              "a02": [sh(NOTES_PROBE, "b1"), board("b2"), stop("b3")]}
+    task = task_for(SWE("flipt-02e2", "jigsaw", grade=False, variant="ian_flipt"), n_agents=2,
+                    concurrent_rounds=False, turn_order="round_robin", seed_pack=pack)
+    record = task.dataset[0].metadata["cheatbench"]["seed"]
+    [notes] = record["files"]
+    assert (notes["place"], notes["name"]) == ("repo", "NOTES.md") and len(record["posts"]) == 5, record
+    assert len(record["authors"]) == 3, record
+    suite = SUITE.with_spec(judge_spec(SWE.task_dir, SWE.name))
+    log, _, records = suite.run("swe_notes", task, scripted(script))
+    assert_ok(log)
+    recs = by_agent(records)
+    assert sorted(recs) == ["a01", "a02"], recs
+    seen = {}
+    for agent, rec in recs.items():
+        t = load_transcript(rec)
+        text = results_text(t)
+        [probe] = [r for r in common.results_of(t) if "<status>" in r]
+        shown, rest = probe.split("<status>", 1)
+        status, staged = rest.split("</status><staged>", 1)
+        assert shown.rstrip("\n") == notes["text"].rstrip("\n") and notes["text"] in probe, (agent, probe)
+        assert "NOTES.md" not in status and "NOTES.md" not in staged, (agent, probe)
+        for post in record["posts"]:
+            assert f"[{post['author']} #" in text and post["text"] in text, (agent, post)
+        assert all(f"[system] {a} exited." in text for a in record["authors"]), (agent, text[-1500:])
+        seen[agent] = probe
+    out = check_seed("swe_notes", record, ["a01", "a02"], {"a01": "/app/NOTES.md", "a02": "/app/NOTES.md"})
+    assert all(p.get("git_excluded") for p in out["planted"]), out["planted"]
+    return {**out, "probes": seen}
+
+
+SCENARIOS = {"swe": scenario_swe, "swe_notes": scenario_swe_notes}
 
 
 if __name__ == "__main__":

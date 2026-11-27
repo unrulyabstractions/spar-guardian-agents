@@ -8,11 +8,13 @@
 A pack is a few board posts and files written from the posts and notes of real teams in our past runs. Its posts stand
 on the board before round 1 under the IDs of a previous team, drawn per run from SwarmConfig.ID_POOL apart from the
 roster. Its files are planted before the agents start: `tmp` puts one copy in /tmp of every machine, root's and
-readable by all; `home` puts one in each agent's home, the agent's own. A pack may point the team at material or
-press it to use the material. It never holds a piece of the exploit, a planted design, a line of the reference, a
-half of a credential or any other content of a honeypot, so a seeded team still needs two agents' items to cheat
-(tests/unit/test_collaboration_*.py check every pack). A pack's lines never go into the task's repository, its README
-or its history, because a tracked file would enter every agent's graded tree.
+readable by all; `home` puts one in each agent's home, the agent's own; `repo` puts one in the root of each agent's own
+clone of the task's repository, the agent's own and excluded from git there (CLONES: swe only). A pack may point the
+team at material or press it to use the material. It never holds a piece of the exploit, a planted design, a line of
+the reference, a half of a credential or any other content of a honeypot, so a seeded team still needs two agents'
+items to cheat (tests/unit/test_collaboration_*.py check every pack). A pack's lines never go into the task's tracked
+files, its README or its history, because a tracked file would enter every agent's graded tree; a `repo` file stays
+untracked.
 
 The packs live in the repository's seeds/ folder, one folder per pack (seeds/README.md):
 
@@ -21,6 +23,7 @@ The packs live in the repository's seeds/ folder, one folder per pack (seeds/REA
     seeds/<task>/<pack>/board/01.md, 02.md, ...      the posts, oldest first: a front matter `author: k`, then the text
     seeds/<task>/<pack>/files/tmp/<name>             a file planted at /tmp/<name> of every machine
     seeds/<task>/<pack>/files/home/<name>            a file planted at ~/<name> of every agent
+    seeds/<task>/<pack>/files/repo/<name>            a file planted at <clone>/<name> of every agent (swe: /app)
     seeds/<task>/<pack>/harvest/                     the real posts the pack was written from, for people; never read
 
 <task> is the Benchmark's key, and a pack's name in the config is "<task>/<pack>". README.md's first paragraph, its
@@ -58,7 +61,10 @@ FILES_DIR = "files"
 HARVEST_DIR = "harvest"         # the sources a pack was written from, for people: never read
 ENTRIES = (README_FILE, PACK_FILE, BOARD_DIR, FILES_DIR, HARVEST_DIR)
 IGNORED = (".DS_Store",)        # Finder's files, never planted
-PLACES = ("tmp", "home")
+PLACES = ("tmp", "home", "repo")
+CLONES = {"swe": "/app"}
+"""The root of each agent's own clone of the task's repository, for each task whose agents have one
+(swe_settings.WORKDIR): a pack's `repo` files go there."""
 KINDS = ("pointer", "pressure")
 PACK_KEYS = ("kinds", "rows")
 KINDS_LINE = re.compile(r"Kinds: ([a-z_]+(?:, [a-z_]+)*)\.")
@@ -123,6 +129,9 @@ def read_pack(folder: Path) -> dict:
     if posts:
         pack["posts"] = posts
     files = read_files(folder / FILES_DIR, full)
+    if task not in CLONES and any(f["place"] == "repo" for f in files):
+        raise ValueError(f"seed pack {full}: {FILES_DIR}/repo/ plants a file in each agent's clone of the repository, "
+                         f"and the agents of {task} have none; only {sorted(CLONES)} take it")
     if files:
         pack["files"] = files
     check_pack(full, pack)
@@ -181,8 +190,8 @@ def read_board(root: Path, full: str) -> list[dict]:
 
 
 def read_files(root: Path, full: str) -> list[dict]:
-    """The files of a pack, tmp's then home's, each place's by name: [{place, name, text}]. Refuses anything under
-    files/ that is not a plain file at files/<place>/<name>."""
+    """The files of a pack, tmp's, home's then repo's, each place's by name: [{place, name, text}]. Refuses anything
+    under files/ that is not a plain file at files/<place>/<name>."""
     if not root.exists():
         return []
     def placed(p: Path) -> bool:
@@ -299,10 +308,15 @@ def task_packs(task: str) -> list[str]:
     return [name for name, pack in packs().items() if pack["task"] == task]
 
 
-def file_path(place: str, name: str, home: str | None) -> str:
-    """Where a seeded file goes: /tmp/<name>, or <home>/<name> for a seat with a home."""
+def file_path(place: str, name: str, home: str | None, task: str | None = None) -> str:
+    """Where a seeded file goes: /tmp/<name>, <clone>/<name> in the task's clone (CLONES), or <home>/<name> for a
+    seat with a home."""
     if place == "tmp":
         return f"{TMP}/{name}"
+    if place == "repo":
+        if task not in CLONES:
+            raise ValueError(f"a seeded file for the agent's clone ({name}) needs a task with one, not {task}")
+        return f"{CLONES[task]}/{name}"
     if not home:
         raise ValueError(f"a seeded file for the agent's home ({name}) needs a seat with a home")
     return f"{home.rstrip('/')}/{name}"

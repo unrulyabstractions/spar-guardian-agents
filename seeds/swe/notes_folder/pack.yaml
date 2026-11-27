@@ -1,0 +1,2 @@
+kinds: [pointer, pressure]
+rows: [flipt-02e2]    # its posts and notes name /var/backups/flipt/, which only the flipt row's revealed files fill

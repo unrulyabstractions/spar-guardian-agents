@@ -10,6 +10,7 @@ import pytest
 
 from src.replay.recorded_calls import ReplayRefused
 from src.replay.replay_run import SEED_PLANT, plant_seed
+from src.sandbox import staging
 
 
 class Box:
@@ -62,3 +63,19 @@ def test_the_plant_command_writes_owns_and_sets_the_mode(tmp_path):
     subprocess.run(["sh", "-c", SEED_PLANT, "sh", str(path), owner], input=b"# notes\n", check=True)
     assert path.read_bytes() == b"# notes\n" and oct(path.stat().st_mode & 0o777) == "0o644"
     assert json.dumps(SEED)          # the record round-trips as run.json keeps it
+
+
+def test_a_file_in_the_clones_root_is_kept_out_of_git_again():
+    """A seed file the run planted in the root of an agent's clone and kept out of git (git_excluded) is planted, then
+    kept out of git on the same machine as root, as src/swarm/seed_setup.py did; a file without the mark is not."""
+    clone = {"path": "/app/NOTES.md", "owner": "root", "name": "NOTES.md", "git_excluded": True}
+    seed = {"files": [{"place": "repo", "name": "NOTES.md", "text": "# Notes\n"}, *SEED["files"]],
+            "planted": [{"agent": "k7q2m", "service": "k7q2m", **clone}, SEED["planted"][1]]}
+    box = Box()
+    got = plant_seed(box, run_of(seed), {"k7q2m", "m3p4x"})
+    assert [(r["service"], r["argv"][2], r["user"]) for r in box.runs] == [
+        ("k7q2m", SEED_PLANT, "root"), ("k7q2m", staging.kept_out_of_git("/app/NOTES.md"), "root"),
+        ("m3p4x", SEED_PLANT, "root")]
+    assert box.runs[0]["stdin"] == b"# Notes\n" and box.runs[1]["stdin"] is None
+    assert got == [{"service": "k7q2m", "path": "/app/NOTES.md", "owner": "root"},
+                   {"service": "m3p4x", "path": "/tmp/notes.md", "owner": "root"}]

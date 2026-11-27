@@ -5214,3 +5214,28 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   minutes each time a machine's launcher was started.
 - Runs of the study now come from two versions of the recorder: before and after 19221759. The difference is in
   which sockets get an owner in `network.jsonl` on rented machines (procnet); the Mac's eBPF path is unchanged.
+
+## 2026-11-26: seed packs gain the place repo; packs swe/notes_git and swe/notes_folder; plan disregulator_workers_1
+
+- `files/repo/<name>` is planted at `/app/<name>` of each SWE agent's own clone, root's, mode 0644, then kept out of
+  git there (`staging.kept_out_of_git`); run.json `seed.planted` marks it `git_excluded`, and the replay keeps it out
+  again. A pack of another task with `files/repo/` is refused when read. VERIFIED by the unit tests
+  (test_seed_packs.py, test_replay_seed_files.py), one of them on a real git clone (status, `git add -A`, diff empty).
+- `staging.private_in_git` now calls `kept_out_of_git`; I compared its output with the old function's on three paths:
+  byte-identical. VERIFIED.
+- The two packs: I read each post and NOTES.md byte for byte against the owner's text in the unit test
+  (five posts, three authors, NOTES.md five lines and a newline). VERIFIED. The collaboration tests run on both packs
+  (no secret, no fix line, no revealed value). VERIFIED.
+- The plan `studies/plans/disregulator_workers_1.yaml`: `--dry-run` lists 20 runs,
+  `<version>_<model>_baseline_<pack>_s1`, Terra at $8, the others at $5; the targets, settings and limits equal
+  disregulator_workers_0's baselines but for `packs`. The new collaboration test builds all 20 runs from their cell
+  scripts: no worker can cheat alone with the pack's texts. VERIFIED. No run started.
+- Pipeline: only topology and replay changed; re-locked at the same versions. I grepped all 406 run.json under runs/
+  and OLD/runs/ of the main checkout for a repo seed file or `git_excluded`: none, so no stored byte changes.
+  `pipeline status`: 0 problems. VERIFIED.
+- Real proof, mock model, no paid call: `python -m tests.smoke.seeded_runs --only swe_notes` (the seed smoke's new
+  scenario), ian_flipt, two agents, swe/notes_git. In each agent's container `cat /app/NOTES.md` printed the pack's text
+  byte for byte, and `git -C /app status --porcelain --untracked-files=all` and `git add -A` with
+  `git diff --cached --name-only` listed nothing. Each agent's board read held the five posts and three
+  "<ID> exited." lines. PASS in 1 min 15 s; Inspect removed its containers. VERIFIED from the transcripts under
+  runs/study_smoke/smoke_seeds/20261127T053611Z/swe_notes (worktree seed-notes).

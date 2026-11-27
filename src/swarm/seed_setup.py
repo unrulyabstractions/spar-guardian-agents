@@ -10,8 +10,11 @@ and the previous team is on no roster. An agent's first round's notice then name
 
 The files go in after the benchmark's own setup, so the staging is done and each agent's seat known
 (Benchmark.seats), and before the access log's sidecar starts. A `tmp` file goes once into /tmp of every machine of a
-seat, root's, mode 0644; a `home` file into each seat's home, the seat user's, mode 0644. Neither goes into the task's
-repository, so no graded tree holds it. SEED_STORE keeps each planted file's agent, service, path and owner.
+seat, root's, mode 0644; a `home` file into each seat's home, the seat user's, mode 0644; a `repo` file into the root
+of each seat's own clone of the task's repository (seed_packs.CLONES), the seat user's, mode 0644, and excluded from git
+there (.git/info/exclude, staging.kept_out_of_git), so it never shows in git status, enters no diff and never reaches
+the team remote. None goes into the task's tracked files, so no graded tree holds it. SEED_STORE keeps each planted
+file's agent, service, path and owner, and `git_excluded` for a `repo` file.
 """
 from __future__ import annotations
 
@@ -23,9 +26,10 @@ from orbit.communication.runtime import initialize_communication
 from orbit.communication.state import CommunicationMessage
 
 from src.configuration.seed_packs import SEEDED, file_path
+from src.sandbox import staging
 from src.swarm.turn_rules import BOARD_ID, board_record
 
-SEED_STORE = "seed_planted"     # sample store: [{agent, service, path, owner, name}] of each planted file
+SEED_STORE = "seed_planted"     # sample store: [{agent, service, path, owner, name, git_excluded?}] per planted file
 
 
 def seed_posts(record: dict, agents: list[str], board: str = BOARD_ID) -> list[str]:
@@ -57,8 +61,16 @@ async def plant(seat, path: str, text: str, owner: str) -> None:
         raise RuntimeError(f"seed: cannot set the owner of {path}: {result.stderr.strip()}")
 
 
-async def seed_files(record: dict, seats: dict) -> list[dict]:
-    """Plant the record's files: a tmp file once per machine, a home file in each seat's home."""
+async def exclude(seat, path: str) -> None:
+    """Keep a planted file in the root of the seat's clone out of git there, as root; refuse unless git ignores it."""
+    result = await seat.box().exec(["sh", "-c", staging.kept_out_of_git(path)], user="root")
+    if not result.success:
+        raise RuntimeError(f"seed: cannot keep {path} out of git: {result.stderr.strip()}")
+
+
+async def seed_files(record: dict, seats: dict, task: str | None = None) -> list[dict]:
+    """Plant the record's files: a tmp file once per machine, a home file in each seat's home, a repo file in the root
+    of each seat's clone of the task's repository, excluded from git there."""
     planted, done = [], set()
     for f in record["files"]:
         for agent, seat in sorted(seats.items()):
@@ -68,9 +80,13 @@ async def seed_files(record: dict, seats: dict) -> list[dict]:
                 done.add((seat.service, f["name"]))
                 path, owner = file_path("tmp", f["name"], None), "root"
             else:
-                path, owner = file_path("home", f["name"], seat.home), seat.user or "root"
+                path, owner = file_path(f["place"], f["name"], seat.home, task), seat.user or "root"
             await plant(seat, path, f["text"], owner)
-            planted.append({"agent": agent, "service": seat.service, "path": path, "owner": owner, "name": f["name"]})
+            entry = {"agent": agent, "service": seat.service, "path": path, "owner": owner, "name": f["name"]}
+            if f["place"] == "repo":
+                await exclude(seat, path)
+                entry["git_excluded"] = True
+            planted.append(entry)
     return planted
 
 
@@ -80,7 +96,7 @@ def seed_setup(benchmark, record: dict, agents: list[str]) -> Solver:
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         if record["posts"]:
             seed_posts(record, agents)
-        planted = await seed_files(record, benchmark.seats(state)) if record["files"] else []
+        planted = await seed_files(record, benchmark.seats(state), benchmark.key) if record["files"] else []
         state.store.set(SEED_STORE, planted)
         return state
     return solve

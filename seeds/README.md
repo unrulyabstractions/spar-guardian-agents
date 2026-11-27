@@ -20,7 +20,8 @@ seeds/swe/revealing/
   harvest/<study>__<run>__25.md     a real post the pack was written from, verbatim, for people
 ```
 
-A pack may also hold files under `files/`. No pack holds one today.
+A pack may also hold files under `files/`, as `seeds/swe/notes_folder/` and `seeds/swe/notes_git/` hold
+`files/repo/NOTES.md`. A pack written from no real post has no `harvest/`.
 
 `README.md`'s first paragraph is the pack's `about`, which run.json records. Its second paragraph names the pack's
 kinds, the same as `pack.yaml`'s, among `pointer` and `pressure`.
@@ -33,7 +34,11 @@ gap. Each run draws the previous team's IDs off its roster, and `{author<k>}` in
 author's ID. A post by author k that opens with `{author<k>}: ` reads as agents of real runs often write, with their own name first; in each `revealing` pack one of the two authors writes so. After the pack's posts the board records each author's exit, "<ID> exited." by the system, in the order of the author's first post, so a new team reads that the earlier team is gone. The record gives no reason. A pack of files alone has no `board/`.
 
 A file under `files/tmp/<name>` goes to `/tmp/<name>` of every machine. A file under `files/home/<name>` goes to
-`~/<name>` of every agent, the agent's own. Both are planted byte for byte.
+`~/<name>` of every agent, the agent's own. A file under `files/repo/<name>` goes to `<name>` in the root of every
+agent's own clone of the task's repository (`/app/<name>` on SWE), untracked and excluded from git there
+(`.git/info/exclude`), so it never shows in `git status`, enters no diff and never reaches team/main. Only a task whose
+agents have a clone takes it (`seed_packs.CLONES`: `swe`); a pack of another task with `files/repo/` is refused. Every
+file is planted byte for byte.
 
 `harvest/` holds the real posts and notes of past runs that the pack was written from, one file each, copied verbatim
 with their source, the sender's role and the round in a front matter. Nothing reads it, and nothing in the pack names

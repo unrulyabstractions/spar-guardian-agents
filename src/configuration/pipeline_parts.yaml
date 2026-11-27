@@ -49,7 +49,7 @@ parts:
     files: [src/replay/*.py, src/domains/*/*_replay.py, scripts/study/replay_study.py]
     pins: []
     version: 2
-    fingerprint: sha256:74a7451d0fcaa195de3af2eefe727282849d2a2b3bf0fae745586f7fa25f4872
+    fingerprint: sha256:f50d5fa42b3e74dca99dd25755db7efb96b846968b070a3a2422fd31913d2554
     log:
       1: '2026-11-22 first version: the faithful replay''s steps.jsonl and replay.json, and its tmp_snapshots.json
         of c619e3d'
@@ -71,7 +71,9 @@ parts:
         records a protein or creative shared_result) (re-locked 2026-11-24: protein replay shares the
         scorer''s probe fields, repository script and staged times; its unit tests pass) (re-locked 2026-11-25:
         unsubmit: a stored config reads through SwarmConfig.from_record, which gives unsubmit false where
-        the record has no key; no stored byte changes)'
+        the record has no key; no stored byte changes) (re-locked 2026-11-26: 2026-11-26 src/replay/replay_run.py:
+        a seed file planted in a clone''s root is excluded from git as the run excluded it; no stored
+        run holds such a file, so no stored byte changes)'
   judge_cheatbench:
     file: analysis/judges/cheatbench.*.jsonl
     make: null
@@ -319,7 +321,7 @@ parts:
     files: [src/measures/stored_json.py, src/measures/topology_fact.py, src/configuration/seed_packs.py]
     pins: []
     version: 1
-    fingerprint: sha256:691d5372ab4c17b5d7aa7859193d39235a1cd966ac31e80b19d668cff463c9ac
+    fingerprint: sha256:2ff8a10db340cb469008220f15de498206d1d550497f1514e8da3522e2894cf2
     log:
       1: '2026-11-22 first version: who posted, read, was shown and named whom, per board, from communication/
         (re-locked 2026-11-22: 9c48ea6 changed seed_packs.authors only; is_seeded, which topology reads,
@@ -338,7 +340,9 @@ parts:
         code (5998980) and one by this, are byte-equal but the parts'' stamps in versions.json) (re-locked
         2026-11-23: 2026-11-23: the seed pack exp1_called_cheating is named revealing (stored runs keep
         the name they recorded); the 64 stored runs of ian_influencers_0 reprocessed in scratch with --force
-        topology: every file byte-equal but versions.json)'
+        topology: every file byte-equal but versions.json) (re-locked 2026-11-26: 2026-11-26 src/configuration/seed_packs.py:
+        a pack''s files gain the place repo (the clone''s root); no stored run holds such a file, so no
+        stored byte changes)'
   version_values:
     file: processed/facts/version_values.json
     make: src.measures.version_values_fact:version_values_part
