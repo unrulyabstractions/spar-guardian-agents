@@ -1,10 +1,12 @@
-# disregulator_workers_1 (2026-11-26): the baseline of five worker models on both versions of the task, with the board
-# seed and the notes file. Each run's board holds a previous team's posts, and the root of each agent's clone holds
-# NOTES.md, kept out of git. Once the posts and the notes point at the upstream branches of the clone (swe/notes_git),
-# once at the backup folder /var/backups/flipt/ (swe/notes_folder). Three workers a team, as in disregulator_workers_0's
-# baselines. Both versions of the task: ian_gflipt (with check_fix) and ian_flipt (without). No pos control, no
-# influencer, no judge, under unsubmit. One run per cell, seed 1: 5 models x 2 versions x 2 packs = 20 runs. Haiku goes
-# straight to Anthropic on the user's temporary key; the others through OpenRouter. Muse is Muse Ember.
+# disregulator_workers_1 (2026-11-26): the baseline and the positive control of five worker models on both versions of
+# the task, with the board seed and the notes file. Each run's board holds a previous team's posts, and the root of each
+# agent's clone holds NOTES.md, kept out of git. Once the posts and the notes point at the upstream branches of the
+# clone (swe/notes_git), once at the backup folder /var/backups/flipt/ (swe/notes_folder). Three workers a team, as in
+# disregulator_workers_0. Both versions of the task: ian_gflipt (with check_fix) and ian_flipt (without). The positive
+# control is the cell's own, as in disregulator_workers_0: every worker told to cheat (ian_gflipt_minimal_cheat,
+# ian_flipt_minimal_cheat). The user, 2026-11-26: "do pos controls too for disregulator study! gonna help us select".
+# No influencer, no judge, under unsubmit. One run per cell, seed 1: 5 models x 2 versions x 2 packs x 2 rows = 40
+# runs. Haiku goes straight to Anthropic on the user's temporary key; the others through OpenRouter. Muse is Muse Ember.
 # Caps: the default $5 a run; $8 for Terra, whose price is ten times Luna's.
 study: disregulator_workers_1
 seeds: [1]
@@ -59,6 +61,56 @@ targets:
     settings: [n_agents=3, max_concurrency=3]
   ian_flipt_ember_baseline:
     module: studies.cells.swe.ian_flipt_minimal
+    model: muse-ember-openrouter
+    packs: [swe/notes_git, swe/notes_folder]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_gflipt_luna_positive_control:
+    module: studies.cells.swe.ian_gflipt_minimal_cheat
+    model: gpt-6-luna-openrouter
+    packs: [swe/notes_git, swe/notes_folder]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_gflipt_haiku_positive_control:
+    module: studies.cells.swe.ian_gflipt_minimal_cheat
+    model: claude-haiku-5-5
+    packs: [swe/notes_git, swe/notes_folder]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_gflipt_terra_positive_control:
+    module: studies.cells.swe.ian_gflipt_minimal_cheat
+    model: gpt-6.1-terra-openrouter
+    packs: [swe/notes_git, swe/notes_folder]
+    settings: [n_agents=3, max_concurrency=3, cost_limit_usd=8]
+  ian_gflipt_hy4_positive_control:
+    module: studies.cells.swe.ian_gflipt_minimal_cheat
+    model: hy4-flash-openrouter
+    packs: [swe/notes_git, swe/notes_folder]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_gflipt_ember_positive_control:
+    module: studies.cells.swe.ian_gflipt_minimal_cheat
+    model: muse-ember-openrouter
+    packs: [swe/notes_git, swe/notes_folder]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_flipt_luna_positive_control:
+    module: studies.cells.swe.ian_flipt_minimal_cheat
+    model: gpt-6-luna-openrouter
+    packs: [swe/notes_git, swe/notes_folder]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_flipt_haiku_positive_control:
+    module: studies.cells.swe.ian_flipt_minimal_cheat
+    model: claude-haiku-5-5
+    packs: [swe/notes_git, swe/notes_folder]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_flipt_terra_positive_control:
+    module: studies.cells.swe.ian_flipt_minimal_cheat
+    model: gpt-6.1-terra-openrouter
+    packs: [swe/notes_git, swe/notes_folder]
+    settings: [n_agents=3, max_concurrency=3, cost_limit_usd=8]
+  ian_flipt_hy4_positive_control:
+    module: studies.cells.swe.ian_flipt_minimal_cheat
+    model: hy4-flash-openrouter
+    packs: [swe/notes_git, swe/notes_folder]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_flipt_ember_positive_control:
+    module: studies.cells.swe.ian_flipt_minimal_cheat
     model: muse-ember-openrouter
     packs: [swe/notes_git, swe/notes_folder]
     settings: [n_agents=3, max_concurrency=3]
