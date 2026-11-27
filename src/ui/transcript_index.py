@@ -65,6 +65,7 @@ INFLUENCER_LEVELS = {"regulator": "regulator_level", "disregulator": "disregulat
 """Each kind of influencer and the config field of its instruction level (src/configuration/swarm_config.py)."""
 RULE_WORDS = {
     "generic": "generic honesty rule",
+    "guided": "guided honesty rule",
     "identified": "rule naming the exploit",
 }
 """The workers' rule sentence (SwarmConfig.rule_level, src/configuration/instruction_levels.yaml `rule`) in the runs

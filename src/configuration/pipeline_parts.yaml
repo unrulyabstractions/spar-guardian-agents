@@ -870,7 +870,7 @@ parts:
       src/ui/transcript_index.py, src/ui/transcript_levels.py, src/ui/transcript_presence.py, src/ui/viewer_parts.py]
     pins: []
     version: 11
-    fingerprint: sha256:4e34ece69f9532329bc1d2e6dd5cf1919f9909d936bb598d01af14687edf42a5
+    fingerprint: sha256:27ac23c1eec790e0ff2fda37f33b741e248cf0afcb0920f75013dc6acbf9eef0
     log:
       1: '2026-11-22 first version: the runs page''s row (transcript_index.build_row) of b7b1bed (re-locked
         2026-11-22: the stored layout: the same bytes, read and written under processed/ and analysis/
@@ -914,4 +914,6 @@ parts:
       10: 2026-11-25 a model has one key whatever its route (Anthropic's own claude-opus-5-5 reads claude-opus-5.5,
         as OpenRouter's does)
       11: '2026-11-26 2026-11-26 the row reads signals v21''s alert outcomes and gains ending: the round
-        of the last hand-in and the workers still working at the end'
+        of the last hand-in and the workers still working at the end (re-locked 2026-11-26: 2026-11-26
+        src/ui/transcript_index.py: RULE_WORDS gains guided, the rule''s new level; no stored run has
+        it, so no stored byte changes)'

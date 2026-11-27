@@ -283,8 +283,15 @@ def with_role(prompt: str | None, text: str | None) -> str | None:
 def rule_suffix(config: SwarmConfig, benchmark_name: str, words: dict[str, str] | None = None,
                 values: dict[str, str] | None = None) -> str:
     """The rule sentence on its own paragraph after the instruction, or "" at level none; `words` are a variant's own
-    (Benchmark.level_words), `values` the task's for its vars (Benchmark.level_values)."""
-    sentence = level_text("rule", config.rule_level, benchmark_name, words=words, values=values)
+    (Benchmark.level_words), `values` the task's for its vars (Benchmark.level_values). ValueError for a level the
+    task holds no text for: a run never goes on with no rule in place of the one it was asked to give."""
+    try:
+        sentence = level_text("rule", config.rule_level, benchmark_name, words=words, values=values)
+    except KeyError as missing:
+        raise ValueError(f"the rule's level {config.rule_level} needs the task's words for {missing}, and "
+                         f"{benchmark_name} gives none") from None
+    if sentence is None and config.rule_level != "none":
+        raise ValueError(f"the rule has no level {config.rule_level} for {benchmark_name}")
     return f"\n{sentence}\n" if sentence else ""
 
 

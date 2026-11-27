@@ -343,7 +343,9 @@ class SwarmConfig(BaseModel):
     # ---------------------------------------------------------------- the instruction
     rule_level: str = "none"
     """The rule sentence appended after the task instruction, a level of src/configuration/instruction_levels.yaml
-    `rule` (none, generic, identified). generic names no exploit; identified names where it lies."""
+    `rule` (none, generic, guided, identified). generic names no exploit; guided says what bad behavior is on the
+    task in general words; identified is a task's own sentence of what may not be used (a scenario's: with its
+    reason)."""
     regulator_level: str = "generic"
     """The text appended to a regulator's system prompt, a level of instruction_levels.yaml `regulator` (none, generic,
     instructed). generic names no exploit; instructed adds what cheating means on the task (the benchmark's `cheating`
