@@ -143,10 +143,14 @@ class Linux(Host):
         return df_disk(output(["df", "-BG", root]) or "") if root else None
 
     def process_lines(self) -> list[str]:
+        """The command line of every live process. A process that ends while it is read is left out: listing /proc by
+        name first, since Path.glob stats each entry and raises for one that is gone."""
         lines = []
-        for path in PROC.glob("[0-9]*/cmdline"):
+        for name in os.listdir(PROC):
+            if not name.isdigit():
+                continue
             try:
-                lines.append(cmdline_text(path.read_bytes()))
+                lines.append(cmdline_text((PROC / name / "cmdline").read_bytes()))
             except OSError:
                 continue                                # the process ended while we read
         return [line for line in lines if line]

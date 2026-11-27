@@ -57,6 +57,8 @@ def test_linux_reads_each_processs_command_line_from_proc(tmp_path, monkeypatch)
                      ("self", b"not a pid\0")):
         (tmp_path / pid).mkdir()
         (tmp_path / pid / "cmdline").write_bytes(raw)
+    (tmp_path / "99").mkdir()                                              # a process that ended: no cmdline left
+    (tmp_path / "meminfo").write_text("MemTotal: 1 kB")
     monkeypatch.setattr(host_facts, "PROC", tmp_path)
     assert host_facts.Linux().process_lines() == ["uv run python -m studies.cells.swe.x --name r_s1"]
 
