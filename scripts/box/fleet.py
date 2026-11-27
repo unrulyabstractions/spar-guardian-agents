@@ -29,6 +29,7 @@ of this repository.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from collections import Counter
 from dataclasses import replace
@@ -126,11 +127,23 @@ def cmd_repin(args: argparse.Namespace) -> int:
     return 0
 
 
-def foreign_traces(study: str, name: str) -> list[str]:
-    """The traces this checkout holds of a run of this name (fleet_plan.traces_here), unless they are a box's run the
-    watch pulled: a run.json naming an eval log in a box's clone."""
+LAUNCHED = re.compile(r"^\S+ (?:LAUNCH|ADOPT) +(\S+)", re.MULTILINE)
+"""A launcher's line for a run it started or took over: the time, the word, the run's name."""
+
+
+def launched_by(study: str, box_id: int) -> set[str]:
+    """The runs the box's launcher started, read from its launcher log as the watch pulled it
+    (logs/<study>/boxes/<id>/launcher.log). Empty before the first pull."""
+    log = run_study.LOGS / study / "boxes" / str(box_id) / "launcher.log"
+    return set(LAUNCHED.findall(log.read_text(errors="replace"))) if log.is_file() else set()
+
+
+def foreign_traces(study: str, name: str, own: frozenset[str] | set[str] = frozenset()) -> list[str]:
+    """The traces this checkout holds of a run of this name (fleet_plan.traces_here), unless they are the box's own run
+    that the watch pulled: a run its launcher started (`own`, from launched_by), or a run.json naming an eval log in a
+    box's clone (the absolute path older exports wrote; run.json holds a relative path since 2026-11-22)."""
     run = RunDir(run_study.RUNS / study / name)
-    if run.is_run() and (run.run_json.get("eval_log") or "").startswith(REMOTE_REPO + "/"):
+    if name in own or (run.is_run() and (run.run_json.get("eval_log") or "").startswith(REMOTE_REPO + "/")):
         return []
     return fleet_plan.traces_here(study, name)
 
@@ -161,8 +174,9 @@ def run_refusals(entry: dict, mock: bool) -> list[str]:
         problems.append(f"the box's runs need {', '.join('~/' + name for name in unrecorded)}, which its entry does "
                         f"not record: repin it to its commit to record it")
     suffix = run_study.MOCK_SUFFIX if mock else ""
+    own = launched_by(entry["study"] + suffix, entry["id"])
     for name in (replace(run, suffix=suffix).name for run in box.runs):
-        if traces := foreign_traces(entry["study"] + suffix, name):
+        if traces := foreign_traces(entry["study"] + suffix, name, own):
             problems.append(fleet_plan.trace_problem(name, traces))
     return problems + launcher_problems(entry["study"])
 

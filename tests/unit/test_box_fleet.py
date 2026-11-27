@@ -796,6 +796,15 @@ def test_run_args_refuse_a_run_made_elsewhere_and_a_model_on_another_key(registr
     write_text(run_json, json.dumps({"eval_log": f"/root/work/logs/{STUDY}/x/x.eval"}))
     assert fleet.main(["run-args", "7"]) == 0                                # the box's own, pulled by the watch
     capsys.readouterr()
+    write_text(run_json, json.dumps({"eval_log": f"logs/{STUDY}/x/x.eval"}))    # the relative path run.json holds now
+    assert fleet.main(["run-args", "7"]) == 1 and BOX.runs[0].name in capsys.readouterr().err
+    launcher_log = run_study.LOGS / STUDY / "boxes" / "7" / "launcher.log"
+    write_text(launcher_log, f"00:04:54 LAUNCH {BOX.runs[1].name} (1 running, 2 queued)\n")
+    assert fleet.main(["run-args", "7"]) == 1                                # the box started another run, not this one
+    capsys.readouterr()
+    write_text(launcher_log, f"00:04:54 LAUNCH {BOX.runs[0].name} (1 running, 2 queued)\n")
+    assert fleet.main(["run-args", "7"]) == 0                                # the box's launcher started this run
+    capsys.readouterr()
     monkeypatch.setattr(fleet_plan, "key_problems", lambda box: ["openai/x needs OPENAI_API_KEY"])
     assert fleet.main(["run-args", "7"]) == 1 and "OPENAI_API_KEY" in capsys.readouterr().err
     assert fleet.main(["run-args", "7", "--mock"]) == 0                      # the mock model needs no key
