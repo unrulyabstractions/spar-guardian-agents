@@ -138,17 +138,22 @@ function colLabel(c) {
   ];
 }
 
-/** A row's team as "workers / regulators / disregulators": each role's number over the row's cells that hold runs (a
- * cell's team), as one number or a range ("3 / 0–1 / 0"). */
-export function teamOf(r, columns) {
-  const seen = { worker: new Set(), regulator: new Set(), disregulator: new Set() };
-  for (const c of columns) {
-    const cell = r.cells[c.key];
-    if (!cell || !cell.n) continue;
-    for (const role of Object.keys(seen)) for (const n of cell.team[role]) seen[role].add(n);
-  }
-  const span = set => { const v = [...set].sort((a, b) => a - b); return !v.length ? '0' : v.length === 1 ? String(v[0]) : `${v[0]}–${v[v.length - 1]}`; };
-  return `${span(seen.worker)} / ${span(seen.regulator)} / ${span(seen.disregulator)}`;
+/** Numbers as one value or a range: "3", "1–2". */
+const span = v => (v.length === 1 ? String(v[0]) : `${v[0]}–${v[v.length - 1]}`);
+
+/** A row's workers (the row's `team`, transcript_summary.row_team): one number, a range where its cells differ. */
+export function workersOf(t) {
+  return h('td', { class: 'num sum-workers', title: t.workers.map(n => plural(n, 'worker')).join(', ') }, span(t.workers));
+}
+
+/** A row's influencers: one role chip per role its columns add, "1 · 33%" (how many, their share of the team), the
+ * long form in its tooltip; "none" where no cell holds one. */
+export function influencersOf(t) {
+  const xs = t.influencers;
+  return h('td', { class: 'sum-infl' }, !xs.length ? muted('none') : h('div', { class: 'sum-infl-chips' }, xs.map(x =>
+    h('span', { class: ['role-chip', `role-chip-${x.role}`, 'sum-infl-chip'],
+      title: x.teams.map(([k, n]) => `${plural(k, x.role)} of ${plural(n, 'agent')}`).join('\n') },
+    `${span(x.n)} · ${span(x.share)}%`))));
 }
 
 /** A column's tooltip: its workers' conditioning and each influencer's role, level and model. */
@@ -269,7 +274,7 @@ export async function viewSummary(q) {
   const sizes = [...new Set(s.rows.map(r => r.size))].sort((a, b) => a - b);
   const zPick = sizes.length > 1 ? select([['', 'All sizes'], ...sizes.map(n => [String(n),
     plural(n, byAgents ? 'agent' : 'worker')])], size, v => nav({ size: v }), { 'aria-label': 'Team size' }) : null;
-  const lead = 3 + (s.by_seed ? 1 : 0) + (byAgents ? 1 : 0);
+  const lead = 4 + (s.by_seed ? 1 : 0) + (byAgents ? 1 : 0);
 
   // The band over the condition columns: one cell per run of columns of the same group. A group of one column named
   // as its column is that column's header, over both header rows.
@@ -288,8 +293,9 @@ export async function viewSummary(q) {
     h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-task' }, 'Task'),
     byAgents ? h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-agents', title: 'Agents per team' }, 'Agents')
       : null,
-    h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-workers', title: 'Agents per team, by role' },
-      'Workers / Regulators / Disregulators'),
+    h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-workers', title: 'Workers per team' }, 'Workers'),
+    h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-infl', title: 'Influencers per team, share of the team' },
+      'Influencers'),
     s.by_seed ? h('th', { scope: 'col', rowspan: '2', class: 'sum-lead sum-seed', title: 'Board posts and files planted before round 1' }, 'Seed') : null];
   const spanned = new Set();
   for (let i = 0; i < C.length;) {
@@ -316,7 +322,7 @@ export async function viewSummary(q) {
   const body = rows.map(r => h('tr', null,
     h('th', { scope: 'row', class: 'sum-model' }, spaced(modelLabel({ model: r.model }))),
     h('td', { class: 'sum-task' }, spaced(r.task)), byAgents ? h('td', { class: 'num sum-agents' }, String(r.size)) : null,
-    h('td', { class: 'num sum-workers' }, teamOf(r, s.columns)),
+    workersOf(r.team), influencersOf(r.team),
     s.by_seed ? h('td', { class: 'sum-seed' }, spaced(r.seed_pack.split('/').pop())) : null,
     cells(r.cells)));
   const totals = wmodel || task || seed || size || !allShown ? summed(rows, s.columns, ladders) : s.totals;
@@ -334,7 +340,7 @@ export async function viewSummary(q) {
     const lefts = [0];
     for (const th of [...band].filter(Boolean).slice(0, lead - 1)) lefts.push(lefts[lefts.length - 1] + th.getBoundingClientRect().width);
     for (const tr of table.querySelectorAll('tr')) {
-      [...tr.children].filter(x => x.matches('.sum-model, .sum-task, .sum-agents, .sum-workers, .sum-seed'))
+      [...tr.children].filter(x => x.matches('.sum-model, .sum-task, .sum-agents, .sum-workers, .sum-infl, .sum-seed'))
         .forEach((x, i) => { x.classList.add('sum-stick'); x.style.left = `${lefts[i]}px`; });
     }
   });

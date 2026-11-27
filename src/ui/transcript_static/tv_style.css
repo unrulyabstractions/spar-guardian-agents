@@ -454,11 +454,15 @@ table.sum-table th.sum-col, table.sum-table tr.sum-band-row th.sum-col { text-al
 .sum-stack .sum-lad-name { width: auto; font-size: 11px; }
 /* The lead columns: centred, as narrow as their longest word (each breaks only at its spaces), a rule between them. */
 table.sum-table th.sum-model, table.sum-table td.sum-task, table.sum-table td.sum-agents,
-table.sum-table td.sum-workers, table.sum-table td.sum-seed { vertical-align: middle; }
+table.sum-table td.sum-workers, table.sum-table td.sum-infl, table.sum-table td.sum-seed { vertical-align: middle; }
 table.sum-table .sum-model, table.sum-table .sum-task, table.sum-table .sum-agents, table.sum-table .sum-workers,
-table.sum-table .sum-seed { text-align: center; white-space: normal; width: 1px; }
-table.sum-table .sum-task, table.sum-table .sum-agents, table.sum-table .sum-workers, table.sum-table .sum-seed {
-  border-left: 1px solid var(--border); }
+table.sum-table .sum-infl, table.sum-table .sum-seed { text-align: center; white-space: normal; width: 1px; }
+table.sum-table .sum-task, table.sum-table .sum-agents, table.sum-table .sum-workers, table.sum-table .sum-infl,
+table.sum-table .sum-seed { border-left: 1px solid var(--border); }
+/* The Influencers lead column: one role chip per role, stacked on the cell's middle, each on one line. */
+.sum-infl-chips { display: inline-flex; flex-direction: column; align-items: stretch; gap: 3px; }
+.sum-infl .role-chip.sum-infl-chip { font-size: 11px; letter-spacing: 0; text-align: center; padding: 0 6px;
+  font-variant-numeric: tabular-nums; }
 .sum-word { white-space: nowrap; }
 /* The detailed Summary: each ladder's letter in a fixed column, its chips wrapping beside it. */
 .sum-stack .sum-lad { display: grid; grid-template-columns: 1.2em minmax(0, auto); align-items: center; column-gap: 4px; }

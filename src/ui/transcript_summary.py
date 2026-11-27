@@ -79,6 +79,20 @@ def team_size(row: dict) -> int:
     return row["workers"] + sum(x.get("n", 1) for x in row["influencer_conditioning"])
 
 
+def row_team(runs: list[dict]) -> dict:
+    """A Summary row's lead columns over its runs: workers (their numbers, lowest first) and influencers, one entry per
+    role some run holds, regulators first: {role, n (its numbers in the runs that hold it, never the baseline's 0),
+    share (the percents of the team those make up), teams ([n, agents] pairs)}."""
+    out = []
+    for role in INFLUENCERS:
+        held = {(k, team_size(r)) for r in runs
+                if (k := sum(x.get("n", 1) for x in r["influencer_conditioning"] if x["role"] == role))}
+        if held:
+            out.append({"role": role, "n": sorted({k for k, _ in held}),
+                        "share": sorted({round(100 * k / t) for k, t in held}), "teams": sorted(map(list, held))})
+    return {"workers": sorted({r["workers"] for r in runs}), "influencers": out}
+
+
 def swarms_keep_their_size(rows: list[dict]) -> bool:
     """Whether influencers take workers' places in the collection's teams: some team with influencers stands beside a
     team without any of its own size, and beside none of its own number of workers, among the runs of its workers'
@@ -306,6 +320,7 @@ def summary(rows: list[dict], col: str, members: dict[str, list[dict]] | None = 
                  **({"seed_pack": pack} if by_seed else {})}
         task_name = next(r for rs in by_col.values() for r in rs).get("task_name")
         out_rows.append({"model": model, "task": task, "task_name": task_name, "size": size, "seed_pack": pack,
+                         "team": row_team([r for rs in by_col.values() for r in rs]),
                          "cells": {c["key"]: filled(by_col.get(c["key"], []), c, where) for c in columns}})
     totals = {c["key"]: filled(of_column.get(c["key"], []), c, {}) for c in columns}
     return {"col": col, "total": len(mine), "by_seed": by_seed, "rows_by": rows_by, "columns": columns,

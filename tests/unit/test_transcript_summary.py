@@ -285,6 +285,29 @@ def test_influencers_of_one_share_stand_in_one_column_whatever_the_teams_size():
     assert s["totals"][fifth]["n"] == 2 and s["totals"][fifth]["team"]["regulator"] == [1, 4]
 
 
+def test_a_rows_lead_columns_are_its_workers_and_what_its_influencer_columns_add():
+    """A row's team (the Workers and Influencers lead columns): its workers as one number, and per influencer role the
+    number its cells hold and their share of the team, never a range down to the baseline's 0."""
+    disreg = [row("base", workers=2), row("d1", workers=2, influencers=(("disregulator", "generic", "haiku"),))]
+    assert ts.summary(disreg, COL)["rows"][0]["team"] == {"workers": [2], "influencers": [
+        {"role": "disregulator", "n": [1], "share": [33], "teams": [[1, 3]]}]}
+    regs = [row("base", workers=2), row("r2", workers=2, influencers=REG_E_HAIKU)]
+    regs[1]["influencer_conditioning"][0]["n"] = 2
+    assert ts.summary(regs, COL)["rows"][0]["team"] == {"workers": [2], "influencers": [
+        {"role": "regulator", "n": [2], "share": [50], "teams": [[2, 4]]}]}
+    assert ts.summary([row("base", workers=4)], COL)["rows"][0]["team"] == {"workers": [4], "influencers": []}
+    both = [row("r", workers=3, influencers=REG_E_HAIKU),
+            row("rd", workers=3, influencers=(*REG_E_HAIKU, ("disregulator", "generic", "haiku")))]
+    assert [(x["role"], x["n"], x["share"]) for x in ts.summary(both, COL)["rows"][0]["team"]["influencers"]] == [
+        ("regulator", [1], [20, 25]), ("disregulator", [1], [20])]
+    page = (ROOT / "src/ui/transcript_static/tv_view_summary.js").read_text()
+    for part in ("const lead = 4 + (s.by_seed", "workersOf(r.team), influencersOf(r.team),", "muted('none')",
+                 "`${span(x.n)} · ${span(x.share)}%`", "`${plural(k, x.role)} of ${plural(n, 'agent')}`",
+                 ".sum-workers, .sum-infl, .sum-seed'"):
+        assert part in page, part
+    assert "Workers / Regulators / Disregulators" not in page and "teamOf" not in page
+
+
 def test_influencer_columns_stand_by_share_before_model():
     """Every 20% column stands before the first 60% one, each share's columns by model (the user, 2026-11-25:
     "order by % not model first")."""
