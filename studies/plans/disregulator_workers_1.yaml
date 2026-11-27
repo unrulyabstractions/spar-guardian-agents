@@ -11,6 +11,7 @@
 # DeepSeek V4.1 Flash workers alone as well, with swe/notes_folder on both versions (the user, 2026-11-27: "also run
 # deepseek baseline with folder note/seed"): 2 more runs.
 study: disregulator_workers_1
+closed: true        # over; moved to OLD/ on 2026-11-27 on the user's word ("just keep headlines in here, move rest to OLD")
 seeds: [1]
 # What every run of the study is given, as in disregulator_workers_0.
 settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5, unsubmit=true,

@@ -4,6 +4,7 @@
 # The runs come back into runs/regulator_scale_2/ beside the others.
 # Caps: about twice what 30 rounds cost at the token counts of the run with 2 Haiku regulators.
 study: regulator_scale_2
+closed: true        # over; moved to OLD/ on 2026-11-27 on the user's word ("just keep headlines in here, move rest to OLD")
 seeds: [1]
 # What every run of the study is given, as in regulator_scale_2.yaml.
 settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5, unsubmit=true,

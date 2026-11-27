@@ -13,6 +13,7 @@
 # Caps (the user, 2026-11-25: "enough cap for study to finnish! we have claude moeny!!"): about twice what 30 rounds
 # cost at the token counts of the run with 2 Haiku regulators. $35 with 2 Fable, $50 with 6 Opus, $80 with 6 Fable.
 study: regulator_scale_2
+closed: true        # over; moved to OLD/ on 2026-11-27 on the user's word ("just keep headlines in here, move rest to OLD")
 seeds: [1]
 # What every run of the study is given. A value named nowhere is the default (swarm_config.py).
 settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5, unsubmit=true,
