@@ -8,6 +8,8 @@
 # No influencer, no judge, under unsubmit. One run per cell, seed 1: 5 models x 2 versions x 2 packs x 2 rows = 40
 # runs. Haiku goes straight to Anthropic on the user's temporary key; the others through OpenRouter. Muse is Muse Ember.
 # Caps: the default $5 a run; $8 for Terra, whose price is ten times Luna's.
+# DeepSeek V4.1 Flash workers alone as well, with swe/notes_folder on both versions (the user, 2026-11-27: "also run
+# deepseek baseline with folder note/seed"): 2 more runs.
 study: disregulator_workers_1
 seeds: [1]
 # What every run of the study is given, as in disregulator_workers_0.
@@ -113,6 +115,16 @@ targets:
     module: studies.cells.swe.ian_flipt_minimal_cheat
     model: muse-ember-openrouter
     packs: [swe/notes_git, swe/notes_folder]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_gflipt_deepseek_baseline:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [swe/notes_folder]
+    settings: [n_agents=3, max_concurrency=3]
+  ian_flipt_deepseek_baseline:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [swe/notes_folder]
     settings: [n_agents=3, max_concurrency=3]
 # max_agents counts every cell script on this Mac, so this study shares it with regulator_headline_0: with 34
 # agents live on 2026-11-26, Docker's 14 processors were all busy and the grading of four runs passed its 600 s.
