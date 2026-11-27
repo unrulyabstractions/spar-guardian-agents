@@ -5162,3 +5162,12 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - Tools landed the same evening: 01d94db4 (a rented machine takes the Anthropic key file through ssh standard input;
   two reviewers, 173 tests) and 4d998570 (five rows of regulator_headline_0 moved to
   `regulator_headline_0_boxes2.yaml`; the Mac runs 20 agents at once since 194dfcfe).
+- 2026-11-26 18:12 local. WHAT: the first real use of `box_run.sh` with the Anthropic key file (main 01d94db4), on
+  rented machines 62782977 and 62783476 (plan `regulator_headline_0_boxes2.yaml`, pinned commit 4d998570). HOW: I
+  read each `box_run.sh` output (the OpenRouter key "73 characters; 600 root", the key file "106 characters; 600
+  root", the launcher's pid; no key text printed), then counted lines in the first machine's Inspect traces over ssh.
+  RESULT: VERIFIED for 62782977: 10 calls to `api.anthropic.com/v1/messages` answered 200, none refused, no
+  authentication or rate error. UNVERIFIED: the same count on 62783476 (its runs had made no model call yet), and the
+  share of Haiku's prompt read from cache on a machine.
+- Two more machines were removed before any run that evening: 62782974 never started at vast.ai (machine 153208
+  again, `--accept-loss`, nothing on it, credit unchanged); its replacement is 62783476.
