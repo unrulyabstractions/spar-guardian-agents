@@ -5171,3 +5171,9 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   share of Haiku's prompt read from cache on a machine.
 - Two more machines were removed before any run that evening: 62782974 never started at vast.ai (machine 153208
   again, `--accept-loss`, nothing on it, credit unchanged); its replacement is 62783476.
+
+## 2026-11-26 swarm_visualization: three rounds of the viewer-insight build (branch viewer-insight, merged fast-forward)
+
+- What: three commits, each round built by Opus. Between rounds, critics (Fable checked the data, Sonnet the design, Haiku a first glance) viewed every screenshot, answered each other, and an Opus judge settled the changes. Added: what each hand-in held (version_values.json), check_fix answers, a study grid page (`--study`), a ring layout for 20 agents, setup chips, alerts counted as true, false and unknown, a rung fall shown at the call that caused it, and a header badge for the verdict.
+- How: an independent verifier agent opened all 13 round-3 PNGs and checked each cue against run.json, version_values.json, cheating.json and signals.jsonl. It checked the Opus reg20 run's 14 hand-ins, all 10 regulator_scale_2 grid marks, the disregulator_existence_2 header counts and cells, the 20-agent run, the reg60 Fable run and the Sonnet run. It found no UI sentences and no file outside swarm_visualization/. I viewed study_reg.png, study_dis.png, opus_t995.png and big_t060.png myself, and checked the 20-agent run's regulator model (gpt-6.1-terra) against run.json. Tests: 12 passed after the rebase onto main.
+- Result: VERIFIED for those shots. UNVERIFIED: live-browser playback, clicks and hover, and any study other than these two. In disregulator_existence_2 the Haiku rows mix two providers (OpenRouter and direct); the grid does not show this.
