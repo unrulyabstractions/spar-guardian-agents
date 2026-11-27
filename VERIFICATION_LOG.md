@@ -5117,3 +5117,20 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   captured, 4 of the host image, 6 excluded as reproducible, 0 missing, 0 different), then `fleet destroy`, about
   $0.05. A second replacement, 62773634, is setting up. VERIFIED for the two destroys (read each tool's output and
   `logs/boxes/destroyed.jsonl`).
+- regulator_headline_0 at 16:50 local, 2026-11-26. WHAT: the first runs made on the rented machines. HOW: I ran
+  `run_validity.validity` on every stored run and read each run's grade, hand-in fact and network block
+  (`scratchpad/headline_run/study_status.py`), and read the console logs and `network.jsonl` of the failed ones.
+  RESULT: 13 runs VERIFIED valid (7 from the Mac, 6 from machines: the machines' runs record the network by socket
+  tables, `network.status` partial, which the study's check accepts as it did in regulator_scale_2). 4 machine runs
+  are BROKEN at their start and made no model call ($0): `ian_gflipt_deepseek_w8_negative_control_none_s1`,
+  `ian_gflipt_deepseek_w4_reg2_hy4flash_none_s1`, `ian_gflipt_deepseek_w8_reg2_luna_none_s1`,
+  `ian_flipt_deepseek_w8_reg2_hy4flash_none_s1`. Each raised "network monitor: the start control left no row" for
+  one agent after three tries: the socket-table recorder saw that agent's test connection with no owner (`pid`
+  null), on a machine whose processors were all busy compiling Go (CPU pressure 98% on 62771426). They are to be set
+  aside with `run_directory.set_aside_attempt` and run again when their machines' launchers end. UNVERIFIED: the
+  cause inside `network_monitor_daemon.py` (I read `socket_owners` and `snapshot`; no test proves the race), and
+  every run still live.
+- Two faults of mine in watching, both fixed: the watcher started at 16:06 kept the list of machines it began with
+  (it missed 62773634 and asked for the destroyed 62771421), and its copy of one busy machine's Inspect data held
+  up the others for 13 minutes. One watcher per machine runs since 16:48. A wait I wrote with `pgrep -f` matched its
+  own command and could not end; replaced by a wait on the launcher's process id.
