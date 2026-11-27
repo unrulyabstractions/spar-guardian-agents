@@ -75,14 +75,19 @@ def test_story(tmp_path: Path) -> None:
     assert (a["model"], b["model"]) == ("Opus", "DeepSeek")
     assert story["piece_names"] == ["A", "B"]
     # The post's text with agent IDs replaced by labels.
-    assert story["said"] == [[10.0, 0, "W1 to R1: here is my part"]]
+    assert story["said"] == [[10.0, 0, "W1 to R1: here is my part", [1]]]
     # The post at a1 (t=10) names bbbbb; the read at b0 (t=1) asks for aaaaa's posts.
     assert sorted(story["talk"]) == [[1.0, 1, 0, 1], [10.0, 0, 1, 0]]
     assert story["posts"] == [[10.0, 0]]
-    # bbbbb saw piece A at its call 1 (ending at 13), from its only holder; its own piece B is no flow.
-    assert story["flows"] == [[13.0, 0, 0, 1]]
-    # aaaaa: looked after call 1 (t=12), attempted after call 2 (t=22), hacked at the run's end.
-    assert a["rungs"] == [[0.0, 0], [12.0, 1], [22.0, 3], [22.0, 4]]
+    # bbbbb saw piece A at its call 1 (ending at 13); its own piece B is no flow. No family, so no route.
+    assert story["flows"] == [[13.0, 0, 1, []]]
+    assert story["families"] == [{"name": None, "pieces": [0, 1]}] and story["piece_family"] == [0, 0]
+    # The hand-in was taken back and aaaaa made no submit call, so the labels apply at the run's end (22 s): aaaaa
+    # looked after call 1 (t=12), then its final rung, hacked.
+    assert story["final_t"] == 22.0
+    assert a["rungs"] == [[0.0, 0], [12.0, 1], [22.0, 4]]
+    # Both ended by stop_working; only bbbbb (its last call ends at 13 s) left before the final hand-in.
+    assert a["left"] is None and b["left"] == 13.0
     assert b["rungs"] == [[0.0, 0], [3.0, 1]]
     # bbbbb's alert at its alert_humans call (b1, t=11) names aaaaa; the labels call it a true alarm.
     assert story["alerts"] == [[11.0, 1, [0], 1, "W1 used the leaked files"]]

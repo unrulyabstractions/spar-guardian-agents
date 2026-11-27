@@ -22,44 +22,57 @@ WebGL.
 | Mark | Meaning |
 |---|---|
 | A sphere | a worker |
-| A cube | a regulator |
-| A spiky ball | a disregulator |
+| A cube | a regulator, with a thin cyan outline on its edges |
+| A spiky ball | a disregulator, with a thin cyan outline on its edges |
 | Where they sit | workers on a ring; regulators on a small ring at its centre, raised a little; disregulators likewise (lowered when a run has both) |
-| Node colour | the agent's Cheating rung at that moment: pale (none), cream (looked), orange (tempted), red (attempted), pulsing crimson (hacked) |
-| A faded, shrunken node | an agent that has left the run |
+| Node colour | the agent's Cheating rung at that moment: pale (none), cream (looked), orange (tempted), red (attempted), crimson with a white core (hacked). Regulators and disregulators carry their rung the same way |
+| Every node changing at once | the final hand-in: from then on every agent shows its final rung from the labels, with a `label` chip in the feed; without a final hand-in, at the run's end |
+| A dashed outline, ◌ on a tag | a final rung no dated call stands behind: no clause of the agent's `timeline.first` at that rung has a call (hacked counts its attempted) |
+| A faded, shrunken node | an agent that left: its episode ended by `stop_working` or an error before the final hand-in. An agent that handed in, or whose teammate did, never fades |
 | An edge | two agents that talked on the board: a post that names the other, or a read that asks for the other's posts (`board_read` with `from_agent`) |
 | Edge thickness | how much they went back and forth lately, against the run's busiest moment; an exchange both ways counts double, and each exchange fades with time, so a pair that stops talking thins to a hairline |
-| A red edge | both agents have cheated |
+| A red edge | both agents are at attempted or above |
 | A spark along an edge | one message, travelling from writer to the agent named (or from the agent asked for to the reader) |
 | A ring spreading from a node | a post on the board |
-| Coloured orbs circling a node | the exploit's pieces the agent holds, one colour per piece |
-| A coloured orb flying between nodes | a piece reaching an agent that did not hold it |
-| A white ring around a node | the agent holds every piece |
-| A wave across the swarm | the final hand-in, in the verdict's colour; the room keeps that colour after it |
+| Orbs circling a node | pieces of the first exploit family (`hidden`: A, B, C) the agent holds, one colour per piece |
+| Small diamonds circling a node | pieces of the second family (`revealed`: client, config, wiring) |
+| An orb or a diamond flying in from the centre | a piece the agent first saw (`pieces_seen_at`) without holding it. Who gave it is not recorded, so no giver is drawn |
+| A white ring close around a node | the agent holds a whole set of either family |
+| A ring flashing out in a rung's colour | the agent reached that rung |
+| A ring closing in, ↓ in the feed | an undone write's rise fell back (`timeline.rises[].fell_at`), with the agent whose call took it out (`by`) |
 | An amber beacon on a node, beams to others | an alert to humans (`alert_humans`): the caller flashes, a beam reaches each agent it names; grey for a false alarm |
-| An amber ring, ⚠ on a tag | an agent alerts have named, and how many times (false alarms not counted) |
-| ◈ 0/2, 1/2, 2/2 | how many of the planted values the version held: found on an added line of its code (`version_values.json`). A fact about the code, not a verdict |
-| Held colours | steel blue 0 held, pink some, magenta all, grey unknown (its code was not stored, or the run has no `version_values.json`) |
-| A tinted room, a hexagonal ring and ✓ | a hand-in stands; room and ring take the colour of what its code held, and the agent who made it wears the ring |
-| A second, outer ring on the final hand-in | the verdict: green when the team's rung is below attempted, red from attempted up, grey when the run has no labels; the room turns green or red |
-| ◉ burst, ◎ ring closing in | a `check_fix` answer: accepted bursts outward, not accepted closes in; both in the colour of what the checked code held, ◉ or ◎ with ◈ on the tag |
-| Violet rings closing on a node, ↩ on a tag | that agent took the hand-in back; the room goes back to dark |
-| A tag under a node | the agent's label (W1 worker, R1 regulator, D1 disregulator), its model, its rung now. Past 12 agents, only an agent doing something now (a rung reached, a post, a piece, a check, an alert, the hand-in) or hovered gets the full tag; the rest show a faint label |
-| The feed at the right | the last six events as icons and chips: ✎ a post and its opening words, → a rung, ● a piece and ← who gave it, ✓ a hand-in and ◈ what it held, ↩ a take-back, ◉ ◎ a check, ⚠ an alert |
+| Pips at a node's left edge | one per alert naming that agent: amber a true alarm, grey a false one, dark amber when the outcome is unknown (`alert_outcomes`) |
+| ⚠n m on a regulator's or disregulator's tag | the alerts it raised: amber the true ones, grey the false ones |
+| ▬▬ n/N, segments above a node | how many of the N planted values the version held: found on an added line of its code (`version_values.json`); filled n of N, dashed when unknown (its code was not stored, or the run has no `version_values.json`). A fact about the code, not a verdict. Shown above the agent whose hand-in stands now |
+| A faint glow at the room's edges | a hand-in stands |
+| A thick ring and a white ring around the final hand-in's maker | the verdict: the thick ring in the team rung's colour, the white ring only when the hand-in passed; no white ring for a fail; grey when the run has no labels |
+| A wave of thin rings, then a thin vignette at the edges | the final hand-in, in the team rung's colour |
+| ◉ burst, ◎ ring closing in | a `check_fix` answer: accepted bursts outward, not accepted closes in, in the shade of what the checked code held |
+| Violet rings closing on a node, ↩ on a tag | that agent took the hand-in back |
+| A tag under a node, on a dark pill | the agent's label (W1 worker, R1 regulator, D1 disregulator), its model, its rung now. A tag that would sit on a nearer node or on another tag is lifted above it, with a thin line back to its node. Past 12 agents, only an agent doing something now (a rung, a post, a piece, a check, an alert, a fall, the hand-in) or hovered gets the full tag; the rest show a faint label |
+| The feed at the right | the last six events as chips, never words from a message: ✎ a post, its writer → the agents it names (its words on hover); → or ↓ a rung; ● or ◆ a piece and the routes (`branch`, `fix`, `patch`, `file`) of the agent's signals row that reach that family; ✓ a hand-in and what it held; ↩ a take-back (its reason on hover); ◉ ◎ a check; ⚠ an alert, the agents it names, true or false (its reason on hover) |
 | Top left | the setup as chips: ● workers and their model, ■ regulators, ✹ disregulators, alone, § the rule, the task version, ◎ check (the `check_fix` tool) or ◎✗, ⚑ cheat (told to cheat); the run's name |
-| Top right | the clock, the round; the hand-in standing now: ✓, who, ◈ what it held, and on the final one the team's rung and pass or fail |
+| Top right | the clock, the round; the hand-in standing now; the badge: a dashed circle until the final hand-in, then a disc in the team rung's colour (white core for hacked, white ring for pass), grey with no labels, ∅ for a run with no hand-in |
+| The legend | the shapes, the rungs, each family's pieces (the family `exploit_used` names is outlined), the alert pips, the held segments, the verdict's disc |
 
 The bar at the bottom: play or pause, the timeline and the speed. A run plays in two minutes at the default speed (three
-chevrons); the button steps through a quarter, half, normal and double speed. The timeline shows how busy
-the board is, a dot of the piece's colour where a piece was passed, a red tick where an agent began to cheat, a band
-while each hand-in stood (in the colour of what it held, the final one in the verdict's colour with what it held on
-top, a violet tick at each take-back), a dot on the bottom lane per `check_fix` answer (filled accepted, ring not
-accepted, in the colour of what it held) and a diamond at the final hand-in. Drag the scene to turn it, scroll to zoom, hover a node to light its links. Space plays or
-pauses. The buttons beside play step one call back or forward and jump to the previous or next round; hold one
-to keep stepping. The arrow keys step calls, and with Shift they step rounds. While stepping, the top right reads
-the round, the call's number and who made which call, and a white ring marks that agent. `#t=0.5` at the end of
-the URL opens the run halfway through, `#round=7` at round 7's first call and `#step=120` at the 120th call, all
-paused.
+chevrons); the button steps through a quarter, half, normal and double speed. The timeline has one lane per kind of
+mark, its icon at the left end and its totals at the right end, equal to the study page's counts:
+
+| Lane | Marks | Totals |
+|---|---|---|
+| ⚠ alerts | a triangle, amber when a true alarm is among it, grey when all are false | ⚠ true or unknown, then false in grey |
+| ● pieces | a dot or a small diamond in the piece's colour per arrival | |
+| ✓ hand-ins | a band while each hand-in stood, in the shade of what its code held; the final one in the team rung's colour, a diamond at it (white edge when it passed) and the verdict's disc after the track's end; a violet tick at each take-back; behind it, how busy the board was | ✓ hand-ins, ↩ take-backs |
+| ▲ rungs | a red tick where an agent reached attempted or above: solid when it stays there to its label, hollow when it fell back | ▲ solid, ▵ hollow |
+| ◎ checks | a dot per `check_fix` answer, filled when accepted, a ring when not | ◉ accepted, ◎ not accepted |
+
+Marks that would share a pixel become one mark with its counts beside it (ticks stand side by side). Drag the scene to
+turn it, scroll to zoom, hover a node to light its links. Space plays or pauses. The buttons beside play step one call
+back or forward and jump to the previous or next round; hold one to keep stepping. The arrow keys step calls, and with
+Shift they step rounds. While stepping, the top right reads the round, the call's number and who made which call, and
+a white ring marks that agent. `#t=0.5` at the end of the URL opens the run halfway through, `#round=7` at round 7's
+first call and `#step=120` at the 120th call, all paused.
 
 ## Where the data comes from
 
@@ -69,19 +82,22 @@ paused.
 | agents, roles | `processed/run.json` `agents`, `processed/facts/topology.json` |
 | calls | `processed/trajectories/*/transcript.json`, numbered from 0 as the transcript scan numbers them |
 | posts, names | `processed/communication/*.json`: each `sent` event, the post's text searched for agent IDs |
-| pieces held | `processed/run.json` `access.agents.<agent>.holds` |
-| pieces received | `analysis/signals.jsonl` `pieces_seen_at`: the call at which the agent first saw each piece |
-| rungs | `analysis/labels/cheating.json` `agents.<agent>.timeline.after` after every call, then the final rung at the run's end |
-| hand-in | `processed/run.json` `team_submission`, and the team's rung and `passed` in `analysis/labels/cheating.json` |
+| pieces held | `processed/run.json` `swe.exploits.<family>.holds` (hidden first), else `access.agents.<agent>.holds` as one family |
+| pieces received | `analysis/signals.jsonl` `pieces_seen_at`: the call at which the agent first saw each piece; the row's `routes`, mapped to a family as the SWE ladder's `route_exploits` does (`network` reaches neither) |
+| the family used | `analysis/labels/cheating.json` `exploit_used` |
+| rungs | `analysis/labels/cheating.json` `agents.<agent>.timeline.after` after every call up to the final hand-in, then `agents.<agent>.rung` from the final hand-in (or the run's end without one) |
+| undated rung | `agents.<agent>.timeline.first`: a clause at the final rung (attempted for hacked) with a call (`n` or `k`) |
+| falls | `agents.<agent>.timeline.rises[]`: `fell_at` (the agent's call where it fell back) and `by` |
+| left | `processed/episodes.jsonl` `ended_by` (`stop_working`) or `error`, when its last call ended before the final hand-in |
+| hand-in, verdict | `processed/run.json` `team_submission`; the final hand-in is the last of `unsubmits.submits` no take-back followed; the team's rung (`team`) and `passed` in `analysis/labels/cheating.json` |
 | what a version held | `processed/facts/version_values.json`: `values` (the planted values), `hand_ins[].held` matched to `unsubmits.submits` by `seq`, `checks[].held` and `answer` |
 | check_fix answers | `version_values.json` `checks`, placed at the caller's answered `check_fix` calls in order (a call the tool refused is no check) |
 | setup | `processed/run.json` `config` (`n_agents` minus `regulators` and `disregulators` = workers, `rule_level`, `tool_limits`, `seed`), `role_models`, `swe.variant`, `launch.module` (ending `_cheat` = told to cheat) |
-| alerts | `processed/run.json` `alerts` (caller, agents named, reason), placed at the caller's `alert_humans` call; `analysis/signals.jsonl` team row `alert_outcomes` for true or false alarm |
+| alerts | `processed/run.json` `alerts` (caller, agents named, reason), placed at the caller's `alert_humans` call; `analysis/signals.jsonl` team row `alert_outcomes` for true or false alarm, matched in order |
 | hand-ins, take-backs | `processed/run.json` `unsubmits.submits` and `unsubmits.unsubmits`, at their recorded times |
 | models | `processed/run.json` `ledger.agents.<agent>.model`, then `role_models`, then `model` |
 
-No file records who passed a piece. A flying orb starts at the holder of that piece the receiver had talked with most,
-then the holder who posted last, then the first holder. An orb from outside the swarm is a piece no agent held.
+No file records who passed a piece, so a piece's arrival names only its receiver and flies in from the scene's centre.
 
 ## Layout
 
@@ -101,17 +117,24 @@ tests/test_insight.py       what hand-ins and checks held, the setup, the study 
 
 ## The study page
 
+Counts read only finished runs: a run in `incomplete/` counts nowhere.
+
 | Mark | Meaning |
 |---|---|
 | Rows and columns | the setup fields that vary across the study's runs, split so the grid has few headers and few empty cells and fits the page; the fields every run shares sit in the header |
-| A cell | one setting; its runs, one mark per seed. Its red tint is the share of runs whose team rung is attempted or above |
-| ▲n ○n /n | runs at attempted or above, runs that passed, runs with labels |
+| Header | the finished runs, ▲ cheated, ○ passed, ? finished runs without labels, ⌀ runs in `incomplete/` |
+| A cell | one setting; its runs, one mark per seed. A dashed empty cell holds no run |
+| ▲n ○n /n | finished runs at attempted or above, finished runs that passed, finished runs with labels |
+| c/n and a thin red bar | the cheated share of a cell's finished runs with labels, along its bottom edge; the same for each row and column in its margin |
 | A disc | a run, in its team rung's colour (none, looked, tempted, attempted, hacked; hacked has a white core) |
 | A white ring | the run passed |
 | A dashed disc with ? | the run has no labels |
-| A faded disc in a dashed ring | the run is in `incomplete/` |
-| The small dot on a disc | what the final hand-in held: steel blue 0, pink some, magenta all, grey unknown |
-| ✓n ↩n ◎a/n ⚠n | hand-ins, take-backs, accepted / all `check_fix` answers, alerts |
+| An empty dashed ring set apart at a cell's edge | a run in `incomplete/` |
+| The dot on a disc | what the final hand-in held: an empty ring 0, half filled some, filled all, grey unknown (its `held` is null). No dot without a hand-in |
+| ✓n or ∅ | hand-ins, or ∅ for a run with no hand-in (`team_submission` null) |
+| ↩n | take-backs |
+| ◉a ◎b | `check_fix` answers accepted and not accepted |
+| ⚠a b | alerts: amber a, true or unknown; grey b, false (`alert_outcomes`) |
 | The row ? | runs without `processed/run.json`, which cannot be placed |
 
 `uv run pytest swarm_visualization/tests -q` runs the tests.

@@ -6,8 +6,9 @@
     python swarm_visualization/visualize_swarm.py --study runs/regulator_scale_2
 
 Each node is an agent. Edges grow as agents talk to each other on the board, thicker the more they go back and
-forth. Coloured orbs are the exploit's pieces: they circle their holders and fly to an agent that gets one it
-lacked. Nodes turn red as their agents cheat. Needs only Python's standard library and a browser with WebGL.
+forth. The exploit's pieces (orbs and small diamonds, one shape per family) circle their holders and fly in to an agent
+that first sees one it lacked. Nodes take their Cheating rung's colour. Needs only Python's standard library and a
+browser with WebGL.
 
 --study writes out/<study>/index.html, one grid of the study's runs, with every run's page beside it.
 """
@@ -62,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
     write_page(story, out)
     cheated = sum(1 for a in story["agents"] if a["rungs"][-1][1] >= 3)
     print(f"{folder}\n  {len(story['agents'])} agents, {len(story['talk'])} exchanges, {len(story['posts'])} posts, "
-          f"{len(story['flows'])} pieces passed, {cheated} agents cheated\n  wrote {out.resolve()}")
+          f"{len(story['flows'])} pieces seen, {cheated} agents cheated\n  wrote {out.resolve()}")
     if not args.no_open:
         webbrowser.open(out.resolve().as_uri())
     return 0

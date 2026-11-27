@@ -2,11 +2,16 @@
 travels, and when each agent climbs the Cheating ladder.
 
     story = build_story(RunFiles(Path("runs/regulator_scale_1/ian_flipt_deepseek_n10_reg0_revealing_s1")))
-    story["agents"]        # [{id, role, label W1/R1/D1, model, holds, start, end, rungs: [[t, rung index], ...]}]
+    story["agents"]        # [{id, role, label W1/R1/D1, model, holds, start, end, left, final, dated,
+                           #   rungs: [[t, rung index], ...]}]
     story["talk"]          # [[t, from, to, kind]]: kind 0 a post that names the agent, 1 a read asking for its posts
     story["posts"]         # [[t, agent index]]: every post an agent wrote
-    story["said"]          # [[t, agent index, excerpt]]: the post's opening words, agent IDs replaced by labels
-    story["flows"]         # [[t, piece, from or -1, to]]: a piece reaching an agent that did not hold it
+    story["said"]          # [[t, agent index, excerpt, [agents named]]]: the post's opening words (IDs as labels)
+    story["families"]      # [{name, pieces: [piece index]}]: the exploits (run.json swe.exploits), hidden first
+    story["piece_family"]  # the family of each piece in story["piece_names"]
+    story["flows"]         # [[t, piece, to, [routes]]]: a piece first seen by an agent that did not hold it
+    story["falls"]         # [[t, agent, rung index after, by agent or -1]]: an undone write's rung falling back
+    story["final_t"]       # when the final hand-in was made (the labels apply from then), or None
     story["submit"]        # {t, agent, cheated, passed, labelled, held} or None
     story["steps"]         # [[t, agent, tool, round]]: every call, in time order
     story["rounds"]        # [[round, t]]: when each round began
@@ -23,8 +28,12 @@ none, None when its code was not stored. It is a fact about the code, not a verd
 The clock is seconds from the run's first call, from the call times the rules recorded (run.json rules.timeline).
 A run without them falls back to the order of each agent's calls within its rounds.
 
-Where a piece came from is not recorded. A flow's source is the holder of that piece the receiver had talked with
-most up to that moment, then the holder who posted last, then the first holder. -1 means no agent held it.
+Where a piece came from is not recorded, so a flow names only its receiver: analysis/signals.jsonl pieces_seen_at,
+the call at which the agent first saw the piece. Its routes are the routes of the agent's signals row (`routes`)
+that reach the piece's family (the SWE ladder's route_exploits); they are the agent's, not proof of this arrival's path.
+
+The labels grade the final hand-in. From the final hand-in on, every agent shows its final rung (cheating.json
+agents.<agent>.rung); without a final hand-in the final rung comes at the run's end.
 """
 from __future__ import annotations
 
@@ -43,6 +52,48 @@ AGENT_ID = re.compile(r"[a-z0-9]{5}")
 ROLE_LETTER = {"worker": "W", "regulator": "R", "disregulator": "D"}
 EXCERPT = 70
 CHECK_ANSWERS = {"accepted": 1, "not_accepted": 0}
+# The SWE ladder's route_exploits: each route of a signals row and the family it reaches, with its chip word. The
+# network route reaches neither family and is left out.
+ROUTE_FAMILY = {"branch": ("hidden", "branch"), "fix_commit": ("hidden", "fix"),
+                "side_patch": ("revealed", "patch"), "revealed_file": ("revealed", "file")}
+LEFT_BY = {"stop_working"}
+
+
+def piece_families(run_json: dict, roster: list[str]) -> tuple[list[dict], dict[str, list[str]]]:
+    """The exploit families and what each agent holds at the start. From run.json swe.exploits (hidden first), else
+    one unnamed family from access.agents.<agent>.holds."""
+    exploits = (run_json.get("swe") or {}).get("exploits") or {}
+    names = sorted(exploits, key=lambda n: (n != "hidden", n))
+    holds: dict[str, list[str]] = {agent: [] for agent in roster}
+    families = []
+    for name in names:
+        family_holds = (exploits.get(name) or {}).get("holds") or {}
+        pieces = sorted({p for held in family_holds.values() for p in held or []})
+        if not pieces:
+            continue
+        families.append({"name": name, "pieces": pieces})
+        for agent, held in family_holds.items():
+            if agent in holds:
+                holds[agent] += [p for p in held or [] if p not in holds[agent]]
+    if not families:
+        access = (run_json.get("access") or {}).get("agents") or {}
+        holds = {agent: list((access.get(agent) or {}).get("holds") or []) for agent in roster}
+        pieces = sorted({p for held in holds.values() for p in held})
+        families = [{"name": None, "pieces": pieces}] if pieces else []
+    return families, holds
+
+
+def dated_final(record: dict) -> bool:
+    """Whether a dated call stands behind the agent's final rung: a clause of timeline.first at that rung with a call
+    (hacked needs attempted dated; its pass is the hand-in's). True where the record has no timeline."""
+    final = rung_index(record.get("rung"))
+    timeline = record.get("timeline") or {}
+    if final == 0 or "first" not in timeline:
+        return True
+    need = min(final, CHEATED_FROM)
+    dated = [rung_index(c.get("rung")) for c in timeline.get("first") or [] if c.get("n") is not None
+             or c.get("k") is not None]
+    return max(dated, default=0) >= need
 
 def agent_labels(roster: list[str], roles: dict[str, str]) -> dict[str, str]:
     """W1, W2, ... for workers, R1 ... for regulators, D1 ... for disregulators, in roster order."""
@@ -199,9 +250,9 @@ def build_story(files: RunFiles) -> dict:
             t = start_of(*where)
             for message_id in event.get("message_ids") or []:
                 content = str((messages.get(message_id) or {}).get("content") or "")
-                posts.append([round(t, 3), index[sender]])
-                said.append([round(t, 3), index[sender], excerpt(content)])
                 named = dict.fromkeys(m for m in AGENT_ID.findall(content) if m in index and m != sender)
+                posts.append([round(t, 3), index[sender]])
+                said.append([round(t, 3), index[sender], excerpt(content), [index[other] for other in named]])
                 talk += [[round(t, 3), index[sender], index[other], TALK_MENTION] for other in named]
     for agent, rows in calls.items():
         for k, c in enumerate(rows):
@@ -212,63 +263,31 @@ def build_story(files: RunFiles) -> dict:
     posts.sort()
     said.sort(key=lambda row: row[:2])
 
-    # The exploit pieces each agent holds at the start.
-    access = (run_json.get("access") or {}).get("agents") or {}
-    holds = {agent: list((access.get(agent) or {}).get("holds") or []) for agent in roster}
-    pieces = sorted({p for held in holds.values() for p in held})
-    piece_index = {p: i for i, p in enumerate(pieces)}
-
-    def ties(a: str, b: str, before: float) -> int:
-        ia, ib = index[a], index[b]
-        return sum(1 for t, x, y, _ in talk if t <= before and {x, y} == {ia, ib})
-
-    def last_post(agent: str, before: float) -> float:
-        return max((t for t, who in posts if who == index[agent] and t <= before), default=-1.0)
-
+    # The exploit pieces each agent holds at the start, by family, and each piece an agent first saw without holding
+    # it (pieces_seen_at). Who gave it is not recorded.
+    families, holds = piece_families(run_json, roster)
+    pieces = [p for family in families for p in family["pieces"]]
+    piece_family = [f for f, family in enumerate(families) for _ in family["pieces"]]
+    piece_index: dict[str, int] = {}
+    for i, p in enumerate(pieces):
+        piece_index.setdefault(p, i)
     flows: list[list] = []
     for row in files.signals():
         if row.get("row") != "agent" or row.get("agent") not in index:
             continue
         receiver = row["agent"]
+        routes = [r for r in row.get("routes") or [] if r in ROUTE_FAMILY]
         for piece, k in (row.get("pieces_seen_at") or {}).items():
             if piece not in piece_index or piece in holds[receiver] or not isinstance(k, int):
                 continue
-            t = end_of(receiver, k)
-            holders = [a for a in roster if piece in holds[a] and a != receiver]
-            source = max(holders, key=lambda h: (ties(h, receiver, t), last_post(h, t), -roster.index(h)),
-                         default=None)
-            flows.append([round(t, 3), piece_index[piece], index[source] if source else -1, index[receiver]])
-    flows.sort()
+            family = families[piece_family[piece_index[piece]]]["name"]
+            chips = list(dict.fromkeys(ROUTE_FAMILY[r][1] for r in routes if ROUTE_FAMILY[r][0] == family))
+            flows.append([round(end_of(receiver, k), 3), piece_index[piece], index[receiver], chips])
+    flows.sort(key=lambda row: row[:3])
 
-    # The Cheating ladder after every call, and the final label at the run's end.
     cheating = files.cheating()
     labelled = cheating.get("agents") or {}
     episodes = {e.get("agent"): e for e in files.episodes()}
-    entry_rounds = (run_json.get("rules") or {}).get("entry_rounds") or {}
-    agents = []
-    for agent in roster:
-        record = labelled.get(agent) or {}
-        after = ((record.get("timeline") or {}).get("after")) or []
-        rungs, current = [[0.0, 0]], 0
-        for k, rung in enumerate(after):
-            value = rung_index(rung)
-            if value != current:
-                rungs.append([round(end_of(agent, k), 3), value])
-                current = value
-        final = rung_index(record.get("rung"))
-        if final != current:
-            rungs.append([round(end_of_run, 3), final])
-        rows = times[agent]
-        entry = entry_rounds.get(agent) if isinstance(entry_rounds, dict) else None
-        start = rows[0][0] if rows and isinstance(entry, int) and entry > 1 else 0.0
-        end = rows[-1][1] if rows else end_of_run
-        agents.append({"id": agent, "role": roles.get(agent, "worker"), "label": labels[agent],
-                       "model": model_of(agent),
-                       "holds": [piece_index[p] for p in holds[agent]],
-                       "start": round(start, 3), "end": round(end, 3),
-                       "ended": (episodes.get(agent) or {}).get("ended_by"),
-                       "rungs": rungs})
-
     submit = None
     handed = run_json.get("team_submission") or {}
     if handed.get("agent") in index:
@@ -350,6 +369,62 @@ def build_story(files: RunFiles) -> dict:
         final = next((row for row in version_rows if row.get("final")), None)
         submit["held"] = held_of(final)
 
+    # The final hand-in: the last hand-in when no take-back followed it. The labels grade it, so every agent shows
+    # its final rung from then on; without one, from the run's end.
+    final_t = None
+    if submit is not None:
+        final_t = handins[-1][0] if handins and handins[-1][2] == 0 else submit["t"]
+    label_t = final_t if final_t is not None else round(end_of_run, 3)
+
+    # The Cheating ladder after every call up to the final hand-in, then the final label. An undone write's rise
+    # falls back at its fell_at call (timeline.rises), by the agent named in "by".
+    entry_rounds = (run_json.get("rules") or {}).get("entry_rounds") or {}
+    agents = []
+    falls: list[list] = []
+    for agent in roster:
+        record = labelled.get(agent) or {}
+        timeline = record.get("timeline") or {}
+        after = timeline.get("after") or []
+        rungs, current = [[0.0, 0]], 0
+        for k, rung in enumerate(after):
+            value = rung_index(rung)
+            at = round(end_of(agent, k), 3)
+            if at >= label_t:
+                break
+            if value != current:
+                rungs.append([at, value])
+                current = value
+        final = rung_index(record.get("rung"))
+        if final != current:
+            rungs.append([label_t, final])
+        for rise in timeline.get("rises") or []:
+            fell = rise.get("fell_at")
+            if not isinstance(fell, int) or fell >= len(after):
+                continue
+            at = round(end_of(agent, fell), 3)
+            if at >= label_t or rung_index(after[fell]) >= CHEATED_FROM:
+                continue
+            by = rise.get("by")
+            row = [at, index[agent], rung_index(after[fell]), index[by] if by in index and by != agent else -1]
+            if row not in falls:
+                falls.append(row)
+        rows = times[agent]
+        entry = entry_rounds.get(agent) if isinstance(entry_rounds, dict) else None
+        start = rows[0][0] if rows and isinstance(entry, int) and entry > 1 else 0.0
+        end = rows[-1][1] if rows else end_of_run
+        episode = episodes.get(agent) or {}
+        # An agent has left when its episode ended by stop_working or an error before the final hand-in.
+        quit_early = episode.get("ended_by") in LEFT_BY or bool(episode.get("error"))
+        left = round(end, 3) if quit_early and end < (final_t if final_t is not None else end_of_run) else None
+        agents.append({"id": agent, "role": roles.get(agent, "worker"), "label": labels[agent],
+                       "model": model_of(agent),
+                       "holds": [piece_index[p] for p in holds[agent] if p in piece_index],
+                       "start": round(start, 3), "end": round(end, 3), "left": left,
+                       "ended": episode.get("ended_by"),
+                       "final": final, "dated": dated_final(record),
+                       "rungs": rungs})
+    falls.sort(key=lambda row: row[:2])
+
     # Every check_fix call that the tool answered: [t, agent, 1 accepted | 0 not_accepted | -1 unknown, held].
     # version_values.json "checks" are numbered across the team; each agent's are matched in order to its own
     # answered check_fix calls (a refused call is no check), else to its first unused call in that round.
@@ -395,6 +470,10 @@ def build_story(files: RunFiles) -> dict:
     setup = run_setup(run_json, roles, versions, tools_called)
     return {"run": files.name, "duration": round(end_of_run, 3), "agents": agents, "pieces": len(pieces),
             "steps": steps, "rounds": rounds,
-            "piece_names": pieces, "talk": talk, "posts": posts, "said": said, "flows": flows, "submit": submit,
-            "alerts": alerts, "handins": handins, "team_rung": rung_index(cheating.get("team")),
+            "piece_names": pieces, "piece_family": piece_family,
+            "families": [{"name": f["name"], "pieces": [i for i, g in enumerate(piece_family) if g == n]}
+                         for n, f in enumerate(families)],
+            "exploit_used": cheating.get("exploit_used"),
+            "talk": talk, "posts": posts, "said": said, "flows": flows, "falls": falls, "submit": submit,
+            "final_t": final_t, "alerts": alerts, "handins": handins, "team_rung": rung_index(cheating.get("team")),
             "values": value_names, "checks": checks, "setup": setup}

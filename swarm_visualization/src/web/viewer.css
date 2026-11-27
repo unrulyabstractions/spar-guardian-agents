@@ -5,11 +5,14 @@ html, body {
   background: radial-gradient(ellipse at 50% 40%, #131a2b 0%, #070a12 60%, #030408 100%);
   user-select: none;
 }
+/* After the final hand-in: a thin vignette at the edges in the team rung's colour; the centre stays dark. */
 #tint {
+  --verdict: 138, 147, 168;
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(ellipse at 50% 45%, rgba(255, 20, 50, 0) 35%, rgba(255, 20, 50, 0.28) 100%);
+  box-shadow: inset 0 0 60px 6px rgba(var(--verdict), 0.42);
+  background: radial-gradient(ellipse at 50% 45%, rgba(var(--verdict), 0) 72%, rgba(var(--verdict), 0.14) 100%);
   opacity: 0;
 }
 #scene {
@@ -26,7 +29,7 @@ html, body {
   bottom: 22px;
   transform: translateX(-50%);
   width: min(1040px, calc(100% - 40px));
-  height: 60px;
+  height: 76px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -52,7 +55,7 @@ html, body {
 #bar svg { width: 100%; height: 100%; fill: #e6eeff; display: block; }
 #timeline {
   flex: 1;
-  height: 48px;
+  height: 64px;
   cursor: pointer;
 }
 
@@ -65,8 +68,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
   white-space: nowrap;
   font-size: 12px;
   line-height: 1.25;
-  text-shadow: 0 1px 3px #000, 0 0 8px #000;
+  padding: 2px 7px 2px;
+  border-radius: 8px;
+  background: rgba(7, 10, 18, 0.84);
+  border: 1px solid rgba(160, 190, 255, 0.1);
 }
+#leaders { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+#leaders .leader { stroke: rgba(200, 215, 255, 0.55); stroke-width: 1; }
+.tag .raised .alarm { margin: 0 0 0 4px; }
+.tag .raised .false { color: #8b93a8; font-weight: 700; margin-left: 3px; }
+.tag .hb { color: #ffffff; }
 .tag b { font-weight: 650; letter-spacing: 0.02em; }
 .tag .model { color: #9fb3d9; }
 .tag .rung { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
@@ -91,12 +102,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 }
 #feed {
   z-index: 2;
-  position: fixed; right: 22px; top: 96px; width: min(380px, 30vw);
+  position: fixed; right: 22px; top: 118px; width: min(380px, 30vw);
   display: flex; flex-direction: column; gap: 6px; pointer-events: none;
 }
 .event {
   font-size: 12.5px; line-height: 1.45; padding: 5px 9px; border-radius: 8px; white-space: nowrap; overflow: hidden;
-  text-overflow: ellipsis;
+  pointer-events: auto;
   background: rgba(14, 19, 32, 0.94); border-left: 3px solid #8fb3ff;
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
 }
@@ -104,27 +115,58 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 .event .quote { color: #b9c7e6; font-style: italic; margin-left: 3px; }
 .event.final { border-left-width: 6px; }
 #legend {
-  position: fixed; left: 22px; bottom: 96px; font-size: 11px; line-height: 1.7; color: #b9c7e6;
+  position: fixed; left: 22px; bottom: 112px; font-size: 11px; line-height: 1.7; color: #b9c7e6;
   background: rgba(14, 19, 32, 0.6); padding: 7px 11px; border-radius: 10px; pointer-events: none;
 }
 #legend .k { margin-right: 10px; white-space: nowrap; }
-#legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+#legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: -1px;
+              box-sizing: border-box; }
+#legend .sw.core { background-image: radial-gradient(circle, #fff 0 30%, transparent 38%) !important; }
+#legend .sw.dashed { border: 1.5px dashed #c9d6e8; background: transparent; }
+#legend .sw.ringed { border: 1.5px solid #fff; background: transparent; width: 11px; height: 11px; }
+#legend .sw.passring { border: 1.5px solid #fff; background: #ff9d47; box-shadow: 0 0 0 1.5px #0e1320, 0 0 0 3px #fff;
+                       width: 8px; height: 8px; margin: 0 6px 0 2px; }
+#legend .fam { padding: 1px 6px; border-radius: 8px; border: 1px solid transparent; }
+#legend .fam.used { border-color: #e6eeff; }
+#legend .pip { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; vertical-align: 0; }
+/* What a version's code held: N segments, n filled; dashed when unknown. */
+.segs { display: inline-flex; gap: 2px; vertical-align: 0; }
+.seg { display: inline-block; width: 9px; height: 5px; border-radius: 1.5px; background: rgba(255, 255, 255, 0.16);
+       border: 1px solid rgba(255, 255, 255, 0.55); box-sizing: border-box; }
+.seg.on { background: #ffffff; border-color: #ffffff; }
+.seg.unknown { background: transparent; border: 1px dashed rgba(255, 255, 255, 0.6); }
+.held { display: inline-flex; align-items: center; gap: 4px; margin: 0 4px; }
+.held .n { font-size: 11px; color: #e6eeff; font-weight: 650; font-variant-numeric: tabular-nums; }
+/* The verdict as a disc: the team rung's fill, a white core for hacked, a white ring for pass, ∅ for no hand-in. */
+.badge { display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; box-sizing: border-box;
+         color: #c8d6f5; font-weight: 700; vertical-align: middle; }
+.badge.big { width: 44px; height: 44px; font-size: 20px; }
+.badge.small { width: 13px; height: 13px; font-size: 9px; margin: 0 4px; }
+.badge.r0 { background: #c9d6e8; }
+.badge.r1 { background: #ffe1a6; }
+.badge.r2 { background: #ff9d47; }
+.badge.r3 { background: #ff2a2a; }
+.badge.r4 { background: radial-gradient(circle, #ffffff 0 22%, #ff0a3c 30%); }
+.badge.pass { box-shadow: 0 0 0 3px #070a12, 0 0 0 5.5px #ffffff; }
+.badge.small.pass { box-shadow: 0 0 0 1.5px #0e1320, 0 0 0 3px #ffffff; }
+.badge.ungraded { background: #4b5263; }
+.badge.none { border: 2px solid #5d6884; }
+.badge.pending { border: 2px dashed #3a4359; }
 #legend .line { display: inline-block; width: 22px; height: 0; border-top: 4px solid #8fb3ff; border-radius: 2px; margin-right: 5px; vertical-align: 2px; }
 .alarm { color: #ffc21a; margin: 0 4px 0 10px; }
 .event .alarm { margin: 0 4px 0 0; }
 .tag .flagged { color: #ffc21a; font-weight: 700; }
+/* While a hand-in stands: a faint neutral glow at the edges. */
 #handinRoom {
-  --room: 157, 180, 224;
   position: fixed; inset: 0; pointer-events: none; opacity: 0;
-  background: radial-gradient(ellipse at 50% 45%, rgba(var(--room), 0.04) 25%, rgba(var(--room), 0.3) 100%);
-}
-#honestRoom {
-  position: fixed; inset: 0; pointer-events: none; opacity: 0;
-  background: radial-gradient(ellipse at 50% 45%, rgba(40, 220, 120, 0) 35%, rgba(40, 220, 120, 0.28) 100%);
+  background: radial-gradient(ellipse at 50% 45%, rgba(157, 180, 224, 0) 70%, rgba(157, 180, 224, 0.12) 100%);
 }
 #bar button.small { width: 30px; height: 30px; padding: 6px; background: rgba(190, 210, 255, 0.07); }
-#clock { text-align: right; }
+#clock { text-align: right; display: flex; gap: 14px; align-items: flex-start; }
+#badge { margin-top: 2px; }
 #where { font-size: 12px; color: #9fb3d9; margin-top: 3px; }
 #where b { font-weight: 650; }
 .tag.mini { opacity: 0.55; font-size: 10px; }
 .tag.mini .rung, .tag.mini .flagged, .tag.mini .model, .tag.mini br { display: none; }
+.tag.mini { padding: 1px 5px; background: rgba(7, 10, 18, 0.6); }
+.ic.ok { color: #e6eeff; }

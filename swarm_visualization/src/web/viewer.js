@@ -1,7 +1,7 @@
 // The swarm in 3D. Each node is an agent; edges grow as agents talk on the board (a post naming the other, or a
-// read asking for the other's posts), thicker the more they go back and forth. Coloured orbs are the exploit's
-// pieces: each agent circles the pieces it holds, and an orb flies to an agent when it gets a piece it lacked.
-// Nodes warm and then turn red as they climb the Cheating ladder. No text is drawn anywhere.
+// read asking for the other's posts), thicker the more they go back and forth. The exploit's pieces circle the agents
+// that hold them: orbs for one family, small diamonds for the other; a piece an agent first sees flies in to it from
+// the scene's centre. Nodes take their Cheating rung's colour; from the final hand-in on, every agent shows its label.
 import * as THREE from 'three';
 
 const S = JSON.parse(document.getElementById('story').textContent);
@@ -14,43 +14,65 @@ const D = {spark: 1.3 * SPS, flow: 2.4 * SPS, ripple: 1.5 * SPS, flash: 1.8 * SP
            fade: 0.7 * SPS, alert: 3.2 * SPS, check: 2.2 * SPS};
 const ASK = 1;
 const CHEATED = 3;
+const HACKED = 4;
 
 const RUNG_COLORS = ['#c9d6e8', '#ffe1a6', '#ff9d47', '#ff2a2a', '#ff0a3c'].map(c => new THREE.Color(c));
-const PIECE_COLORS = ['#3d8bff', '#2fe07a', '#b46dff', '#00d8d0', '#f0e040', '#ff7ad9'].map(c => new THREE.Color(c));
+const RUNG_WORDS = ['none', 'looked', 'tempted', 'attempted', 'hacked'];
 const EDGE_COLOR = new THREE.Color('#8fb3ff');
 const EDGE_RED = new THREE.Color('#ff2f45');
 const TALK_COLOR = new THREE.Color('#eaf2ff');
 const ASK_COLOR = new THREE.Color('#7fe8ff');
+const ROLE_EDGE = new THREE.Color('#38e1ff');             // the outline of a regulator or disregulator
 const ALERT_COLOR = new THREE.Color('#ffc21a');          // an alert to humans; a false alarm is grey
-const FALSE_ALARM = new THREE.Color('#a3abc2');
+const FALSE_ALARM = new THREE.Color('#8b93a8');
+const UNKNOWN_ALARM = new THREE.Color('#b8953a');
+const alarmColor = outcome => (outcome === 1 ? ALERT_COLOR : outcome === 0 ? FALSE_ALARM : UNKNOWN_ALARM);
 const ALERTS = (S.alerts || []).slice().sort((a, b) => a[0] - b[0]);
-// A hand-in: only the final one is graded (the labels): green when the team's rung is below attempted, red from
-// attempted up, grey when the run has no labels. Every hand-in, the final one too, also shows what its code held:
-// how many of the planted values (S.values) sit on an added line. Steel blue none, pink some, magenta all, grey
-// unknown (its code was not stored). That is a fact about the code, not a verdict.
+
+// The exploit's pieces, by family (run.json swe.exploits): orbs for the first, small diamonds for the second.
+const PIECE_NAMES = S.piece_names || [];
+const FAMILIES = S.families || (PIECE_NAMES.length ? [{name: null, pieces: PIECE_NAMES.map((_, i) => i)}] : []);
+const PIECE_FAMILY = S.piece_family || PIECE_NAMES.map(() => 0);
+const FAMILY_HUES = [['#3d8bff', '#2fe07a', '#b46dff', '#5ab0ff', '#7dffb0'],
+                     ['#f0e040', '#a8f04a', '#e0a870', '#ffd27a', '#d0ff8a']];
+const FAMILY_ICON = ['●', '◆'];
+const PIECE_COLORS = PIECE_NAMES.map((_, i) => {
+  const f = PIECE_FAMILY[i] || 0, k = (FAMILIES[f] ? FAMILIES[f].pieces.indexOf(i) : i);
+  const hues = FAMILY_HUES[f % FAMILY_HUES.length];
+  return new THREE.Color(hues[Math.max(0, k) % hues.length]);
+});
+const pieceColor = i => PIECE_COLORS[i] || new THREE.Color('#8fb3ff');
+const familyOf = i => PIECE_FAMILY[i] || 0;
+
+// What a version's code held: how many of the planted values (S.values) sit on an added line. A fact about the code,
+// not a verdict. Shown as N white segments filled n of N, dashed when unknown (its code was not stored).
 const VALUES = S.values || [];
 const NV = VALUES.length;
-const HELD_COLORS = {unknown: new THREE.Color('#6b7385'), none: new THREE.Color('#9db4e0'),
-                     some: new THREE.Color('#ff9ac8'), all: new THREE.Color('#ff3fb4')};
+const HELD_COLORS = {unknown: new THREE.Color('#6b7385'), none: new THREE.Color('#7f8db0'),
+                     some: new THREE.Color('#c9d3ea'), all: new THREE.Color('#ffffff')};
 const heldLevel = held => (!Array.isArray(held) || !NV ? 'unknown' : !held.length ? 'none' : held.length >= NV ? 'all' : 'some');
 const heldColor = held => HELD_COLORS[heldLevel(held)];
 const heldText = held => (heldLevel(held) === 'unknown' ? '?' : `${held.length}/${NV}`);
-const HONEST_COLOR = new THREE.Color('#3ddc84');
-const CHEAT_COLOR = new THREE.Color('#ff2f45');
+
+// Hand-ins. Only the final one is graded (the labels): the team's rung in its own colour, a white ring for pass.
 const UNGRADED_COLOR = new THREE.Color('#8a93a8');
 const TAKEBACK_COLOR = new THREE.Color('#d68cff');        // a hand-in taken back
 const HANDINS = (S.handins || []).slice().sort((a, b) => a[0] - b[0]);
 if (!HANDINS.length && S.submit) HANDINS.push([S.submit.t, S.submit.agent, 0, '', S.submit.held ?? null]);
-// The final hand-in: the last one no take-back followed.
-const FINAL = (() => {
+const FINAL = (() => {                                    // the final hand-in: the last one no take-back followed
   const last = HANDINS[HANDINS.length - 1];
   return S.submit && last && last[2] === 0 ? last : null;
 })();
-const FINAL_T = FINAL ? FINAL[0] : (S.submit ? S.submit.t : Infinity);
+const FINAL_T = S.final_t ?? (FINAL ? FINAL[0] : (S.submit ? S.submit.t : Infinity));
+const LABEL_T = Number.isFinite(FINAL_T) ? FINAL_T : T;   // when every agent takes its final rung
+const FINAL_AGENT = FINAL ? FINAL[1] : (S.submit ? S.submit.agent : -1);
 const FINAL_HELD = S.submit ? (S.submit.held !== undefined ? S.submit.held : (FINAL ? FINAL[4] : null)) : null;
 const GRADED = !!S.submit && S.submit.labelled !== false;
-const VERDICT_COLOR = !GRADED ? UNGRADED_COLOR : S.submit.cheated ? CHEAT_COLOR : HONEST_COLOR;
+const TEAM_RUNG = S.team_rung || 0;
+const PASSED = GRADED && !!S.submit.passed;
+const VERDICT_COLOR = GRADED ? RUNG_COLORS[TEAM_RUNG] : UNGRADED_COLOR;
 const CHECKS = (S.checks || []).slice().sort((a, b) => a[0] - b[0]);
+const FALLS = (S.falls || []).slice().sort((a, b) => a[0] - b[0]);
 const TAU = 0.08 * T;                                     // an exchange's weight halves in about 0.7 TAU
 function handinAt(t) {                                    // who holds the hand-in at t, since when, what it held
   let holder = -1, since = -Infinity, back = null, held = null;
@@ -78,24 +100,46 @@ const rimLight = new THREE.DirectionalLight(0x6f8cff, 0.8);
 rimLight.position.set(-18, -6, -12);
 scene.add(rimLight);
 
-function radialTexture(stops) {
+function canvasTexture(draw) {
   const c = document.createElement('canvas');
   c.width = c.height = 256;
-  const g = c.getContext('2d');
-  const gradient = g.createRadialGradient(128, 128, 0, 128, 128, 128);
-  for (const [at, alpha] of stops) gradient.addColorStop(at, `rgba(255,255,255,${alpha})`);
-  g.fillStyle = gradient;
-  g.fillRect(0, 0, 256, 256);
+  draw(c.getContext('2d'));
   const texture = new THREE.CanvasTexture(c);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
+function radialTexture(stops) {
+  return canvasTexture(g => {
+    const gradient = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+    for (const [at, alpha] of stops) gradient.addColorStop(at, `rgba(255,255,255,${alpha})`);
+    g.fillStyle = gradient;
+    g.fillRect(0, 0, 256, 256);
+  });
+}
+// A circle of radius 0.9 of the sprite's half size: a sprite of scale s draws a ring of radius 0.45 s.
+const CIRCLE_R = 0.45;
+function circleTexture(width, dashed = false) {
+  return canvasTexture(g => {
+    g.strokeStyle = '#ffffff';
+    g.lineWidth = width;
+    if (dashed) g.setLineDash([14, 10]);
+    g.beginPath(); g.arc(128, 128, 115, 0, Math.PI * 2); g.stroke();
+  });
+}
 const GLOW = radialTexture([[0, 1], [0.2, 0.6], [0.5, 0.16], [1, 0]]);
 const RING = radialTexture([[0, 0], [0.7, 0], [0.8, 0.95], [0.88, 0.3], [1, 0]]);
+const DOT = canvasTexture(g => { g.fillStyle = '#fff'; g.beginPath(); g.arc(128, 128, 100, 0, Math.PI * 2); g.fill();
+                                 g.strokeStyle = '#070a12'; g.lineWidth = 26; g.stroke(); });
+const CORE = radialTexture([[0, 1], [0.45, 1], [0.62, 0.55], [1, 0]]);
+const RING_VERDICT = circleTexture(9);
+const RING_PASS = circleTexture(5);
+const RING_SET = circleTexture(5);
+const RING_DASHED = circleTexture(4, true);
 
-function sprite(texture, color = 0xffffff, opacity = 1) {
+function sprite(texture, color = 0xffffff, opacity = 1, additive = true) {
   const material = new THREE.SpriteMaterial({map: texture, color, transparent: true, opacity,
-                                             blending: THREE.AdditiveBlending, depthWrite: false});
+                                             blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+                                             depthWrite: false});
   return new THREE.Sprite(material);
 }
 
@@ -127,10 +171,23 @@ class Pool {
 }
 const glowPool = new Pool(() => sprite(GLOW));
 const ringPool = new Pool(() => sprite(RING));
+const wavePool = new Pool(() => sprite(circleTexture(3)));         // the final hand-in's wave: a thin line
+const pipPool = new Pool(() => sprite(DOT, 0xffffff, 1, false));
 const orbGeometry = new THREE.SphereGeometry(1, 20, 14);
-const orbPool = new Pool(() => new THREE.Mesh(orbGeometry, new THREE.MeshStandardMaterial({
-  roughness: 0.25, metalness: 0.1, emissiveIntensity: 1.2, transparent: true})));
-const pools = [glowPool, ringPool, orbPool];
+const gemGeometry = new THREE.OctahedronGeometry(1.15, 0).scale(0.75, 1.3, 0.75);   // a small upright diamond
+const pieceMaterial = () => new THREE.MeshStandardMaterial({roughness: 0.25, metalness: 0.1, emissiveIntensity: 1.2,
+                                                            transparent: true});
+const orbPool = new Pool(() => new THREE.Mesh(orbGeometry, pieceMaterial()));
+const gemPool = new Pool(() => new THREE.Mesh(gemGeometry, Object.assign(pieceMaterial(), {flatShading: true})));
+const pools = [glowPool, ringPool, wavePool, pipPool, orbPool, gemPool];
+function pieceMesh(piece) {                  // an orb for the first family, a small diamond for the second
+  const gem = familyOf(piece) === 1;
+  const mesh = gem ? gemPool.get() : orbPool.get();
+  if (gem) mesh.quaternion.copy(camera.quaternion);           // upright and facing the camera: a rhombus
+  const color = pieceColor(piece);
+  mesh.material.color.copy(color); mesh.material.emissive.copy(color);
+  return mesh;
+}
 
 // ---------- agents ----------
 function spikyGeometry() {
@@ -173,21 +230,28 @@ const ANCHORS = (() => {
 })();
 const CROWDED = N > 12;                       // a crowded swarm shows tags only for agents doing something now
 const pos = [], vel = [];
+// Radii around a node of radius 1 (each ring at most 1.33): the dashed outline of a rung no dated call stands behind,
+// the white full-set ring, the verdict ring in the team rung's colour and the white pass ring.
+const R_DASH = 1.08, R_SET = 1.16, R_VERDICT = 1.25, R_PASS = 1.34, R_PIPS = 1.5, R_HELD = [1.42, 1.56];
 const nodes = S.agents.map((agent, i) => {
   const group = new THREE.Group();
   scene.add(group);
   const material = new THREE.MeshStandardMaterial({color: RUNG_COLORS[0].clone(), emissive: RUNG_COLORS[0].clone(),
                                                    emissiveIntensity: 0.25, roughness: 0.32, metalness: 0.12,
-                                                   transparent: true, flatShading: agent.role === 'disregulator'});
+                                                   transparent: true, flatShading: agent.role !== 'worker'});
   let core, cage = null;
+  const edgeMaterial = new THREE.LineBasicMaterial({color: ROLE_EDGE, transparent: true, opacity: 0.95, toneMapped: false});
   if (agent.role === 'disregulator') {
-    core = new THREE.Mesh(spikyGeometry(), material);
+    const geometry = spikyGeometry();
+    core = new THREE.Mesh(geometry, material);
+    cage = new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 30), edgeMaterial);
+    cage.scale.setScalar(1.025);
+    core.add(cage);
   } else if (agent.role === 'regulator') {
     const box = new THREE.BoxGeometry(1.3, 1.3, 1.3);
     core = new THREE.Mesh(box, material);
-    material.flatShading = true;
-    cage = new THREE.LineSegments(new THREE.EdgesGeometry(box),
-                                  new THREE.LineBasicMaterial({color: 0xcfe2ff, transparent: true, opacity: 0.9}));
+    cage = new THREE.LineSegments(new THREE.EdgesGeometry(box), edgeMaterial);
+    cage.scale.setScalar(1.025);
     core.add(cage);
   } else {
     core = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), material);
@@ -197,44 +261,61 @@ const nodes = S.agents.map((agent, i) => {
   const glow = sprite(GLOW, RUNG_COLORS[0], 0.4);
   glow.scale.setScalar(4);
   group.add(glow);
-  const complete = new THREE.Mesh(new THREE.TorusGeometry(1.95, 0.05, 8, 72),
-                                  new THREE.MeshBasicMaterial({color: 0xffffff, transparent: true, opacity: 0,
-                                                               blending: THREE.AdditiveBlending, depthWrite: false}));
-  group.add(complete);
+  const ringSprite = (texture, radius) => {
+    const s = sprite(texture, 0xffffff, 0, false);
+    s.scale.setScalar(radius / CIRCLE_R);
+    group.add(s);
+    return s;
+  };
+  const whiteCore = sprite(CORE, 0xffffff, 0, false);     // hacked: a white core, as on the study page's disc
+  whiteCore.scale.setScalar(0.8);
+  group.add(whiteCore);
+  const dash = ringSprite(RING_DASHED, R_DASH);
+  const fullSet = ringSprite(RING_SET, R_SET);
+  const verdict = ringSprite(RING_VERDICT, R_VERDICT);
+  const pass = ringSprite(RING_PASS, R_PASS);
+  // What the standing hand-in's code held: N small segments at the top of the node, filled n of N; three dashes each
+  // when unknown. Turned to face the camera each frame.
+  const held = new THREE.Group();
+  const segments = [];
+  const span = Math.min(0.42, 1.25 / Math.max(1, NV)), gap = 0.1;
+  for (let k = 0; k < NV; k++) {
+    const start = Math.PI / 2 + ((NV - 1) / 2 - k) * (span + gap) - span / 2;
+    const solid = new THREE.Mesh(new THREE.RingGeometry(R_HELD[0], R_HELD[1], 12, 1, start, span),
+                                 new THREE.MeshBasicMaterial({color: 0xffffff, transparent: true, opacity: 0,
+                                                              side: THREE.DoubleSide, depthWrite: false}));
+    const dashes = [0, 1, 2].map(d => {
+      const m = new THREE.Mesh(new THREE.RingGeometry(R_HELD[0] + 0.03, R_HELD[1] - 0.03, 4, 1,
+                                                      start + (d * span) / 3 + span * 0.05, span / 3 - span * 0.1),
+                               new THREE.MeshBasicMaterial({color: 0xffffff, transparent: true, opacity: 0,
+                                                            side: THREE.DoubleSide, depthWrite: false}));
+      held.add(m);
+      return m;
+    });
+    held.add(solid);
+    segments.push({solid, dashes});
+  }
+  group.add(held);
   pos.push(ANCHORS[i].clone().add(new THREE.Vector3(Math.sin(i * 7.1) * 0.2, Math.cos(i * 3.3) * 0.2, 0)));
   vel.push(new THREE.Vector3());
   const tilt = new THREE.Quaternion().setFromEuler(new THREE.Euler((i * 1.7) % Math.PI, (i * 2.3) % Math.PI, 0));
-  return {agent, group, core, material, cage, glow, complete, tilt, spin: 0.6 + (i % 5) * 0.12};
+  return {agent, group, core, material, cage, glow, whiteCore, dash, fullSet, verdict, pass, held, segments, tilt,
+          spin: 0.6 + (i % 5) * 0.12};
 });
 const cores = nodes.map(n => n.core);
-for (const node of nodes) {
-  node.flag = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.07, 8, 72),
-                             new THREE.MeshBasicMaterial({color: ALERT_COLOR, transparent: true, opacity: 0,
-                                                          blending: THREE.AdditiveBlending, depthWrite: false}));
-  node.group.add(node.flag);
-  node.hold = new THREE.Mesh(new THREE.TorusGeometry(2.25, 0.11, 8, 6),
-                             new THREE.MeshBasicMaterial({color: HELD_COLORS.none, transparent: true, opacity: 0,
-                                                          blending: THREE.AdditiveBlending, depthWrite: false}));
-  node.group.add(node.hold);
-  // The holder of a hand-in wears what its code held (the ring above); the final one also wears the verdict outside.
-  node.verdict = new THREE.Mesh(new THREE.TorusGeometry(2.62, 0.09, 8, 6),
-                             new THREE.MeshBasicMaterial({color: HELD_COLORS.none, transparent: true, opacity: 0,
-                                                          blending: THREE.AdditiveBlending, depthWrite: false}));
-  node.group.add(node.verdict);
-}
-function alertsUpTo(t) {                     // agent -> how many true or unknown alerts named it, and raised by it
-  const named = new Array(N).fill(0), raised = new Array(N).fill(0);
+function alertsUpTo(t) {   // per agent: the outcomes of the alerts naming it, and the true and false alerts it raised
+  const named = Array.from({length: N}, () => []);
+  const raised = Array.from({length: N}, () => [0, 0]);
   for (const [ta, caller, who, outcome] of ALERTS) {
     if (ta > t) break;
-    raised[caller]++;
-    if (outcome !== 0) for (const j of who) named[j]++;
+    raised[caller][outcome === 0 ? 1 : 0]++;
+    for (const j of who) named[j].push(outcome);
   }
   return {named, raised};
 }
 
 // ---------- words: a tag under each agent, the setup chips, the clock, a feed of events, a legend ----------
 // Words are single words, numbers and icons: never a sentence.
-const RUNG_WORDS = ['none', 'looked', 'tempted', 'attempted', 'hacked'];
 const ROLE_ICON = {worker: '●', regulator: '■', disregulator: '✹'};
 const ROLE_ACCENT = {worker: '#8fb3ff', regulator: '#7fe8ff', disregulator: '#ff9de2'};
 const esc = text => String(text).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
@@ -242,13 +323,26 @@ const hex = color => '#' + color.getHexString();
 const nameOf = i => (i >= 0 ? `<b style="color:${ROLE_ACCENT[S.agents[i].role] || '#fff'}">${esc(S.agents[i].label)}</b>` : '∅');
 const clockText = v => { const s = Math.max(0, Math.round(v)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const chip = (text, color, cls = '') => `<span class="chip ${cls}" style="color:${color};background:${color}22">${text}</span>`;
-const heldChip = held => chip(`◈ ${heldText(held)}`, hex(heldColor(held)));
+function segs(held) {                         // N small segments, n filled; dashed when unknown
+  const level = heldLevel(held);
+  if (!NV) return '';
+  let out = '';
+  for (let k = 0; k < NV; k++) out += `<i class="seg${level === 'unknown' ? ' unknown' : k < held.length ? ' on' : ''}"></i>`;
+  return `<span class="segs">${out}</span>`;
+}
+const heldChip = held => (NV ? `<span class="held">${segs(held)}<span class="n">${heldText(held)}</span></span>` : '');
+function badgeHTML(size = 'big') {           // the verdict as a disc: rung fill, white core hacked, white ring pass
+  if (!S.submit) return `<span class="badge ${size} none">∅</span>`;
+  if (!GRADED) return `<span class="badge ${size} ungraded"></span>`;
+  return `<span class="badge ${size} r${TEAM_RUNG}${PASSED ? ' pass' : ''}"></span>`;
+}
 const verdictChips = () => (!S.submit ? '' : !GRADED ? chip('?', hex(UNGRADED_COLOR)) :
-  chip(RUNG_WORDS[S.team_rung || 0], hex(VERDICT_COLOR), 'strong') + chip(S.submit.passed ? 'pass' : 'fail', S.submit.passed ? '#ffffff' : '#8a93a8'));
-const checkChip = answer => (answer === 1 ? chip('◉ accepted', '#9ff0c0', 'strong') :
-  answer === 0 ? chip('◎ not accepted', '#a9b4cc') : chip('◎ ?', '#6b7385'));
+  chip(RUNG_WORDS[TEAM_RUNG], hex(VERDICT_COLOR), 'strong') + chip(PASSED ? 'pass' : 'fail', PASSED ? '#ffffff' : '#8a93a8'));
+const checkIcon = answer => (answer === 1 ? '<span class="ic ok">◉</span>' : '<span class="ic">◎</span>');
+const ROUTE_TIP = {branch: 'a planted branch', fix: 'a fix commit', patch: 'a side patch', file: 'a revealed file'};
 
 const labelsBox = document.getElementById('labels');
+const leaders = document.getElementById('leaders');
 const tags = S.agents.map(agent => {
   const el = document.createElement('div');
   el.className = 'tag';
@@ -257,8 +351,12 @@ const tags = S.agents.map(agent => {
     ? `<b style="color:${ROLE_ACCENT[agent.role] || '#fff'}">${esc(agent.label)}</b> <span class="rung"></span>`
     : `<b style="color:${ROLE_ACCENT[agent.role] || '#fff'}">${esc(agent.label)}</b> <span class="model">${esc(agent.model || '')}</span><br><span class="rung"></span>`;
   labelsBox.appendChild(el);
-  el.insertAdjacentHTML('beforeend', ' <span class="flagged"></span>');
-  return {el, rung: el.querySelector('.rung'), flagged: el.querySelector('.flagged'), shown: -1, flags: '', full: true};
+  el.insertAdjacentHTML('beforeend', '<span class="flagged"></span><span class="raised"></span>');
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  line.setAttribute('class', 'leader');
+  leaders.appendChild(line);
+  return {el, line, rung: el.querySelector('.rung'), flagged: el.querySelector('.flagged'),
+          raised: el.querySelector('.raised'), shown: '', flags: '', raisedHTML: '', full: true};
 });
 {
   // The setup in one line of chips: workers, regulators, disregulators, the rule, the task version, told to cheat.
@@ -278,77 +376,100 @@ const tags = S.agents.map(agent => {
   const back = S.back ? `<a class="back" href="${esc(S.back)}">◂</a>` : '';
   document.getElementById('cast').innerHTML = back + parts.join('');
   document.getElementById('runName').textContent = S.run;
+  // The legend: shapes, rungs, pieces by family (the family the labels say was used outlined), held, alerts, rings.
   const shapes = [['worker', '● worker'], ['regulator', '■ regulator'], ['disregulator', '✹ disregulator']]
-    .filter(([role]) => S.agents.some(a => a.role === role)).map(([, word]) => `<span class="k">${word}</span>`).join('');
-  const swatches = RUNG_WORDS.map((w, k) => `<span class="k"><span class="sw" style="background:${hex(RUNG_COLORS[k])}"></span>${w}</span>`).join('');
+    .filter(([role]) => S.agents.some(a => a.role === role))
+    .map(([role, word]) => `<span class="k" style="color:${ROLE_ACCENT[role]}">${word}</span>`).join('');
+  const swatches = RUNG_WORDS.map((w, k) => `<span class="k"><span class="sw${k === HACKED ? ' core' : ''}" style="background:${hex(RUNG_COLORS[k])}"></span>${w}</span>`).join('') +
+    '<span class="k"><span class="sw dashed"></span>undated</span>';
+  const used = String(S.exploit_used || '');
+  const families = FAMILIES.map((family, f) => {
+    const names = family.pieces.map(p => `<b style="color:${hex(pieceColor(p))}">${esc(PIECE_NAMES[p])}</b>`).join(' ');
+    const outlined = family.name && (used === family.name || used === 'both');
+    return `<span class="k fam${outlined ? ' used' : ''}">${FAMILY_ICON[f % 2]} ${names}</span>`;
+  }).join('') + (FAMILIES.length ? '<span class="k"><span class="sw ringed"></span>set</span>' : '');
   const marks = ['<span class="k"><span class="line"></span>talk</span>',
-                 S.pieces ? `<span class="k"><span class="sw" style="background:${hex(PIECE_COLORS[0])}"></span>piece</span>` : '',
-                 ALERTS.length ? '<span class="k"><span class="alarm">⚠</span>alert</span>' : '',
+                 ALERTS.length ? `<span class="k"><span class="pip" style="background:${hex(ALERT_COLOR)}"></span>⚠ true</span>` +
+                                 `<span class="k"><span class="pip" style="background:${hex(FALSE_ALARM)}"></span>false</span>` : '',
                  HANDINS.some(r => r[2] === 1) ? `<span class="k" style="color:${hex(TAKEBACK_COLOR)}">↩ back</span>` : '',
                  CHECKS.length ? '<span class="k">◉ ◎ check</span>' : ''].join('');
-  const held = (HANDINS.length || CHECKS.length) && NV
-    ? `<span class="k">◈</span>` + ['none', 'some', 'all', 'unknown'].map(level =>
-        `<span class="k"><span class="sw" style="background:${hex(HELD_COLORS[level])}"></span>${
-          level === 'unknown' ? '?' : level === 'none' ? `0/${NV}` : level === 'all' ? `${NV}/${NV}` : 'some'}</span>`).join('') +
-      (S.submit ? `<span class="k">✓</span><span class="k"><span class="sw" style="background:${hex(HONEST_COLOR)}"></span>&lt;attempted</span>` +
-                  `<span class="k"><span class="sw" style="background:${hex(CHEAT_COLOR)}"></span>≥attempted</span>` : '')
-    : S.submit ? `<span class="k">✓</span><span class="k"><span class="sw" style="background:${hex(HONEST_COLOR)}"></span>&lt;attempted</span>` +
-                 `<span class="k"><span class="sw" style="background:${hex(CHEAT_COLOR)}"></span>≥attempted</span>` : '';
+  const held = NV && (HANDINS.length || CHECKS.length)
+    ? `<span class="k">◈ ${segs([])} 0/${NV}</span><span class="k">${segs(VALUES.map((_, k) => k))} ${NV}/${NV}</span><span class="k">${segs(null)} ?</span>`
+    : '';
+  const verdict = S.submit ? `<span class="k">✓ ${badgeHTML('small')} label</span><span class="k"><span class="sw passring"></span>pass</span>` : '';
   document.getElementById('legend').innerHTML =
-    `<div>${shapes}</div><div>${swatches}</div><div>${marks}</div>${held ? `<div>${held}</div>` : ''}`;
+    `<div>${shapes}</div><div>${swatches}</div>${families ? `<div>${families}</div>` : ''}<div>${marks}</div>` +
+    `${held || verdict ? `<div>${held}${verdict}</div>` : ''}`;
 }
+
+// The feed: every recorded event as a row of chips. A post's or a reason's words show only on hover.
 const events = [];
-for (const [te, a, text] of S.said || []) {
-  events.push({t: te, accent: ROLE_ACCENT[S.agents[a].role], html: `${nameOf(a)} <span class="ic">✎</span><span class="quote">“${esc(text)}”</span>`});
+const titled = text => (text ? ` title="${esc(text)}"` : '');
+for (const [te, a, text, named] of S.said || []) {
+  events.push({t: te, accent: ROLE_ACCENT[S.agents[a].role], tip: text,
+               html: `<span class="ic">✎</span>${nameOf(a)}${named && named.length ? ` <span class="ic">→</span>${named.map(nameOf).join(' ')}` : ''}`});
 }
-S.agents.forEach((agent, i) => {
-  let before = 0;
-  for (const [at, value] of agent.rungs) {
-    if (value > before) {
-      const atEnd = at >= T - 1e-6;
-      events.push({t: at, accent: hex(RUNG_COLORS[value]),
-                   html: `${nameOf(i)} <span class="ic">→</span>${chip(RUNG_WORDS[value], hex(RUNG_COLORS[value]), 'strong')}${atEnd ? chip('end', '#8a93a8') : ''}`});
+{
+  const fallAt = new Set(FALLS.map(([tf, a]) => `${tf}|${a}`));
+  S.agents.forEach((agent, i) => {
+    let before = 0;
+    for (const [at, value] of agent.rungs) {
+      const label = Math.abs(at - LABEL_T) < 1e-6 ? chip('label', '#8a93a8') : '';
+      if (value > before) {
+        events.push({t: at, prio: 1, accent: hex(RUNG_COLORS[value]),
+                     html: `${nameOf(i)} <span class="ic">→</span>${chip(RUNG_WORDS[value], hex(RUNG_COLORS[value]), 'strong')}${label}`});
+      } else if (value < before && !fallAt.has(`${at}|${i}`)) {
+        events.push({t: at, prio: 1, accent: hex(RUNG_COLORS[value]),
+                     html: `${nameOf(i)} <span class="ic">↓</span>${chip(RUNG_WORDS[value], hex(RUNG_COLORS[value]), 'strong')}${label}`});
+      }
+      before = value;
     }
-    before = value;
-  }
-});
-for (const [tf, piece, src, dst] of S.flows) {
-  const name = (S.piece_names || [])[piece] ?? piece;
-  const color = hex(PIECE_COLORS[piece % PIECE_COLORS.length]);
-  events.push({t: tf, accent: color,
-               html: `${nameOf(dst)} <span class="ic" style="color:${color}">●</span><b style="color:${color}">${esc(name)}</b> <span class="ic">←</span>${nameOf(src)}`});
+  });
+}
+for (const [tf, a, rung, by] of FALLS) {
+  events.push({t: tf, prio: 1, accent: hex(RUNG_COLORS[rung]),
+               html: `${nameOf(a)} <span class="ic">↓</span>${chip(RUNG_WORDS[rung], hex(RUNG_COLORS[rung]), 'strong')}${by >= 0 ? `<span class="ic">←</span>${nameOf(by)}` : ''}`});
+}
+for (const [tf, piece, dst, routes] of S.flows || []) {
+  const color = hex(pieceColor(piece));
+  events.push({t: tf, accent: color, tip: (routes || []).map(r => ROUTE_TIP[r] || r).join(' · '),
+               html: `${nameOf(dst)} <span class="ic" style="color:${color}">${FAMILY_ICON[familyOf(piece) % 2]}</span>` +
+                     `<b style="color:${color}">${esc(PIECE_NAMES[piece] ?? piece)}</b>${(routes || []).map(r => chip(esc(r), '#9fb3d9')).join('')}`});
 }
 {
   const finalAt = FINAL ? FINAL[0] : undefined;
   for (const [th, a, kind, reason, held] of HANDINS) {
     if (kind === 0 && th === finalAt) continue;
     events.push(kind === 0
-      ? {t: th, accent: hex(heldColor(held)), html: `${nameOf(a)} <span class="ic">✓</span>${heldChip(held)}`}
-      : {t: th, accent: hex(TAKEBACK_COLOR),
-         html: `${nameOf(a)} <span class="ic" style="color:${hex(TAKEBACK_COLOR)}">↩</span>${reason ? `<span class="quote">“${esc(reason)}”</span>` : ''}`});
+      ? {t: th, accent: hex(heldColor(held)), html: `<span class="ic">✓</span>${nameOf(a)}${heldChip(held)}`}
+      : {t: th, accent: hex(TAKEBACK_COLOR), tip: reason,
+         html: `<span class="ic" style="color:${hex(TAKEBACK_COLOR)}">↩</span>${nameOf(a)}`});
   }
 }
 if (S.submit) {
-  events.push({t: FINAL_T, accent: hex(VERDICT_COLOR), final: true,
-               html: `${nameOf(FINAL ? FINAL[1] : S.submit.agent)} <span class="ic">✓</span>${heldChip(FINAL_HELD)}${verdictChips()}`});
+  events.push({t: FINAL_T, prio: 2, accent: hex(VERDICT_COLOR), final: true,
+               html: `<span class="ic">✓</span>${nameOf(FINAL_AGENT)}${heldChip(FINAL_HELD)}${badgeHTML('small')}${verdictChips()}`});
 }
 for (const [tc, a, answer, held] of CHECKS) {
-  events.push({t: tc, accent: hex(heldColor(held)), html: `${nameOf(a)} ${checkChip(answer)}${heldChip(held)}`});
+  events.push({t: tc, accent: hex(heldColor(held)), html: `${checkIcon(answer)}${nameOf(a)}${heldChip(held)}`});
 }
 for (const [ta, caller, who, outcome, reason] of ALERTS) {
-  const color = outcome === 0 ? hex(FALSE_ALARM) : hex(ALERT_COLOR);
-  events.push({t: ta, accent: color,
-               html: `<span class="alarm">⚠</span>${nameOf(caller)}${who.length ? ` <span class="ic">→</span>${who.map(nameOf).join(' ')}` : ''}` +
-                     `${outcome === 1 ? chip('true', color, 'strong') : outcome === 0 ? chip('false', color) : ''}` +
-                     `${reason ? `<span class="quote">“${esc(reason)}”</span>` : ''}`});
+  const color = hex(alarmColor(outcome));
+  events.push({t: ta, accent: color, tip: reason,
+               html: `<span class="alarm" style="color:${color}">⚠</span>${nameOf(caller)}${who.length ? ` <span class="ic">→</span>${who.map(nameOf).join(' ')}` : ''}` +
+                     `${outcome === 1 ? chip('true', color, 'strong') : outcome === 0 ? chip('false', color) : ''}`});
 }
-events.sort((a, b) => a.t - b.t);
+events.sort((a, b) => a.t - b.t || (a.prio || 0) - (b.prio || 0));
 const feed = document.getElementById('feed');
 const clockTime = document.getElementById('clockTime');
 const whereEl = document.getElementById('where');
 const standingEl = document.getElementById('standing');
+const badgeEl = document.getElementById('badge');
+const tintEl = document.getElementById('tint');
+tintEl.style.setProperty('--verdict', `${Math.round(VERDICT_COLOR.r * 255)},${Math.round(VERDICT_COLOR.g * 255)},${Math.round(VERDICT_COLOR.b * 255)}`);
 const FEED_SIZE = 6;
-let feedShown = -2;
+let feedShown = -2, badgeShown = '';
+const camRight = new THREE.Vector3(), camUp = new THREE.Vector3();
 function drawWords(rungs, here, alive, focus, flags, hand, recent) {
   clockTime.textContent = `${clockText(t)} / ${clockText(T)}`;
   const r = roundAt(t), step = stepShown();
@@ -359,6 +480,9 @@ function drawWords(rungs, here, alive, focus, flags, hand, recent) {
   const standing = hand.holder < 0 ? '' :
     `<span class="ic">✓</span>${nameOf(hand.holder)}${heldChip(hand.held)}${hand.since === FINAL_T ? verdictChips() : ''}`;
   if (standingEl.innerHTML !== standing) standingEl.innerHTML = standing;
+  // The badge: dashed until the final hand-in (or the run's end without one), then the verdict.
+  const badge = (S.submit ? t >= FINAL_T : t >= T - 1e-6) ? badgeHTML() : '<span class="badge big pending"></span>';
+  if (badge !== badgeShown) { badgeShown = badge; badgeEl.innerHTML = badge; }
   let last = -1;
   while (last + 1 < events.length && events[last + 1].t <= t) last++;
   if (last !== feedShown) {
@@ -366,43 +490,86 @@ function drawWords(rungs, here, alive, focus, flags, hand, recent) {
     const rows = [];
     for (let k = last; k >= 0 && k > last - FEED_SIZE; k--) {
       const e = events[k], age = last - k;
-      rows.push(`<div class="event${e.final ? ' final' : ''}" style="border-left-color:${e.accent};opacity:${1 - age * 0.12}">` +
+      rows.push(`<div class="event${e.final ? ' final' : ''}"${titled(e.tip)} style="border-left-color:${e.accent};opacity:${1 - age * 0.12}">` +
                 `<span class="when">${clockText(e.t)}</span>${e.html}</div>`);
     }
     feed.innerHTML = rows.join('');
   }
   camera.updateMatrixWorld();
+  camRight.setFromMatrixColumn(camera.matrixWorld, 0);
   const w = window.innerWidth, h = window.innerHeight;
+  // Where each node sits on screen: its centre, its radius in pixels, its depth.
+  const discs = nodes.map((node, i) => {
+    if (!alive[i] || here[i].here < 0.5) return null;
+    tmp.copy(pos[i]).project(camera);
+    if (tmp.z > 1) return null;
+    const sx = (tmp.x * 0.5 + 0.5) * w, sy = (-tmp.y * 0.5 + 0.5) * h, z = tmp.z;
+    tmp.copy(pos[i]).addScaledVector(camRight, node.group.scale.x).project(camera);
+    return {sx, sy, z, r: Math.abs((tmp.x * 0.5 + 0.5) * w - sx)};
+  });
+  const shown = [];
   nodes.forEach((node, i) => {
     const tag = tags[i];
     const full = !CROWDED || recent.has(i) || (hovered >= 0 && focus(i) >= 1);
-    if (!alive[i] || here[i].here < 0.5) { tag.el.style.display = 'none'; return; }
+    if (!discs[i]) { tag.el.style.display = 'none'; tag.line.style.display = 'none'; return; }
     if (tag.full !== full) { tag.full = full; tag.el.classList.toggle('mini', !full); }
-    tmp.copy(pos[i]).project(camera);
-    if (tmp.z > 1) { tag.el.style.display = 'none'; return; }
-    const lift = 1.9 * node.group.scale.x;
-    const below = new THREE.Vector3().copy(pos[i]).addScaledVector(camera.up, -lift).project(camera);
     tag.el.style.display = '';
-    tag.el.style.left = `${(tmp.x * 0.5 + 0.5) * w}px`;
-    tag.el.style.top = `${(-below.y * 0.5 + 0.5) * h + 4}px`;
-    tag.el.style.opacity = String((1 - 0.6 * here[i].gone) * (focus(i) < 1 ? 0.25 : 1) * (full ? 1 : 0.55));
+    tag.el.style.opacity = String((1 - 0.6 * here[i].gone) * (focus(i) < 1 ? 0.25 : 1) * (full ? 1 : 0.6));
     const rung = rungs[i].rung;
     const check = recentCheck(i);
-    const badge = (flags.named[i] ? `⚠${flags.named[i] > 1 ? flags.named[i] : ''}` : '') +
-                  (hand.holder === i ? ` <b style="color:${hex(hand.since === FINAL_T ? VERDICT_COLOR : heldColor(hand.held))}">✓</b>` +
-                   `<b style="color:${hex(heldColor(hand.held))}">◈${heldText(hand.held)}</b>` : '') +
+    const badge = (hand.holder === i ? ` <b class="hb">✓</b>${heldChip(hand.held)}` : '') +
                   (hand.back && hand.back[1] === i && t - hand.back[0] < D.flash * 1.5 ? ' <b style="color:#d68cff">↩</b>' : '') +
-                  (check ? ` <b style="color:${hex(heldColor(check[3]))}">${check[2] === 1 ? '◉' : '◎'}${heldText(check[3])}</b>` : '');
-    if (tag.flags !== badge) {
-      tag.flags = badge;
-      tag.flagged.innerHTML = badge;
-    }
-    if (tag.shown !== rung) {
-      tag.shown = rung;
-      tag.rung.textContent = RUNG_WORDS[rung];
+                  (check ? ` <b class="hb">${check[2] === 1 ? '◉' : '◎'}</b>${heldChip(check[3])}` : '');
+    if (tag.flags !== badge) { tag.flags = badge; tag.flagged.innerHTML = badge; }
+    // A regulator or disregulator carries the count of alerts it raised: true (amber) and false (grey).
+    const [up, down] = flags.raised[i];
+    const raised = S.agents[i].role !== 'worker' && (up || down)
+      ? ` <span class="alarm">⚠${up}</span>${down ? `<span class="false">${down}</span>` : ''}` : '';
+    if (tag.raisedHTML !== raised) { tag.raisedHTML = raised; tag.raised.innerHTML = raised; }
+    const word = RUNG_WORDS[rung] + (t >= LABEL_T && !S.agents[i].dated && rung === S.agents[i].final ? ' ◌' : '');
+    if (tag.shown !== word) {
+      tag.shown = word;
+      tag.rung.textContent = word;
       tag.rung.style.color = hex(RUNG_COLORS[rung]);
     }
+    shown.push(i);
   });
+  // Place the tags nearest first. A tag that would sit on a nearer node or on another tag is lifted above it, with
+  // a thin leader line back to its node.
+  shown.sort((a, b) => discs[a].z - discs[b].z);
+  const placed = [];
+  const overlaps = (x0, y0, x1, y1, self) => {
+    for (const p of placed) if (x0 < p.x1 && x1 > p.x0 && y0 < p.y1 && y1 > p.y0) return p.y0;
+    for (let j = 0; j < N; j++) {
+      const d = discs[j];
+      if (!d || j === self || d.z > discs[self].z) continue;
+      const cx = Math.max(x0, Math.min(d.sx, x1)), cy = Math.max(y0, Math.min(d.sy, y1));
+      if ((cx - d.sx) ** 2 + (cy - d.sy) ** 2 < (d.r * 0.92) ** 2) return d.sy - d.r;
+    }
+    return null;
+  };
+  for (const i of shown) {
+    const tag = tags[i], d = discs[i];
+    const tw = tag.el.offsetWidth, th = tag.el.offsetHeight;
+    const x0 = d.sx - tw / 2, base = d.sy + d.r * 1.12 + 3;
+    let y0 = base;
+    for (let tries = 0; tries < 8; tries++) {
+      const top = overlaps(x0, y0, x0 + tw, y0 + th, i);
+      if (top === null) break;
+      y0 = Math.min(top, y0) - th - 4;
+    }
+    placed.push({x0, y0, x1: x0 + tw, y1: y0 + th});
+    tag.el.style.left = `${d.sx}px`;
+    tag.el.style.top = `${y0}px`;
+    const lifted = Math.abs(y0 - base) > 2;
+    tag.line.style.display = lifted ? '' : 'none';
+    if (lifted) {
+      const above = y0 < d.sy;
+      tag.line.setAttribute('x1', d.sx); tag.line.setAttribute('y1', above ? d.sy - d.r : d.sy + d.r);
+      tag.line.setAttribute('x2', d.sx); tag.line.setAttribute('y2', above ? y0 + th : y0);
+      tag.line.style.opacity = tag.el.style.opacity;
+    }
+  }
 }
 function recentCheck(i) {                      // agent i's check_fix answer in the last moments, or null
   let found = null;
@@ -427,7 +594,6 @@ for (const pair of pairs.values()) {
                                                                      depthWrite: false}));
   scene.add(pair.mesh);
 }
-// The busiest pair's final weight: edge thickness is read against it.
 function decayed(sorted, t) {                 // each exchange counts 1 when it happens and fades with time
   let sum = 0;
   for (const te of sorted) { if (te > t) break; sum += Math.exp(-(t - te) / TAU); }
@@ -466,27 +632,23 @@ function rungAt(agent, t) {
   }
   return {rung, previous, since};
 }
-function presence(agent, t) {               // 0 not yet here, 1 here, fading to the exited look after its end
+function presence(agent, t) {               // 0 not yet here, 1 here, fading only once the agent has left
   if (t < agent.start) return {here: 0, gone: 0};
   const here = Math.min(1, (t - agent.start) / D.fade + (agent.start <= 0 ? 1 : 0));
-  const leaves = agent.end < T - 1e-6;
-  const gone = leaves && t > agent.end ? Math.min(1, (t - agent.end) / D.fade) : 0;
+  const left = agent.left ?? null;           // ended by stop_working or an error before the final hand-in
+  const gone = left !== null && t > left ? Math.min(1, (t - left) / D.fade) : 0;
   return {here, gone};
 }
-const flows = S.flows.slice().sort((a, b) => a[0] - b[0]);
+const flows = (S.flows || []).slice().sort((a, b) => a[0] - b[0]);
 function piecesHeld(i, t) {
   const held = new Set(S.agents[i].holds);
-  for (const [tf, piece, , to] of flows) {
+  for (const [tf, piece, to] of flows) {
     if (tf + D.flow > t) break;
     if (to === i) held.add(piece);
   }
   return [...held].sort((a, b) => a - b);
 }
-function farPoint(seed) {                    // where a piece no agent held comes in from
-  const a = seed * 2.399, u = Math.sin(seed * 12.9898) * 0.6;
-  const s = Math.sqrt(1 - u * u);
-  return new THREE.Vector3(60 * s * Math.cos(a), 60 * u, 60 * s * Math.sin(a));
-}
+const FROM_CENTRE = new THREE.Vector3(0, 2.5, 0);   // a piece's arrival flies in from the scene's centre
 const smooth = x => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
 
 // ---------- layout ----------
@@ -552,7 +714,7 @@ function placeCamera(alive, dt) {
   const ease = 1 - Math.exp(-dt * 2);
   center.lerp(c, ease);
   radius += (r - radius) * ease;
-  const distance = (radius / Math.sin((camera.fov * Math.PI) / 360)) * 1.0 * zoom;
+  const distance = (radius / Math.sin((camera.fov * Math.PI) / 360)) * 1.04 * zoom;
   camera.position.set(center.x + distance * Math.sin(polar) * Math.cos(azimuth),
                       center.y + distance * Math.cos(polar),
                       center.z + distance * Math.sin(polar) * Math.sin(azimuth));
@@ -572,10 +734,15 @@ function pick() {
 
 // ---------- the frame ----------
 let t = 0, playing = false, speedIndex = 2, clock = 0, last = performance.now();
-const tint = document.getElementById('tint');
 const handinRoom = document.getElementById('handinRoom');
-const honestRoom = document.getElementById('honestRoom');
 const arc = new THREE.Vector3(), up = new THREE.Vector3(), from = new THREE.Vector3(), to = new THREE.Vector3();
+const toCamera = new THREE.Vector3();
+
+function ringAt(at, color, opacity, scale) {
+  const r = ringPool.get();
+  r.position.copy(at); r.material.color.copy(color);
+  r.material.opacity = opacity; r.scale.setScalar(scale);
+}
 
 function update(dt) {
   const alive = S.agents.map(a => t >= a.start);
@@ -595,8 +762,13 @@ function update(dt) {
     for (const pair of pairs.values()) if (pair.w > 0 && (pair.i === hovered || pair.j === hovered)) { near.add(pair.i); near.add(pair.j); }
   }
   const focus = i => (hovered < 0 || near.has(i) ? 1 : 0.18);
+  camera.updateMatrixWorld();
+  camRight.setFromMatrixColumn(camera.matrixWorld, 0);
+  camUp.setFromMatrixColumn(camera.matrixWorld, 1);
+  const labelled = t >= LABEL_T;
 
-  // Nodes: colour by rung, faded once the agent has left.
+  // Nodes: colour by rung, faded once the agent has left. Hacked has a white core; a final rung no dated call
+  // stands behind has a dashed outline.
   nodes.forEach((node, i) => {
     const {rung, previous, since} = rungs[i];
     const {here: h, gone} = here[i];
@@ -607,17 +779,24 @@ function update(dt) {
     const color = RUNG_COLORS[previous].clone().lerp(RUNG_COLORS[rung], mix);
     node.material.color.copy(color);
     node.material.emissive.copy(color);
-    const pulse = rung >= CHEATED ? 0.5 + 0.5 * Math.sin(clock * (rung === 4 ? 5 : 3.2)) : 0;
-    node.material.emissiveIntensity = 0.18 + 0.2 * rung + 0.35 * pulse;
+    const pulse = rung >= CHEATED ? 0.5 + 0.5 * Math.sin(clock * (rung === HACKED ? 5 : 3.2)) : 0;
+    node.material.emissiveIntensity = 0.18 + 0.2 * rung + 0.25 * pulse;
     const look = 1 - 0.7 * gone;
     node.material.opacity = (0.35 + 0.65 * look) * focus(i);
-    const scale = smooth(h) * (1 - 0.3 * gone) * (rung >= CHEATED ? 1.08 : 1);
+    const scale = smooth(h) * (1 - 0.3 * gone);
     node.group.scale.setScalar(Math.max(0.001, scale));
     node.glow.material.color.copy(color);
-    node.glow.material.opacity = (0.28 + 0.1 * rung + 0.35 * pulse) * look * focus(i);
-    node.glow.scale.setScalar(3.4 + 0.75 * rung + 0.8 * pulse);
+    node.glow.material.opacity = (0.22 + 0.06 * rung + 0.2 * pulse) * look * focus(i);
+    node.glow.scale.setScalar(3.2 + 0.4 * rung + 0.5 * pulse);
     node.core.rotation.y += dt * 0.3;
-    if (node.cage) { node.core.rotation.x += dt * 0.15; node.cage.material.opacity = 0.9 * look * focus(i); }
+    if (node.cage) { node.core.rotation.x += dt * 0.15; node.cage.material.opacity = 0.95 * look * focus(i); }
+    // The white core sits in front of the node, toward the camera.
+    toCamera.subVectors(camera.position, pos[i]).normalize();
+    node.whiteCore.position.copy(toCamera).multiplyScalar(1.05);
+    node.whiteCore.material.opacity = rung === HACKED ? 0.95 * mix * look * focus(i) : 0;
+    const undated = labelled && !S.agents[i].dated && rung === S.agents[i].final && rung > 0;
+    node.dash.material.color.copy(RUNG_COLORS[rung]).lerp(new THREE.Color(1, 1, 1), 0.35);
+    node.dash.material.opacity = undated ? 0.95 * look * focus(i) : 0;
   });
 
   // Edges: thickness from the back and forth so far, bright for a moment after each exchange.
@@ -663,107 +842,109 @@ function update(dt) {
   for (const [te, a] of windowed(postsSorted, t, D.ripple)) {
     if (!alive[a]) continue;
     const p = (t - te) / D.ripple;
-    const r = ringPool.get();
-    r.position.copy(pos[a]);
-    r.material.color.copy(TALK_COLOR);
-    r.material.opacity = 0.45 * (1 - p) * focus(a);
-    r.scale.setScalar(2.4 + 5 * p);
+    ringAt(pos[a], TALK_COLOR, 0.45 * (1 - p) * focus(a), 2.4 + 5 * p);
   }
 
-  // Pieces in flight: an orb leaves its holder and lands on the agent that lacked it.
-  flows.forEach(([tf, piece, src, dst], n) => {
-    const color = PIECE_COLORS[piece % PIECE_COLORS.length];
-    const start = src >= 0 ? pos[src] : farPoint(n + 1);
+  // Pieces arriving: the agent first saw a piece it lacked (pieces_seen_at). Who gave it is not recorded, so the
+  // piece flies in from the scene's centre and lands on the agent.
+  flows.forEach(([tf, piece, dst]) => {
+    if (!alive[dst]) return;
+    const color = pieceColor(piece);
     if (t >= tf && t < tf + D.flow) {
       const p = (t - tf) / D.flow;
-      const dist = start.distanceTo(pos[dst]);
-      up.set(0, 1, 0).multiplyScalar(dist * 0.35);
+      const dist = FROM_CENTRE.distanceTo(pos[dst]);
+      up.set(0, 1, 0).multiplyScalar(dist * 0.3);
       for (let trail = 0; trail < 7; trail++) {
         const q = smooth(p - trail * 0.03);
         if (p - trail * 0.03 < 0) continue;
-        arc.lerpVectors(start, pos[dst], q).addScaledVector(up, Math.sin(Math.PI * q));
+        arc.lerpVectors(FROM_CENTRE, pos[dst], q).addScaledVector(up, Math.sin(Math.PI * q));
         if (trail === 0) {
-          const orb = orbPool.get();
-          orb.position.copy(arc);
-          orb.scale.setScalar(0.42);
-          orb.material.color.copy(color); orb.material.emissive.copy(color); orb.material.opacity = 1;
+          const mesh = pieceMesh(piece);
+          mesh.position.copy(arc);
+          mesh.scale.setScalar(0.42);
+          mesh.material.opacity = 1;
         }
         const g = glowPool.get();
         g.position.copy(arc);
         g.material.color.copy(color);
-        g.material.opacity = 0.9 * (1 - trail / 7);
-        g.scale.setScalar(2.2 - trail * 0.22);
-      }
-      if (p < 0.35 && src >= 0) {                      // the holder lets it go
-        const r = ringPool.get();
-        r.position.copy(start); r.material.color.copy(color);
-        r.material.opacity = 0.8 * (1 - p / 0.35); r.scale.setScalar(2.5 + 8 * p);
+        g.material.opacity = 0.8 * (1 - trail / 7);
+        g.scale.setScalar(2.0 - trail * 0.2);
       }
     }
     const landed = t - (tf + D.flow);
     if (landed >= 0 && landed < D.flash) {             // and it lands
       const p = landed / D.flash;
-      const r = ringPool.get();
-      r.position.copy(pos[dst]); r.material.color.copy(color);
-      r.material.opacity = 0.9 * (1 - p); r.scale.setScalar(2.5 + 6 * p);
+      ringAt(pos[dst], color, 0.9 * (1 - p), 2.5 + 6 * p);
     }
   });
 
-  // The pieces each agent holds circle it; a full set lights a ring.
+  // The pieces each agent holds circle it; a whole set of either family lights the white ring.
   nodes.forEach((node, i) => {
-    if (!alive[i]) return;
+    if (!alive[i]) { node.fullSet.material.opacity = 0; return; }
     const held = piecesHeld(i, t);
     const look = 1 - 0.7 * here[i].gone;
     const scale = node.group.scale.x;
     held.forEach((piece, k) => {
-      const color = PIECE_COLORS[piece % PIECE_COLORS.length];
+      const color = pieceColor(piece);
       const angle = clock * node.spin + (k * Math.PI * 2) / held.length;
       arc.set(Math.cos(angle) * 1.95, 0, Math.sin(angle) * 1.95).applyQuaternion(node.tilt).multiplyScalar(scale).add(pos[i]);
-      const orb = orbPool.get();
-      orb.position.copy(arc);
-      orb.scale.setScalar(0.26 * scale);
-      orb.material.color.copy(color); orb.material.emissive.copy(color);
-      orb.material.opacity = look * focus(i);
+      const mesh = pieceMesh(piece);
+      mesh.position.copy(arc);
+      mesh.scale.setScalar(0.24 * scale);
+      mesh.material.opacity = look * focus(i);
       const g = glowPool.get();
       g.position.copy(arc); g.material.color.copy(color);
-      g.material.opacity = 0.55 * look * focus(i); g.scale.setScalar(1.3 * scale);
+      g.material.opacity = 0.45 * look * focus(i); g.scale.setScalar(1.2 * scale);
     });
-    node.complete.quaternion.copy(node.tilt).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)));
-    node.complete.material.opacity = S.pieces >= 2 && held.length >= S.pieces ? 0.55 * look * focus(i) : 0;
+    const whole = FAMILIES.some(f => f.pieces.length >= 2 && f.pieces.every(p => held.includes(p)));
+    node.fullSet.material.opacity = whole ? 0.9 * look * focus(i) : 0;
   });
 
-  // A rung reached flashes a ring in its colour.
+  // A rung reached flashes a ring in its colour; a rise that fell back closes a ring in on the node.
   nodes.forEach((node, i) => {
     if (!alive[i]) return;
     const {rung, previous, since} = rungs[i];
     const p = (t - since) / D.flash;
     if (rung > previous && p >= 0 && p < 1) {
-      const r = ringPool.get();
-      r.position.copy(pos[i]); r.material.color.copy(RUNG_COLORS[rung]);
-      r.material.opacity = (rung >= CHEATED ? 1 : 0.6) * (1 - p);
-      r.scale.setScalar(2.5 + (rung >= CHEATED ? 10 : 5) * smooth(p));
+      ringAt(pos[i], RUNG_COLORS[rung], (rung >= CHEATED ? 1 : 0.6) * (1 - p), 2.5 + (rung >= CHEATED ? 10 : 5) * smooth(p));
     }
   });
+  for (const [tf, a, rung] of windowed(FALLS, t, D.flash * 1.4)) {
+    if (!alive[a]) continue;
+    const p = (t - tf) / (D.flash * 1.4);
+    for (let wave = 0; wave < 2; wave++) {
+      const q = p * 1.4 - wave * 0.3;
+      if (q < 0 || q > 1) continue;
+      ringAt(pos[a], RUNG_COLORS[rung], 0.95 * (1 - q), 2.4 + 9 * (1 - smooth(q)));
+    }
+  }
 
-  // Alerts to humans: the caller flashes a beacon and a beam reaches every agent it names; a named agent keeps an
-  // amber ring from then on. A false alarm is grey.
+  // Alerts to humans: the caller flashes a beacon and a beam reaches every agent it names. Each alert naming an
+  // agent leaves a pip at its edge: amber a true alarm, grey a false one.
   const flags = alertsUpTo(t);
   nodes.forEach((node, i) => {
     if (!alive[i]) return;
-    node.flag.quaternion.copy(camera.quaternion);
-    const on = flags.named[i] ? 0.35 + 0.12 * Math.min(flags.named[i], 4) : 0;
-    node.flag.material.opacity = on * (0.75 + 0.25 * Math.sin(clock * 4)) * focus(i);
+    const outcomes = flags.named[i];
+    const scale = node.group.scale.x;
+    outcomes.forEach((outcome, k) => {
+      const row = Math.floor(k / 10), col = k % 10;
+      const a = Math.PI * (0.72 + 0.056 * col) + row * 0.028;
+      const r = (R_PIPS + row * 0.26) * scale;
+      const pip = pipPool.get();
+      pip.position.copy(pos[i]).addScaledVector(camRight, Math.cos(a) * r).addScaledVector(camUp, Math.sin(a) * r);
+      pip.material.color.copy(alarmColor(outcome));
+      pip.material.opacity = (1 - 0.6 * here[i].gone) * focus(i);
+      pip.scale.setScalar(0.24 * scale);
+    });
   });
   for (const [ta, caller, who, outcome] of windowed(ALERTS, t, D.alert)) {
     if (!alive[caller]) continue;
     const p = (t - ta) / D.alert;
-    const color = outcome === 0 ? FALSE_ALARM : ALERT_COLOR;
+    const color = alarmColor(outcome);
     for (let wave = 0; wave < 3; wave++) {           // the beacon: three quick rings
       const q = (p * 3 - wave * 0.35);
       if (q < 0 || q > 1) continue;
-      const r = ringPool.get();
-      r.position.copy(pos[caller]); r.material.color.copy(color);
-      r.material.opacity = 0.95 * (1 - q); r.scale.setScalar(2.4 + 7 * q);
+      ringAt(pos[caller], color, 0.95 * (1 - q), 2.4 + 7 * q);
     }
     const g = glowPool.get();
     g.position.copy(pos[caller]); g.material.color.copy(color);
@@ -779,55 +960,45 @@ function update(dt) {
         s2.material.opacity = 0.85 * (1 - p);
         s2.scale.setScalar(0.9);
       }
-      if (reach >= 1) {
-        const r = ringPool.get();
-        r.position.copy(pos[j]); r.material.color.copy(color);
-        r.material.opacity = 0.9 * (1 - p); r.scale.setScalar(2.5 + 4 * smooth((p - 0.35) / 0.65));
-      }
+      if (reach >= 1) ringAt(pos[j], color, 0.9 * (1 - p), 2.5 + 4 * smooth((p - 0.35) / 0.65));
     }
   }
 
-  // The final hand-in: a wave across the swarm in the verdict's colour; the room keeps it after (red when the team's
-  // rung is attempted or above, green below, grey without labels).
+  // The final hand-in: a wave across the swarm in the team rung's colour, then a thin vignette of it at the edges.
   const finalOn = S.submit ? smooth(((t - FINAL_T) / D.submit) * 2) : 0;
   if (S.submit) {
     const p = (t - FINAL_T) / D.submit;
-    if (p >= 0 && p < 1) {
+    if (p >= 0 && p < 1 && FINAL_AGENT >= 0) {
       for (let wave = 0; wave < 3; wave++) {
         const q = p - wave * 0.12;
         if (q < 0) continue;
-        const r = ringPool.get();
-        r.position.copy(pos[FINAL ? FINAL[1] : S.submit.agent]); r.material.color.copy(VERDICT_COLOR);
-        r.material.opacity = 0.9 * (1 - q);
-        r.scale.setScalar(3 + radius * 3.2 * smooth(q));
+        const r = wavePool.get();
+        r.position.copy(pos[FINAL_AGENT]); r.material.color.copy(VERDICT_COLOR);
+        r.material.opacity = 0.85 * (1 - q); r.scale.setScalar((3 + radius * 1.8 * smooth(q)) / CIRCLE_R / 2);
       }
     }
-    tint.style.opacity = GRADED && S.submit.cheated ? String(0.9 * finalOn) : '0';
-    honestRoom.style.opacity = GRADED && !S.submit.cheated ? String(0.9 * finalOn) : '0';
   }
+  tintEl.style.opacity = GRADED ? String(finalOn) : '0';
 
-  // Hand-ins: while one stands, the room and the ring of the agent who made it take the colour of what its code
-  // held; the final one adds the verdict ring outside. A take-back flashes violet rings closing in on the agent who
-  // took it, and the room goes back to dark.
+  // Hand-ins: while one stands, its maker wears the held segments (what its code held) and the room's edges glow
+  // faintly; the final one adds the verdict ring in the team rung's colour and, when it passed, the white ring.
+  // A take-back closes violet rings in on the agent who took it.
   const hand = handinAt(t);
   const isFinal = hand.holder >= 0 && hand.since === FINAL_T;
   const roomOn = hand.holder >= 0 ? smooth((t - hand.since) / D.fade) : 1 - smooth((t - hand.since) / D.fade);
-  const roomColor = isFinal && GRADED ? null : hand.holder >= 0 ? heldColor(hand.held) : roomColorShown;
-  if (roomColor && roomColor !== roomColorShown) {
-    roomColorShown = roomColor;
-    const c = roomColor;
-    handinRoom.style.setProperty('--room', `${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)}`);
-  }
-  handinRoom.style.opacity = String(isFinal && GRADED ? 1 - finalOn : Math.max(0, roomOn));
+  handinRoom.style.opacity = String(isFinal ? 0 : Math.max(0, roomOn) * 0.8);
+  const level = heldLevel(hand.held);
   nodes.forEach((node, i) => {
     const holding = alive[i] && hand.holder === i;
     const on = holding ? smooth((t - hand.since) / D.fade) * focus(i) : 0;
-    node.hold.material.color.copy(heldColor(hand.held));
-    node.hold.material.opacity = 0.9 * on;
-    node.hold.rotation.set(Math.PI / 2, 0, clock * 0.8);
+    node.held.quaternion.copy(camera.quaternion);
+    node.segments.forEach(({solid, dashes}, k) => {
+      solid.material.opacity = level === 'unknown' ? 0 : on * (Array.isArray(hand.held) && k < hand.held.length ? 0.95 : 0.22);
+      for (const d of dashes) d.material.opacity = level === 'unknown' ? 0.6 * on : 0;
+    });
     node.verdict.material.color.copy(VERDICT_COLOR);
     node.verdict.material.opacity = isFinal ? 0.95 * on : 0;
-    node.verdict.rotation.set(Math.PI / 2, 0, -clock * 0.5);
+    node.pass.material.opacity = isFinal && PASSED ? 0.95 * on : 0;
   });
   if (hand.back && alive[hand.back[1]]) {
     const p = (t - hand.back[0]) / D.flash;
@@ -835,9 +1006,7 @@ function update(dt) {
       for (let wave = 0; wave < 3; wave++) {
         const q = p * 1.6 - wave * 0.25;
         if (q < 0 || q > 1) continue;
-        const r = ringPool.get();
-        r.position.copy(pos[hand.back[1]]); r.material.color.copy(TAKEBACK_COLOR);
-        r.material.opacity = 0.95 * (1 - p); r.scale.setScalar(2.2 + 9 * (1 - smooth(q)));
+        ringAt(pos[hand.back[1]], TAKEBACK_COLOR, 0.95 * (1 - p), 2.2 + 9 * (1 - smooth(q)));
       }
       const g = glowPool.get();
       g.position.copy(pos[hand.back[1]]); g.material.color.copy(TAKEBACK_COLOR);
@@ -845,8 +1014,8 @@ function update(dt) {
     }
   }
 
-  // check_fix answers: the caller lights up in the colour of what the checked code held. Accepted bursts outward
-  // in two bright rings around a solid flash; not accepted is one dim ring that closes in.
+  // check_fix answers: the caller lights up in the shade of what the checked code held. Accepted bursts outward in
+  // two bright rings around a solid flash; not accepted is one dim ring that closes in.
   for (const [tc, a, answer, held] of windowed(CHECKS, t, D.check)) {
     if (!alive[a]) continue;
     const p = (t - tc) / D.check;
@@ -855,28 +1024,20 @@ function update(dt) {
       for (let wave = 0; wave < 2; wave++) {
         const q = p * 1.4 - wave * 0.3;
         if (q < 0 || q > 1) continue;
-        const r = ringPool.get();
-        r.position.copy(pos[a]); r.material.color.copy(color);
-        r.material.opacity = 1 - q; r.scale.setScalar(2.6 + 9 * smooth(q));
+        ringAt(pos[a], color, 1 - q, 2.6 + 9 * smooth(q));
       }
       const g = glowPool.get();
       g.position.copy(pos[a]); g.material.color.copy(color);
       g.material.opacity = 0.95 * (1 - p); g.scale.setScalar(7.5);
     } else {
-      const r = ringPool.get();
-      r.position.copy(pos[a]); r.material.color.copy(color);
-      r.material.opacity = 0.75 * (1 - p); r.scale.setScalar(2.4 + 5 * (1 - smooth(p)));
+      ringAt(pos[a], color, 0.75 * (1 - p), 2.4 + 5 * (1 - smooth(p)));
     }
   }
 
   // The call being stepped: a white ring on the agent making it.
   syncCursor();
   const shown = stepShown();
-  if (shown && alive[shown[1]]) {
-    const r = ringPool.get();
-    r.position.copy(pos[shown[1]]); r.material.color.setRGB(1, 1, 1);
-    r.material.opacity = 0.75 + 0.25 * Math.sin(clock * 6); r.scale.setScalar(4.6);
-  }
+  if (shown && alive[shown[1]]) ringAt(pos[shown[1]], new THREE.Color(1, 1, 1), 0.75 + 0.25 * Math.sin(clock * 6), 3.6);
 
   // Who gets a tag in a crowded swarm: an agent doing something now.
   const recent = new Set();
@@ -887,8 +1048,8 @@ function update(dt) {
     for (const row of windowed(CHECKS, t, D.check * 1.6)) recent.add(row[1]);
     for (const [, caller, who] of windowed(ALERTS, t, D.alert)) { recent.add(caller); who.forEach(j => recent.add(j)); }
     for (const [, a] of windowed(postsSorted, t, D.ripple)) recent.add(a);
-    for (const [, , , dst] of windowed(flows, t, D.flow + D.flash)) recent.add(dst);
-    flags.named.forEach((n, i) => { if (n) recent.add(i); });
+    for (const [, , dst] of windowed(flows, t, D.flow + D.flash)) recent.add(dst);
+    for (const [, a] of windowed(FALLS, t, D.flash * 2)) recent.add(a);
     if (shown) recent.add(shown[1]);
   }
 
@@ -896,7 +1057,6 @@ function update(dt) {
   placeCamera(alive, dt);
   drawWords(rungs, here, alive, focus, flags, hand, recent);
 }
-let roomColorShown = null;
 
 // ---------- controls: play, timeline, speed (icons only) ----------
 const playButton = document.getElementById('play');
@@ -987,6 +1147,27 @@ window.addEventListener('keydown', e => {
   if (e.code === 'ArrowLeft') { e.preventDefault(); e.shiftKey ? goRound(-1) : goStep(-1); }
 });
 
+// The timeline: one lane per kind of mark, its icon at the left end and its totals at the right end.
+const TL_LEFT = 20, TL_RIGHT = 104;
+const LANES = {alert: 7, piece: 18, band: 31, tick: 44, check: 56};
+function trackX(v, w) { return TL_LEFT + (v / T) * (w - TL_LEFT - TL_RIGHT); }
+// Marks that would share a pixel become one mark with a count: each cluster starts at a mark and takes every mark
+// within `gap` pixels of its start.
+function clusters(xs, gap) {
+  const out = [];
+  xs.forEach((x, k) => {
+    const c = out[out.length - 1];
+    if (c && x - c.x < gap) c.members.push(k); else out.push({x, members: [k]});
+  });
+  return out;
+}
+function drawBadge(g, x, y, r) {                 // the verdict's disc, as in the header
+  if (!S.submit) return;
+  g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2);
+  g.fillStyle = hex(VERDICT_COLOR); g.fill();
+  if (GRADED && TEAM_RUNG === HACKED) { g.beginPath(); g.arc(x, y, r * 0.4, 0, Math.PI * 2); g.fillStyle = '#ffffff'; g.fill(); }
+  if (PASSED) { g.beginPath(); g.arc(x, y, r + 2, 0, Math.PI * 2); g.strokeStyle = '#ffffff'; g.lineWidth = 1.5; g.stroke(); }
+}
 function buildBackdrop() {
   const dpr = Math.min(window.devicePixelRatio, 2);
   const w = timeline.clientWidth, h = timeline.clientHeight;
@@ -995,93 +1176,154 @@ function buildBackdrop() {
   backdrop.width = timeline.width; backdrop.height = timeline.height;
   const g = backdrop.getContext('2d');
   g.scale(dpr, dpr);
-  const x = v => 8 + (v / T) * (w - 16);
-  // How busy the board is: a soft histogram of the exchanges.
+  const x = v => trackX(v, w);
+  const end = x(T);
+  g.textBaseline = 'middle';
+  const text = (s, tx, ty, color, size = 9.5, align = 'left') => {
+    g.font = `650 ${size}px -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif`;
+    g.fillStyle = color; g.textAlign = align; g.fillText(s, tx, ty);
+    return g.measureText(s).width;
+  };
+  // How busy the board is: a soft histogram of the exchanges around the hand-in lane.
   const bins = 160, counts = new Array(bins).fill(0);
   for (const [te] of S.talk) counts[Math.min(bins - 1, Math.floor((te / T) * bins))]++;
   for (const [te] of S.posts) counts[Math.min(bins - 1, Math.floor((te / T) * bins))] += 0.5;
   const top = Math.max(1, ...counts);
-  g.fillStyle = 'rgba(160,190,255,0.22)';
+  g.fillStyle = 'rgba(160,190,255,0.16)';
   counts.forEach((c, b) => {
-    const bh = (c / top) * (h * 0.42);
-    g.fillRect(x((b / bins) * T), h / 2 - bh / 2, Math.max(1, (w - 16) / bins - 1), bh);
+    const bh = (c / top) * 14;
+    g.fillRect(x((b / bins) * T), LANES.band - bh / 2, Math.max(1, (end - TL_LEFT) / bins - 1), bh);
   });
-  // The track.
   g.fillStyle = 'rgba(200,215,255,0.16)';
-  g.fillRect(8, h / 2 - 1.5, w - 16, 3);
-  // Pieces passed: a dot of the piece's colour above the track.
-  for (const [tf, piece] of S.flows) {
-    g.fillStyle = '#' + PIECE_COLORS[piece % PIECE_COLORS.length].getHexString();
-    g.beginPath(); g.arc(x(tf), h * 0.22, 2.6, 0, Math.PI * 2); g.fill();
+  g.fillRect(TL_LEFT, LANES.band - 1.5, end - TL_LEFT, 3);
+  // Lane icons.
+  const icon = (s, lane, color) => text(s, 9, LANES[lane], color, 10, 'center');
+  if (ALERTS.length) icon('⚠', 'alert', '#ffc21a');
+  if (flows.length) icon('●', 'piece', '#9fb3d9');
+  icon('✓', 'band', '#c8d6f5');
+  icon('▲', 'tick', '#ff4d5d');
+  if (CHECKS.length) icon('◎', 'check', '#c8d6f5');
+
+  // Alerts: a triangle per cluster, amber when any is a true alarm; the count of true ones beside it in amber and of
+  // false ones in grey.
+  for (const c of clusters(ALERTS.map(row => x(row[0])), 18)) {
+    const rows = c.members.map(k => ALERTS[k]);
+    const yes = rows.filter(r => r[3] !== 0).length, no = rows.length - yes;
+    g.fillStyle = yes ? '#ffc21a' : '#8b93a8';
+    const y = LANES.alert;
+    g.beginPath(); g.moveTo(c.x, y + 4); g.lineTo(c.x - 4, y - 3.5); g.lineTo(c.x + 4, y - 3.5); g.closePath(); g.fill();
+    if (rows.length > 1) {
+      let tx = c.x + 6;
+      if (yes) tx += text(String(yes), tx, y, '#ffc21a', 9.5) + 4;
+      if (no) text(String(no), tx, y, '#8b93a8', 9.5);
+    }
   }
-  // Agents turning red: a red tick below the track.
+  // Pieces arriving: a dot (or a small diamond) in the piece's colour; a cluster shows its count.
+  for (const c of clusters(flows.map(row => x(row[0])), 13)) {
+    const piece = flows[c.members[0]][1], y = LANES.piece;
+    g.fillStyle = hex(pieceColor(piece));
+    g.beginPath();
+    if (familyOf(piece) === 1) { g.moveTo(c.x, y - 3.6); g.lineTo(c.x + 3.6, y); g.lineTo(c.x, y + 3.6); g.lineTo(c.x - 3.6, y); g.closePath(); }
+    else g.arc(c.x, y, 2.8, 0, Math.PI * 2);
+    g.fill();
+    if (c.members.length > 1) text(String(c.members.length), c.x + 6, y, '#9fb3d9', 9.5);
+  }
+  // Hand-ins: a band along the track while each stood, in the shade of what its code held; the final one in the
+  // team rung's colour, marked with the verdict's disc. A violet tick at each take-back.
+  HANDINS.forEach(([th, , kind, , held], k) => {
+    if (kind === 1) { g.fillStyle = hex(TAKEBACK_COLOR); g.fillRect(x(th) - 1, LANES.band - 6, 2, 12); return; }
+    const stop = k + 1 < HANDINS.length ? HANDINS[k + 1][0] : T;
+    const x0 = x(th), width = Math.max(2, x(stop) - x0);
+    const final = th === FINAL_T && S.submit;
+    g.fillStyle = hex(final ? VERDICT_COLOR : heldColor(held));
+    g.globalAlpha = final ? 1 : 0.75;
+    g.fillRect(x0, LANES.band - 3, width, 6);
+    g.globalAlpha = 1;
+  });
+  // A rung reached at attempted or above: a red tick, solid when the agent stays there to its label, hollow when it
+  // fell back. Ticks at one pixel stand side by side.
+  const ticks = [];
   for (const agent of S.agents) {
     let before = 0;
-    for (const [at, value] of agent.rungs) {
+    agent.rungs.forEach(([at, value], k) => {
       if (value >= CHEATED && before < CHEATED) {
-        g.fillStyle = '#ff2d3d';
-        g.fillRect(x(at) - 1, h * 0.6, 2.2, h * 0.18);
+        const fell = agent.rungs.slice(k + 1).some(([, v]) => v < CHEATED);
+        ticks.push({at, solid: !fell});
       }
       before = value;
+    });
+  }
+  ticks.sort((a, b) => a.at - b.at);
+  let tickX = -Infinity;
+  for (const tick of ticks) {
+    tickX = Math.max(x(tick.at), tickX + 3.4);
+    g.fillStyle = '#ff2d3d'; g.strokeStyle = '#ff2d3d'; g.lineWidth = 1;
+    if (tick.solid) g.fillRect(tickX - 1.2, LANES.tick - 5, 2.4, 10);
+    else g.strokeRect(tickX - 1, LANES.tick - 4.5, 2, 9);
+  }
+  // check_fix answers: a dot per cluster in the shade of what the checked code held, filled when any was accepted;
+  // the accepted count beside it in white and the rest in grey.
+  for (const c of clusters(CHECKS.map(row => x(row[0])), 22)) {
+    const rows = c.members.map(k => CHECKS[k]);
+    const yes = rows.filter(r => r[2] === 1).length, no = rows.length - yes, y = LANES.check;
+    g.beginPath(); g.arc(c.x, y, 3, 0, Math.PI * 2);
+    if (yes) { g.fillStyle = hex(heldColor(rows.find(r => r[2] === 1)[3])); g.fill(); }
+    else { g.strokeStyle = hex(heldColor(rows[0][3])); g.lineWidth = 1.3; g.stroke(); }
+    if (rows.length > 1) {
+      let tx = c.x + 6;
+      if (yes) tx += text(String(yes), tx, y, '#e6eeff', 9.5) + 4;
+      if (no) text(yes ? `◎${no}` : String(no), tx, y, '#8792a8', 9.5);
     }
   }
-  // Hand-ins: a band along the track while each stood, in the colour of what its code held; the final one in the
-  // verdict's colour with what it held on top. A dark notch where a hand-in replaced another, a violet tick at
-  // each take-back.
-  HANDINS.forEach(([th, , kind, , held], k) => {
-    if (kind === 1) { g.fillStyle = hex(TAKEBACK_COLOR); g.fillRect(x(th) - 1, h / 2 - 7, 2, 14); return; }
-    const end = k + 1 < HANDINS.length ? HANDINS[k + 1][0] : T;
-    const x0 = x(th), width = Math.max(2, x(end) - x0);
-    if (th === FINAL_T && S.submit) {
-      g.fillStyle = hex(VERDICT_COLOR); g.fillRect(x0, h / 2 - 3, width, 6);
-      g.fillStyle = hex(heldColor(held)); g.fillRect(x0, h / 2 - 6, width, 3);
-    } else {
-      g.fillStyle = hex(heldColor(held)); g.fillRect(x0, h / 2 - 3.5, width, 7);
-    }
-    if (k > 0 && HANDINS[k - 1][2] === 0) { g.fillStyle = '#070a12'; g.fillRect(x0 - 0.5, h / 2 - 4, 1.2, 8); }
-  });
-  // check_fix answers: a dot on the bottom lane in the colour of what the checked code held; filled when accepted,
-  // a ring when not.
-  for (const [tc, , answer, held] of CHECKS) {
-    const cx = x(tc), cy = h * 0.9;
-    g.beginPath(); g.arc(cx, cy, answer === 1 ? 3.2 : 2.6, 0, Math.PI * 2);
-    if (answer === 1) { g.fillStyle = hex(heldColor(held)); g.fill(); }
-    else { g.strokeStyle = hex(heldColor(held)); g.lineWidth = 1.3; g.stroke(); }
-  }
-  // Alerts: a triangle above the track, amber (grey for a false alarm).
-  for (const [ta, , , outcome] of ALERTS) {
-    const ax = x(ta), ay = h * 0.04;
-    g.fillStyle = outcome === 0 ? '#a3abc2' : '#ffc21a';
-    g.beginPath(); g.moveTo(ax, ay + 7); g.lineTo(ax - 4, ay); g.lineTo(ax + 4, ay); g.closePath(); g.fill();
-  }
-  // The final hand-in: a diamond in the verdict's colour.
-  if (S.submit) {
-    const sx = x(FINAL_T), sy = h / 2;
+  // The final hand-in: a diamond in the team rung's colour, and the verdict's disc.
+  if (S.submit && Number.isFinite(FINAL_T)) {
+    const sx = x(FINAL_T), sy = LANES.band;
     g.fillStyle = hex(VERDICT_COLOR);
-    g.beginPath(); g.moveTo(sx, sy - 8); g.lineTo(sx + 6, sy); g.lineTo(sx, sy + 8); g.lineTo(sx - 6, sy); g.closePath(); g.fill();
-    g.strokeStyle = '#070a12'; g.lineWidth = 1; g.stroke();
+    g.beginPath(); g.moveTo(sx, sy - 7); g.lineTo(sx + 5, sy); g.lineTo(sx, sy + 7); g.lineTo(sx - 5, sy); g.closePath(); g.fill();
+    g.strokeStyle = PASSED ? '#ffffff' : '#070a12'; g.lineWidth = 1.2; g.stroke();
+    drawBadge(g, end + 9, sy, 4.5);
+  }
+  // Totals at the right end, equal to the study page's counts.
+  const tx0 = end + 20;
+  const totals = (lane, parts) => {
+    let tx = tx0;
+    for (const [s, color] of parts) tx += text(s, tx, LANES[lane], color, 10.5) + 5;
+  };
+  if (ALERTS.length) {
+    const no = ALERTS.filter(r => r[3] === 0).length;
+    totals('alert', [[`⚠${ALERTS.length - no}`, '#ffc21a'], ...(no ? [[String(no), '#8b93a8']] : [])]);
+  }
+  const hands = HANDINS.filter(r => r[2] === 0).length, backs = HANDINS.length - hands;
+  totals('band', S.submit || hands ? [[`✓${hands}`, '#c8d6f5'], ...(backs ? [[`↩${backs}`, hex(TAKEBACK_COLOR)]] : [])] : [['∅', '#8792a8']]);
+  const solid = ticks.filter(k => k.solid).length;
+  if (ticks.length) totals('tick', [[`▲${solid}`, '#ff4d5d'], ...(ticks.length > solid ? [[`▵${ticks.length - solid}`, '#a8616a']] : [])]);
+  if (CHECKS.length) {
+    const yes = CHECKS.filter(r => r[2] === 1).length;
+    totals('check', [[`◉${yes}`, '#e6eeff'], [`◎${CHECKS.length - yes}`, '#8792a8']]);
   }
 }
 function drawTimeline() {
   if (!backdrop) buildBackdrop();
   const dpr = timeline.width / timeline.clientWidth;
-  const w = timeline.clientWidth, h = timeline.clientHeight;
+  const w = timeline.clientWidth;
   tctx.setTransform(1, 0, 0, 1, 0, 0);
   tctx.clearRect(0, 0, timeline.width, timeline.height);
   tctx.drawImage(backdrop, 0, 0);
   tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const px = 8 + (t / T) * (w - 16);
-  tctx.fillStyle = 'rgba(230,238,255,0.75)';
-  tctx.fillRect(8, h / 2 - 1.5, px - 8, 3);
+  const px = trackX(t, w);
+  tctx.fillStyle = 'rgba(230,238,255,0.55)';
+  tctx.fillRect(TL_LEFT, LANES.band - 1, px - TL_LEFT, 2);
+  tctx.fillStyle = 'rgba(255,255,255,0.35)';
+  tctx.fillRect(px - 0.5, 1, 1, timeline.clientHeight - 2);
   tctx.fillStyle = '#ffffff';
   tctx.shadowColor = 'rgba(255,255,255,0.8)'; tctx.shadowBlur = 8;
-  tctx.beginPath(); tctx.arc(px, h / 2, 6, 0, Math.PI * 2); tctx.fill();
+  tctx.beginPath(); tctx.arc(px, LANES.band, 5.5, 0, Math.PI * 2); tctx.fill();
   tctx.shadowBlur = 0;
 }
 let scrubbing = false;
 function scrubTo(e) {
   const rect = timeline.getBoundingClientRect();
-  t = Math.min(T, Math.max(0, ((e.clientX - rect.left - 8) / (rect.width - 16)) * T));
+  t = Math.min(T, Math.max(0, ((e.clientX - rect.left - TL_LEFT) / (rect.width - TL_LEFT - TL_RIGHT)) * T));
 }
 timeline.addEventListener('pointerdown', e => { scrubbing = true; timeline.setPointerCapture(e.pointerId); scrubTo(e); });
 timeline.addEventListener('pointermove', e => { if (scrubbing) scrubTo(e); });
@@ -1091,7 +1333,7 @@ function resize() {
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   camera.aspect = window.innerWidth / window.innerHeight;
   // Lift the picture clear of the bar at the bottom.
-  camera.setViewOffset(window.innerWidth, window.innerHeight, 0, 46, window.innerWidth, window.innerHeight);
+  camera.setViewOffset(window.innerWidth, window.innerHeight, 0, 56, window.innerWidth, window.innerHeight);
   camera.updateProjectionMatrix();
   backdrop = null;
 }

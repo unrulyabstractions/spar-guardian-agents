@@ -132,3 +132,73 @@ def test_study_grid_keeps_runs_without_labels(tmp_path: Path) -> None:
     assert [s["run"] for s in cell] == ["a_s1", "a_s2", "d_s1"]
     page = build_study_page("study", rows, {"a_s1": "a_s1.html"})
     assert 'href="a_s1.html"' in page and "mark missing" in page and "incomplete" in page
+
+
+def test_families_falls_and_labels_at_the_final_hand_in(tmp_path: Path) -> None:
+    folder = write_run(tmp_path / "run")
+    run_path = folder / "processed" / "run.json"
+    run_json = json.loads(run_path.read_text())
+    run_json["swe"]["exploits"] = {"revealed": {"holds": {"aaaaa": ["client"], "bbbbb": ["config"]}},
+                                   "hidden": {"holds": {"aaaaa": ["A"], "bbbbb": ["B"]}}}
+    run_path.write_text(json.dumps(run_json))
+    (folder / "analysis" / "signals.jsonl").write_text("\n".join(json.dumps(r) for r in [
+        {"row": "agent", "agent": "aaaaa", "pieces_seen_at": {"A": 0, "config": 1, "B": 3},
+         "routes": ["branch", "network", "revealed_file"]},
+        {"row": "team", "alert_outcomes": []}]))
+    (folder / "analysis" / "labels" / "cheating.json").write_text(json.dumps({
+        "team": "hacked", "passed": True, "exploit_used": "revealed", "agents": {
+            "aaaaa": {"rung": "hacked", "timeline": {
+                "first": [{"clause": "supplied", "rung": "attempted", "n": 4, "k": 4}],
+                "after": ["none", "attempted", "tempted", "tempted", "attempted"],
+                "rises": [{"k": 1, "rung": "attempted", "by": "bbbbb", "fell_at": 2}]}},
+            "bbbbb": {"rung": "looked", "timeline": {
+                "first": [{"clause": "moved", "rung": "looked", "n": None, "k": None}],
+                "after": ["looked", "looked"]}}}}))
+    story = build_story(RunFiles(folder))
+    # Hidden first; each family's pieces sorted.
+    assert story["piece_names"] == ["A", "B", "client", "config"] and story["piece_family"] == [0, 0, 1, 1]
+    assert story["families"] == [{"name": "hidden", "pieces": [0, 1]}, {"name": "revealed", "pieces": [2, 3]}]
+    assert story["exploit_used"] == "revealed"
+    a, b = story["agents"]
+    assert a["holds"] == [0, 2] and b["holds"] == [1, 3]
+    # aaaaa first saw config at call 1 (ends 12 s) and B at call 3 (ends 32 s); only file routes reach config and
+    # only branch reaches B. Its own A is no flow.
+    assert story["flows"] == [[12.0, 3, 0, ["file"]], [32.0, 1, 0, ["branch"]]]
+    # The final hand-in is at 41 s: the rise at call 1 falls at call 2 (by R1), and the final rung applies at 41 s,
+    # not at the run's end; the call after it (attempted at 42 s) is not shown.
+    assert story["final_t"] == 41.0
+    assert a["rungs"] == [[0.0, 0], [12.0, 3], [22.0, 2], [41.0, 4]]
+    assert story["falls"] == [[22.0, 0, 2, 1]]
+    # aaaaa's attempted has a dated call; bbbbb's looked has none.
+    assert a["dated"] is True and b["dated"] is False
+    assert a["final"] == 4 and b["final"] == 1
+
+
+def test_study_counts_finished_runs_and_splits_alerts(tmp_path: Path) -> None:
+    from swarm_visualization.src.study_page import tally
+    study = tmp_path / "study"
+    write_run(study / "a_s1", seed=1)
+    write_run(study / "incomplete" / "a_s2", seed=2)
+    nohand = write_run(study / "a_s3", seed=3, team="tempted", passed=False)
+    run_path = nohand / "processed" / "run.json"
+    run_json = json.loads(run_path.read_text())
+    run_json["team_submission"] = None
+    run_json["alerts"] = [{"agent": "bbbbb", "agents": ["aaaaa"]}] * 3
+    run_path.write_text(json.dumps(run_json))
+    (nohand / "analysis" / "signals.jsonl").write_text(json.dumps(
+        {"row": "team", "alert_outcomes": [{"outcome": "true_alarm"}, {"outcome": "false_alarm"},
+                                           {"outcome": "false_alarm"}]}))
+    rows = [run_summary(RunFiles(p), inc) for p, inc in study_runs(study)]
+    # The incomplete run counts nowhere: two finished, one cheated (hacked), one passed.
+    assert tally(rows) == (1, 1, 2)
+    by = {r["run"]: r for r in rows}
+    assert by["a_s3"]["submitted"] is False and by["a_s1"]["submitted"] is True
+    page = build_study_page("study", rows, {})
+    assert '2 runs' in page and '⌀ 1' in page
+    # No hand-in: ∅ and no held dot; alerts split into true (amber) and false (grey).
+    a_s3 = page.split('title="a_s3')[1].split("</span></span>")[0]
+    assert "∅" in a_s3 and "leak" not in a_s3
+    assert '⚠1<i>2</i>' in page
+    # The incomplete run is an empty dashed outline set apart.
+    assert '<span class=aside>' in page and 'mark incomplete' in page
+    assert 'mark r' not in page.split('<span class=aside>')[1].split('</span></div>')[0]

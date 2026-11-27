@@ -74,6 +74,7 @@ def run_summary(files: RunFiles, incomplete: bool = False) -> dict:
             "labelled": labelled and team in RUNGS,
             "team_rung": RUNGS.index(team) if team in RUNGS else None,
             "passed": bool(cheating.get("passed")) if labelled else None,
+            "submitted": bool(run_json.get("team_submission")),
             "handins": submits, "takebacks": len(record.get("unsubmits") or []),
             "alerts": len(run_json.get("alerts") or []),
             "false_alarms": sum(1 for o in outcomes if o == "false_alarm"),
@@ -165,51 +166,80 @@ def chip(field: str, value) -> str:
     return f'<span class="chip">{esc(str(value))}</span>'
 
 
+def held_level(s: dict) -> str | None:
+    """What the final hand-in held, as the dot's level: None when there was no hand-in or no planted values."""
+    if not s.get("submitted") or not s["values"]:
+        return None
+    n, held = s["values"], s["final_held"]
+    return "unknown" if held is None else "none" if held == 0 else "all" if held >= n else "some"
+
+
 def mark(s: dict, href: str | None) -> str:
+    """One run: a disc in its team rung's colour (white ring when it passed), the held dot, its seed and counts. A run
+    in incomplete/ is an empty dashed outline with its seed only."""
     esc = html.escape
-    rung = s["team_rung"]
-    classes = ["mark"]
-    if not s["labelled"]:
-        classes.append("missing")
-    else:
-        classes.append(f"r{rung}")
-        if s["passed"]:
-            classes.append("passed")
-    if s["incomplete"]:
-        classes.append("incomplete")
-    leak = ""
-    if s["values"]:
-        n, held = s["values"], s["final_held"]
-        level = "unknown" if held is None else "none" if held == 0 else "all" if held >= n else "some"
-        leak = f'<i class="leak {level}"></i>'
-    glyphs = []
-    if s["handins"]:
-        glyphs.append(f'<span class="g h">✓{s["handins"]}</span>')
-    if s["takebacks"]:
-        glyphs.append(f'<span class="g b">↩{s["takebacks"]}</span>')
-    if s["checks"]:
-        glyphs.append(f'<span class="g c">◎{s["accepted"]}/{s["checks"]}</span>')
-    if s["alerts"]:
-        glyphs.append(f'<span class="g a">⚠{s["alerts"]}</span>')
-    title = (f'{s["run"]} · {RUNGS[rung] if s["labelled"] else "?"} · '
+    seed = f'<span class="seed">s{esc(str(s["seed"] if s["seed"] is not None else "?"))}</span>'
+    title = (f'{s["run"]} · {RUNGS[s["team_rung"]] if s["labelled"] else "?"} · '
              f'{"pass" if s["passed"] else "fail" if s["passed"] is not None else "?"}')
-    face = "?" if not s["labelled"] else ""
-    body = (f'<span class="{" ".join(classes)}">{face}{leak}</span>'
-            f'<span class="seed">s{esc(str(s["seed"] if s["seed"] is not None else "?"))}</span>'
-            f'<span class="glyphs">{"".join(glyphs)}</span>')
+    if s["incomplete"]:
+        body = f'<span class="mark incomplete"></span>{seed}'
+        title = f'{s["run"]} · incomplete'
+    else:
+        classes = ["mark", f'r{s["team_rung"]}' if s["labelled"] else "missing"]
+        if s["labelled"] and s["passed"]:
+            classes.append("passed")
+        level = held_level(s)
+        leak = f'<i class="leak {level}"></i>' if level else ""
+        glyphs = [f'<span class="g h">✓{s["handins"]}</span>' if s.get("submitted")
+                  else '<span class="g n">∅</span>']
+        if s["takebacks"]:
+            glyphs.append(f'<span class="g b">↩{s["takebacks"]}</span>')
+        if s["checks"]:
+            glyphs.append(f'<span class="g c">◉{s["accepted"]}<i>◎{s["checks"] - s["accepted"]}</i></span>')
+        if s["alerts"]:
+            true = s["alerts"] - s["false_alarms"]
+            glyphs.append(f'<span class="g a">⚠{true}' + (f'<i>{s["false_alarms"]}</i>' if s["false_alarms"] else "")
+                          + '</span>')
+        face = "" if s["labelled"] else "?"
+        body = (f'<span class="{" ".join(classes)}">{face}{leak}</span>{seed}'
+                f'<span class="glyphs">{"".join(glyphs)}</span>')
     if href:
         return f'<a class="run" href="{esc(href)}" title="{esc(title)}">{body}</a>'
     return f'<span class="run" title="{esc(title)}">{body}</span>'
 
 
+def finished(runs: list[dict]) -> list[dict]:
+    return [s for s in runs if not s["incomplete"]]
+
+
+def tally(runs: list[dict]) -> tuple[int, int, int]:
+    """(cheated, passed, graded) over the finished runs with labels."""
+    graded = [s for s in finished(runs) if s["labelled"]]
+    return (sum(1 for s in graded if s["team_rung"] >= CHEATED_FROM), sum(1 for s in graded if s["passed"]),
+            len(graded))
+
+
+def share_bar(runs: list[dict]) -> str:
+    """The cheated share of the finished runs with labels: a thin bar and 'cheated/graded'."""
+    cheated, _, graded = tally(runs)
+    if not graded:
+        return '<span class="frac dim">–</span>'
+    return (f'<span class="frac{" hot" if cheated else ""}">{cheated}/{graded}</span>'
+            f'<span class="bar"><i style="width:{100 * cheated / graded:.0f}%"></i></span>')
+
+
 def cell_share(runs: list[dict]) -> str:
-    graded = [s for s in runs if s["labelled"]]
-    cheated = sum(1 for s in graded if s["team_rung"] >= CHEATED_FROM)
-    passed = sum(1 for s in graded if s["passed"])
+    cheated, passed, graded = tally(runs)
     if not graded:
         return '<span class="share">–</span>'
     return (f'<span class="share"><b class="{"hot" if cheated else ""}">▲{cheated}</b>'
-            f'<b class="{"ok" if passed else ""}">○{passed}</b><i>/{len(graded)}</i></span>')
+            f'<b class="{"ok" if passed else ""}">○{passed}</b><i>/{graded}</i></span>')
+
+
+def marks(runs: list[dict], hrefs: dict[str, str]) -> str:
+    done = "".join(mark(s, hrefs.get(s["run"])) for s in runs if not s["incomplete"])
+    aside = "".join(mark(s, hrefs.get(s["run"])) for s in runs if s["incomplete"])
+    return f'<div class="marks">{done}{f"<span class=aside>{aside}</span>" if aside else ""}</div>'
 
 
 def build_study_page(study: str, summaries: list[dict], hrefs: dict[str, str]) -> str:
@@ -219,44 +249,52 @@ def build_study_page(study: str, summaries: list[dict], hrefs: dict[str, str]) -
     def label(fields: list[str], values: dict) -> str:
         return "".join(chip(f, values[f]) for f in fields) or '<span class="chip dim">·</span>'
 
-    head = "".join(f'<th class="col">{label(grid["col_fields"], c)}</th>' for c in grid["cols"])
+    def cell_runs(i: int, j: int) -> list[dict]:
+        return grid["cells"].get(f"{i}|{j}", [])
+
+    n_rows, n_cols = len(grid["rows"]), len(grid["cols"])
+    head = "".join(f'<th class="col">{label(grid["col_fields"], c)}'
+                   f'<div class="margin">{share_bar([s for i in range(n_rows) for s in cell_runs(i, j)])}</div></th>'
+                   for j, c in enumerate(grid["cols"]))
     body = []
     for i, r in enumerate(grid["rows"]):
         tds = []
-        for j, _ in enumerate(grid["cols"]):
-            runs = grid["cells"].get(f"{i}|{j}", [])
+        for j in range(n_cols):
+            runs = cell_runs(i, j)
             if not runs:
                 tds.append('<td class="empty"></td>')
                 continue
-            graded = [s for s in runs if s["labelled"]]
-            heat = (sum(1 for s in graded if s["team_rung"] >= CHEATED_FROM) / len(graded)) if graded else 0
-            marks = "".join(mark(s, hrefs.get(s["run"])) for s in runs)
-            tds.append(f'<td style="--heat:{heat:.2f}">{cell_share(runs)}<div class="marks">{marks}</div></td>')
-        body.append(f'<tr><th class="row">{label(grid["row_fields"], r)}</th>{"".join(tds)}</tr>')
+            tds.append(f'<td>{cell_share(runs)}{marks(runs, hrefs)}<div class="foot">{share_bar(runs)}</div></td>')
+        row_runs = [s for j in range(n_cols) for s in cell_runs(i, j)]
+        body.append(f'<tr><th class="row">{label(grid["row_fields"], r)}'
+                    f'<div class="margin">{share_bar(row_runs)}</div></th>{"".join(tds)}</tr>')
     if grid["unplaced"]:
-        marks = "".join(mark(s, hrefs.get(s["run"])) for s in grid["unplaced"])
         body.append(f'<tr><th class="row"><span class="chip dim">?</span></th>'
-                    f'<td colspan="{max(1, len(grid["cols"]))}"><div class="marks">{marks}</div></td></tr>')
+                    f'<td colspan="{max(1, n_cols)}">{marks(grid["unplaced"], hrefs)}</td></tr>')
     # What every run shares, leaving out the absent things (no regulators, no rule, not told to cheat).
     shared = "".join(chip(f, v) for f, v in grid["shared"].items() if f == "version" or v)
-    graded = [s for s in summaries if s["labelled"]]
-    cheated = sum(1 for s in graded if s["team_rung"] >= CHEATED_FROM)
-    passed = sum(1 for s in graded if s["passed"])
-    missing = len(summaries) - len(graded)
-    totals = (f'<span class="chip">{len(summaries)} runs</span>'
+    done = finished(summaries)
+    cheated, passed, graded = tally(summaries)
+    missing = len(done) - graded
+    unfinished = len(summaries) - len(done)
+    totals = (f'<span class="chip">{len(done)} runs</span>'
               f'<span class="chip hot">▲ {cheated}</span><span class="chip ok">○ {passed}</span>'
-              + (f'<span class="chip dim">? {missing}</span>' if missing else ""))
+              + (f'<span class="chip dim">? {missing}</span>' if missing else "")
+              + (f'<span class="chip dim">⌀ {unfinished}</span>' if unfinished else ""))
     swatches = "".join(f'<span class="key"><span class="mark r{k}"></span>{w}</span>' for k, w in enumerate(RUNGS))
     legend = (f'{swatches}<span class="key"><span class="mark r0 passed"></span>pass</span>'
               '<span class="key"><span class="mark missing">?</span>no labels</span>'
-              '<span class="key"><span class="mark r0 incomplete"></span>incomplete</span>'
+              '<span class="key"><span class="mark incomplete"></span>⌀ incomplete</span>'
               '<span class="key"><span class="mark r0"><i class="leak none"></i></span>0 held</span>'
               '<span class="key"><span class="mark r0"><i class="leak some"></i></span>some</span>'
               '<span class="key"><span class="mark r0"><i class="leak all"></i></span>all</span>'
               '<span class="key"><span class="mark r0"><i class="leak unknown"></i></span>?</span>'
-              '<span class="key g h">✓ hand-ins</span><span class="key g b">↩ take-backs</span>'
-              '<span class="key g c">◎ accepted/checks</span><span class="key g a">⚠ alerts</span>'
-              '<span class="key"><b class="hot">▲</b> cheated</span><span class="key"><b class="ok">○</b> pass</span>')
+              '<span class="key g h">✓ hand-ins</span><span class="key g n">∅ none</span>'
+              '<span class="key g b">↩ take-backs</span>'
+              '<span class="key g c">◉ accepted <i>◎ not</i></span>'
+              '<span class="key g a">⚠ alerts <i>false</i></span>'
+              '<span class="key"><b class="hot">▲</b> cheated</span><span class="key"><b class="ok">○</b> pass</span>'
+              '<span class="key"><span class="bar"><i style="width:60%"></i></span>cheated share</span>')
     css = (WEB / "study.css").read_text()
     # "</" inside a <script> block would end it early.
     data = json.dumps({"study": study, "runs": summaries}).replace("</", "<\\/")
