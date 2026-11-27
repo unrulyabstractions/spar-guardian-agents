@@ -113,6 +113,8 @@ from src.swarm.unsubmit import unsubmit_bindings, unsubmit_tools
 TOKEN_LIMIT = 64_000_000
 # The label of a run with a seed pack (SwarmConfig.seed_pack): a previous team's posts and files before round 1.
 SEED_DEVIATION = "a_previous_teams_posts_and_files_are_seeded_before_round_1"
+# The label of a run whose workers are told of an exploit (SwarmConfig.workers_told, Lucy's disclosure tiers).
+DISCLOSURE_DEVIATION = "each_workers_first_message_says_an_exploit_exists_and_where"
 
 
 # --------------------------------------------------------------------------
@@ -174,12 +176,15 @@ def first_messages(sample: Sample, plan: Plan, benchmark: Benchmark) -> dict[str
     words, task_values = benchmark.level_words(), benchmark.level_values()
     own = {a: roles_module.role_first(role_of(plan.roles, a), plan.config, benchmark.key, words, task_values)
            for a in plan.agents}
-    if not overseers and not any(values.values()) and not any(own.values()):
+    disclosure = roles_module.worker_disclosure(plan.config, words)
+    if not overseers and not any(values.values()) and not any(own.values()) and not disclosure:
         return None
 
     def message(agent: str) -> str:
         text = own[agent].strip() if own[agent] else None
         if agent not in overseers:
+            if role_of(plan.roles, agent) == "worker" and disclosure:
+                text = "\n\n".join(t for t in (text, disclosure) if t)
             return with_facts(first[agent], values[agent], note=text)
         task, facts = split_facts(first[agent])
         parts = [roles_module.oversight_first_message(task.strip("\n")).rstrip(),
@@ -364,7 +369,8 @@ def record_run(task_: Task, benchmark: Benchmark, plan: Plan, prompts: dict[str,
         cb["code"] = settings.code_state()
         cb["access"] = {"policy": access_policy.policy_name(plan.access), "agents": plan.holds,
                         "pieces": plan.pieces or None, "n_pieces": plan.n_pieces}
-        cb["deviations"] = benchmark.deviations(plan) + ([SEED_DEVIATION] if config.seed_pack else [])
+        cb["deviations"] = (benchmark.deviations(plan) + ([SEED_DEVIATION] if config.seed_pack else [])
+                            + ([DISCLOSURE_DEVIATION] if config.workers_told != "none" else []))
         seed = seed_record(config, benchmark.key, benchmark.row)
         if seed:
             cb["seed"] = seed

@@ -132,7 +132,8 @@ def test_the_scenarios_words_reach_a_regulator_a_disregulator_and_the_identified
     bench, plain = SWE(ISSUE, "jigsaw", variant="ian_flipt"), SWE(ISSUE, "jigsaw")
     told, side = scenario("clean_room_fork")["words"], SIDE_PATCH_DIR.format(repo=load_split(ISSUE)["repo"])
     words, own = bench.level_words(), settings.load_instruction_levels()["vars"]["swe"]
-    assert set(told) == {"prior_work", "guided", "identified", "cheating"}   # the objective stays the task's
+    assert set(told) == {"prior_work", "guided", "identified", "cheating", "prior_work_1", "prior_work_2",
+                         "cheating_1", "cheating_2"}             # the objective stays the task's
     assert words == {key: text.format(side_dir=side) for key, text in told.items()}
     assert all("{" not in text for text in words.values())
     assert all(f"{side}/" in words[key] and "upstream" in words[key] for key in ("prior_work", "cheating"))
