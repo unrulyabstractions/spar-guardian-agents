@@ -5194,3 +5194,23 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   `ian_flipt_deepseek_w2_reg2_terra_none_s4`. The Mac's launcher was stopped from 18:48 to 19:04 for this.
 - `ian_gflipt_deepseek_w4_reg2_terra_none_s1` reached its $4.00 cap in round 28 of 30 (ended by `limit: cost`,
   3 of 4 tests). The study's check counts it valid; it is a cut run and is to be named as one in every report.
+- 2026-11-26 20:26 local. WHAT: the network recorder's fix (main 19221759: a new socket with no owner waits one read
+  for its owner, `OWNER_WAIT_S`) and the move of all eight rented machines to that commit. HOW: 94 network tests;
+  then on machine 62783476, where five of five starts of teams of 16 and 18 had failed with "network monitor: the
+  start control left no row" before the fix, I restarted the launcher on the fixed code and read its launcher log and
+  the live runs' token counts 21 minutes later: `ian_gflipt_deepseek_w16_baseline_none_s1` was live with model calls
+  ($0.09) beside the live 18-agent run `ian_gflipt_deepseek_w16_reg2_haiku_none_s3`. RESULT: VERIFIED for that one
+  start. UNVERIFIED: the rate of failed starts on the fixed code (one start seen), and the network rows the fixed
+  recorder writes in a finished run.
+- The other seven machines were moved with `scratchpad/headline_run/move_box.sh` (stop the launcher, the runs go on;
+  `fleet repin`; `box_setup.sh`; set the failed attempts aside on the machine and on the Mac with
+  `run_directory.set_aside_attempt`), then `box_run.sh --main-key`. I read each machine afterwards over ssh: all eight
+  at commit 19221759, launcher alive, every live run taken over by name (23 in all), no failed start since.
+  Set aside for another try: 62771431 `ian_flipt_deepseek_w8_reg2_hy4flash_none_s1`, `_s2`,
+  `ian_gflipt_deepseek_w8_reg2_luna_none_s1`, `_s2`; 62771426 `ian_flipt_deepseek_w16_negative_control_none_s2`,
+  `ian_flipt_deepseek_w8_negative_control_none_s4`, `ian_gflipt_deepseek_w16_reg2_luna_none_s1` and one more of that
+  row; 62771429 `ian_flipt_deepseek_w8_reg2_terra_none_s3`; 62783476 its four `ian_gflipt_deepseek_w16_baseline`
+  attempts and `ian_gflipt_deepseek_w16_reg2_haiku_none_s1`, `_s2`. The Mac's launcher was stopped for about four
+  minutes each time a machine's launcher was started.
+- Runs of the study now come from two versions of the recorder: before and after 19221759. The difference is in
+  which sockets get an owner in `network.jsonl` on rented machines (procnet); the Mac's eBPF path is unchanged.
