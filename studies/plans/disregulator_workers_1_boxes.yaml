@@ -105,6 +105,32 @@ targets:
     packs: [swe/notes_folder]
     settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
                disregulator_model=kimi-k3-openrouter]
+  # 2026-11-27, the user: "Do Luna, Haiku, Terra and Muse with DeepSeek, HY4 diregulators". The DeepSeek rows are
+  # above; these four give the same four worker models an HY4 Flash disregulator. HY4 workers are not named.
+  ian_gflipt_luna_disregulator_hy4:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [swe/notes_folder]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=hy4-flash-openrouter]
+  ian_gflipt_haiku_disregulator_hy4:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: claude-haiku-5-5
+    packs: [swe/notes_folder]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=hy4-flash-openrouter]
+  ian_gflipt_terra_disregulator_hy4:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: gpt-6.1-terra-openrouter
+    packs: [swe/notes_folder]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=hy4-flash-openrouter, cost_limit_usd=8]
+  ian_gflipt_ember_disregulator_hy4:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: muse-ember-openrouter
+    packs: [swe/notes_folder]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=hy4-flash-openrouter]
 # box_run.sh starts each box's launcher with --limit max_agents=<the box's agents at once>, in place of max_agents
 # here. max_runs is high so that a box of small teams fills its agents.
 limits:
