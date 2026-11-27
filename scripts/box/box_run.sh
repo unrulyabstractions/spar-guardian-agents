@@ -156,7 +156,7 @@ send_key_files() {
     if has_workspace "$rel"; then
       send_key_file "$rel.workspace" 8
     else
-      "$here/box_ssh.sh" "$id" "rm -f $(printf %q "/root/$rel.workspace")"
+      "$here/box_ssh.sh" "$id" "rm -f $(printf %q "/root/$rel.workspace")" < /dev/null
     fi
   done
 }
