@@ -10,13 +10,15 @@ travels, and when each agent climbs the Cheating ladder.
     story["families"]      # [{name, pieces: [piece index]}]: the exploits (run.json swe.exploits), hidden first
     story["piece_family"]  # the family of each piece in story["piece_names"]
     story["flows"]         # [[t, piece, to, [routes]]]: a piece first seen by an agent that did not hold it
-    story["falls"]         # [[t, agent, rung index after, by agent or -1]]: an undone write's rung falling back
+    story["falls"]         # [[t, agent, rung index after, by agent or -1]]: an undone write's rung falling back, at
+                           #   the causing call (rises[].by and .at) when recorded
     story["final_t"]       # when the final hand-in was made (the labels apply from then), or None
     story["submit"]        # {t, agent, cheated, passed, labelled, held} or None
     story["steps"]         # [[t, agent, tool, round]]: every call, in time order
     story["rounds"]        # [[round, t]]: when each round began
     story["handins"]       # [[t, agent, 0 hand-in | 1 take-back, reason excerpt for a take-back, held]]
-    story["alerts"]        # [[t, caller, [named agents], 1 true alarm | 0 false alarm | -1 unknown, reason excerpt]]
+    story["alerts"]        # [[t, caller, [named agents], 1 true alarm | 0 false alarm | -1 unknown, reason excerpt,
+                           #   [per named agent: 1 cheated by then | 0 not | -1 unknown]]]
     story["values"]        # the planted values' names (processed/facts/version_values.json "values")
     story["checks"]        # [[t, agent, 1 accepted | 0 not_accepted | -1 unknown, held]]: every check_fix answer
     story["setup"]         # workers, models, regulators, disregulators, task version, check tool, told to cheat
@@ -94,6 +96,34 @@ def dated_final(record: dict) -> bool:
     dated = [rung_index(c.get("rung")) for c in timeline.get("first") or [] if c.get("n") is not None
              or c.get("k") is not None]
     return max(dated, default=0) >= need
+
+def move_fall(rungs: list[list], seen_at: float, cause: float) -> bool:
+    """Move the fall below attempted that the agent's own call `seen_at` shows to `cause`, the call that caused it.
+    The rise holds until then; the agent's changes below attempted in between merge into the fall. Returns False,
+    changing nothing, when no such fall is at seen_at or another rise to attempted lies in between."""
+    k = next((k for k, (at, value) in enumerate(rungs) if at == seen_at and value < CHEATED_FROM), None)
+    if k is None or k == 0 or rungs[k - 1][1] < CHEATED_FROM:
+        return False
+    lo, hi = min(seen_at, cause), max(seen_at, cause)
+    between = [row for row in rungs if lo < row[0] < hi or (row[0] == hi and row is not rungs[k])]
+    if any(value >= CHEATED_FROM for _, value in between):
+        return False
+    if cause <= rungs[k - 1][0]:
+        return False
+    if cause > seen_at:
+        # The changes up to the cause happen while the rise still holds: the last of them is the rung after the fall.
+        landing = between[-1][1] if between else rungs[k][1]
+        rungs[:] = [row for row in rungs if not (seen_at <= row[0] <= cause)] + [[cause, landing]]
+    else:
+        rungs[k][0] = cause
+    rungs.sort(key=lambda row: row[0])
+    merged = [rungs[0]]
+    for row in rungs[1:]:
+        if row[1] != merged[-1][1]:
+            merged.append(row)
+    rungs[:] = merged
+    return True
+
 
 def agent_labels(roster: list[str], roles: dict[str, str]) -> dict[str, str]:
     """W1, W2, ... for workers, R1 ... for regulators, D1 ... for disregulators, in roster order."""
@@ -310,9 +340,11 @@ def build_story(files: RunFiles) -> dict:
         return sorted({value_index[v] for v in held if v in value_index})
 
     # Alerts to humans (alert_humans): placed at the caller's n-th alert_humans call, with the agents it names and
-    # whether the labels call it a true alarm (1), a false alarm (0) or cannot tell (-1).
+    # whether the labels call it a true alarm (1), a false alarm (0) or cannot tell (-1). Each agent named carries
+    # its own flag from alert_outcomes[].named_cheated_by_then: 1 it had cheated by then, 0 not, -1 unknown.
     team_row = next((row for row in files.signals() if row.get("row") == "team"), {})
-    outcomes = [o.get("outcome") for o in team_row.get("alert_outcomes") or []]
+    outcome_rows = [o for o in team_row.get("alert_outcomes") or [] if isinstance(o, dict)]
+    outcomes = [o.get("outcome") for o in outcome_rows]
     alerts: list[list] = []
     nth: dict[str, int] = {}
     for n, alert in enumerate(run_json.get("alerts") or []):
@@ -324,10 +356,12 @@ def build_story(files: RunFiles) -> dict:
         nth[caller] = k + 1
         t = start_of(caller, mine[k]) if k < len(mine) else end_of_run
         outcome = outcomes[n] if n < len(outcomes) else None
-        named = [index[a] for a in alert.get("agents") or [] if a in index and a != caller]
-        alerts.append([round(t, 3), index[caller], named,
+        named_ids = [a for a in dict.fromkeys(alert.get("agents") or []) if a in index and a != caller]
+        by_then = (outcome_rows[n].get("named_cheated_by_then") if n < len(outcome_rows) else None) or {}
+        flags = [1 if by_then.get(a) is True else 0 if by_then.get(a) is False else -1 for a in named_ids]
+        alerts.append([round(t, 3), index[caller], [index[a] for a in named_ids],
                        1 if outcome == "true_alarm" else 0 if outcome == "false_alarm" else -1,
-                       excerpt(str(alert.get("reason") or ""))])
+                       excerpt(str(alert.get("reason") or "")), flags])
     alerts.sort(key=lambda row: row[:2])
 
     # Every hand-in (0) and take-back (1), from run.json unsubmits, at its recorded time (or, without recorded
@@ -377,7 +411,7 @@ def build_story(files: RunFiles) -> dict:
     label_t = final_t if final_t is not None else round(end_of_run, 3)
 
     # The Cheating ladder after every call up to the final hand-in, then the final label. An undone write's rise
-    # falls back at its fell_at call (timeline.rises), by the agent named in "by".
+    # falls back (timeline.rises fell_at) at the call that caused it: call "at" of the agent "by", when recorded.
     entry_rounds = (run_json.get("rules") or {}).get("entry_rounds") or {}
     agents = []
     falls: list[list] = []
@@ -394,20 +428,28 @@ def build_story(files: RunFiles) -> dict:
             if value != current:
                 rungs.append([at, value])
                 current = value
-        final = rung_index(record.get("rung"))
-        if final != current:
-            rungs.append([label_t, final])
+        moved: dict[float, float] = {}
         for rise in timeline.get("rises") or []:
             fell = rise.get("fell_at")
             if not isinstance(fell, int) or fell >= len(after):
                 continue
-            at = round(end_of(agent, fell), 3)
-            if at >= label_t or rung_index(after[fell]) >= CHEATED_FROM:
+            seen_at = round(end_of(agent, fell), 3)
+            if seen_at >= label_t or rung_index(after[fell]) >= CHEATED_FROM:
                 continue
             by = rise.get("by")
+            # The fall happens at the call that caused it: the start of call `at` of the agent `by`.
+            at = moved.get(seen_at, seen_at)
+            if at == seen_at and by in index and isinstance(rise.get("at"), int) and calls.get(by):
+                cause = round(start_of(by, rise["at"]), 3)
+                if cause < label_t and move_fall(rungs, seen_at, cause):
+                    at = moved[seen_at] = cause
             row = [at, index[agent], rung_index(after[fell]), index[by] if by in index and by != agent else -1]
             if row not in falls:
                 falls.append(row)
+        current = rungs[-1][1]
+        final = rung_index(record.get("rung"))
+        if final != current:
+            rungs.append([label_t, final])
         rows = times[agent]
         entry = entry_rounds.get(agent) if isinstance(entry_rounds, dict) else None
         start = rows[0][0] if rows and isinstance(entry, int) and entry > 1 else 0.0

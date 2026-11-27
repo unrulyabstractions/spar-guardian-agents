@@ -10,8 +10,8 @@ const T = Math.max(S.duration, 1e-6);
 const PLAY_SECONDS = 120;                // the whole run plays in this many seconds at 1x
 const SPEEDS = [0.25, 0.5, 1, 2];
 const SPS = T / PLAY_SECONDS;            // story seconds per screen second at 1x
-const D = {spark: 1.3 * SPS, flow: 2.4 * SPS, ripple: 1.5 * SPS, flash: 1.8 * SPS, submit: 3.6 * SPS,
-           fade: 0.7 * SPS, alert: 3.2 * SPS, check: 2.2 * SPS};
+const D = {spark: 1.0 * SPS, flow: 2.4 * SPS, ripple: 1.0 * SPS, flash: 1.8 * SPS, verdict: 1.0 * SPS,
+           fade: 0.7 * SPS, change: 0.06 * SPS, alert: 3.2 * SPS, check: 2.2 * SPS};
 const ASK = 1;
 const CHEATED = 3;
 const HACKED = 4;
@@ -22,20 +22,26 @@ const EDGE_COLOR = new THREE.Color('#8fb3ff');
 const EDGE_RED = new THREE.Color('#ff2f45');
 const TALK_COLOR = new THREE.Color('#eaf2ff');
 const ASK_COLOR = new THREE.Color('#7fe8ff');
-const ROLE_EDGE = new THREE.Color('#38e1ff');             // the outline of a regulator or disregulator
+const ROLE_EDGE = {regulator: new THREE.Color('#38e1ff'),      // the outline of a regulator (cyan) and of a
+                   disregulator: new THREE.Color('#ff9de2')};  // disregulator (pink), as in the legend
 const ALERT_COLOR = new THREE.Color('#ffc21a');          // an alert to humans; a false alarm is grey
 const FALSE_ALARM = new THREE.Color('#8b93a8');
 const UNKNOWN_ALARM = new THREE.Color('#b8953a');
 const alarmColor = outcome => (outcome === 1 ? ALERT_COLOR : outcome === 0 ? FALSE_ALARM : UNKNOWN_ALARM);
+// One pip per accusation: filled amber when the agent named had cheated by then (a hit), hollow amber when the alarm
+// was true only for the team, grey when false, dashed grey when unknown.
+const pipKind = (outcome, flag) => (outcome === 0 ? 'false' : outcome === 1 && flag === 1 ? 'hit'
+                                    : outcome === 1 && flag === 0 ? 'team' : 'unknown');
 const ALERTS = (S.alerts || []).slice().sort((a, b) => a[0] - b[0]);
 
 // The exploit's pieces, by family (run.json swe.exploits): orbs for the first, small diamonds for the second.
 const PIECE_NAMES = S.piece_names || [];
 const FAMILIES = S.families || (PIECE_NAMES.length ? [{name: null, pieces: PIECE_NAMES.map((_, i) => i)}] : []);
 const PIECE_FAMILY = S.piece_family || PIECE_NAMES.map(() => 0);
-const FAMILY_HUES = [['#3d8bff', '#2fe07a', '#b46dff', '#5ab0ff', '#7dffb0'],
+const FAMILY_HUES = [['#16d0c0', '#2fe07a', '#b46dff', '#5ab0ff', '#7dffb0'],
                      ['#f0e040', '#a8f04a', '#e0a870', '#ffd27a', '#d0ff8a']];
 const FAMILY_ICON = ['●', '◆'];
+const FAMILY_HOLLOW = ['○', '◇'];
 const PIECE_COLORS = PIECE_NAMES.map((_, i) => {
   const f = PIECE_FAMILY[i] || 0, k = (FAMILIES[f] ? FAMILIES[f].pieces.indexOf(i) : i);
   const hues = FAMILY_HUES[f % FAMILY_HUES.length];
@@ -130,11 +136,12 @@ const GLOW = radialTexture([[0, 1], [0.2, 0.6], [0.5, 0.16], [1, 0]]);
 const RING = radialTexture([[0, 0], [0.7, 0], [0.8, 0.95], [0.88, 0.3], [1, 0]]);
 const DOT = canvasTexture(g => { g.fillStyle = '#fff'; g.beginPath(); g.arc(128, 128, 100, 0, Math.PI * 2); g.fill();
                                  g.strokeStyle = '#070a12'; g.lineWidth = 26; g.stroke(); });
-const CORE = radialTexture([[0, 1], [0.45, 1], [0.62, 0.55], [1, 0]]);
-const RING_VERDICT = circleTexture(9);
-const RING_PASS = circleTexture(5);
-const RING_SET = circleTexture(5);
-const RING_DASHED = circleTexture(4, true);
+const HOLLOW = canvasTexture(g => { g.strokeStyle = '#fff'; g.lineWidth = 46; g.beginPath(); g.arc(128, 128, 92, 0, Math.PI * 2);
+                                    g.stroke(); });
+const DASHED_DOT = canvasTexture(g => { g.strokeStyle = '#fff'; g.lineWidth = 34; g.setLineDash([46, 30]);
+                                        g.beginPath(); g.arc(128, 128, 98, 0, Math.PI * 2); g.stroke(); });
+const RING_LEFT = circleTexture(7, true);                 // an agent that left: a dashed edge
+const RING_RUNG = circleTexture(15);                     // a rung change: the brightest cue of a frame
 
 function sprite(texture, color = 0xffffff, opacity = 1, additive = true) {
   const material = new THREE.SpriteMaterial({map: texture, color, transparent: true, opacity,
@@ -171,22 +178,42 @@ class Pool {
 }
 const glowPool = new Pool(() => sprite(GLOW));
 const ringPool = new Pool(() => sprite(RING));
-const wavePool = new Pool(() => sprite(circleTexture(3)));         // the final hand-in's wave: a thin line
+const thinPool = new Pool(() => sprite(circleTexture(3)));         // the final hand-in's ring: a thin line
+const rungPool = new Pool(() => sprite(RING_RUNG));
 const pipPool = new Pool(() => sprite(DOT, 0xffffff, 1, false));
+const pipHollowPool = new Pool(() => sprite(HOLLOW, 0xffffff, 1, false));
+const pipDashPool = new Pool(() => sprite(DASHED_DOT, 0xffffff, 1, false));
 const orbGeometry = new THREE.SphereGeometry(1, 20, 14);
 const gemGeometry = new THREE.OctahedronGeometry(1.15, 0).scale(0.75, 1.3, 0.75);   // a small upright diamond
 const pieceMaterial = () => new THREE.MeshStandardMaterial({roughness: 0.25, metalness: 0.1, emissiveIntensity: 1.2,
                                                             transparent: true});
 const orbPool = new Pool(() => new THREE.Mesh(orbGeometry, pieceMaterial()));
 const gemPool = new Pool(() => new THREE.Mesh(gemGeometry, Object.assign(pieceMaterial(), {flatShading: true})));
-const pools = [glowPool, ringPool, wavePool, pipPool, orbPool, gemPool];
-function pieceMesh(piece) {                  // an orb for the first family, a small diamond for the second
+// A piece seen but not dealt: a hollow outline of the same shape.
+const orbHollowPool = new Pool(() => sprite(circleTexture(26), 0xffffff, 1, false));
+const gemEdges = new THREE.EdgesGeometry(gemGeometry);
+const gemHollowPool = new Pool(() => new THREE.LineSegments(gemEdges, new THREE.LineBasicMaterial({transparent: true,
+                                                                                                  toneMapped: false})));
+const pools = [glowPool, ringPool, thinPool, rungPool, pipPool, pipHollowPool, pipDashPool, orbPool, gemPool,
+               orbHollowPool, gemHollowPool];
+const ORB_SPRITE = 1.05 / CIRCLE_R;           // a hollow orb's sprite scale per unit of orb radius (a little wider)
+function pieceMesh(piece, hollow = false) {   // an orb for the first family, a small diamond for the second
   const gem = familyOf(piece) === 1;
+  const color = pieceColor(piece);
+  if (hollow) {
+    const mesh = gem ? gemHollowPool.get() : orbHollowPool.get();
+    if (gem) mesh.quaternion.copy(camera.quaternion);
+    mesh.material.color.copy(color);
+    mesh.userData.hollowOrb = !gem;
+    return mesh;
+  }
   const mesh = gem ? gemPool.get() : orbPool.get();
   if (gem) mesh.quaternion.copy(camera.quaternion);           // upright and facing the camera: a rhombus
-  const color = pieceColor(piece);
   mesh.material.color.copy(color); mesh.material.emissive.copy(color);
   return mesh;
+}
+function sizePiece(mesh, size) {              // a mesh's radius, or a hollow orb sprite's ring radius
+  mesh.scale.setScalar(mesh.userData.hollowOrb ? size * ORB_SPRITE : size);
 }
 
 // ---------- agents ----------
@@ -230,17 +257,18 @@ const ANCHORS = (() => {
 })();
 const CROWDED = N > 12;                       // a crowded swarm shows tags only for agents doing something now
 const pos = [], vel = [];
-// Radii around a node of radius 1 (each ring at most 1.33): the dashed outline of a rung no dated call stands behind,
-// the white full-set ring, the verdict ring in the team rung's colour and the white pass ring.
-const R_DASH = 1.08, R_SET = 1.16, R_VERDICT = 1.25, R_PASS = 1.34, R_PIPS = 1.5, R_HELD = [1.42, 1.56];
+// Radii around a node of radius 1: the dashed edge of an agent that left, the alert pips, the held segments.
+const R_LEFT = {worker: 1.14, regulator: 1.3, disregulator: 1.42}, R_PIPS = 1.5, R_HELD = [1.42, 1.56];
+const facetGeometry = new THREE.IcosahedronGeometry(1.08, 1);   // hacked: a faceted, low-poly solid
 const nodes = S.agents.map((agent, i) => {
   const group = new THREE.Group();
   scene.add(group);
   const material = new THREE.MeshStandardMaterial({color: RUNG_COLORS[0].clone(), emissive: RUNG_COLORS[0].clone(),
                                                    emissiveIntensity: 0.25, roughness: 0.32, metalness: 0.12,
                                                    transparent: true, flatShading: agent.role !== 'worker'});
-  let core, cage = null;
-  const edgeMaterial = new THREE.LineBasicMaterial({color: ROLE_EDGE, transparent: true, opacity: 0.95, toneMapped: false});
+  let core, cage = null, facet = null;
+  const edgeMaterial = new THREE.LineBasicMaterial({color: ROLE_EDGE[agent.role] || ROLE_EDGE.regulator,
+                                                    transparent: true, opacity: 0.95, toneMapped: false});
   if (agent.role === 'disregulator') {
     const geometry = spikyGeometry();
     core = new THREE.Mesh(geometry, material);
@@ -255,6 +283,13 @@ const nodes = S.agents.map((agent, i) => {
     core.add(cage);
   } else {
     core = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), material);
+    // Hacked: the same node as a flat-shaded, faceted solid; attempted stays a smooth sphere.
+    facet = new THREE.Mesh(facetGeometry, new THREE.MeshStandardMaterial({
+      color: RUNG_COLORS[HACKED].clone(), emissive: RUNG_COLORS[HACKED].clone(), emissiveIntensity: 0.5,
+      roughness: 0.45, metalness: 0.15, transparent: true, flatShading: true}));
+    facet.visible = false;
+    facet.userData.agent = i;
+    group.add(facet);
   }
   core.userData.agent = i;
   group.add(core);
@@ -267,13 +302,7 @@ const nodes = S.agents.map((agent, i) => {
     group.add(s);
     return s;
   };
-  const whiteCore = sprite(CORE, 0xffffff, 0, false);     // hacked: a white core, as on the study page's disc
-  whiteCore.scale.setScalar(0.8);
-  group.add(whiteCore);
-  const dash = ringSprite(RING_DASHED, R_DASH);
-  const fullSet = ringSprite(RING_SET, R_SET);
-  const verdict = ringSprite(RING_VERDICT, R_VERDICT);
-  const pass = ringSprite(RING_PASS, R_PASS);
+  const leftRing = ringSprite(RING_LEFT, R_LEFT[agent.role] || R_LEFT.worker);   // an agent that left: a dashed edge
   // What the standing hand-in's code held: N small segments at the top of the node, filled n of N; three dashes each
   // when unknown. Turned to face the camera each frame.
   const held = new THREE.Group();
@@ -299,17 +328,24 @@ const nodes = S.agents.map((agent, i) => {
   pos.push(ANCHORS[i].clone().add(new THREE.Vector3(Math.sin(i * 7.1) * 0.2, Math.cos(i * 3.3) * 0.2, 0)));
   vel.push(new THREE.Vector3());
   const tilt = new THREE.Quaternion().setFromEuler(new THREE.Euler((i * 1.7) % Math.PI, (i * 2.3) % Math.PI, 0));
-  return {agent, group, core, material, cage, glow, whiteCore, dash, fullSet, verdict, pass, held, segments, tilt,
+  return {agent, group, core, facet, material, cage, glow, leftRing, held, segments, tilt,
           spin: 0.6 + (i % 5) * 0.12};
 });
-const cores = nodes.map(n => n.core);
-function alertsUpTo(t) {   // per agent: the outcomes of the alerts naming it, and the true and false alerts it raised
+const cores = nodes.flatMap(n => (n.facet ? [n.core, n.facet] : [n.core]));
+// Per agent: a pip kind for each accusation naming it; and of the alerts it raised, the true, false and unknown ones
+// and its hits and misses (agents named who had, or had not, cheated by then).
+function alertsUpTo(t) {
   const named = Array.from({length: N}, () => []);
-  const raised = Array.from({length: N}, () => [0, 0]);
-  for (const [ta, caller, who, outcome] of ALERTS) {
+  const raised = Array.from({length: N}, () => [0, 0, 0, 0, 0]);
+  for (const [ta, caller, who, outcome, , flags] of ALERTS) {
     if (ta > t) break;
-    raised[caller][outcome === 0 ? 1 : 0]++;
-    for (const j of who) named[j].push(outcome);
+    raised[caller][outcome === 1 ? 0 : outcome === 0 ? 1 : 2]++;
+    who.forEach((j, k) => {
+      const flag = flags ? flags[k] : -1;
+      named[j].push(pipKind(outcome, flag));
+      if (flag === 1) raised[caller][3]++;
+      else if (flag === 0) raised[caller][4]++;
+    });
   }
   return {named, raised};
 }
@@ -318,6 +354,8 @@ function alertsUpTo(t) {   // per agent: the outcomes of the alerts naming it, a
 // Words are single words, numbers and icons: never a sentence.
 const ROLE_ICON = {worker: '●', regulator: '■', disregulator: '✹'};
 const ROLE_ACCENT = {worker: '#8fb3ff', regulator: '#7fe8ff', disregulator: '#ff9de2'};
+const ROLE_COLORS = Object.fromEntries(Object.entries(ROLE_ACCENT).map(([role, c]) => [role, new THREE.Color(c)]));
+const STEP_COLOR = new THREE.Color('#9fb3d9');
 const esc = text => String(text).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 const hex = color => '#' + color.getHexString();
 const nameOf = i => (i >= 0 ? `<b style="color:${ROLE_ACCENT[S.agents[i].role] || '#fff'}">${esc(S.agents[i].label)}</b>` : '∅');
@@ -331,11 +369,40 @@ function segs(held) {                         // N small segments, n filled; das
   return `<span class="segs">${out}</span>`;
 }
 const heldChip = held => (NV ? `<span class="held">${segs(held)}<span class="n">${heldText(held)}</span></span>` : '');
-function badgeHTML(size = 'big') {           // the verdict as a disc: rung fill, white core hacked, white ring pass
+// The verdict's shape, as on the study page: a round disc in the rung's colour, a red hexagon for hacked, a white
+// ring for pass.
+const hexPoints = r => [0, 1, 2, 3, 4, 5].map(k => `${(r * Math.sin((k * Math.PI) / 3)).toFixed(2)},` +
+                                                   `${(-r * Math.cos((k * Math.PI) / 3)).toFixed(2)}`).join(' ');
+function discSVG(rung, passed) {
+  const fill = hex(RUNG_COLORS[rung]);
+  if (rung === HACKED) {                       // a hexagon, and for pass a white ring of the same shape
+    const ring = passed ? `<polygon points="${hexPoints(14.2)}" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linejoin="round"/>` : '';
+    return `<svg viewBox="-15 -15 30 30" aria-hidden="true"><polygon points="${hexPoints(11)}" fill="${fill}"/>${ring}</svg>`;
+  }
+  const shape = `<circle r="10" fill="${fill}"/>`;
+  const ring = passed ? '<circle r="13.6" fill="none" stroke="#ffffff" stroke-width="2.2"/>' : '';
+  return `<svg viewBox="-15 -15 30 30" aria-hidden="true">${shape}${ring}</svg>`;
+}
+function badgeHTML(size = 'big') {           // the verdict: ∅ with no hand-in, grey without labels
   if (!S.submit) return `<span class="badge ${size} none">∅</span>`;
   if (!GRADED) return `<span class="badge ${size} ungraded"></span>`;
-  return `<span class="badge ${size} r${TEAM_RUNG}${PASSED ? ' pass' : ''}"></span>`;
+  return `<span class="badge ${size} r${TEAM_RUNG}">${discSVG(TEAM_RUNG, PASSED)}</span>`;
 }
+// The run's mark on its study page: the verdict's disc and the held dot; a dashed ring for a run in incomplete/.
+function studyMarkHTML() {
+  if (S.incomplete) return '<span class="smark incomplete"></span>';
+  const level = S.submit && NV ? heldLevel(FINAL_HELD) : null;
+  const dot = level ? `<i class="leak ${level}"></i>` : '';
+  if (!GRADED) return `<span class="smark missing"><b>${S.submit ? '?' : '∅'}</b>${dot}</span>`;
+  return `<span class="smark r${TEAM_RUNG}">${discSVG(TEAM_RUNG, PASSED)}${S.submit ? '' : '<b>∅</b>'}${dot}</span>`;
+}
+// How many agents the labels put at attempted or above: workers, and disregulators apart.
+const COUNTS = ['worker', 'disregulator'].map(role => {
+  const members = S.agents.filter(a => a.role === role);
+  return [role, members.filter(a => a.final >= CHEATED).length, members.length];
+}).filter(([, , n]) => n);
+const countsHTML = () => COUNTS.map(([role, k, n]) =>
+  `<span class="count${k ? ' hot' : ''}">${role === 'worker' ? '▲' : '<b style="color:#ff9de2">✹</b>'}${k}/${n}</span>`).join('');
 const verdictChips = () => (!S.submit ? '' : !GRADED ? chip('?', hex(UNGRADED_COLOR)) :
   chip(RUNG_WORDS[TEAM_RUNG], hex(VERDICT_COLOR), 'strong') + chip(PASSED ? 'pass' : 'fail', PASSED ? '#ffffff' : '#8a93a8'));
 const checkIcon = answer => (answer === 1 ? '<span class="ic ok">◉</span>' : '<span class="ic">◎</span>');
@@ -347,16 +414,17 @@ const tags = S.agents.map(agent => {
   const el = document.createElement('div');
   el.className = 'tag';
   // A big swarm gets short tags (label and rung); the header already names the models and roles.
-  el.innerHTML = N > 8
+  el.innerHTML = '<div class="fams"></div>' + (N > 8
     ? `<b style="color:${ROLE_ACCENT[agent.role] || '#fff'}">${esc(agent.label)}</b> <span class="rung"></span>`
-    : `<b style="color:${ROLE_ACCENT[agent.role] || '#fff'}">${esc(agent.label)}</b> <span class="model">${esc(agent.model || '')}</span><br><span class="rung"></span>`;
+    : `<b style="color:${ROLE_ACCENT[agent.role] || '#fff'}">${esc(agent.label)}</b> <span class="model">${esc(agent.model || '')}</span><br><span class="rung"></span>`);
   labelsBox.appendChild(el);
   el.insertAdjacentHTML('beforeend', '<span class="flagged"></span><span class="raised"></span>');
   const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
   line.setAttribute('class', 'leader');
   leaders.appendChild(line);
   return {el, line, rung: el.querySelector('.rung'), flagged: el.querySelector('.flagged'),
-          raised: el.querySelector('.raised'), shown: '', flags: '', raisedHTML: '', full: true};
+          raised: el.querySelector('.raised'), fams: el.querySelector('.fams'), shown: '', flags: '', raisedHTML: '',
+          famsHTML: '', full: true};
 });
 {
   // The setup in one line of chips: workers, regulators, disregulators, the rule, the task version, told to cheat.
@@ -371,32 +439,35 @@ const tags = S.agents.map(agent => {
   if (!regs && !dis) parts.push(chip('alone', '#8a93a8', 'big'));
   if (su.rule) parts.push(chip(`§ ${esc(su.rule)}`, '#e6eeff', 'big'));
   if (su.version) parts.push(chip(esc(su.version), '#b9c7e6', 'big'));
-  if (su.check_tool !== undefined) parts.push(su.check_tool ? chip('◎ check', '#9ff0c0', 'big') : chip('◎✗', '#6b7385', 'big'));
+  if (su.check_tool !== undefined) parts.push(su.check_tool ? chip('◎ check', '#c8d0e0', 'big') : chip('◎✗', '#6b7385', 'big'));
   if (su.told_to_cheat) parts.push(chip('⚑ cheat', '#ffb067', 'big strong'));
-  const back = S.back ? `<a class="back" href="${esc(S.back)}">◂</a>` : '';
+  const back = S.back ? `<a class="back" href="${esc(S.back)}">◂</a>${studyMarkHTML()}` : '';
   document.getElementById('cast').innerHTML = back + parts.join('');
   document.getElementById('runName').textContent = S.run;
   // The legend: shapes, rungs, pieces by family (the family the labels say was used outlined), held, alerts, rings.
   const shapes = [['worker', '● worker'], ['regulator', '■ regulator'], ['disregulator', '✹ disregulator']]
     .filter(([role]) => S.agents.some(a => a.role === role))
     .map(([role, word]) => `<span class="k" style="color:${ROLE_ACCENT[role]}">${word}</span>`).join('');
-  const swatches = RUNG_WORDS.map((w, k) => `<span class="k"><span class="sw${k === HACKED ? ' core' : ''}" style="background:${hex(RUNG_COLORS[k])}"></span>${w}</span>`).join('') +
-    '<span class="k"><span class="sw dashed"></span>undated</span>';
+  const hexSwatch = `<svg class="hx" viewBox="-6 -6 12 12"><polygon points="${hexPoints(5.6)}" fill="${hex(RUNG_COLORS[HACKED])}"/></svg>`;
+  const swatches = RUNG_WORDS.map((w, k) => `<span class="k">${k === HACKED ? hexSwatch : `<span class="sw" style="background:${hex(RUNG_COLORS[k])}"></span>`}${w}</span>`).join('') +
+    '<span class="k">◌ undated</span><span class="k"><span class="sw dashed"></span>left</span>';
   const used = String(S.exploit_used || '');
   const families = FAMILIES.map((family, f) => {
     const names = family.pieces.map(p => `<b style="color:${hex(pieceColor(p))}">${esc(PIECE_NAMES[p])}</b>`).join(' ');
     const outlined = family.name && (used === family.name || used === 'both');
     return `<span class="k fam${outlined ? ' used' : ''}">${FAMILY_ICON[f % 2]} ${names}</span>`;
-  }).join('') + (FAMILIES.length ? '<span class="k"><span class="sw ringed"></span>set</span>' : '');
+  }).join('') + (FAMILIES.length ? `<span class="k">${FAMILY_HOLLOW[0]} seen</span>` : '');
+  const pip = (cls, color) => `<span class="pip ${cls}" style="--c:${color}"></span>`;
+  const amber = hex(ALERT_COLOR), grey = hex(FALSE_ALARM);
   const marks = ['<span class="k"><span class="line"></span>talk</span>',
-                 ALERTS.length ? `<span class="k"><span class="pip" style="background:${hex(ALERT_COLOR)}"></span>⚠ true</span>` +
-                                 `<span class="k"><span class="pip" style="background:${hex(FALSE_ALARM)}"></span>false</span>` : '',
+                 ALERTS.length ? `<span class="k">${pip('', amber)}⚠ hit</span><span class="k">${pip('hollow', amber)}team</span>` +
+                                 `<span class="k">${pip('', grey)}false</span><span class="k">${pip('dashed', grey)}?</span>` : '',
                  HANDINS.some(r => r[2] === 1) ? `<span class="k" style="color:${hex(TAKEBACK_COLOR)}">↩ back</span>` : '',
                  CHECKS.length ? '<span class="k">◉ ◎ check</span>' : ''].join('');
   const held = NV && (HANDINS.length || CHECKS.length)
     ? `<span class="k">◈ ${segs([])} 0/${NV}</span><span class="k">${segs(VALUES.map((_, k) => k))} ${NV}/${NV}</span><span class="k">${segs(null)} ?</span>`
     : '';
-  const verdict = S.submit ? `<span class="k">✓ ${badgeHTML('small')} label</span><span class="k"><span class="sw passring"></span>pass</span>` : '';
+  const verdict = S.submit ? `<span class="k">✓ ${badgeHTML('small')} label</span><span class="k"><span class="badge small r0">${discSVG(0, true)}</span>pass</span>` : '';
   document.getElementById('legend').innerHTML =
     `<div>${shapes}</div><div>${swatches}</div>${families ? `<div>${families}</div>` : ''}<div>${marks}</div>` +
     `${held || verdict ? `<div>${held}${verdict}</div>` : ''}`;
@@ -453,10 +524,12 @@ if (S.submit) {
 for (const [tc, a, answer, held] of CHECKS) {
   events.push({t: tc, accent: hex(heldColor(held)), html: `${checkIcon(answer)}${nameOf(a)}${heldChip(held)}`});
 }
-for (const [ta, caller, who, outcome, reason] of ALERTS) {
+for (const [ta, caller, who, outcome, reason, flags] of ALERTS) {
   const color = hex(alarmColor(outcome));
+  // An agent named who had not cheated by then is drawn dimmed.
+  const named = who.map((j, k) => (flags && flags[k] === 0 ? `<span class="miss">${nameOf(j)}</span>` : nameOf(j)));
   events.push({t: ta, accent: color, tip: reason,
-               html: `<span class="alarm" style="color:${color}">⚠</span>${nameOf(caller)}${who.length ? ` <span class="ic">→</span>${who.map(nameOf).join(' ')}` : ''}` +
+               html: `<span class="alarm" style="color:${color}">⚠</span>${nameOf(caller)}${who.length ? ` <span class="ic">→</span>${named.join(' ')}` : ''}` +
                      `${outcome === 1 ? chip('true', color, 'strong') : outcome === 0 ? chip('false', color) : ''}`});
 }
 events.sort((a, b) => a.t - b.t || (a.prio || 0) - (b.prio || 0));
@@ -465,12 +538,26 @@ const clockTime = document.getElementById('clockTime');
 const whereEl = document.getElementById('where');
 const standingEl = document.getElementById('standing');
 const badgeEl = document.getElementById('badge');
-const tintEl = document.getElementById('tint');
-tintEl.style.setProperty('--verdict', `${Math.round(VERDICT_COLOR.r * 255)},${Math.round(VERDICT_COLOR.g * 255)},${Math.round(VERDICT_COLOR.b * 255)}`);
 const FEED_SIZE = 6;
 let feedShown = -2, badgeShown = '';
 const camRight = new THREE.Vector3(), camUp = new THREE.Vector3();
-function drawWords(rungs, here, alive, focus, flags, hand, recent) {
+// A small row of family marks under a node: per family, solid for a piece dealt, hollow for one seen, filled out
+// to the family's size with dim marks for the pieces it has not got.
+function famsHTML(i, sets) {
+  if (!sets) return '';
+  const out = [];
+  FAMILIES.forEach((family, f) => {
+    if (!family.pieces.some(p => sets.dealt.has(p) || sets.seen.has(p))) return;
+    out.push(family.pieces.map(p => {
+      const color = hex(pieceColor(p));
+      if (sets.dealt.has(p)) return `<b style="color:${color}">${FAMILY_ICON[f % 2]}</b>`;
+      if (sets.seen.has(p)) return `<b style="color:${color}">${FAMILY_HOLLOW[f % 2]}</b>`;
+      return `<b class="nil">${FAMILY_ICON[f % 2]}</b>`;
+    }).join(''));
+  });
+  return out.join('<i></i>');
+}
+function drawWords(rungs, here, alive, focus, flags, hand, recent, pieceSets) {
   clockTime.textContent = `${clockText(t)} / ${clockText(T)}`;
   const r = roundAt(t), step = stepShown();
   const whereText = (ROUNDS.length ? `R ${ROUNDS[r] ? ROUNDS[r][0] : 0}/${ROUNDS[ROUNDS.length - 1][0]}` : '') +
@@ -481,7 +568,10 @@ function drawWords(rungs, here, alive, focus, flags, hand, recent) {
     `<span class="ic">✓</span>${nameOf(hand.holder)}${heldChip(hand.held)}${hand.since === FINAL_T ? verdictChips() : ''}`;
   if (standingEl.innerHTML !== standing) standingEl.innerHTML = standing;
   // The badge: dashed until the final hand-in (or the run's end without one), then the verdict.
-  const badge = (S.submit ? t >= FINAL_T : t >= T - 1e-6) ? badgeHTML() : '<span class="badge big pending"></span>';
+  // A run in incomplete/ never ends: its ∅ shows from the start.
+  const done = S.submit ? t >= FINAL_T : S.incomplete || t >= T - 1e-6;
+  const badge = done ? `${GRADED ? `<span class="counts">${countsHTML()}</span>` : ''}${badgeHTML()}`
+                     : '<span class="badge big pending"></span>';
   if (badge !== badgeShown) { badgeShown = badge; badgeEl.innerHTML = badge; }
   let last = -1;
   while (last + 1 < events.length && events[last + 1].t <= t) last++;
@@ -514,17 +604,23 @@ function drawWords(rungs, here, alive, focus, flags, hand, recent) {
     if (!discs[i]) { tag.el.style.display = 'none'; tag.line.style.display = 'none'; return; }
     if (tag.full !== full) { tag.full = full; tag.el.classList.toggle('mini', !full); }
     tag.el.style.display = '';
-    tag.el.style.opacity = String((1 - 0.6 * here[i].gone) * (focus(i) < 1 ? 0.25 : 1) * (full ? 1 : 0.6));
     const rung = rungs[i].rung;
+    const dim = rung >= CHEATED ? 1 : 1 - 0.4 * here[i].gone;          // a cheater never dims
+    tag.el.style.opacity = String(dim * (focus(i) < 1 ? 0.25 : 1) * (full ? 1 : 0.6));
+    const fams = famsHTML(i, pieceSets[i]);
+    if (tag.famsHTML !== fams) { tag.famsHTML = fams; tag.fams.innerHTML = fams; }
     const check = recentCheck(i);
     const badge = (hand.holder === i ? ` <b class="hb">✓</b>${heldChip(hand.held)}` : '') +
                   (hand.back && hand.back[1] === i && t - hand.back[0] < D.flash * 1.5 ? ' <b style="color:#d68cff">↩</b>' : '') +
                   (check ? ` <b class="hb">${check[2] === 1 ? '◉' : '◎'}</b>${heldChip(check[3])}` : '');
     if (tag.flags !== badge) { tag.flags = badge; tag.flagged.innerHTML = badge; }
-    // A regulator or disregulator carries the count of alerts it raised: true (amber) and false (grey).
-    const [up, down] = flags.raised[i];
-    const raised = S.agents[i].role !== 'worker' && (up || down)
-      ? ` <span class="alarm">⚠${up}</span>${down ? `<span class="false">${down}</span>` : ''}` : '';
+    // A regulator or disregulator carries the alerts it raised (amber true, grey false, hollow ? unknown) and its
+    // hits and misses: agents named who had, or had not, cheated by then.
+    const [up, down, unknown, hits, misses] = flags.raised[i];
+    const raised = S.agents[i].role !== 'worker' && (up || down || unknown)
+      ? ` <span class="alarm">⚠${up}</span>${down ? `<span class="false">${down}</span>` : ''}` +
+        `${unknown ? `<span class="unknown">?${unknown}</span>` : ''}` +
+        `${hits || misses ? ` <span class="hits">●${hits}</span><span class="misses">○${misses}</span>` : ''}` : '';
     if (tag.raisedHTML !== raised) { tag.raisedHTML = raised; tag.raised.innerHTML = raised; }
     const word = RUNG_WORDS[rung] + (t >= LABEL_T && !S.agents[i].dated && rung === S.agents[i].final ? ' ◌' : '');
     if (tag.shown !== word) {
@@ -632,7 +728,7 @@ function rungAt(agent, t) {
   }
   return {rung, previous, since};
 }
-function presence(agent, t) {               // 0 not yet here, 1 here, fading only once the agent has left
+function presence(agent, t) {               // here: 0 not yet, 1 here; gone: 0 to 1 once the agent has left
   if (t < agent.start) return {here: 0, gone: 0};
   const here = Math.min(1, (t - agent.start) / D.fade + (agent.start <= 0 ? 1 : 0));
   const left = agent.left ?? null;           // ended by stop_working or an error before the final hand-in
@@ -640,14 +736,17 @@ function presence(agent, t) {               // 0 not yet here, 1 here, fading on
   return {here, gone};
 }
 const flows = (S.flows || []).slice().sort((a, b) => a[0] - b[0]);
-function piecesHeld(i, t) {
-  const held = new Set(S.agents[i].holds);
+function piecesHeld(i, t) {                  // the pieces dealt to agent i, and the ones it has seen since
+  const dealt = new Set(S.agents[i].holds), seen = new Set();
   for (const [tf, piece, to] of flows) {
     if (tf + D.flow > t) break;
-    if (to === i) held.add(piece);
+    if (to === i && !dealt.has(piece)) seen.add(piece);
   }
-  return [...held].sort((a, b) => a - b);
+  return {dealt, seen};
 }
+// A post naming no agent spreads a faint ring; a post naming agents shows only as its beams.
+const quietPosts = (S.said ? S.said.filter(row => !(row[3] && row[3].length)).map(row => [row[0], row[1]]) : S.posts.slice())
+  .sort((a, b) => a[0] - b[0]);
 const FROM_CENTRE = new THREE.Vector3(0, 2.5, 0);   // a piece's arrival flies in from the scene's centre
 const smooth = x => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
 
@@ -736,7 +835,6 @@ function pick() {
 let t = 0, playing = false, speedIndex = 2, clock = 0, last = performance.now();
 const handinRoom = document.getElementById('handinRoom');
 const arc = new THREE.Vector3(), up = new THREE.Vector3(), from = new THREE.Vector3(), to = new THREE.Vector3();
-const toCamera = new THREE.Vector3();
 
 function ringAt(at, color, opacity, scale) {
   const r = ringPool.get();
@@ -765,38 +863,39 @@ function update(dt) {
   camera.updateMatrixWorld();
   camRight.setFromMatrixColumn(camera.matrixWorld, 0);
   camUp.setFromMatrixColumn(camera.matrixWorld, 1);
-  const labelled = t >= LABEL_T;
 
-  // Nodes: colour by rung, faded once the agent has left. Hacked has a white core; a final rung no dated call
-  // stands behind has a dashed outline.
+  // Nodes: fill by rung. A hacked worker is a faceted solid. An agent that left wears a dashed edge; a cheater never
+  // dims, and an agent below attempted that left fades to no less than 60%.
   nodes.forEach((node, i) => {
     const {rung, previous, since} = rungs[i];
     const {here: h, gone} = here[i];
     node.group.visible = alive[i];
     if (!alive[i]) return;
     node.group.position.copy(pos[i]);
-    const mix = smooth((t - since) / D.fade);
+    const mix = smooth((t - since) / D.change);          // the colour changes at the call itself
     const color = RUNG_COLORS[previous].clone().lerp(RUNG_COLORS[rung], mix);
     node.material.color.copy(color);
     node.material.emissive.copy(color);
     const pulse = rung >= CHEATED ? 0.5 + 0.5 * Math.sin(clock * (rung === HACKED ? 5 : 3.2)) : 0;
     node.material.emissiveIntensity = 0.18 + 0.2 * rung + 0.25 * pulse;
-    const look = 1 - 0.7 * gone;
-    node.material.opacity = (0.35 + 0.65 * look) * focus(i);
-    const scale = smooth(h) * (1 - 0.3 * gone);
-    node.group.scale.setScalar(Math.max(0.001, scale));
+    const look = rung >= CHEATED ? 1 : 1 - 0.4 * gone;
+    node.material.opacity = look * focus(i);
+    node.group.scale.setScalar(Math.max(0.001, smooth(h)));
     node.glow.material.color.copy(color);
     node.glow.material.opacity = (0.22 + 0.06 * rung + 0.2 * pulse) * look * focus(i);
     node.glow.scale.setScalar(3.2 + 0.4 * rung + 0.5 * pulse);
     node.core.rotation.y += dt * 0.3;
     if (node.cage) { node.core.rotation.x += dt * 0.15; node.cage.material.opacity = 0.95 * look * focus(i); }
-    // The white core sits in front of the node, toward the camera.
-    toCamera.subVectors(camera.position, pos[i]).normalize();
-    node.whiteCore.position.copy(toCamera).multiplyScalar(1.05);
-    node.whiteCore.material.opacity = rung === HACKED ? 0.95 * mix * look * focus(i) : 0;
-    const undated = labelled && !S.agents[i].dated && rung === S.agents[i].final && rung > 0;
-    node.dash.material.color.copy(RUNG_COLORS[rung]).lerp(new THREE.Color(1, 1, 1), 0.35);
-    node.dash.material.opacity = undated ? 0.95 * look * focus(i) : 0;
+    if (node.facet) {
+      const faceted = rung === HACKED;
+      node.facet.visible = faceted;
+      node.core.visible = !faceted;
+      node.facet.rotation.y = node.core.rotation.y;
+      node.facet.material.emissiveIntensity = 0.45 + 0.25 * pulse;
+      node.facet.material.opacity = look * focus(i);
+    }
+    node.leftRing.material.color.set(0xdfe6f5);
+    node.leftRing.material.opacity = 0.9 * smooth(gone * 3) * focus(i);
   });
 
   // Edges: thickness from the back and forth so far, bright for a moment after each exchange.
@@ -809,14 +908,14 @@ function update(dt) {
     m.position.addVectors(from, to).multiplyScalar(0.5);
     m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tmp.subVectors(to, from).normalize());
     const share = Math.min(1, pair.w / W_MAX);                 // against the run's busiest pair
-    const thick = 0.012 + 0.34 * Math.pow(share, 0.85);
+    const thick = 0.006 + 0.11 * Math.pow(share, 0.85);
     m.scale.set(thick, length, thick);
     const fresh = Math.max(0, 1 - (t - pair.last) / (D.spark * 2.5));
     const both = Math.min(rungs[pair.i].rung, rungs[pair.j].rung);
     m.material.color.copy(EDGE_COLOR).lerp(EDGE_RED, both >= CHEATED ? 0.85 : 0);
     const faded = 1 - 0.6 * Math.max(here[pair.i].gone, here[pair.j].gone);
     const lit = hovered < 0 ? 1 : (pair.i === hovered || pair.j === hovered ? 1.3 : 0.1);
-    m.material.opacity = Math.min(1, (0.1 + 0.5 * share + 0.5 * fresh) * faded * lit);
+    m.material.opacity = Math.min(1, (0.12 + 0.45 * share + 0.3 * fresh) * faded * lit);
   }
 
   for (const pool of pools) pool.begin();
@@ -827,22 +926,24 @@ function update(dt) {
     if (!alive[a] || !alive[b]) continue;
     const p = (t - te) / D.spark;
     const [src, dst] = kind === ASK ? [b, a] : [a, b];
+    // A thin beam tinted in the writer's role colour (the reader's for a read), fading within about a second.
+    const tint = ROLE_COLORS[S.agents[a].role] || ROLE_COLORS.worker;
     for (let trail = 0; trail < 4; trail++) {
       const q = p - trail * 0.05;
       if (q < 0) continue;
       const s = glowPool.get();
       s.position.lerpVectors(pos[src], pos[dst], smooth(q));
-      s.material.color.copy(kind === ASK ? ASK_COLOR : TALK_COLOR);
-      s.material.opacity = (1 - trail * 0.22) * (1 - 0.3 * p) * (hovered < 0 || near.has(src) || near.has(dst) ? 1 : 0.15);
-      s.scale.setScalar(1.1 - trail * 0.2);
+      s.material.color.copy(tint);
+      s.material.opacity = 0.7 * (1 - trail * 0.22) * (1 - p) * (hovered < 0 || near.has(src) || near.has(dst) ? 1 : 0.15);
+      s.scale.setScalar(0.36 - trail * 0.06);
     }
   }
 
-  // Ripples: every post spreads a ring from its writer.
-  for (const [te, a] of windowed(postsSorted, t, D.ripple)) {
+  // Ripples: a post that names no agent spreads a faint ring from its writer.
+  for (const [te, a] of windowed(quietPosts, t, D.ripple)) {
     if (!alive[a]) continue;
     const p = (t - te) / D.ripple;
-    ringAt(pos[a], TALK_COLOR, 0.45 * (1 - p) * focus(a), 2.4 + 5 * p);
+    ringAt(pos[a], ROLE_COLORS[S.agents[a].role] || TALK_COLOR, 0.25 * (1 - p) * focus(a), 2.4 + 3 * p);
   }
 
   // Pieces arriving: the agent first saw a piece it lacked (pieces_seen_at). Who gave it is not recorded, so the
@@ -859,9 +960,9 @@ function update(dt) {
         if (p - trail * 0.03 < 0) continue;
         arc.lerpVectors(FROM_CENTRE, pos[dst], q).addScaledVector(up, Math.sin(Math.PI * q));
         if (trail === 0) {
-          const mesh = pieceMesh(piece);
+          const mesh = pieceMesh(piece, true);
           mesh.position.copy(arc);
-          mesh.scale.setScalar(0.42);
+          sizePiece(mesh, 0.42);
           mesh.material.opacity = 1;
         }
         const g = glowPool.get();
@@ -878,44 +979,54 @@ function update(dt) {
     }
   });
 
-  // The pieces each agent holds circle it; a whole set of either family lights the white ring.
-  nodes.forEach((node, i) => {
-    if (!alive[i]) { node.fullSet.material.opacity = 0; return; }
-    const held = piecesHeld(i, t);
-    const look = 1 - 0.7 * here[i].gone;
+  // The pieces circle their agent: a piece dealt solid, a piece seen since as a hollow outline of its shape.
+  const pieceSets = nodes.map((node, i) => {
+    if (!alive[i]) return null;
+    const sets = piecesHeld(i, t);
+    const held = [...sets.dealt, ...sets.seen].sort((a, b) => a - b);
+    const look = rungs[i].rung >= CHEATED ? 1 : 1 - 0.4 * here[i].gone;
     const scale = node.group.scale.x;
     held.forEach((piece, k) => {
       const color = pieceColor(piece);
+      const hollow = !sets.dealt.has(piece);
       const angle = clock * node.spin + (k * Math.PI * 2) / held.length;
       arc.set(Math.cos(angle) * 1.95, 0, Math.sin(angle) * 1.95).applyQuaternion(node.tilt).multiplyScalar(scale).add(pos[i]);
-      const mesh = pieceMesh(piece);
+      const mesh = pieceMesh(piece, hollow);
       mesh.position.copy(arc);
-      mesh.scale.setScalar(0.24 * scale);
+      sizePiece(mesh, 0.24 * scale);
       mesh.material.opacity = look * focus(i);
+      if (hollow) return;
       const g = glowPool.get();
       g.position.copy(arc); g.material.color.copy(color);
       g.material.opacity = 0.45 * look * focus(i); g.scale.setScalar(1.2 * scale);
     });
-    const whole = FAMILIES.some(f => f.pieces.length >= 2 && f.pieces.every(p => held.includes(p)));
-    node.fullSet.material.opacity = whole ? 0.9 * look * focus(i) : 0;
+    return sets;
   });
 
-  // A rung reached flashes a ring in its colour; a rise that fell back closes a ring in on the node.
+  // A rung change closes a bright ring in on the node, in the new rung's colour: the brightest cue of a frame.
+  const rungRing = (at, color, p, strength) => {
+    const r = rungPool.get();
+    r.position.copy(at); r.material.color.copy(color);
+    r.material.opacity = strength * (1 - p);
+    r.scale.setScalar((1.3 + 1.9 * (1 - smooth(p))) / CIRCLE_R);
+  };
   nodes.forEach((node, i) => {
     if (!alive[i]) return;
     const {rung, previous, since} = rungs[i];
     const p = (t - since) / D.flash;
-    if (rung > previous && p >= 0 && p < 1) {
-      ringAt(pos[i], RUNG_COLORS[rung], (rung >= CHEATED ? 1 : 0.6) * (1 - p), 2.5 + (rung >= CHEATED ? 10 : 5) * smooth(p));
-    }
+    if (rung !== previous && p >= 0 && p < 1) rungRing(pos[i], RUNG_COLORS[rung], p, rung >= CHEATED ? 1 : 0.75);
   });
-  for (const [tf, a, rung] of windowed(FALLS, t, D.flash * 1.4)) {
-    if (!alive[a]) continue;
-    const p = (t - tf) / (D.flash * 1.4);
-    for (let wave = 0; wave < 2; wave++) {
-      const q = p * 1.4 - wave * 0.3;
-      if (q < 0 || q > 1) continue;
-      ringAt(pos[a], RUNG_COLORS[rung], 0.95 * (1 - q), 2.4 + 9 * (1 - smooth(q)));
+  // A fall happens at the call that caused it: a short beam from the agent who caused it to the agent that fell.
+  for (const [tf, a, rung, by] of windowed(FALLS, t, D.flash)) {
+    if (!alive[a] || by < 0 || !alive[by]) continue;
+    const p = (t - tf) / D.flash;
+    const reach = smooth(p / 0.06);
+    for (let k = 0; k <= 12; k++) {
+      const s2 = glowPool.get();
+      s2.position.lerpVectors(pos[by], pos[a], (k / 12) * reach);
+      s2.material.color.copy(RUNG_COLORS[rung]);
+      s2.material.opacity = 0.75 * (1 - p);
+      s2.scale.setScalar(0.5);
     }
   }
 
@@ -926,14 +1037,15 @@ function update(dt) {
     if (!alive[i]) return;
     const outcomes = flags.named[i];
     const scale = node.group.scale.x;
-    outcomes.forEach((outcome, k) => {
+    const look = rungs[i].rung >= CHEATED ? 1 : 1 - 0.4 * here[i].gone;
+    outcomes.forEach((kind, k) => {
       const row = Math.floor(k / 10), col = k % 10;
       const a = Math.PI * (0.72 + 0.056 * col) + row * 0.028;
       const r = (R_PIPS + row * 0.26) * scale;
-      const pip = pipPool.get();
+      const pip = kind === 'hit' || kind === 'false' ? pipPool.get() : kind === 'team' ? pipHollowPool.get() : pipDashPool.get();
       pip.position.copy(pos[i]).addScaledVector(camRight, Math.cos(a) * r).addScaledVector(camUp, Math.sin(a) * r);
-      pip.material.color.copy(alarmColor(outcome));
-      pip.material.opacity = (1 - 0.6 * here[i].gone) * focus(i);
+      pip.material.color.copy(kind === 'hit' || kind === 'team' ? ALERT_COLOR : FALSE_ALARM);
+      pip.material.opacity = look * focus(i);
       pip.scale.setScalar(0.24 * scale);
     });
   });
@@ -944,11 +1056,11 @@ function update(dt) {
     for (let wave = 0; wave < 3; wave++) {           // the beacon: three quick rings
       const q = (p * 3 - wave * 0.35);
       if (q < 0 || q > 1) continue;
-      ringAt(pos[caller], color, 0.95 * (1 - q), 2.4 + 7 * q);
+      ringAt(pos[caller], color, 0.55 * (1 - q), 2.4 + 5 * q);
     }
     const g = glowPool.get();
     g.position.copy(pos[caller]); g.material.color.copy(color);
-    g.material.opacity = 0.9 * (1 - p) * (0.6 + 0.4 * Math.sin(clock * 14)); g.scale.setScalar(6);
+    g.material.opacity = 0.5 * (1 - p) * (0.6 + 0.4 * Math.sin(clock * 14)); g.scale.setScalar(5);
     for (const j of who) {                           // a beam of light to each agent named
       if (!alive[j]) continue;
       const reach = smooth(p / 0.35);
@@ -957,32 +1069,26 @@ function update(dt) {
         const s2 = glowPool.get();
         s2.position.lerpVectors(pos[caller], pos[j], q);
         s2.material.color.copy(color);
-        s2.material.opacity = 0.85 * (1 - p);
-        s2.scale.setScalar(0.9);
+        s2.material.opacity = 0.6 * (1 - p);
+        s2.scale.setScalar(0.5);
       }
-      if (reach >= 1) ringAt(pos[j], color, 0.9 * (1 - p), 2.5 + 4 * smooth((p - 0.35) / 0.65));
+      if (reach >= 1) ringAt(pos[j], color, 0.5 * (1 - p), 2.5 + 3 * smooth((p - 0.35) / 0.65));
     }
   }
 
-  // The final hand-in: a wave across the swarm in the team rung's colour, then a thin vignette of it at the edges.
-  const finalOn = S.submit ? smooth(((t - FINAL_T) / D.submit) * 2) : 0;
-  if (S.submit) {
-    const p = (t - FINAL_T) / D.submit;
-    if (p >= 0 && p < 1 && FINAL_AGENT >= 0) {
-      for (let wave = 0; wave < 3; wave++) {
-        const q = p - wave * 0.12;
-        if (q < 0) continue;
-        const r = wavePool.get();
-        r.position.copy(pos[FINAL_AGENT]); r.material.color.copy(VERDICT_COLOR);
-        r.material.opacity = 0.85 * (1 - q); r.scale.setScalar((3 + radius * 1.8 * smooth(q)) / CIRCLE_R / 2);
-      }
+  // The final hand-in: one thin ring in the team rung's colour around its maker, staying close and gone within a
+  // second. The header's disc carries the verdict.
+  if (S.submit && FINAL_AGENT >= 0 && alive[FINAL_AGENT]) {
+    const p = (t - FINAL_T) / D.verdict;
+    if (p >= 0 && p < 1) {
+      const r = thinPool.get();
+      r.position.copy(pos[FINAL_AGENT]); r.material.color.copy(VERDICT_COLOR);
+      r.material.opacity = 0.8 * (1 - p); r.scale.setScalar((1.4 + 1.2 * smooth(p)) / CIRCLE_R);
     }
   }
-  tintEl.style.opacity = GRADED ? String(finalOn) : '0';
 
   // Hand-ins: while one stands, its maker wears the held segments (what its code held) and the room's edges glow
-  // faintly; the final one adds the verdict ring in the team rung's colour and, when it passed, the white ring.
-  // A take-back closes violet rings in on the agent who took it.
+  // faintly. A take-back closes violet rings in on the agent who took it.
   const hand = handinAt(t);
   const isFinal = hand.holder >= 0 && hand.since === FINAL_T;
   const roomOn = hand.holder >= 0 ? smooth((t - hand.since) / D.fade) : 1 - smooth((t - hand.since) / D.fade);
@@ -996,9 +1102,6 @@ function update(dt) {
       solid.material.opacity = level === 'unknown' ? 0 : on * (Array.isArray(hand.held) && k < hand.held.length ? 0.95 : 0.22);
       for (const d of dashes) d.material.opacity = level === 'unknown' ? 0.6 * on : 0;
     });
-    node.verdict.material.color.copy(VERDICT_COLOR);
-    node.verdict.material.opacity = isFinal ? 0.95 * on : 0;
-    node.pass.material.opacity = isFinal && PASSED ? 0.95 * on : 0;
   });
   if (hand.back && alive[hand.back[1]]) {
     const p = (t - hand.back[0]) / D.flash;
@@ -1006,11 +1109,11 @@ function update(dt) {
       for (let wave = 0; wave < 3; wave++) {
         const q = p * 1.6 - wave * 0.25;
         if (q < 0 || q > 1) continue;
-        ringAt(pos[hand.back[1]], TAKEBACK_COLOR, 0.95 * (1 - p), 2.2 + 9 * (1 - smooth(q)));
+        ringAt(pos[hand.back[1]], TAKEBACK_COLOR, 0.6 * (1 - p), 2.2 + 6 * (1 - smooth(q)));
       }
       const g = glowPool.get();
       g.position.copy(pos[hand.back[1]]); g.material.color.copy(TAKEBACK_COLOR);
-      g.material.opacity = 0.9 * (1 - p); g.scale.setScalar(6);
+      g.material.opacity = 0.45 * (1 - p); g.scale.setScalar(5);
     }
   }
 
@@ -1024,20 +1127,20 @@ function update(dt) {
       for (let wave = 0; wave < 2; wave++) {
         const q = p * 1.4 - wave * 0.3;
         if (q < 0 || q > 1) continue;
-        ringAt(pos[a], color, 1 - q, 2.6 + 9 * smooth(q));
+        ringAt(pos[a], color, 0.6 * (1 - q), 2.6 + 5 * smooth(q));
       }
       const g = glowPool.get();
       g.position.copy(pos[a]); g.material.color.copy(color);
-      g.material.opacity = 0.95 * (1 - p); g.scale.setScalar(7.5);
+      g.material.opacity = 0.45 * (1 - p); g.scale.setScalar(5);
     } else {
       ringAt(pos[a], color, 0.75 * (1 - p), 2.4 + 5 * (1 - smooth(p)));
     }
   }
 
-  // The call being stepped: a white ring on the agent making it.
+  // The call being stepped: a pale blue ring on the agent making it (white means pass).
   syncCursor();
   const shown = stepShown();
-  if (shown && alive[shown[1]]) ringAt(pos[shown[1]], new THREE.Color(1, 1, 1), 0.75 + 0.25 * Math.sin(clock * 6), 3.6);
+  if (shown && alive[shown[1]]) ringAt(pos[shown[1]], STEP_COLOR, 0.55 + 0.2 * Math.sin(clock * 6), 3.6);
 
   // Who gets a tag in a crowded swarm: an agent doing something now.
   const recent = new Set();
@@ -1055,7 +1158,7 @@ function update(dt) {
 
   for (const pool of pools) pool.end();
   placeCamera(alive, dt);
-  drawWords(rungs, here, alive, focus, flags, hand, recent);
+  drawWords(rungs, here, alive, focus, flags, hand, recent, pieceSets);
 }
 
 // ---------- controls: play, timeline, speed (icons only) ----------
@@ -1161,12 +1264,28 @@ function clusters(xs, gap) {
   });
   return out;
 }
-function drawBadge(g, x, y, r) {                 // the verdict's disc, as in the header
+function drawBadge(g, x, y, r) {                 // the verdict's disc, as in the header: a hexagon for hacked
   if (!S.submit) return;
-  g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2);
+  g.beginPath();
+  if (GRADED && TEAM_RUNG === HACKED) {
+    for (let k = 0; k < 6; k++) {
+      const a = (k * Math.PI) / 3, R = r * 1.16;
+      if (k) g.lineTo(x + R * Math.sin(a), y - R * Math.cos(a)); else g.moveTo(x + R * Math.sin(a), y - R * Math.cos(a));
+    }
+    g.closePath();
+  } else g.arc(x, y, r, 0, Math.PI * 2);
   g.fillStyle = hex(VERDICT_COLOR); g.fill();
-  if (GRADED && TEAM_RUNG === HACKED) { g.beginPath(); g.arc(x, y, r * 0.4, 0, Math.PI * 2); g.fillStyle = '#ffffff'; g.fill(); }
-  if (PASSED) { g.beginPath(); g.arc(x, y, r + 2, 0, Math.PI * 2); g.strokeStyle = '#ffffff'; g.lineWidth = 1.5; g.stroke(); }
+  if (PASSED) {                                  // a white ring of the same shape
+    g.beginPath();
+    if (GRADED && TEAM_RUNG === HACKED) {
+      for (let k = 0; k < 6; k++) {
+        const a = (k * Math.PI) / 3, R = r * 1.16 + 2.6;
+        if (k) g.lineTo(x + R * Math.sin(a), y - R * Math.cos(a)); else g.moveTo(x + R * Math.sin(a), y - R * Math.cos(a));
+      }
+      g.closePath();
+    } else g.arc(x, y, r + 2.2, 0, Math.PI * 2);
+    g.strokeStyle = '#ffffff'; g.lineWidth = 1.5; g.stroke();
+  }
 }
 function buildBackdrop() {
   const dpr = Math.min(window.devicePixelRatio, 2);
@@ -1179,10 +1298,18 @@ function buildBackdrop() {
   const x = v => trackX(v, w);
   const end = x(T);
   g.textBaseline = 'middle';
-  const text = (s, tx, ty, color, size = 9.5, align = 'left') => {
+  const text = (s, tx, ty, color, size = 9.5, align = 'left', hollow = false) => {
     g.font = `650 ${size}px -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif`;
-    g.fillStyle = color; g.textAlign = align; g.fillText(s, tx, ty);
-    return g.measureText(s).width;
+    g.textAlign = align;
+    g.fillStyle = color; g.fillText(s, tx, ty);
+    const width = g.measureText(s).width;
+    if (hollow) {                                    // unknown: the amber text in a dashed outline
+      const x0 = align === 'center' ? tx - width / 2 : tx;
+      g.strokeStyle = color; g.lineWidth = 0.8; g.setLineDash([2, 1.5]);
+      g.strokeRect(x0 - 1.5, ty - size * 0.6, width + 3, size * 1.2);
+      g.setLineDash([]);
+    }
+    return width + (hollow ? 2 : 0);
   };
   // How busy the board is: a soft histogram of the exchanges around the hand-in lane.
   const bins = 160, counts = new Array(bins).fill(0);
@@ -1204,18 +1331,21 @@ function buildBackdrop() {
   icon('▲', 'tick', '#ff4d5d');
   if (CHECKS.length) icon('◎', 'check', '#c8d6f5');
 
-  // Alerts: a triangle per cluster, amber when any is a true alarm; the count of true ones beside it in amber and of
-  // false ones in grey.
+  // Alerts: a triangle per cluster, amber when it holds a true alarm, a hollow amber one when its only alarms not
+  // false are unknown, grey when all are false; beside it the true ones in amber, the false in grey, ? the unknown.
   for (const c of clusters(ALERTS.map(row => x(row[0])), 18)) {
     const rows = c.members.map(k => ALERTS[k]);
-    const yes = rows.filter(r => r[3] !== 0).length, no = rows.length - yes;
-    g.fillStyle = yes ? '#ffc21a' : '#8b93a8';
+    const yes = rows.filter(r => r[3] === 1).length, no = rows.filter(r => r[3] === 0).length;
+    const unknown = rows.length - yes - no;
     const y = LANES.alert;
-    g.beginPath(); g.moveTo(c.x, y + 4); g.lineTo(c.x - 4, y - 3.5); g.lineTo(c.x + 4, y - 3.5); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(c.x, y + 4); g.lineTo(c.x - 4, y - 3.5); g.lineTo(c.x + 4, y - 3.5); g.closePath();
+    if (yes || !unknown) { g.fillStyle = yes ? '#ffc21a' : '#8b93a8'; g.fill(); }
+    else { g.strokeStyle = '#ffc21a'; g.lineWidth = 1.2; g.stroke(); }
     if (rows.length > 1) {
       let tx = c.x + 6;
       if (yes) tx += text(String(yes), tx, y, '#ffc21a', 9.5) + 4;
-      if (no) text(String(no), tx, y, '#8b93a8', 9.5);
+      if (no) tx += text(String(no), tx, y, '#8b93a8', 9.5) + 4;
+      if (unknown) text(`?${unknown}`, tx, y, '#ffc21a', 9.5, 'left', true);
     }
   }
   // Pieces arriving: a dot (or a small diamond) in the piece's colour; a cluster shows its count.
@@ -1240,26 +1370,36 @@ function buildBackdrop() {
     g.fillRect(x0, LANES.band - 3, width, 6);
     g.globalAlpha = 1;
   });
-  // A rung reached at attempted or above: a red tick, solid when the agent stays there to its label, hollow when it
-  // fell back. Ticks at one pixel stand side by side.
+  // A rung reached at attempted or above: a red tick, solid when the agent stays there to its label, hollow from the
+  // rise to the call that caused its fall. A final rung no dated call stands behind has no time: its tick is dashed,
+  // beside the verdict's disc, off the time axis. Ticks at one pixel stand side by side.
   const ticks = [];
   for (const agent of S.agents) {
     let before = 0;
     agent.rungs.forEach(([at, value], k) => {
       if (value >= CHEATED && before < CHEATED) {
-        const fell = agent.rungs.slice(k + 1).some(([, v]) => v < CHEATED);
-        ticks.push({at, solid: !fell});
+        const fall = agent.rungs.slice(k + 1).find(([, v]) => v < CHEATED);
+        const undated = !fall && !agent.dated && Math.abs(at - LABEL_T) < 1e-6;
+        ticks.push({at, solid: !fall && !undated, undated, until: fall ? fall[0] : null});
       }
       before = value;
     });
   }
   ticks.sort((a, b) => a.at - b.at);
-  let tickX = -Infinity;
+  let tickX = -Infinity, undatedX = end + 4;
+  g.fillStyle = '#ff2d3d'; g.strokeStyle = '#ff2d3d'; g.lineWidth = 1;
   for (const tick of ticks) {
+    if (tick.undated) {
+      g.setLineDash([2, 1.5]); g.strokeRect(undatedX - 1, LANES.tick - 4.5, 2, 9); g.setLineDash([]);
+      undatedX += 3.6;
+      continue;
+    }
     tickX = Math.max(x(tick.at), tickX + 3.4);
-    g.fillStyle = '#ff2d3d'; g.strokeStyle = '#ff2d3d'; g.lineWidth = 1;
     if (tick.solid) g.fillRect(tickX - 1.2, LANES.tick - 5, 2.4, 10);
-    else g.strokeRect(tickX - 1, LANES.tick - 4.5, 2, 9);
+    else {
+      const span = Math.max(2, x(tick.until) - tickX);
+      g.strokeRect(tickX - 1, LANES.tick - 4.5, span, 9);
+    }
   }
   // check_fix answers: a dot per cluster in the shade of what the checked code held, filled when any was accepted;
   // the accepted count beside it in white and the rest in grey.
@@ -1285,18 +1425,24 @@ function buildBackdrop() {
   }
   // Totals at the right end, equal to the study page's counts.
   const tx0 = end + 20;
-  const totals = (lane, parts) => {
-    let tx = tx0;
-    for (const [s, color] of parts) tx += text(s, tx, LANES[lane], color, 10.5) + 5;
+  const totals = (lane, parts, from = tx0) => {
+    let tx = from;
+    for (const [s, color, hollow] of parts) tx += text(s, tx, LANES[lane], color, 10.5, 'left', !!hollow) + 5;
   };
   if (ALERTS.length) {
-    const no = ALERTS.filter(r => r[3] === 0).length;
-    totals('alert', [[`⚠${ALERTS.length - no}`, '#ffc21a'], ...(no ? [[String(no), '#8b93a8']] : [])]);
+    const yes = ALERTS.filter(r => r[3] === 1).length, no = ALERTS.filter(r => r[3] === 0).length;
+    const unknown = ALERTS.length - yes - no;
+    totals('alert', [[`⚠${yes}`, '#ffc21a'], ...(no ? [[String(no), '#8b93a8']] : []),
+                     ...(unknown ? [[`?${unknown}`, '#ffc21a', true]] : [])]);
   }
   const hands = HANDINS.filter(r => r[2] === 0).length, backs = HANDINS.length - hands;
   totals('band', S.submit || hands ? [[`✓${hands}`, '#c8d6f5'], ...(backs ? [[`↩${backs}`, hex(TAKEBACK_COLOR)]] : [])] : [['∅', '#8792a8']]);
-  const solid = ticks.filter(k => k.solid).length;
-  if (ticks.length) totals('tick', [[`▲${solid}`, '#ff4d5d'], ...(ticks.length > solid ? [[`▵${ticks.length - solid}`, '#a8616a']] : [])]);
+  const solid = ticks.filter(k => k.solid).length, undated = ticks.filter(k => k.undated).length;
+  const hollow = ticks.length - solid - undated;
+  if (ticks.length) {
+    totals('tick', [[`▲${solid}`, '#ff4d5d'], ...(undated ? [[`◌${undated}`, '#ff4d5d']] : []),
+                    ...(hollow ? [[`▵${hollow}`, '#a8616a']] : [])], Math.max(tx0, undatedX + 4));
+  }
   if (CHECKS.length) {
     const yes = CHECKS.filter(r => r[2] === 1).length;
     totals('check', [[`◉${yes}`, '#e6eeff'], [`◎${CHECKS.length - yes}`, '#8792a8']]);

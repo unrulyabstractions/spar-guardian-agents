@@ -5,16 +5,6 @@ html, body {
   background: radial-gradient(ellipse at 50% 40%, #131a2b 0%, #070a12 60%, #030408 100%);
   user-select: none;
 }
-/* After the final hand-in: a thin vignette at the edges in the team rung's colour; the centre stays dark. */
-#tint {
-  --verdict: 138, 147, 168;
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  box-shadow: inset 0 0 60px 6px rgba(var(--verdict), 0.42);
-  background: radial-gradient(ellipse at 50% 45%, rgba(var(--verdict), 0) 72%, rgba(var(--verdict), 0.14) 100%);
-  opacity: 0;
-}
 #scene {
   position: fixed;
   inset: 0;
@@ -121,14 +111,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 #legend .k { margin-right: 10px; white-space: nowrap; }
 #legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: -1px;
               box-sizing: border-box; }
-#legend .sw.core { background-image: radial-gradient(circle, #fff 0 30%, transparent 38%) !important; }
-#legend .sw.dashed { border: 1.5px dashed #c9d6e8; background: transparent; }
-#legend .sw.ringed { border: 1.5px solid #fff; background: transparent; width: 11px; height: 11px; }
-#legend .sw.passring { border: 1.5px solid #fff; background: #ff9d47; box-shadow: 0 0 0 1.5px #0e1320, 0 0 0 3px #fff;
-                       width: 8px; height: 8px; margin: 0 6px 0 2px; }
+#legend .sw.dashed { border: 1.5px dashed #dfe6f5; background: transparent; width: 11px; height: 11px; }
+#legend .hx { width: 11px; height: 11px; margin-right: 4px; vertical-align: -1px; }
 #legend .fam { padding: 1px 6px; border-radius: 8px; border: 1px solid transparent; }
 #legend .fam.used { border-color: #e6eeff; }
-#legend .pip { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; vertical-align: 0; }
+/* An accusation's pip: filled (a hit, or grey a false alarm), hollow (true only for the team), dashed (unknown). */
+#legend .pip { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: 0;
+               box-sizing: border-box; background: var(--c); }
+#legend .pip.hollow { background: transparent; border: 2px solid var(--c); }
+#legend .pip.dashed { background: transparent; border: 1.5px dashed var(--c); }
 /* What a version's code held: N segments, n filled; dashed when unknown. */
 .segs { display: inline-flex; gap: 2px; vertical-align: 0; }
 .seg { display: inline-block; width: 9px; height: 5px; border-radius: 1.5px; background: rgba(255, 255, 255, 0.16);
@@ -137,25 +128,47 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 .seg.unknown { background: transparent; border: 1px dashed rgba(255, 255, 255, 0.6); }
 .held { display: inline-flex; align-items: center; gap: 4px; margin: 0 4px; }
 .held .n { font-size: 11px; color: #e6eeff; font-weight: 650; font-variant-numeric: tabular-nums; }
-/* The verdict as a disc: the team rung's fill, a white core for hacked, a white ring for pass, ∅ for no hand-in. */
-.badge { display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; box-sizing: border-box;
-         color: #c8d6f5; font-weight: 700; vertical-align: middle; }
-.badge.big { width: 44px; height: 44px; font-size: 20px; }
-.badge.small { width: 13px; height: 13px; font-size: 9px; margin: 0 4px; }
-.badge.r0 { background: #c9d6e8; }
-.badge.r1 { background: #ffe1a6; }
-.badge.r2 { background: #ff9d47; }
-.badge.r3 { background: #ff2a2a; }
-.badge.r4 { background: radial-gradient(circle, #ffffff 0 22%, #ff0a3c 30%); }
-.badge.pass { box-shadow: 0 0 0 3px #070a12, 0 0 0 5.5px #ffffff; }
-.badge.small.pass { box-shadow: 0 0 0 1.5px #0e1320, 0 0 0 3px #ffffff; }
+/* The verdict as a disc (an inline SVG): the team rung's fill, a red hexagon for hacked, a white ring for pass, ∅ for
+   no hand-in, grey without labels. */
+.badge { position: relative; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%;
+         box-sizing: border-box; color: #c8d6f5; font-weight: 700; vertical-align: middle; }
+.badge svg, .smark svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.badge.big { width: 46px; height: 46px; font-size: 20px; }
+.badge.small { width: 17px; height: 17px; font-size: 9px; margin: 0 3px; }
+.badge.r3 svg { filter: drop-shadow(0 0 3px rgba(255, 20, 50, 0.6)); }
 .badge.ungraded { background: #4b5263; }
+.badge.big.ungraded { width: 30px; height: 30px; margin: 8px; }
+/* Beside the verdict: how many agents the labels put at attempted or above. */
+.counts { display: inline-flex; gap: 8px; align-items: center; margin-right: 8px; font-size: 15px; font-weight: 750;
+          color: #8a93a8; font-variant-numeric: tabular-nums; vertical-align: middle; }
+.counts .hot { color: #ff4d5d; }
+/* The run's mark on its study page, beside the back link. */
+.smark { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 30px;
+         height: 30px; vertical-align: middle; margin: 0 6px 0 2px; font-size: 13px; font-weight: 800; color: #0a0e18; }
+.smark b { position: relative; }
+.smark.missing, .smark.incomplete { width: 22px; height: 22px; margin: 4px 10px 4px 6px; border-radius: 50%;
+                                     box-sizing: border-box; border: 2px dashed #5d6884; color: #8792a8; }
+.smark .leak { position: absolute; right: 1px; bottom: 1px; width: 10px; height: 10px; border-radius: 50%;
+               box-sizing: border-box; border: 1.5px solid #ffffff; box-shadow: 0 0 0 1.5px #070a12; background: #070a12; }
+.smark .leak.some { background: linear-gradient(90deg, #ffffff 50%, #070a12 50%); }
+.smark .leak.all { background: #ffffff; }
+.smark .leak.unknown { background: #4b5263; border-color: #8792a8; }
 .badge.none { border: 2px solid #5d6884; }
 .badge.pending { border: 2px dashed #3a4359; }
 #legend .line { display: inline-block; width: 22px; height: 0; border-top: 4px solid #8fb3ff; border-radius: 2px; margin-right: 5px; vertical-align: 2px; }
 .alarm { color: #ffc21a; margin: 0 4px 0 10px; }
 .event .alarm { margin: 0 4px 0 0; }
 .tag .flagged { color: #ffc21a; font-weight: 700; }
+.tag .raised .unknown { color: #ffc21a; border: 1px dashed #ffc21a; border-radius: 3px; padding: 0 2px; margin-left: 3px; }
+.tag .raised .hits { color: #ffc21a; font-weight: 700; margin-left: 2px; }
+.tag .raised .misses { color: #ffc21a; opacity: 0.75; font-weight: 700; margin-left: 3px; }
+/* Under a node: one mark per piece of a family, solid dealt, hollow seen, dim not held. */
+.tag .fams { font-size: 10px; line-height: 1.1; letter-spacing: 1px; }
+.tag .fams:empty { display: none; }
+.tag .fams i { display: inline-block; width: 6px; }
+.tag .fams .nil { color: #3a4359; }
+.tag.mini .fams { display: none; }
+.event .miss { opacity: 0.4; }
 /* While a hand-in stands: a faint neutral glow at the edges. */
 #handinRoom {
   position: fixed; inset: 0; pointer-events: none; opacity: 0;

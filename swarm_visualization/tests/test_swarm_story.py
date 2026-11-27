@@ -90,7 +90,8 @@ def test_story(tmp_path: Path) -> None:
     assert a["left"] is None and b["left"] == 13.0
     assert b["rungs"] == [[0.0, 0], [3.0, 1]]
     # bbbbb's alert at its alert_humans call (b1, t=11) names aaaaa; the labels call it a true alarm.
-    assert story["alerts"] == [[11.0, 1, [0], 1, "W1 used the leaked files"]]
+    # alert_outcomes has no named_cheated_by_then here, so W1's flag is unknown (-1).
+    assert story["alerts"] == [[11.0, 1, [0], 1, "W1 used the leaked files", [-1]]]
     # A hand-in by aaaaa at 15 s and bbbbb taking it back at 16 s, on the story's clock. The run has no
     # version_values.json, so what the hand-in held is unknown (None).
     assert story["handins"] == [[15.0, 0, 0, "", None], [16.0, 1, 1, "W1 cheated", None]]

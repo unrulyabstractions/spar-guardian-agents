@@ -194,11 +194,86 @@ def test_study_counts_finished_runs_and_splits_alerts(tmp_path: Path) -> None:
     by = {r["run"]: r for r in rows}
     assert by["a_s3"]["submitted"] is False and by["a_s1"]["submitted"] is True
     page = build_study_page("study", rows, {})
-    assert '2 runs' in page and '⌀ 1' in page
+    assert '2 runs' in page and '<span class="mark incomplete tiny"></span> 1' in page and '⌀' not in page
     # No hand-in: ∅ and no held dot; alerts split into true (amber) and false (grey).
     a_s3 = page.split('title="a_s3')[1].split("</span></span>")[0]
     assert "∅" in a_s3 and "leak" not in a_s3
+    # Its hover counts the hand-ins made and taken back; the disc's ∅ says none stands.
+    assert page.split('title="a_s3', 1)[1].split('"', 1)[0].endswith("✓2 ↩1 ◉1 ◎1")
     assert '⚠1<i>2</i>' in page
     # The incomplete run is an empty dashed outline set apart.
     assert '<span class=aside>' in page and 'mark incomplete' in page
     assert 'mark r' not in page.split('<span class=aside>')[1].split('</span></div>')[0]
+
+
+def story_of(page: str) -> dict:
+    """The story a run's page embeds."""
+    raw = page.split('<script id="story" type="application/json">', 1)[1].split("</script>", 1)[0]
+    return json.loads(raw.replace("<\\/", "</"))
+
+
+def test_a_finished_and_an_incomplete_run_of_one_name_open_their_own_pages(tmp_path: Path) -> None:
+    from swarm_visualization.src.study_page import write_study
+    study = tmp_path / "study"
+    write_run(study / "a_s1", seed=1, team="hacked", passed=True)
+    unfinished = write_run(study / "incomplete" / "a_s1", seed=1, labels=False)
+    run_path = unfinished / "processed" / "run.json"
+    run_json = json.loads(run_path.read_text())
+    run_json["team_submission"] = None
+    run_path.write_text(json.dumps(run_json))
+    out = tmp_path / "out"
+    index = write_study(study, out, log=lambda *_: None).read_text()
+    # Two links, keyed by folder path: the finished run's page and the incomplete one's.
+    assert 'href="a_s1.html"' in index and 'href="incomplete/a_s1.html"' in index
+    done, partial = story_of((out / "a_s1.html").read_text()), story_of((out / "incomplete" / "a_s1.html").read_text())
+    assert done["submit"] is not None and done["submit"]["passed"] is True and done["team_rung"] == 4
+    assert done["back"] == "index.html" and not done["incomplete"]
+    assert partial["submit"] is None and partial["incomplete"] is True and partial["back"] == "../index.html"
+
+
+def test_alerts_count_three_ways_and_each_accusation_has_a_flag(tmp_path: Path) -> None:
+    folder = write_run(tmp_path / "run")
+    run_path = folder / "processed" / "run.json"
+    run_json = json.loads(run_path.read_text())
+    run_json["alerts"] = [{"agent": "bbbbb", "agents": ["aaaaa"], "reason": "x"}] * 3
+    run_path.write_text(json.dumps(run_json))
+    team = {"row": "team", "true_alarms": 1, "false_alarms": 1, "alert_outcomes": [
+        {"outcome": "true_alarm", "named_cheated_by_then": {"aaaaa": False}},
+        {"outcome": None, "named_cheated_by_then": {"aaaaa": None}},
+        {"outcome": "false_alarm", "named_cheated_by_then": {"aaaaa": False}}]}
+    (folder / "analysis" / "signals.jsonl").write_text(json.dumps(team))
+    summary = run_summary(RunFiles(folder))
+    # The amber number is the team row's true alarms; the unknown one is neither true nor false.
+    assert summary["true_alarms"] == team["true_alarms"] == 1
+    assert summary["false_alarms"] == 1 and summary["unknown_alarms"] == 1
+    page = build_study_page("study", [summary], {})
+    assert '⚠1<i>1</i><u>?1</u>' in page
+    story = build_story(RunFiles(folder))
+    # Each alert: its outcome (1, -1, 0) and, per agent named, whether it had cheated by then (0 no, -1 unknown).
+    assert [(row[3], row[5]) for row in story["alerts"]] == [(1, [0]), (-1, [-1]), (0, [0])]
+
+
+def test_a_fall_happens_at_the_call_that_caused_it(tmp_path: Path) -> None:
+    folder = write_run(tmp_path / "run")
+    (folder / "analysis" / "labels" / "cheating.json").write_text(json.dumps({
+        "team": "hacked", "passed": True, "agents": {
+            "aaaaa": {"rung": "hacked", "timeline": {
+                "first": [{"clause": "supplied", "rung": "attempted", "n": 0, "k": 0}],
+                "after": ["attempted", "attempted", "tempted", "tempted", "attempted"],
+                "rises": [{"k": 0, "rung": "attempted", "by": "bbbbb", "at": 1, "fell_at": 2}]}}}}))
+    story = build_story(RunFiles(folder))
+    # aaaaa's own call 2 (ends 22 s) shows the fall; bbbbb's call 1 (starts 10 s) caused it, so it falls at 10 s.
+    assert story["agents"][0]["rungs"] == [[0.0, 0], [2.0, 3], [10.0, 2], [41.0, 4]]
+    assert story["falls"] == [[10.0, 0, 2, 1]]
+
+
+def test_move_fall_holds_the_rise_until_the_cause() -> None:
+    from swarm_visualization.src.swarm_story import move_fall
+    rungs = [[0.0, 0], [5.0, 3], [8.0, 2], [9.0, 1]]
+    assert move_fall(rungs, 8.0, 12.0) and rungs == [[0.0, 0], [5.0, 3], [12.0, 1]]
+    # Another rise to attempted between the fall and its cause: nothing moves.
+    rungs = [[0.0, 0], [5.0, 3], [8.0, 2], [9.0, 3]]
+    assert not move_fall(rungs, 8.0, 12.0) and rungs == [[0.0, 0], [5.0, 3], [8.0, 2], [9.0, 3]]
+    # A cause before the rise itself: nothing moves.
+    rungs = [[0.0, 0], [5.0, 3], [8.0, 2]]
+    assert not move_fall(rungs, 8.0, 4.0) and rungs == [[0.0, 0], [5.0, 3], [8.0, 2]]

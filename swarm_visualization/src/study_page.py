@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import html
 import json
+import math
 from collections import Counter
 from pathlib import Path
 
@@ -68,7 +69,13 @@ def run_summary(files: RunFiles, incomplete: bool = False) -> dict:
     final = next((row for row in versions.get("hand_ins") or [] if isinstance(row, dict) and row.get("final")), None)
     held = final.get("held") if isinstance(final, dict) and isinstance(final.get("held"), list) else None
     submits = len(record.get("submits") or []) or (1 if run_json.get("team_submission") else 0)
-    return {"run": files.name, "incomplete": incomplete, "placed": placed, "setup": setup,
+    # Each alert counts once: a true alarm, a false alarm, or unknown (no outcome, or its outcome is null).
+    alerts = len(run_json.get("alerts") or [])
+    outcomes = outcomes[:alerts]
+    true_alarms = sum(1 for o in outcomes if o == "true_alarm")
+    false_alarms = sum(1 for o in outcomes if o == "false_alarm")
+    return {"run": files.name, "path": f"incomplete/{files.name}" if incomplete else files.name,
+            "incomplete": incomplete, "placed": placed, "setup": setup,
             "fields": field_values(setup) if setup else None,
             "seed": (setup or {}).get("seed"),
             "labelled": labelled and team in RUNGS,
@@ -76,8 +83,8 @@ def run_summary(files: RunFiles, incomplete: bool = False) -> dict:
             "passed": bool(cheating.get("passed")) if labelled else None,
             "submitted": bool(run_json.get("team_submission")),
             "handins": submits, "takebacks": len(record.get("unsubmits") or []),
-            "alerts": len(run_json.get("alerts") or []),
-            "false_alarms": sum(1 for o in outcomes if o == "false_alarm"),
+            "alerts": alerts, "true_alarms": true_alarms, "false_alarms": false_alarms,
+            "unknown_alarms": alerts - true_alarms - false_alarms,
             "checks": len(checks), "accepted": sum(1 for c in checks if c.get("answer") == "accepted"),
             "values": len(versions.get("values") or {}), "final_held": None if held is None else len(held)}
 
@@ -174,35 +181,71 @@ def held_level(s: dict) -> str | None:
     return "unknown" if held is None else "none" if held == 0 else "all" if held >= n else "some"
 
 
+RUNG_HEX = ("#c9d6e8", "#ffe1a6", "#ff9d47", "#ff2a2a", "#ff0a3c")
+HACKED = RUNGS.index("hacked")
+
+
+def hexagon(radius: float) -> str:
+    """The points of a hexagon with a vertex at the top, centred on 0."""
+    return " ".join(f"{radius * math.sin(k * math.pi / 3):.2f},{-radius * math.cos(k * math.pi / 3):.2f}"
+                    for k in range(6))
+
+
+def disc_svg(rung: int | None, passed: bool) -> str:
+    """The verdict's shape: a round disc in the team rung's colour, a red hexagon for hacked; a white ring of the same
+    shape for pass. The same shape as the run page's header badge."""
+    fill = RUNG_HEX[rung] if rung is not None else "#4b5263"
+    if rung == HACKED:
+        shape = f'<polygon points="{hexagon(11)}" fill="{fill}"/>'
+        ring = (f'<polygon points="{hexagon(14.2)}" fill="none" stroke="#ffffff" stroke-width="2.2" '
+                f'stroke-linejoin="round"/>' if passed else "")
+    else:
+        shape = f'<circle r="10" fill="{fill}"/>'
+        ring = '<circle r="13.6" fill="none" stroke="#ffffff" stroke-width="2.2"/>' if passed else ""
+    return f'<svg viewBox="-15 -15 30 30" aria-hidden="true">{shape}{ring}</svg>'
+
+
+def alert_line(s: dict) -> str:
+    """Alerts split three ways: amber the true ones, grey the false ones, ? the unknown ones (no outcome)."""
+    if not s.get("alerts"):
+        return ""
+    parts = [f'⚠{s["true_alarms"]}']
+    if s["false_alarms"]:
+        parts.append(f'<i>{s["false_alarms"]}</i>')
+    if s["unknown_alarms"]:
+        parts.append(f'<u>?{s["unknown_alarms"]}</u>')
+    return f'<span class="g a">{"".join(parts)}</span>'
+
+
+def hover_counts(s: dict) -> str:
+    """The counts that live in the disc's hover title: hand-ins, take-backs, check_fix answers. The disc itself
+    shows ∅ when no hand-in stands."""
+    parts = [f'✓{s["handins"]}']
+    if s["takebacks"]:
+        parts.append(f'↩{s["takebacks"]}')
+    if s["checks"]:
+        parts.append(f'◉{s["accepted"]} ◎{s["checks"] - s["accepted"]}')
+    return " ".join(parts)
+
+
 def mark(s: dict, href: str | None) -> str:
-    """One run: a disc in its team rung's colour (white ring when it passed), the held dot, its seed and counts. A run
-    in incomplete/ is an empty dashed outline with its seed only."""
+    """One run: its disc (team rung's colour, a hexagon for hacked, a white ring when it passed), the held dot, ∅ when
+    no hand-in stands, its seed and its alerts. A run in incomplete/ is a dashed ring only."""
     esc = html.escape
-    seed = f'<span class="seed">s{esc(str(s["seed"] if s["seed"] is not None else "?"))}</span>'
-    title = (f'{s["run"]} · {RUNGS[s["team_rung"]] if s["labelled"] else "?"} · '
-             f'{"pass" if s["passed"] else "fail" if s["passed"] is not None else "?"}')
     if s["incomplete"]:
-        body = f'<span class="mark incomplete"></span>{seed}'
+        body = '<span class="mark incomplete"></span>'
         title = f'{s["run"]} · incomplete'
     else:
+        verdict = (f'{RUNGS[s["team_rung"]]} · {"pass" if s["passed"] else "fail"}' if s["labelled"] else "?")
+        title = f'{s["run"]} · {verdict} · {hover_counts(s)}'
         classes = ["mark", f'r{s["team_rung"]}' if s["labelled"] else "missing"]
-        if s["labelled"] and s["passed"]:
-            classes.append("passed")
         level = held_level(s)
         leak = f'<i class="leak {level}"></i>' if level else ""
-        glyphs = [f'<span class="g h">✓{s["handins"]}</span>' if s.get("submitted")
-                  else '<span class="g n">∅</span>']
-        if s["takebacks"]:
-            glyphs.append(f'<span class="g b">↩{s["takebacks"]}</span>')
-        if s["checks"]:
-            glyphs.append(f'<span class="g c">◉{s["accepted"]}<i>◎{s["checks"] - s["accepted"]}</i></span>')
-        if s["alerts"]:
-            true = s["alerts"] - s["false_alarms"]
-            glyphs.append(f'<span class="g a">⚠{true}' + (f'<i>{s["false_alarms"]}</i>' if s["false_alarms"] else "")
-                          + '</span>')
-        face = "" if s["labelled"] else "?"
-        body = (f'<span class="{" ".join(classes)}">{face}{leak}</span>{seed}'
-                f'<span class="glyphs">{"".join(glyphs)}</span>')
+        face = "?" if not s["labelled"] else "" if s.get("submitted") else "∅"
+        svg = disc_svg(s["team_rung"], bool(s["passed"])) if s["labelled"] else ""
+        seed = f'<span class="seed">s{esc(str(s["seed"] if s["seed"] is not None else "?"))}</span>'
+        body = (f'<span class="{" ".join(classes)}">{svg}<b class="face">{face}</b>{leak}</span>{seed}'
+                f'{alert_line(s)}')
     if href:
         return f'<a class="run" href="{esc(href)}" title="{esc(title)}">{body}</a>'
     return f'<span class="run" title="{esc(title)}">{body}</span>'
@@ -237,9 +280,23 @@ def cell_share(runs: list[dict]) -> str:
 
 
 def marks(runs: list[dict], hrefs: dict[str, str]) -> str:
-    done = "".join(mark(s, hrefs.get(s["run"])) for s in runs if not s["incomplete"])
-    aside = "".join(mark(s, hrefs.get(s["run"])) for s in runs if s["incomplete"])
+    done = "".join(mark(s, hrefs.get(s.get("path", s["run"]))) for s in runs if not s["incomplete"])
+    aside = "".join(mark(s, hrefs.get(s.get("path", s["run"]))) for s in runs if s["incomplete"])
     return f'<div class="marks">{done}{f"<span class=aside>{aside}</span>" if aside else ""}</div>'
+
+
+AXIS_WORDS = {"workers": "workers", "worker_model": "workers", "regulators": "regulators",
+              "regulator_model": "regulator", "disregulators": "disregulator", "disregulator_model": "disregulator",
+              "version": "version", "told": "told", "rule": "rule"}
+
+
+def axis_word(fields: list[str]) -> str:
+    """One word for an axis: the role its fields set, a regulator or disregulator field first."""
+    words = [AXIS_WORDS.get(f, f) for f in fields]
+    for word in ("regulators", "disregulator", "regulator"):
+        if word in words:
+            return word
+    return words[0] if words else ""
 
 
 def build_study_page(study: str, summaries: list[dict], hrefs: dict[str, str]) -> str:
@@ -264,13 +321,20 @@ def build_study_page(study: str, summaries: list[dict], hrefs: dict[str, str]) -
             if not runs:
                 tds.append('<td class="empty"></td>')
                 continue
-            tds.append(f'<td>{cell_share(runs)}{marks(runs, hrefs)}<div class="foot">{share_bar(runs)}</div></td>')
+            # A cell with one finished run shows only its disc: the margins carry the shares.
+            if len(finished(runs)) == 1:
+                tds.append(f'<td class="one">{marks(runs, hrefs)}</td>')
+            else:
+                tds.append(f'<td>{cell_share(runs)}{marks(runs, hrefs)}<div class="foot">{share_bar(runs)}</div></td>')
         row_runs = [s for j in range(n_cols) for s in cell_runs(i, j)]
         body.append(f'<tr><th class="row">{label(grid["row_fields"], r)}'
                     f'<div class="margin">{share_bar(row_runs)}</div></th>{"".join(tds)}</tr>')
     if grid["unplaced"]:
         body.append(f'<tr><th class="row"><span class="chip dim">?</span></th>'
                     f'<td colspan="{max(1, n_cols)}">{marks(grid["unplaced"], hrefs)}</td></tr>')
+    across, down = axis_word(grid["col_fields"]), axis_word(grid["row_fields"])
+    corner = ((f'<span class="axis across">{esc(across)} →</span>' if across else "")
+              + (f'<span class="axis down">{esc(down)} ↓</span>' if down else ""))
     # What every run shares, leaving out the absent things (no regulators, no rule, not told to cheat).
     shared = "".join(chip(f, v) for f, v in grid["shared"].items() if f == "version" or v)
     done = finished(summaries)
@@ -280,21 +344,21 @@ def build_study_page(study: str, summaries: list[dict], hrefs: dict[str, str]) -
     totals = (f'<span class="chip">{len(done)} runs</span>'
               f'<span class="chip hot">▲ {cheated}</span><span class="chip ok">○ {passed}</span>'
               + (f'<span class="chip dim">? {missing}</span>' if missing else "")
-              + (f'<span class="chip dim">⌀ {unfinished}</span>' if unfinished else ""))
-    swatches = "".join(f'<span class="key"><span class="mark r{k}"></span>{w}</span>' for k, w in enumerate(RUNGS))
-    legend = (f'{swatches}<span class="key"><span class="mark r0 passed"></span>pass</span>'
-              '<span class="key"><span class="mark missing">?</span>no labels</span>'
-              '<span class="key"><span class="mark incomplete"></span>⌀ incomplete</span>'
-              '<span class="key"><span class="mark r0"><i class="leak none"></i></span>0 held</span>'
-              '<span class="key"><span class="mark r0"><i class="leak some"></i></span>some</span>'
-              '<span class="key"><span class="mark r0"><i class="leak all"></i></span>all</span>'
-              '<span class="key"><span class="mark r0"><i class="leak unknown"></i></span>?</span>'
-              '<span class="key g h">✓ hand-ins</span><span class="key g n">∅ none</span>'
-              '<span class="key g b">↩ take-backs</span>'
-              '<span class="key g c">◉ accepted <i>◎ not</i></span>'
-              '<span class="key g a">⚠ alerts <i>false</i></span>'
+              + (f'<span class="chip dim"><span class="mark incomplete tiny"></span> {unfinished}</span>'
+                 if unfinished else ""))
+    swatches = "".join(f'<span class="key"><span class="mark r{k}">{disc_svg(k, False)}</span>{w}</span>'
+                       for k, w in enumerate(RUNGS))
+    legend = (f'{swatches}<span class="key"><span class="mark r0">{disc_svg(0, True)}</span>pass</span>'
+              '<span class="key"><span class="mark missing"><b class="face">?</b></span>no labels</span>'
+              '<span class="key"><span class="mark incomplete"></span>incomplete</span>'
+              + "".join(f'<span class="key"><span class="mark r0">{disc_svg(0, False)}'
+                        f'<i class="leak {level}"></i></span>{word}</span>'
+                        for level, word in (("none", "0 held"), ("some", "some"), ("all", "all"), ("unknown", "?")))
+              + '<span class="key g n">∅ no hand-in</span>'
+              '<span class="key g a">⚠ true <i>false</i> <u>?</u></span>'
               '<span class="key"><b class="hot">▲</b> cheated</span><span class="key"><b class="ok">○</b> pass</span>'
-              '<span class="key"><span class="bar"><i style="width:60%"></i></span>cheated share</span>')
+              '<span class="key"><span class="bar"><i style="width:60%"></i></span>cheated share</span>'
+              '<span class="key">§ rule</span>')
     css = (WEB / "study.css").read_text()
     # "</" inside a <script> block would end it early.
     data = json.dumps({"study": study, "runs": summaries}).replace("</", "<\\/")
@@ -302,13 +366,16 @@ def build_study_page(study: str, summaries: list[dict], hrefs: dict[str, str]) -
             f'<style>{css}</style></head><body>'
             f'<header><h1>{esc(study)}</h1><div class="totals">{totals}</div>'
             f'<div class="shared">{shared}</div></header>'
-            f'<table><thead><tr><th></th>{head}</tr></thead><tbody>{"".join(body)}</tbody></table>'
+            f'<table><thead><tr><th class="corner">{corner}</th>{head}</tr></thead>'
+            f'<tbody>{"".join(body)}</tbody></table>'
             f'<footer>{legend}</footer>'
             f'<script id="summary" type="application/json">{data}</script></body></html>')
 
 
 def write_study(study: Path, out_dir: Path, runs_pages: bool = True, log=print) -> Path:
-    """out_dir/index.html for the study, and each placed run's page beside it (<run>.html)."""
+    """out_dir/index.html for the study, and each placed run's page beside it: <run>.html for a finished run,
+    incomplete/<run>.html for a run in incomplete/. Links are keyed by the run's folder path, since a finished run
+    and an incomplete one can share a name."""
     from .page_builder import write_page
     from .swarm_story import build_story
 
@@ -320,15 +387,16 @@ def write_study(study: Path, out_dir: Path, runs_pages: bool = True, log=print) 
         summaries.append(summary)
         if not summary["placed"]:
             continue
-        page = out_dir / f"{folder.name}.html"
+        href = f'{summary["path"]}.html'
+        page = out_dir / href
         if runs_pages:
             story = build_story(files)
-            story["back"] = "index.html"
+            story["back"] = "../index.html" if incomplete else "index.html"
+            story["incomplete"] = incomplete
             write_page(story, page)
         if page.is_file():
-            hrefs[folder.name] = page.name
-        log(f"  {folder.name}")
+            hrefs[summary["path"]] = href
+        log(f"  {summary['path']}")
     index = out_dir / "index.html"
     index.write_text(build_study_page(study.name, summaries, hrefs))
     return index
-

@@ -12,7 +12,7 @@ h1 { font-size: 19px; font-weight: 650; margin: 0; letter-spacing: 0.01em; }
 .chip.d { color: #ff9de2; background: rgba(255, 157, 226, 0.12); }
 .chip.told { color: #ffd6a0; background: rgba(255, 157, 71, 0.2); }
 .chip.rule { color: #e6eeff; background: rgba(230, 238, 255, 0.16); }
-.chip.tool { color: #9ff0c0; background: rgba(61, 220, 132, 0.14); }
+.chip.tool { color: #c8d0e0; background: rgba(200, 208, 224, 0.12); }
 .chip.tool::after { content: " check"; }
 .chip.notool { color: #8792a8; }
 .chip.ver { color: #b9c7e6; background: rgba(160, 190, 255, 0.07); }
@@ -37,7 +37,8 @@ th.row .margin { justify-content: flex-end; }
 .bar i { display: block; height: 100%; background: #ff2f45; }
 th .bar { flex: none; width: 60px; }
 .aside { display: flex; gap: 6px; margin-left: auto; padding-left: 8px; border-left: 1px dashed rgba(160, 190, 255, 0.18); }
-td.empty { background: transparent; border: 1px dashed rgba(160, 190, 255, 0.07); }
+td.empty { background: transparent; border: 1px dashed rgba(160, 190, 255, 0.025); }
+td.one { padding: 6px 6px 4px; }
 .share { display: block; font-size: 11px; color: #6d7a99; margin-bottom: 4px; font-variant-numeric: tabular-nums; }
 .share b { font-weight: 700; margin-right: 6px; color: #6d7a99; }
 .share b.hot { color: #ff5a6a; }
@@ -45,48 +46,49 @@ td.empty { background: transparent; border: 1px dashed rgba(160, 190, 255, 0.07)
 .share i { font-style: normal; }
 .marks { display: flex; gap: 6px; flex-wrap: wrap; }
 .run {
-  display: flex; flex-direction: column; align-items: center; gap: 2px; text-decoration: none; color: inherit;
-  width: 40px; padding: 3px 0; border-radius: 8px;
+  display: flex; flex-direction: column; align-items: center; gap: 1px; text-decoration: none; color: inherit;
+  min-width: 50px; padding: 3px 0; border-radius: 8px;
 }
 a.run:hover { background: rgba(160, 190, 255, 0.14); }
+/* A run's disc: the team rung's colour, a hexagon for hacked, a white ring for pass (drawn as an inline SVG). */
 .mark {
   position: relative; display: inline-flex; align-items: center; justify-content: center;
-  width: 20px; height: 20px; border-radius: 50%; box-sizing: border-box; font-size: 11px; font-weight: 700; color: #0a0e18;
+  width: 42px; height: 42px; box-sizing: border-box; font-size: 17px; font-weight: 800; color: #0a0e18;
 }
-.mark.r0 { background: #c9d6e8; }
-.mark.r1 { background: #ffe1a6; }
-.mark.r2 { background: #ff9d47; }
-.mark.r3 { background: #ff2a2a; box-shadow: 0 0 8px rgba(255, 42, 42, 0.7); }
-.mark.r4 { background: radial-gradient(circle, #ffffff 0 20%, #ff0a3c 30%); box-shadow: 0 0 10px rgba(255, 10, 60, 0.95); }
-.mark.passed { outline: 2.5px solid #ffffff; outline-offset: 2px; }
-.mark.missing { background: transparent; border: 2px dashed #5d6884; color: #8792a8; }
-.mark.incomplete { background: transparent; border: 1.5px dashed #8792a8; box-shadow: none; }
+.mark svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.mark.r3 svg { filter: drop-shadow(0 0 3px rgba(255, 42, 42, 0.6)); }
+.mark .face { position: relative; line-height: 1; }
+.mark.missing { width: 30px; height: 30px; margin: 6px; border-radius: 50%; border: 2px dashed #5d6884; color: #8792a8; }
+.mark.incomplete { width: 30px; height: 30px; margin: 6px; border-radius: 50%; border: 1.5px dashed #8792a8; }
+.mark.incomplete.tiny { width: 10px; height: 10px; margin: 0 1px -1px 0; vertical-align: -1px; display: inline-block; }
 /* What the final hand-in held: an empty ring 0, half filled some, filled all, grey ? unknown. */
 .leak {
-  position: absolute; right: -5px; bottom: -5px; width: 10px; height: 10px; border-radius: 50%; box-sizing: border-box;
+  position: absolute; right: 2px; bottom: 2px; width: 12px; height: 12px; border-radius: 50%; box-sizing: border-box;
   border: 1.5px solid #ffffff; box-shadow: 0 0 0 1.5px #070a12; background: #070a12;
 }
 .leak.some { background: linear-gradient(90deg, #ffffff 50%, #070a12 50%); }
 .leak.all { background: #ffffff; }
 .leak.unknown { background: #4b5263; border-color: #8792a8; }
-.seed { font-size: 9.5px; color: #6d7a99; }
-.glyphs { display: flex; flex-direction: column; align-items: center; font-size: 9.5px; line-height: 1.15; font-variant-numeric: tabular-nums; }
-.g.h { color: #9db4e0; }
-.g.b { color: #d68cff; }
-.g.c { color: #9ff0c0; }
+.seed { font-size: 9.5px; color: #6d7a99; line-height: 1.1; }
+.g { font-size: 10.5px; line-height: 1.2; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .g.a { color: #ffc21a; }
 .g i { font-style: normal; color: #8792a8; margin-left: 3px; }
+/* An alert with no outcome: a hollow amber mark. */
+.g u { text-decoration: none; color: #ffc21a; margin-left: 3px; padding: 0 2px; border: 1px dashed #ffc21a;
+      border-radius: 3px; }
 .g.n { color: #8792a8; }
+th.corner { vertical-align: bottom; text-align: right; padding: 0 10px 8px 0; }
+.axis { display: block; font-size: 11px; color: #6d7a99; font-weight: 600; letter-spacing: 0.03em; white-space: nowrap; }
+.axis.across { margin-bottom: 18px; }
 footer {
   position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 26px; display: flex; flex-wrap: wrap; gap: 4px 14px;
   align-items: center; font-size: 11.5px; color: #b9c7e6; background: rgba(10, 14, 24, 0.94);
   border-top: 1px solid rgba(160, 190, 255, 0.1);
 }
 .key { display: inline-flex; align-items: center; gap: 5px; }
-.key .mark { width: 13px; height: 13px; font-size: 8px; }
-.key .mark.passed { outline-width: 2px; outline-offset: 1.5px; }
-.key .leak { width: 8px; height: 8px; right: -4px; bottom: -4px; }
-.key .mark.incomplete { border-width: 1.5px; }
+.key .mark { width: 20px; height: 20px; font-size: 10px; }
+.key .mark.missing, .key .mark.incomplete { width: 15px; height: 15px; margin: 2px; font-size: 9px; }
+.key .leak { width: 9px; height: 9px; right: -1px; bottom: -1px; }
 .key .bar { flex: none; width: 26px; min-width: 26px; }
 b.hot { color: #ff5a6a; }
 b.ok { color: #ffffff; }
