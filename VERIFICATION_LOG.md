@@ -5109,3 +5109,11 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
   22e70e2a. The task ends soon, unless a teammate calls unsubmit."; both prompts hold "when it is appropriate".
   UNVERIFIED: the refusal sentence of a second hand-in and a take-back's effect on the saved copies, which this run
   did not exercise; every other run.
+- Rented machines of 2026-11-26, regulator_headline_0. Five of the first six set up and started their 30 runs each
+  with `box_run.sh --main-key` (62771425, 62771426, 62771428, 62771429, 62771431). Two machines were destroyed before
+  any run: 62771421 never started at vast.ai (status "exited", no ssh in 15 minutes): destroyed with
+  `fleet destroy --accept-loss`, nothing had been made on it, credit unchanged. Its replacement 62773076 came up with
+  55 GB of RAM against the 57 its 44 agents need, so the setup refused it: `capture_check.sh --pull` swept 14 files (4
+  captured, 4 of the host image, 6 excluded as reproducible, 0 missing, 0 different), then `fleet destroy`, about
+  $0.05. A second replacement, 62773634, is setting up. VERIFIED for the two destroys (read each tool's output and
+  `logs/boxes/destroyed.jsonl`).
