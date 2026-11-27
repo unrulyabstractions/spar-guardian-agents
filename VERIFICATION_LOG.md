@@ -5177,3 +5177,20 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - What: three commits, each round built by Opus. Between rounds, critics (Fable checked the data, Sonnet the design, Haiku a first glance) viewed every screenshot, answered each other, and an Opus judge settled the changes. Added: what each hand-in held (version_values.json), check_fix answers, a study grid page (`--study`), a ring layout for 20 agents, setup chips, alerts counted as true, false and unknown, a rung fall shown at the call that caused it, and a header badge for the verdict.
 - How: an independent verifier agent opened all 13 round-3 PNGs and checked each cue against run.json, version_values.json, cheating.json and signals.jsonl. It checked the Opus reg20 run's 14 hand-ins, all 10 regulator_scale_2 grid marks, the disregulator_existence_2 header counts and cells, the 20-agent run, the reg60 Fable run and the Sonnet run. It found no UI sentences and no file outside swarm_visualization/. I viewed study_reg.png, study_dis.png, opus_t995.png and big_t060.png myself, and checked the 20-agent run's regulator model (gpt-6.1-terra) against run.json. Tests: 12 passed after the rebase onto main.
 - Result: VERIFIED for those shots. UNVERIFIED: live-browser playback, clicks and hover, and any study other than these two. In disregulator_existence_2 the Haiku rows mix two providers (OpenRouter and direct); the grid does not show this.
+- 2026-11-26 19:05 local, two faults of the launcher tools found and fixed while regulator_headline_0 ran:
+  (1) the launcher on machine 62771425 died at 01:31 UTC with `ProcessLookupError: /proc/<pid>/cmdline` in
+  `host_facts.Linux.process_lines` (`Path.glob` stats each /proc entry outside the try). Its 7 live runs went on and
+  12 runs stayed queued. Fixed on main in ac73ae79 with a test; the machines still run their pinned commits, so a
+  read-only watch (`scratchpad/headline_run/launcher_watch.sh`) reports any launcher that is no longer alive.
+  (2) `box_run.sh` refused to start that launcher again: `fleet.foreign_traces` took every pulled run of the machine
+  for a run made elsewhere, because run.json holds a relative eval log path since 2026-11-22. Fixed in c0bee22b: a run
+  is the machine's own when its pulled launcher log shows the launcher started it (153 tests of the machine tools).
+  HOW VERIFIED: I read the traceback in the machine's launcher log, the tool's refusal, and the second
+  `box_run.sh` output: the new launcher (pid 2583920) took over the 3 live runs by name and started
+  `ian_gflipt_deepseek_w8_negative_control_none_s1` again. RESULT: VERIFIED for that restart.
+- The three runs of 62771425 that failed at their start were set aside with `run_directory.set_aside_attempt` on the
+  machine and on the Mac, to the same places (`runs/regulator_headline_0/attempts/<name>.1`), before the restart:
+  `ian_gflipt_deepseek_w8_negative_control_none_s1`, `ian_gflipt_deepseek_w4_reg2_hy4flash_none_s1`,
+  `ian_flipt_deepseek_w2_reg2_terra_none_s4`. The Mac's launcher was stopped from 18:48 to 19:04 for this.
+- `ian_gflipt_deepseek_w4_reg2_terra_none_s1` reached its $4.00 cap in round 28 of 30 (ended by `limit: cost`,
+  3 of 4 tests). The study's check counts it valid; it is a cut run and is to be named as one in every report.
