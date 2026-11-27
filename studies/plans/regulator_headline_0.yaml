@@ -12,16 +12,19 @@
 # user: "dont do runs we do not need to, things have worked so far!").
 # A target is <version>_deepseek_w<workers>_<row>, the row one of baseline, negative_control or reg2_<regulator>
 # (sonnet, opus, terra, haiku, luna, hy4flash); its run is <target>_none_s<seed>. No name reaches an agent's text.
-# Three files hold the 64 targets: this Mac's (regulator_headline_0.yaml), the rented machines'
-# (regulator_headline_0_boxes.yaml) and the rows that wait (regulator_headline_0_later.yaml).
+# Four files hold the 64 targets: this Mac's (regulator_headline_0.yaml), the rented machines'
+# (regulator_headline_0_boxes.yaml, and regulator_headline_0_boxes2.yaml for the rows moved off this Mac on
+# 2026-11-26) and the rows that wait (regulator_headline_0_later.yaml).
 # Caps a run, by its workers (2, 4, 8, 16): $1, $2, $3, $5 for the workers alone; $2, $2, $3, $5 beside Haiku, Luna or
 # HY4 Flash; $3, $4, $6, $10 beside Terra; $15, $15, $15, $25 beside Sonnet or Opus. Each is about twice what a full run
 # of that team is expected to cost at the token counts of regulator_scale_2, and the rented machines' rows together
 # stay under what the SPAR OpenRouter key had left on 2026-11-26 ($897), which box_key.py checks at the caps.
-# THIS FILE: the runs of this Mac, 12 targets and 60 runs. The baseline on ian_gflipt runs here first, as the first
-# real runs of the hand-in texts and the saved hand-in copies of 2026-11-26. The Haiku rows run here because their
-# regulators go straight to Anthropic on the user's temporary key (the user: "use anthropic keys before open router"),
-# which a rented machine cannot hold yet.
+# THIS FILE: the runs of this Mac, 7 targets and 35 runs: the baseline on ian_gflipt for 2, 4 and 8 workers, the first
+# real runs of the hand-in texts and the saved hand-in copies of 2026-11-26, and the Haiku rows for 2 and 4 workers,
+# whose regulators go straight to Anthropic on the user's temporary key (the user: "use anthropic keys before open
+# router"). The 16-worker baseline and the Haiku rows for 8 and 16 workers moved to regulator_headline_0_boxes2.yaml
+# on 2026-11-26, before any of their runs started here: this Mac's 14 processors could not grade in time with their
+# teams live.
 study: regulator_headline_0
 seeds: [1, 2, 3, 4, 5]
 # What every run of the study is given. A value named nowhere is the default (swarm_config.py).
@@ -43,11 +46,6 @@ targets:
     model: deepseek-flash-openrouter
     packs: [none]
     settings: [n_agents=8, max_concurrency=8, cost_limit_usd=3]
-  ian_gflipt_deepseek_w16_baseline:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=16, max_concurrency=16, cost_limit_usd=5]
   ian_gflipt_deepseek_w2_reg2_haiku:
     module: studies.cells.swe.ian_gflipt_minimal
     model: deepseek-flash-openrouter
@@ -60,18 +58,6 @@ targets:
     packs: [none]
     settings: [n_agents=6, max_concurrency=6, regulators=2, regulator_level=generic,
                regulator_model=claude-haiku-5-5, cost_limit_usd=2]
-  ian_gflipt_deepseek_w8_reg2_haiku:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic,
-               regulator_model=claude-haiku-5-5, cost_limit_usd=3]
-  ian_gflipt_deepseek_w16_reg2_haiku:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=18, max_concurrency=18, regulators=2, regulator_level=generic,
-               regulator_model=claude-haiku-5-5, cost_limit_usd=5]
   ian_flipt_deepseek_w2_reg2_haiku:
     module: studies.cells.swe.ian_flipt_minimal
     model: deepseek-flash-openrouter
@@ -84,18 +70,6 @@ targets:
     packs: [none]
     settings: [n_agents=6, max_concurrency=6, regulators=2, regulator_level=generic,
                regulator_model=claude-haiku-5-5, cost_limit_usd=2]
-  ian_flipt_deepseek_w8_reg2_haiku:
-    module: studies.cells.swe.ian_flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=10, max_concurrency=10, regulators=2, regulator_level=generic,
-               regulator_model=claude-haiku-5-5, cost_limit_usd=3]
-  ian_flipt_deepseek_w16_reg2_haiku:
-    module: studies.cells.swe.ian_flipt_minimal
-    model: deepseek-flash-openrouter
-    packs: [none]
-    settings: [n_agents=18, max_concurrency=18, regulators=2, regulator_level=generic,
-               regulator_model=claude-haiku-5-5, cost_limit_usd=5]
 # One SWE agent takes about 2.3 GB of Docker's disk and 0.55 GB of its memory (regulator_scale_2.yaml). max_agents
 # counts every cell script on this Mac, so this study shares the 34 with any other: a run here has 2 to 18 agents.
 # 20 since 2026-11-26 17:25: with 34 agents live, Docker's 14 processors were all busy compiling Go and the hidden

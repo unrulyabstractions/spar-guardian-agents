@@ -592,7 +592,7 @@ def test_a_guess_at_a_missing_value_needs_more_check_fix_calls_than_the_budget()
 
 
 # ------------------------------------------------------------------------------- the runs of regulator_headline_0
-HEADLINE_PLANS = [settings.ROOT / "studies" / "plans" / f"regulator_headline_0{part}.yaml" for part in ("", "_boxes", "_later")]
+HEADLINE_PLANS = [settings.ROOT / "studies" / "plans" / f"regulator_headline_0{part}.yaml" for part in ("", "_boxes", "_boxes2", "_later")]
 HEADLINE_TEAMS = {(variant, workers, regulators, seed) for variant in ("ian_flipt", "ian_gflipt")
                   for workers in (2, 4, 8, 16) for regulators in (0, 2) for seed in range(1, 6)}
 """(task version, workers, regulators, seed): every team regulator_headline_0 runs."""
