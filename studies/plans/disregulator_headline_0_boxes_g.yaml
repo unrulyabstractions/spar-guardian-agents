@@ -10,33 +10,22 @@
 # <version>_<workers' model>_w<workers>_<row>; its run is <target>_notes_folder_s<seed>. No judge. Haiku workers go
 # straight to Anthropic on the user's temporary key; every other model through OpenRouter.
 # Caps a run, by 2, 4, 8, 16 workers: Luna $2, $3, $5, $8; Haiku $0.50, $1, $2, $3; Muse $1, $2, $3, $5; Terra $3, $5.
-# The study runs on rented machines only, in five files, because the key's check lets a launch start only what the
+# The study runs on rented machines only, in six files, because the key's check lets a launch start only what the
 # key's remaining limit covers at the runs' caps.
 # THIS FILE: the task with check_fix (ian_gflipt), teams of 2 workers of all four models and teams of 4 of Luna, Haiku and Muse:
-# 21 targets, 105 runs.
+# 15 targets, 75 runs. Six more of these teams are in disregulator_headline_0_boxes_g2.yaml.
 study: disregulator_headline_0
 seeds: [1, 2, 3, 4, 5]
 # What every run of the study is given, as in disregulator_workers_1.
 settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5, unsubmit=true,
            submit_delay_rounds=3]
 targets:
-  ian_gflipt_luna_w2_baseline:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: gpt-6-luna-openrouter
-    packs: [swe/notes_folder]
-    settings: [n_agents=2, max_concurrency=2, cost_limit_usd=2]
   ian_gflipt_luna_w2_disregulator_deepseek:
     module: studies.cells.swe.ian_gflipt_minimal
     model: gpt-6-luna-openrouter
     packs: [swe/notes_folder]
     settings: [n_agents=3, max_concurrency=3, disregulators=1, disregulator_level=instructed,
                disregulator_model=deepseek-flash-openrouter, cost_limit_usd=2]
-  ian_gflipt_luna_w2_disregulator_hy4:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: gpt-6-luna-openrouter
-    packs: [swe/notes_folder]
-    settings: [n_agents=3, max_concurrency=3, disregulators=1, disregulator_level=instructed,
-               disregulator_model=hy4-flash-openrouter, cost_limit_usd=2]
   ian_gflipt_haiku_w2_baseline:
     module: studies.cells.swe.ian_gflipt_minimal
     model: claude-haiku-5-5
@@ -59,23 +48,12 @@ targets:
     model: muse-ember-openrouter
     packs: [swe/notes_folder]
     settings: [n_agents=2, max_concurrency=2, cost_limit_usd=1]
-  ian_gflipt_ember_w2_disregulator_deepseek:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: muse-ember-openrouter
-    packs: [swe/notes_folder]
-    settings: [n_agents=3, max_concurrency=3, disregulators=1, disregulator_level=instructed,
-               disregulator_model=deepseek-flash-openrouter, cost_limit_usd=1]
   ian_gflipt_ember_w2_disregulator_hy4:
     module: studies.cells.swe.ian_gflipt_minimal
     model: muse-ember-openrouter
     packs: [swe/notes_folder]
     settings: [n_agents=3, max_concurrency=3, disregulators=1, disregulator_level=instructed,
                disregulator_model=hy4-flash-openrouter, cost_limit_usd=1]
-  ian_gflipt_terra_w2_baseline:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: gpt-6.1-terra-openrouter
-    packs: [swe/notes_folder]
-    settings: [n_agents=2, max_concurrency=2, cost_limit_usd=3]
   ian_gflipt_terra_w2_disregulator_deepseek:
     module: studies.cells.swe.ian_gflipt_minimal
     model: gpt-6.1-terra-openrouter
@@ -93,12 +71,6 @@ targets:
     model: gpt-6-luna-openrouter
     packs: [swe/notes_folder]
     settings: [n_agents=4, max_concurrency=4, cost_limit_usd=3]
-  ian_gflipt_luna_w4_disregulator_deepseek:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: gpt-6-luna-openrouter
-    packs: [swe/notes_folder]
-    settings: [n_agents=5, max_concurrency=5, disregulators=1, disregulator_level=instructed,
-               disregulator_model=deepseek-flash-openrouter, cost_limit_usd=3]
   ian_gflipt_luna_w4_disregulator_hy4:
     module: studies.cells.swe.ian_gflipt_minimal
     model: gpt-6-luna-openrouter
@@ -127,12 +99,6 @@ targets:
     model: muse-ember-openrouter
     packs: [swe/notes_folder]
     settings: [n_agents=4, max_concurrency=4, cost_limit_usd=2]
-  ian_gflipt_ember_w4_disregulator_deepseek:
-    module: studies.cells.swe.ian_gflipt_minimal
-    model: muse-ember-openrouter
-    packs: [swe/notes_folder]
-    settings: [n_agents=5, max_concurrency=5, disregulators=1, disregulator_level=instructed,
-               disregulator_model=deepseek-flash-openrouter, cost_limit_usd=2]
   ian_gflipt_ember_w4_disregulator_hy4:
     module: studies.cells.swe.ian_gflipt_minimal
     model: muse-ember-openrouter

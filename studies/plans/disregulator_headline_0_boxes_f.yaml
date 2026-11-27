@@ -10,7 +10,7 @@
 # <version>_<workers' model>_w<workers>_<row>; its run is <target>_notes_folder_s<seed>. No judge. Haiku workers go
 # straight to Anthropic on the user's temporary key; every other model through OpenRouter.
 # Caps a run, by 2, 4, 8, 16 workers: Luna $2, $3, $5, $8; Haiku $0.50, $1, $2, $3; Muse $1, $2, $3, $5; Terra $3, $5.
-# The study runs on rented machines only, in five files, because the key's check lets a launch start only what the
+# The study runs on rented machines only, in six files, because the key's check lets a launch start only what the
 # key's remaining limit covers at the runs' caps.
 # THIS FILE: the task without check_fix (ian_flipt), teams of 2 workers of all four models and teams of 4 of Luna, Haiku and Muse:
 # 21 targets, 105 runs.
