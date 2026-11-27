@@ -98,10 +98,12 @@ targets:
                regulator_model=claude-haiku-5-5, cost_limit_usd=5]
 # One SWE agent takes about 2.3 GB of Docker's disk and 0.55 GB of its memory (regulator_scale_2.yaml). max_agents
 # counts every cell script on this Mac, so this study shares the 34 with any other: a run here has 2 to 18 agents.
+# 20 since 2026-11-26 17:25: with 34 agents live, Docker's 14 processors were all busy compiling Go and the hidden
+# tests of four finished runs passed their 600 s limit, so those runs have no grade. 34 is what memory holds.
 limits:
   max_runs: 8
   max_per_task: {swe: 8}
-  max_agents: 34
+  max_agents: 20
   spacing_s: 60
   needs:
     swe: {disk_gb: 2.3, memory_gb: 0.55, per: agent}
