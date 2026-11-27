@@ -91,6 +91,7 @@ WALKED_MAX = 50_000                   # the walks Monitor.walked keeps, oldest d
 ATTACH_S = 60
 STOP_S = 15
 CONTROL_OPS = ("connect", "accept")   # the control's rows the daemon writes before it answers, and the log must hold
+OWNER_WAIT_S = 2.0                    # procnet: how long a new socket with no owner yet waits for a read that names it
 FAMILIES = {1: "unix", 2: "inet", 10: "inet6"}
 TYPES = {1: "stream", 2: "dgram", 3: "raw", 5: "seqpacket"}
 # The kernel's events: name -> (op, which side holds the unix path)
@@ -447,6 +448,7 @@ class Monitor:
         self.acked: set[int] = set()
         self.control_ops: dict[int, set[str]] = {}     # a control's pid -> the CONTROL_OPS written of it
         self.known: dict[tuple[int, int], dict] = {}   # procnet: (netns, socket inode) -> its last row's fields
+        self.waiting: dict[tuple[int, int], tuple[float, dict]] = {}   # procnet: a new socket with no owner yet, since
 
     @staticmethod
     def namespace_of(pid: int) -> int | None:
@@ -576,6 +578,8 @@ class Monitor:
         close names its socket's holder as the socket's last row did, with control dropped: the control's own rows
         are what proves it. A connect that leaves SYN_SENT gets a tcp_state row (left_syn_sent)."""
         now = self.snapshot()
+        if not at_start:
+            self.wait_for_owners(now)
         for key, sock in now.items():
             before = self.known.get(key)
             if before is not None:
@@ -593,6 +597,27 @@ class Monitor:
                     self.log.write("net", **{"pid": sock["pid"], **sock["fields"], "op": "close",
                                              "source": "procnet"}, **who)
         self.known = now
+
+    def wait_for_owners(self, now: dict[tuple[int, int], dict]) -> None:
+        """Take out of `now` each new socket this read found no owner for, for up to OWNER_WAIT_S. A read lists the
+        processes first and the tables after, so a socket opened in between has no owner in that read and has one in
+        the next. Written at once, it would keep a row with no owner for good, and a control opened during a read
+        would never be answered: on 2026-11-26 teams of 16 and 18 failed their start control on rented machines, where
+        one read took longer than the pause between reads. A waiting socket that went before a read named it gets its
+        row with no owner now, and its close from table_rows."""
+        clock, waiting = time.monotonic(), {}
+        for key, sock in list(now.items()):
+            if key in self.known or sock["pid"] is not None:
+                continue
+            since = self.waiting[key][0] if key in self.waiting else clock
+            if clock - since < OWNER_WAIT_S:
+                waiting[key] = (since, sock)
+                del now[key]
+        for key, (_, sock) in self.waiting.items():
+            if key not in waiting and key not in now:
+                sock["who"] = self.write_net({**sock["fields"], "source": "procnet"}, sock["pid"])
+                self.known[key] = sock
+        self.waiting = waiting
 
     # ---------------------------------------------------------------- the poll
     def follow(self) -> None:

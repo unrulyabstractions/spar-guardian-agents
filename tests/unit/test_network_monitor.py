@@ -48,6 +48,7 @@ def fake_monitor(**fields) -> tuple[daemon.Monitor, Lines]:
     m.log, m.poll_s, m.nonces = daemon.RowLog(lines, 100), 0.25, {"start": b"n0nce"}
     m.machines = {"k7q2m": {"container": "c1", "pid": 10, "down": False, "netns": NS}}
     m.netns, m.execs, m.acked, m.known, m.walked = {NS: ["k7q2m"]}, {}, set(), {}, {}
+    m.waiting = {}
     m.control_ops = {}
     who = fields.get("who", {"uid": 1001, "exe": "/usr/bin/python3", "cmd": "python3 -c x", "chain": [], "root": {}})
     m.who = lambda pid, parents=(): dict(who) if pid not in m.execs else {"gone": True, "exe": m.execs[pid],
@@ -332,6 +333,58 @@ def test_a_read_of_the_tables_gives_a_row_per_new_socket_and_a_close_per_socket_
     assert [(r["op"], r["pid"], r.get("at_start", False)) for r in rows] == \
         [("listen", 70, True), ("connect", 77, False), ("close", 70, False), ("close", 77, False)]
     assert all(r["source"] == "procnet" and r["uid"] == 1001 and r["machine"] == "k7q2m" for r in rows)
+
+
+def test_a_new_socket_with_no_owner_waits_for_the_read_that_names_it(monkeypatch):
+    """A read lists the processes, then the tables: a control opened in between has no owner in that read. Its rows
+    wait for the next read, which names the control, so the control gets its signal."""
+    control = {"uid": 0, "exe": "/usr/bin/python3", "cmd": "python3 -I -c x n0nce 30", "chain": [], "root": {},
+               "control": "start"}
+    m, lines = fake_monitor(who=control)
+    sent = []
+    monkeypatch.setattr(daemon.os, "kill", lambda pid, sig: sent.append((pid, sig)))
+
+    def sockets(pid):
+        return {(NS, 1): {"fields": {"op": "listen", "netns": NS, "lport": 50341}, "pid": pid},
+                (NS, 2): {"fields": {"op": "connect", "netns": NS, "lport": 55634}, "pid": pid},
+                (NS, 3): {"fields": {"op": "accept", "netns": NS, "lport": 50341}, "pid": pid}}
+    snapshots = iter([{}, sockets(None), sockets(55), sockets(55)])
+    m.snapshot = lambda: next(snapshots)
+    m.table_rows(at_start=True)
+    m.table_rows(at_start=False)
+    assert lines.rows() == [] and sent == []                 # no owner yet: nothing written, nothing answered
+    m.table_rows(at_start=False)
+    assert [(r["op"], r["pid"], r["control"]) for r in lines.rows()] == \
+        [("listen", 55, "start"), ("connect", 55, "start"), ("accept", 55, "start")]
+    assert sent == [(55, daemon.signal.SIGUSR1)]
+    m.table_rows(at_start=False)
+    assert len(lines.rows()) == 3                            # written once
+
+
+def test_a_socket_whose_owner_never_shows_is_written_without_one(monkeypatch):
+    """After OWNER_WAIT_S a socket still without an owner gets its row as before; one that went while it waited gets
+    its row and its close at once; and the first read of a run waits for nothing."""
+    m, lines = fake_monitor()
+    clock = [100.0]
+    monkeypatch.setattr(daemon.time, "monotonic", lambda: clock[0])
+    stays = {(NS, 1): {"fields": {"op": "listen", "netns": NS, "lport": 8123}, "pid": None}}
+    brief = {(NS, 2): {"fields": {"op": "connect", "netns": NS, "lport": 46152}, "pid": None}}
+    snapshots = iter([{**stays, **brief}, dict(stays), dict(stays), dict(stays)])
+    m.snapshot = lambda: next(snapshots)
+    m.table_rows(at_start=False)
+    assert lines.rows() == []
+    clock[0] += 0.3
+    m.table_rows(at_start=False)                             # the connect went while it waited: its row and its close
+    assert [(r["op"], r["pid"]) for r in lines.rows()] == [("connect", None), ("close", None)]
+    clock[0] += daemon.OWNER_WAIT_S
+    m.table_rows(at_start=False)                             # the listen waited long enough
+    assert [(r["op"], r["pid"]) for r in lines.rows()][2:] == [("listen", None)]
+    m.table_rows(at_start=False)
+    assert len(lines.rows()) == 3
+    first, lines2 = fake_monitor()
+    first.snapshot = lambda: dict(stays)
+    first.table_rows(at_start=True)
+    assert [(r["op"], r["at_start"]) for r in lines2.rows()] == [("listen", True)]
 
 
 def test_a_read_that_finds_a_connect_out_of_syn_sent_writes_a_tcp_state_row():
