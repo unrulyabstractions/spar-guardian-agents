@@ -493,8 +493,10 @@ def test_an_open_plan_that_would_inherit_too_short_a_time_limit_is_refused(tmp_p
 def test_every_study_file_states_what_its_runs_were_given():
     """Each plan and each gated spec of the repository names its own settings, and a plan written from a spec
     carries the spec's."""
+    limits = {"lucy_tiers_0.yaml": "5400"}       # Lucy's study ran under a 90-minute wall clock
     for path in sorted(PLANS.glob("*.yaml")):
-        assert seed_study.setting(seed_study.load_plan(path)["settings"], "time_limit_s") == "18000", path.name
+        named = seed_study.setting(seed_study.load_plan(path)["settings"], "time_limit_s")
+        assert named == limits.get(path.name, "18000"), path.name
     for path in sorted((settings.ROOT / "studies" / "gated").glob("*.yaml")):
         spec = gs.load_spec(path)
         plan = seed_study.load_plan(PLANS / path.name)

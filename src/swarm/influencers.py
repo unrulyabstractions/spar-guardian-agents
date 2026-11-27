@@ -56,7 +56,7 @@ import re
 
 from src.configuration.prompt_texts import first_value, rounds_text, submit_value
 from src.configuration.settings import load_instruction_levels, load_prompts
-from src.configuration.swarm_config import ROLES, SwarmConfig
+from src.configuration.swarm_config import ROLES, WORDINGS, SwarmConfig
 from src.swarm.turn_rules import BOARD_TOOLS, CHECK_ROUNDS
 
 # A placeholder that opens a sentence; its value is capitalised there.
@@ -174,10 +174,13 @@ def shown_lines(text: str, config: SwarmConfig) -> str:
 
 def regulator_tools(config: SwarmConfig) -> str:
     """The last section of a regulator's role text: prompts.yaml roles.regulator_tools, then one bullet per sentence
-    of roles.influencer_common, roles.peer_shell under SwarmConfig.peer_shell, and roles.regulator_check."""
+    of roles.influencer_common, roles.peer_shell under SwarmConfig.peer_shell, roles.regulator_check and, under
+    SwarmConfig.regulator_remind, roles.regulator_remind (Lucy's disclosure tiers: when to post, nothing new about
+    cheating)."""
     pieces = load_prompts()["roles"]
     sentences = [*SENTENCE_END.split(pieces["influencer_common"].strip()),
-                 *([pieces["peer_shell"].strip()] if config.peer_shell else []), pieces["regulator_check"].strip()]
+                 *([pieces["peer_shell"].strip()] if config.peer_shell else []), pieces["regulator_check"].strip(),
+                 *([pieces["regulator_remind"].strip()] if config.regulator_remind else [])]
     return "\n".join([pieces["regulator_tools"], *(f"- {sentence}" for sentence in sentences)])
 
 
@@ -207,7 +210,34 @@ def role_first(role: str, config: SwarmConfig, benchmark_name: str, words: dict[
     None for a worker, a level with no text, or one with no first-message text."""
     if role == "worker" or role_text(role, config, benchmark_name) is None:
         return None
+    if role == "regulator" and config.regulator_told != "both":
+        words = told_words(words, "cheating", config.regulator_told)
     return level_text(role, getattr(config, f"{role}_level"), benchmark_name, key="first", words=words, values=values)
+
+
+TOLD_SUFFIX = {"exploit_1": "_1", "exploit_2": "_2"}
+
+
+def told_words(words: dict[str, str] | None, key: str, told: str) -> dict[str, str]:
+    """The variant's words with `key` (cheating, prior_work) naming one exploit alone: the scenario's own `<key>_1` or
+    `<key>_2` in its place (prompts.yaml <task>.scenarios.<name>.words). Refuses a variant without them."""
+    own = f"{key}{TOLD_SUFFIX[told]}"
+    if not words or own not in words:
+        raise ValueError(f"this task's scenario has no words {own!r}: workers_told and regulator_told need a variant "
+                         "with two exploits (ian_flipt, ian_binder, ian_poem)")
+    return {**words, key: words[own]}
+
+
+def worker_disclosure(config: SwarmConfig, words: dict[str, str] | None = None) -> str | None:
+    """What a worker's first message says of the task's exploits under workers_told (prompts.yaml disclosure.worker),
+    or None at none: that the exploit exists and where, with no rule about it."""
+    if config.workers_told == "none":
+        return None
+    if config.workers_told != "both":
+        words = told_words(words, "prior_work", config.workers_told)
+    if not words or "prior_work" not in words:
+        raise ValueError("workers_told needs a variant whose scenario gives prior_work")
+    return load_prompts()["disclosure"][WORDINGS[config.workers_told_wording]].format(told=words["prior_work"])
 
 
 def role_briefing(config: SwarmConfig, names: list[str]) -> str | None:

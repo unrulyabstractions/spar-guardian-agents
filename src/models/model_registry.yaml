@@ -225,6 +225,19 @@ models:
       a third of a three-worker team's tokens costs 0.302 here. Precision is not listed; OpenAI serves its own weights.
       A live check that day (three repeated calls, a tool call, a control) showed the cache written at 1.25, then read
       and billed at 0.05, tool calls working, and a pinned call to a host that does not exist refused.
+  gpt-6.2-sol-openrouter:
+    inspect: openrouter/openai/gpt-6.2-sol
+    provider: openrouter
+    routing: {order: [openai], allow_fallbacks: false}
+    context: 1050000
+    max_output: 128000
+    reasoning: reasoning model
+    usd_per_million: {input: 2.00, cached_input: 0.10, output: 10.00, cache_write: 2.50}
+    long_prompt: {over: 272000, input: 4.00, cached_input: 0.20, output: 15.00, cache_write: 5.00}
+    price_source: OpenRouter's model list on 2026-11-25 (input 2.00, cached 0.10, output 10.00), the OpenAI endpoint the routing pins; the long-prompt rates are gpt-6.1-sol's, unchecked for 6.2
+    cheatbench: []
+    status: candidate
+    notes: Sol 6.2, listed on OpenRouter since 2026-11-17, at the gpt-6.1-sol price. No direct entry yet. For Lucy's disclosure-tier runs (2026-11-25), carried over from her fork's guardian6.
   gpt-5-mini-openrouter:
     inspect: openrouter/openai/gpt-5-mini
     provider: openrouter
