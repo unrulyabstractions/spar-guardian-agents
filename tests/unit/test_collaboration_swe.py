@@ -714,7 +714,7 @@ def test_no_worker_of_disregulator_workers_1_can_cheat_alone():
 
 # ---------------------------------------------------------------------------- the runs of disregulator_headline_0
 DISREGULATOR_HEADLINE_PLANS = [settings.ROOT / "studies" / "plans" / f"disregulator_headline_0{part}.yaml"
-                               for part in ("_boxes", "_boxes_terra4", "_boxes8", "_boxes16")]
+                               for part in ("_boxes_g", "_boxes_f", "_boxes_terra4", "_boxes8", "_boxes16")]
 DISREGULATOR_HEADLINE_WORKERS = {"luna": (2, 4, 8, 16), "haiku": (2, 4, 8, 16), "ember": (2, 4, 8, 16), "terra": (2, 4)}
 """Each worker model's team sizes: Terra runs in teams of 2 and 4 only."""
 DISREGULATOR_HEADLINE_ROWS = ("baseline", "disregulator_deepseek", "disregulator_hy4")
