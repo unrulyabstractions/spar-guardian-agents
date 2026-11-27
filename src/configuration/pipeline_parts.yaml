@@ -49,7 +49,7 @@ parts:
     files: [src/replay/*.py, src/domains/*/*_replay.py, scripts/study/replay_study.py]
     pins: []
     version: 2
-    fingerprint: sha256:f50d5fa42b3e74dca99dd25755db7efb96b846968b070a3a2422fd31913d2554
+    fingerprint: sha256:bed76ac2d8a8b2807f465b0067998ef5fb48cf9f91309854917f254500a888d0
     log:
       1: '2026-11-22 first version: the faithful replay''s steps.jsonl and replay.json, and its tmp_snapshots.json
         of c619e3d'
@@ -72,6 +72,8 @@ parts:
         scorer''s probe fields, repository script and staged times; its unit tests pass) (re-locked 2026-11-25:
         unsubmit: a stored config reads through SwarmConfig.from_record, which gives unsubmit false where
         the record has no key; no stored byte changes) (re-locked 2026-11-26: 2026-11-26 src/replay/replay_run.py:
+        a seed file planted in a clone''s root is excluded from git as the run excluded it; no stored
+        run holds such a file, so no stored byte changes) (re-locked 2026-11-26: 2026-11-26 src/replay/replay_run.py:
         a seed file planted in a clone''s root is excluded from git as the run excluded it; no stored
         run holds such a file, so no stored byte changes)'
   judge_cheatbench:

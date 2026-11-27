@@ -146,7 +146,7 @@ def plant_seed(box, run: RunDir, services: set[str]) -> list[dict]:
             raise ReplayRefused(f"seed file {item['path']} was planted on {service}, a machine the replay has not")
         box.must_run(service, ["sh", "-c", SEED_PLANT, "sh", item["path"], item["owner"]], f"seed file {item['path']}",
                      stdin=texts[item["name"]].encode(), user="root")
-        if item.get("git_excluded"):        # a file in the root of the agent's clone, kept out of git as the run kept it
+        if item.get("git_excluded"):        # a file in the clone's root, kept out of git as the run kept it
             box.must_run(service, ["sh", "-c", staging.kept_out_of_git(item["path"])],
                          f"seed file {item['path']} kept out of git", user="root")
         planted.append({"service": service, "path": item["path"], "owner": item["owner"]})
