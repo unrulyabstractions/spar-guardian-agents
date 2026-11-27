@@ -24,15 +24,17 @@
 # file under umask 077, then mv: a regular file of mode 600, never on a command line, never printed. The box checks
 # its mode and prints only its length.
 #
-# Once /root/box_id shows the endpoint reaches this instance, the launcher starts under nohup setsid with /root/.box_env
-# sourced, uv on its PATH and UV_NO_SYNC set (the cells' `uv run` uses the .venv the launch pinned as it is). Its output
-# goes to /root/launcher.log and its pid to /root/launcher.pid. A launcher alive on the box is refused.
+# Before any key goes, the box must show /root/box_id naming this instance (the endpoint reaches it) and no launcher
+# alive: a live launcher's runs read the key file and workspace file as each starts, so replacing them under it is
+# refused. The launcher then starts under nohup setsid with /root/.box_env sourced, uv on its PATH and UV_NO_SYNC set
+# (the cells' `uv run` uses the .venv the launch pinned as it is), after the same two checks again. Its output goes to
+# /root/launcher.log and its pid to /root/launcher.pid.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 cd "$root"
 if [ $# -lt 1 ]; then
-  sed -n '2,29p' "$0"
+  sed -n '2,31p' "$0"
   exit 2
 fi
 id=$1
@@ -61,17 +63,23 @@ key_files=()
 IFS=, read -r -a key_files <<< "$key_list"
 echo "== box $id: python -m ${launcher[*]}"
 
-# send_key: the box's key into /root/.box_env, its length checked on the box; never printed.
-send_key() {
-  sent_from=BOX_$name
-  check=(check "$name" --box-id "$id")
+sent_from=BOX_$name
+if [ "$main_key" -eq 1 ]; then
+  sent_from=$name
+fi
+
+# check_box_key: OpenRouter must cap the key and enough must be left for the box's runs; only --main-key lets the main
+# key pass. Nothing goes to the box.
+check_box_key() {
+  local check=(check "$name" --box-id "$id")
   if [ "$main_key" -eq 1 ]; then
-    sent_from=$name
     check+=(--main-key)
   fi
-  # OpenRouter must cap the key and enough must be left for the box's runs; only --main-key lets the main key pass
   uv run python -m scripts.box.box_key "${check[@]}" || exit 1
+}
 
+# send_key: the box's key into /root/.box_env, its length checked on the box; never printed.
+send_key() {
   echo "== the key ($name, from $sent_from) into /root/.box_env"
   printf 'export %s=%q\n' "$name" "${!sent_from}" \
     | "$here/box_ssh.sh" "$id" 'umask 077 && trap "rm -f /root/.box_env.new" EXIT HUP INT TERM &&
@@ -153,31 +161,27 @@ send_key_files() {
   done
 }
 
-if [ "$mock" -eq 1 ]; then
-  echo "== the mock model: no key goes to the box"
-else
-  check_key_files
-  send_key
-  send_key_files
-fi
-
-echo "== the launcher"
-"$here/box_ssh.sh" "$id" "bash -s -- $(printf '%q ' "$id" "${launcher[@]}")" <<'REMOTE'
+# on_box: the box's side, run as `bash -s -- ready <id>` (the two checks alone) or `bash -s -- start <id> <launcher>`.
+on_box() {
+  cat <<'REMOTE'
 set -euo pipefail
 alive() { [ -f /root/launcher.pid ] && grep -qs scripts.study.run_study "/proc/$(cat /root/launcher.pid)/cmdline"; }
-start() {
-  local id=$1
-  shift
-  if [ "$(cat /root/box_id 2> /dev/null || true)" != "$id" ]; then
-    echo "refused: /root/box_id names $(cat /root/box_id 2> /dev/null || echo nothing), not $id: the endpoint" \
+# ready: /root/box_id names this instance and no launcher is alive on the box.
+ready() {
+  if [ "$(cat /root/box_id 2> /dev/null || true)" != "$1" ]; then
+    echo "refused: /root/box_id names $(cat /root/box_id 2> /dev/null || echo nothing), not $1: the endpoint" \
       "reaches another box, or box_setup.sh never ran"
     exit 1
   fi
-  cd /root/work
   if alive; then
     echo "refused: a launcher is alive (pid $(cat /root/launcher.pid))"
     exit 1
   fi
+}
+start() {
+  ready "$1"
+  shift
+  cd /root/work
   rm -f /root/launcher.pid
   echo "== $(date -u +%FT%TZ) box_run: $*" >> /root/launcher.log
   # shellcheck disable=SC2016  # the inner bash expands "$@" and $$
@@ -200,5 +204,25 @@ start() {
   tail -n 30 /root/launcher.log
   exit 1
 }
-start "$@" < /dev/null
+case $1 in
+  ready) ready "$2" ;;
+  start) shift; start "$@" < /dev/null ;;
+esac
 REMOTE
+}
+
+if [ "$mock" -eq 0 ]; then
+  check_key_files
+  check_box_key
+fi
+echo "== the box: its instance, and no launcher alive"
+on_box | "$here/box_ssh.sh" "$id" "bash -s -- ready $(printf %q "$id")"
+if [ "$mock" -eq 1 ]; then
+  echo "== the mock model: no key goes to the box"
+else
+  send_key
+  send_key_files
+fi
+
+echo "== the launcher"
+on_box | "$here/box_ssh.sh" "$id" "bash -s -- start $(printf '%q ' "$id" "${launcher[@]}")"

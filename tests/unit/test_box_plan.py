@@ -156,8 +156,36 @@ def test_a_regulator_straight_at_anthropic_needs_the_key_file_here(here, fake_ho
     assert fleet_plan.key_problems(box) == lacking                           # a link to nothing
     real.parent.mkdir()
     real.write_text(FAKE_ANTHROPIC + "\n")
+    real.chmod(0o600)
     assert fleet_plan.key_problems(box) == []
     assert f"   ~/{ANTHROPIC_KEY} goes to the box for 1 run" in fleet_plan.lines(fleet_plan.assign(plan))
+
+
+@pytest.mark.parametrize("name, text, mode, words", [
+    ("anthropic_key", FAKE_ANTHROPIC + "\n", 0o644, "is open to group or others"),
+    ("anthropic_key", "not a key at all\r\n", 0o600, "must hold the key alone on one line"),
+    ("anthropic_key", "", 0o600, "must hold the key alone on one line"),
+    ("anthropic_key.workspace", "wrkspc_test0000\n", 0o640, "is open to group or others"),
+    ("anthropic_key.workspace", "not a workspace\n", 0o600, "must hold the workspace ID alone on one line"),
+])
+def test_a_key_file_or_workspace_this_machine_would_refuse_is_refused(here, fake_home, name, text, mode, words):
+    """A key file or its workspace file is checked as this machine reads it (model_registry.read_key_file and
+    workspace_id), so a file open to group or others, or one that is not its one line, never reaches a box, whose copy
+    is mode 600 whatever this machine's was. The refusal names the file, never its content."""
+    plan = write_plan(here, {"a": {"settings": ["regulators=1", "regulator_model=claude-haiku-5-5"]}})
+    [box] = fleet_plan.assign(plan).boxes
+    key = fake_home / ANTHROPIC_KEY
+    key.parent.mkdir(parents=True)
+    key.write_text(FAKE_ANTHROPIC + "\n")
+    key.chmod(0o600)
+    (key.parent / "anthropic_key.workspace").write_text("wrkspc_test0000\n")
+    (key.parent / "anthropic_key.workspace").chmod(0o600)
+    assert fleet_plan.key_problems(box) == []
+    (key.parent / name).write_text(text)
+    (key.parent / name).chmod(mode)
+    [problem] = fleet_plan.key_problems(box)
+    assert problem.startswith(f"claude-haiku-5-5: {key.parent / name} ") and words in problem
+    assert not (text.strip() and text.strip() in problem)
 
 
 def test_a_key_file_outside_the_home_is_refused(here):
@@ -172,6 +200,7 @@ def test_a_key_file_outside_the_home_is_refused(here):
 def test_a_model_on_another_key_is_still_refused_beside_the_key_file(here, fake_home):
     (fake_home / ANTHROPIC_KEY).parent.mkdir(parents=True)
     (fake_home / ANTHROPIC_KEY).write_text(FAKE_ANTHROPIC + "\n")
+    (fake_home / ANTHROPIC_KEY).chmod(0o600)
     plan = write_plan(here, {"a": {"settings": ["regulators=1", "regulator_model=claude-haiku-5-5"]},
                              "b": {"settings": ["regulators=1", "regulator_model=gpt-6-luna"]}})
     [box] = fleet_plan.assign(plan).boxes
@@ -264,6 +293,9 @@ esac
 STAND_IN_SSH = """#!/bin/sh
 printf '%s\\n' "$*" >> "$STAND_IN/ssh_arguments"
 cat >> "$STAND_IN/ssh_input"
+case "$*" in
+  *"bash -s -- ready "*) [ ! -f "$STAND_IN/busy" ] || { echo "refused: a launcher is alive (pid 42)"; exit 1; } ;;
+esac
 """
 
 
@@ -300,8 +332,8 @@ def test_box_run_starts_the_launcher_from_run_args_under_setsid_with_the_box_env
     result = box_run(BOX_OPENROUTER_API_KEY=SCOPED, OPENROUTER_API_KEY=MAIN)
     assert result.returncode == 0, result.stdout + result.stderr
     last = box_run.sent("ssh_arguments").splitlines()[-1]
-    assert last.endswith(" box bash -s -- 7 scripts.study.run_study studies/plans/study_x.yaml --yes --only t\\ a "
-                         "--limit max_agents=44 ")
+    assert last.endswith(" box bash -s -- start 7 scripts.study.run_study studies/plans/study_x.yaml --yes --only "
+                         "t\\ a --limit max_agents=44 ")
     started = box_run.sent("ssh_input")
     assert "nohup setsid bash -c" in started and "UV_NO_SYNC=1" in started and "/root/.local/bin" in started
     assert ". /root/.box_env" in started and "echo $$ > /root/launcher.pid" in started
@@ -404,6 +436,26 @@ def test_box_run_removes_an_old_workspace_on_the_box_when_none_is_here(box_run, 
     assert result.returncode == 0, result.stdout + result.stderr
     assert f"rm -f /root/{ANTHROPIC_KEY}.workspace\n" in box_run.sent("ssh_arguments")
     assert FAKE_ANTHROPIC + "\n" in box_run.sent("ssh_input")
+
+
+@pytest.mark.parametrize("flags", [("--main-key",), ("--mock",)])
+def test_box_run_asks_the_box_before_any_key_and_sends_none_while_a_launcher_lives(box_run, key_home, flags):
+    """A live launcher's runs read the key file and workspace file as each starts, so the box's instance and its
+    launcher are checked before any key goes, and a box that refuses gets none."""
+    (key_home / (ANTHROPIC_KEY + ".workspace")).write_text(WORKSPACE + "\n")
+    result = box_run(*flags, OPENROUTER_API_KEY=MAIN, HOME=str(key_home))
+    assert result.returncode == 0, result.stdout + result.stderr
+    arguments = box_run.sent("ssh_arguments").splitlines()
+    assert arguments[0].endswith(" box bash -s -- ready 7")
+    assert "refused: /root/box_id names" in box_run.sent("ssh_input").split("set -euo pipefail")[1]
+    for stand_in in ("ssh_arguments", "ssh_input"):
+        (box_run.stand_in / stand_in).unlink()
+    (box_run.stand_in / "busy").write_text("")
+    result = box_run(*flags, OPENROUTER_API_KEY=MAIN, HOME=str(key_home))
+    assert result.returncode == 1 and "refused: a launcher is alive (pid 42)" in result.stdout
+    assert box_run.sent("ssh_arguments").splitlines() == [arguments[0]]
+    for secret in (FAKE_ANTHROPIC, WORKSPACE, MAIN):
+        assert secret not in box_run.sent("ssh_input")
 
 
 def test_box_run_refuses_a_missing_key_file_before_sending_any_key(box_run, key_home):

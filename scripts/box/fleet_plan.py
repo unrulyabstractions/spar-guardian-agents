@@ -234,9 +234,24 @@ def key_files(box: BoxPlan) -> list[str]:
     return sorted(key_file_runs(box))
 
 
+def key_file_problem(model: str, path: Path) -> str | None:
+    """Why this machine's key file of the model, or its workspace file, may not go to a box, never their content: the
+    key file is missing (a link counts as the file it names), or either file is one this machine would refuse
+    (model_registry.read_key_file and workspace_id: open to group or others, or not its one line). None when both
+    pass."""
+    if not path.is_file():
+        return f"{model} takes its key from ~/{home_key_file(model)}, which this machine lacks"
+    try:
+        model_registry.read_key_file(path)
+        model_registry.workspace_id(provider_of(resolve(model)))
+    except ValueError as error:
+        return f"{model}: {error}"
+    return None
+
+
 def key_problems(box: BoxPlan) -> list[str]:
-    """One line per model of the box's runs whose key a box cannot get: a key file outside the home or one this machine
-    lacks (a link counts as the file it names), or a key variable other than BOX_KEY, the one variable a box holds."""
+    """One line per model of the box's runs whose key a box cannot get: a key file outside the home, or one this machine
+    lacks or would refuse (key_file_problem), or a key variable other than BOX_KEY, the one variable a box holds."""
     problems = []
     for model in sorted({model for run in box.runs for model in run_models(run, box.settings)}):
         path, names = key_file_of(model), key_env(resolve(model))
@@ -246,8 +261,8 @@ def key_problems(box: BoxPlan) -> list[str]:
                                 "files this machine holds")
         elif not path.is_relative_to(Path.home()):
             problems.append(f"{model} takes its key from {path}, outside the home, which has no place on a box")
-        elif not path.is_file():
-            problems.append(f"{model} takes its key from ~/{home_key_file(model)}, which this machine lacks")
+        elif problem := key_file_problem(model, path):
+            problems.append(problem)
     return problems
 
 

@@ -66,11 +66,13 @@ commit's.
 A box holds the OpenRouter key and, when its runs need it, the Anthropic key file. A model whose registry provider names
 a `key_file` (Claude called straight at Anthropic, such as `claude-haiku-5-5`) takes its key from that file, not from a
 variable. `create` records in the box's entry the key files under the home its runs need (`key_files`), and `plan` and
-`create` refuse such a model when this machine lacks the file. `box_run.sh` sends each one, its links resolved, to the
-same path under `/root` (`/root/.config/spar-guardian-agents/anthropic_key`), and the workspace file beside it
-(`anthropic_key.workspace`) when this machine has one. Both go like the OpenRouter key: through ssh's standard input,
-under `umask 077`, to a `.new` file that `mv` puts in place, never on a command line, never printed. The box checks the
-mode and prints only the length. The capture never pulls these files and counts them as excluded.
+`create` refuse such a model when this machine lacks the file or would refuse it (open to group or others, or not one
+line of the key; its workspace file likewise). `box_run.sh` asks the box first: `/root/box_id` must name the instance
+and no launcher may be alive, since a live launcher's runs read these files as each starts. It then sends each one, its
+links resolved, to the same path under `/root` (`/root/.config/spar-guardian-agents/anthropic_key`), and the workspace
+file beside it (`anthropic_key.workspace`) when this machine has one. Both go like the OpenRouter key: through ssh's
+standard input, under `umask 077`, to a `.new` file that `mv` puts in place, never on a command line, never printed. The
+box checks the mode and prints only the length. The capture never pulls these files and counts them as excluded.
 
 `capture_check.sh --pull` brings the box's `runs/` and `logs/` into the same folders here, its launcher output and the
 plan copy it rewrote as gates opened into `logs/<study>/boxes/<id>/`, and every other file into
@@ -100,6 +102,7 @@ answer, it stops the box (`fleet stop`). A box it cannot capture is stopped, not
 | `no memory need per agent` | add `limits.needs.<task>.memory_gb` to the plan, or pass `--max-agents` |
 | `needs OPENAI_API_KEY, and a box holds only OPENROUTER_API_KEY and the key files this machine holds` | a run's model, a role's too, must route through OpenRouter or take its key from a key file |
 | `takes its key from ~/<key file>, which this machine lacks` | write the key to that file here (chmod 600) |
+| `is open to group or others`, `must hold the key alone on one line` | `chmod 600` the file, or write the key alone on one line |
 | `which its entry does not record` (run-args) | an entry older than `key_files`: `repin` it to its commit |
 | `<plan> here differs from commit <sha>` | commit and push the file, or restore it: the boxes run the commit's |
 | `<run> has traces here` | a run folder, eval log or console log of the name is here: set it aside first |
@@ -112,7 +115,7 @@ answer, it stops the box (`fleet stop`). A box it cannot capture is stopped, not
 | `<run> has traces here` (run-args) | a failed box run's pulled traces count too: set them aside |
 | `no longer holds the box's targets` (run-args, repin) | pin a commit whose plan holds them whole |
 | `no box key`, `no credit limit`, `less than the $X the runs of the boxes that hold it may spend` | the key needs a cap in OpenRouter and room for every run of every open box that holds it |
-| `a launcher is alive` | the box runs already; watch it |
+| `a launcher is alive` | the box runs already, and no key went to it: watch it |
 | `/root/box_id names ...` | the endpoint reaches another box: run `fleet status` |
 | `this machine holds another run of <run>` (capture) | an eval log here, or the one a run.json here names, is not the box's: nothing is pulled; set the local run aside first |
 | `Docker holds ... containers` (capture) | a stopped run's workspace: `box_teardown.sh` saves it under `/root/docker_saved` and passes `--accept-docker` |
