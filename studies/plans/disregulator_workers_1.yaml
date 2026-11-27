@@ -64,11 +64,12 @@ targets:
     settings: [n_agents=3, max_concurrency=3]
 # max_agents counts every cell script on this Mac, so this study shares it with regulator_headline_0: with 34
 # agents live on 2026-11-26, Docker's 14 processors were all busy and the grading of four runs passed its 600 s.
-# 28 since 22:15 that day: with 19 agents live the containers used 301% of the 1400% (docker stats).
+# 24 since 22:25 that day: with 19 agents live the containers used 301% of the 1400% (docker stats), and with 28,
+# as new teams built, they reached 1269% for a moment.
 limits:
   max_runs: 10
   max_per_task: {swe: 10}
-  max_agents: 28
+  max_agents: 24
   spacing_s: 60
   needs:
     swe: {disk_gb: 2.3, memory_gb: 0.55, per: agent}
