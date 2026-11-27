@@ -5279,3 +5279,46 @@ Worktree branch worktree-wf_06767850-855-1, commits eb0b406, 4e52b9d, 986b444 an
 - What I told the user wrongly this evening: asked "did deepseek neg control end?", I reported the generic
   negative control (38 of 40 samples) when the user meant the negative control under the stronger rules, which had
   no run. Corrected to the user at once when they said so.
+
+## 2026-11-27 (night): six machines of regulator_headline_0 and disregulator_workers_1 captured and destroyed
+
+Each destroy went through `scripts/box/fleet destroy` (`.claude/box_teardown.sh`), after `capture_check.sh` swept the
+machine and compared every file with its copy here. I read each teardown log's sweep line myself.
+
+| Instance | Ran | Swept | Captured | Missing | Different | Destroy sent (UTC) | Cost |
+|---|---|---|---|---|---|---|---|
+| 62771426 | regulator_headline_0, 30 runs | 68233 | 2395 | 0 | 0 | 12:19:21 | $6.70 |
+| 62783476 | regulator_headline_0, 10 runs | 67363 | 1525 | 0 | 0 | 12:20:11 | $4.78 |
+| 62782977 | regulator_headline_0, 15 runs | 67348 | 1491 | 0 | 0 | 12:55:36 | $4.79 |
+| 62829706 | disregulator_workers_1, 15 runs with a disregulator | 66628 | 850 | 0 | 0 | 13:08:39 | $1.79 |
+| 62825256 | regulator_headline_0, 15 runs (identified, ian_flipt, 4/8/16 workers) | 66853 | 1077 | 0 | 0 | 13:23:06 | $10.91 |
+
+- 62825254 (rented 08:02 UTC for the same rows, never set up) was destroyed at about 08:50 UTC with `--accept-loss`:
+  it downloaded at about 64 KB/s, its clone of a submodule was incomplete, so the sweep could not run. I listed it over
+  ssh first: 0 runs, 0 logs, 0 containers, no Inspect data. Its five setup files are in logs/boxes/62825254/final,
+  sizes equal and setup.log's sha256 equal. Lost: a partial checkout of pushed commits. Cost $1.27.
+- Samples run again before the destroys, each after `run_directory.set_aside_attempt` on the machine and here:
+  62771426 `ian_flipt_deepseek_w16_negative_control_none_s3` and `ian_gflipt_deepseek_w16_reg2_luna_none_s3` (both
+  had stopped at their start before 19221759); 62783476 `ian_gflipt_deepseek_w16_reg2_haiku_none_s5` (`OSError:
+  Argument list too long: 'docker'`, read in its run log); the Mac `ian_gflipt_deepseek_w2_reg2_haiku_none_s3`
+  (failed episodes: timeout). The three machine reruns ended with exit 0 and a stored label; the Mac's is queued.
+- A capture refuses to pull when a run's eval log here differs from the machine's ("this machine holds another run").
+  That happened on three machines because I stopped the watcher before its last pass, so the copies here were the
+  logs' first bytes. For 62825256 I moved the two partial copies aside with `run_directory.set_aside_attempt`
+  (`runs/` and `logs/regulator_headline_0/attempts/ian_flipt_deepseek_w8_negative_control_identified_none_s1.1` and
+  `_s2.1`: each holds one eval stub of 1954 bytes, they are not failed attempts). For the others one `watch.sh --once`
+  pass before the teardown was enough; `finish_box.sh` in the scratchpad now does that for every machine.
+- Some machines give one ssh stream 40 to 150 KB/s and scale with the number of streams (62825256: 51 KB/s with one,
+  677 KB/s with ten; 62829706: 38 KB/s with one, 656 KB/s with ten, about 4 MB/s with 26). The Mac itself downloaded
+  at 85 MB/s. I pulled their runs and logs with the watcher's rsync form in parallel streams.
+- 62829706: the guard's two teardown tries failed on that refusal and it stopped the machine at 12:42:21 UTC, with one
+  run's eval log (1,292,866,899 bytes) not here. I started the machine again through the fleet's client and identity
+  checks, split the file into 26 pieces under /tmp there, pulled them in parallel, joined them here: sha256
+  da48cc210af33b4789c5328ae8fc1a257dcc65d8ebdee268318697a0adf73a30 on both sides, sizes equal. I placed the file,
+  ran `rsync --checksum` against the machine (0 files transferred, 0 bytes of data), removed the pieces there, then
+  the capture passed. VERIFIED.
+- 62825256's last 15 missing files were Inspect's traces, `view/last-eval-result` and three empty lock files; pulled
+  into logs/boxes/62825256/files, the check then passed and the destroy's snapshot read 1077 files back against the
+  manifest. VERIFIED.
+- Not verified yet: the content of the runs these machines made (labels read on the machines only). The studies'
+  verification follows when their last machines are captured.
