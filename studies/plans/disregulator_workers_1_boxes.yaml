@@ -1,0 +1,116 @@
+# disregulator_workers_1 (2026-11-27), the rows with a disregulator. The user: "For all, try smallest setting with
+# diregulator from exp, with a variety of diregulators", "but only in one of ther versions", then "folder, go ahead".
+# Each of the study's five worker models as three workers with one disregulator at level instructed, as in
+# disregulator_existence_2: DeepSeek V4.1 Flash, Grok 4.7 or Kimi K3. On ian_gflipt (with check_fix), under unsubmit,
+# with the seed pack swe/notes_folder: the board's posts and NOTES.md point at /var/backups/flipt/. One run per cell,
+# seed 1: 5 worker models x 3 disregulator models = 15 runs. A target is ian_gflipt_<workers>_disregulator_<model>; its
+# run is <target>_notes_folder_s1. No judge. Haiku workers go straight to Anthropic on the user's temporary key; every
+# other model through OpenRouter.
+# Caps: the default $5 a run; $8 with Terra workers, as in the study's other rows.
+# THIS FILE runs on rented machines. The baseline and the positive control run on the Mac from
+# disregulator_workers_1.yaml.
+study: disregulator_workers_1
+seeds: [1]
+# What every run of the study is given, as in disregulator_workers_0.
+settings: [rounds=30, calls_per_round=10, round_time_s=600, time_limit_s=18000, cost_limit_usd=5, unsubmit=true,
+           submit_delay_rounds=3]
+targets:
+  ian_gflipt_luna_disregulator_deepseek:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [swe/notes_folder]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=deepseek-flash-openrouter]
+  ian_gflipt_luna_disregulator_grok:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [swe/notes_folder]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=grok-4.7-openrouter]
+  ian_gflipt_luna_disregulator_kimi:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: gpt-6-luna-openrouter
+    packs: [swe/notes_folder]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=kimi-k3-openrouter]
+  ian_gflipt_haiku_disregulator_deepseek:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: claude-haiku-5-5
+    packs: [swe/notes_folder]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=deepseek-flash-openrouter]
+  ian_gflipt_haiku_disregulator_grok:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: claude-haiku-5-5
+    packs: [swe/notes_folder]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=grok-4.7-openrouter]
+  ian_gflipt_haiku_disregulator_kimi:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: claude-haiku-5-5
+    packs: [swe/notes_folder]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=kimi-k3-openrouter]
+  ian_gflipt_terra_disregulator_deepseek:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: gpt-6.1-terra-openrouter
+    packs: [swe/notes_folder]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=deepseek-flash-openrouter, cost_limit_usd=8]
+  ian_gflipt_terra_disregulator_grok:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: gpt-6.1-terra-openrouter
+    packs: [swe/notes_folder]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=grok-4.7-openrouter, cost_limit_usd=8]
+  ian_gflipt_terra_disregulator_kimi:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: gpt-6.1-terra-openrouter
+    packs: [swe/notes_folder]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=kimi-k3-openrouter, cost_limit_usd=8]
+  ian_gflipt_hy4_disregulator_deepseek:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: hy4-flash-openrouter
+    packs: [swe/notes_folder]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=deepseek-flash-openrouter]
+  ian_gflipt_hy4_disregulator_grok:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: hy4-flash-openrouter
+    packs: [swe/notes_folder]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=grok-4.7-openrouter]
+  ian_gflipt_hy4_disregulator_kimi:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: hy4-flash-openrouter
+    packs: [swe/notes_folder]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=kimi-k3-openrouter]
+  ian_gflipt_ember_disregulator_deepseek:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: muse-ember-openrouter
+    packs: [swe/notes_folder]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=deepseek-flash-openrouter]
+  ian_gflipt_ember_disregulator_grok:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: muse-ember-openrouter
+    packs: [swe/notes_folder]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=grok-4.7-openrouter]
+  ian_gflipt_ember_disregulator_kimi:
+    module: studies.cells.swe.ian_gflipt_minimal
+    model: muse-ember-openrouter
+    packs: [swe/notes_folder]
+    settings: [n_agents=4, max_concurrency=4, disregulators=1, disregulator_level=instructed,
+               disregulator_model=kimi-k3-openrouter]
+# box_run.sh starts each box's launcher with --limit max_agents=<the box's agents at once>, in place of max_agents
+# here. max_runs is high so that a box of small teams fills its agents.
+limits:
+  max_runs: 20
+  max_per_task: {swe: 20}
+  max_agents: 40
+  spacing_s: 60
+  needs:
+    swe: {disk_gb: 2.3, memory_gb: 0.55, per: agent}
