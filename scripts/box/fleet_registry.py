@@ -79,15 +79,16 @@ def registered(registry: dict, instance_id: int) -> dict | None:
 def box_entry(instance_id: int, label: str, assignment: Assignment, box: BoxPlan, offer: dict | None, launch: str,
               commit: str) -> dict:
     """The registry's record of one instance: what it runs (the study, the plan and spec as the clone holds them, the
-    box's targets, its agents at once, its runs and their caps, the commit) and what identifies and prices it. Never
-    the reply's keys."""
+    box's targets, its agents at once, its runs and their caps, the key files under the home its runs need, the commit)
+    and what identifies and prices it. Never the reply's keys."""
     offer = offer or {}
     return {"id": instance_id, "label": label, "box": box.name, "study": assignment.study, "plan": assignment.plan,
             "gates": assignment.gates, "targets": box.targets, "max_agents": box.max_agents, "runs": len(box.runs),
-            "cap_usd": round(box.cap_usd, 2), "tasks": box.tasks, "floor": list(box.floor), "commit": commit,
-            "launch": launch, "offer": offer.get("id"), "machine_id": offer.get("machine_id"),
-            "dph": offer.get("dph_total"), "cores": offer.get("cpu_cores_effective"),
-            "ram_gb": round(ram_share_gb(offer), 1) if offer else None, "disk_gb": DISK_GB,
+            "cap_usd": round(box.cap_usd, 2), "key_files": fleet_plan.key_files(box), "tasks": box.tasks,
+            "floor": list(box.floor), "commit": commit, "launch": launch, "offer": offer.get("id"),
+            "machine_id": offer.get("machine_id"), "dph": offer.get("dph_total"),
+            "cores": offer.get("cpu_cores_effective"), "ram_gb": round(ram_share_gb(offer), 1) if offer else None,
+            "disk_gb": DISK_GB,
             "reliability": offer.get("reliability"), "geolocation": offer.get("geolocation"),
             "created": now_iso(), "ssh": None, "destroy_sent": None, "destroyed": None}
 
@@ -165,9 +166,10 @@ def load_launch(launch: str) -> dict:
 
 
 def open_entry(instance_id: int) -> dict:
-    """A registered box that is not destroyed, with its launch's pins."""
+    """A registered box that is not destroyed, with its launch's pins. An entry older than key_files needs none."""
     entry = registered(load_registry(), instance_id)
     if entry is None or entry["destroyed"]:
         raise RuntimeError(f"{instance_id} is not a registered box that is not destroyed")
     pins = load_launch(entry["launch"])
-    return entry | pins | minimums(entry["floor"]) | {"commit": entry["commit"], "key": BOX_KEY}
+    return entry | pins | minimums(entry["floor"]) | {"commit": entry["commit"], "key": BOX_KEY,
+                                                      "key_files": entry.get("key_files") or []}

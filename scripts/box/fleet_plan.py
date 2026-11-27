@@ -26,7 +26,8 @@ from scripts.box import fleet_layout
 from scripts.box.fleet_layout import BOX_KEY, floor_of, from_root
 from scripts.study import gated_study, run_study
 from scripts.study.run_study import Cell
-from src.models.model_registry import key_env, resolve
+from src.models import model_registry
+from src.models.model_registry import key_env, provider_of, resolve
 
 AGENTS_PER_CORE = 1.4
 """The Mac's figure: it ran 20 agents on Docker's 14 cores (studies/gated/regulator_scale_1.yaml). No box has
@@ -203,11 +204,51 @@ def run_models(run: Cell, settings: tuple[str, ...]) -> set[str]:
     return {run.model, *(pair.split("=", 1)[1] for pair in pairs if pair.split("=", 1)[0].endswith("_model"))}
 
 
+def key_file_of(model: str) -> Path | None:
+    """The key file the model's provider takes its key from (the registry's `key_file`); None for a provider that
+    reads a variable, and outside the registry."""
+    provider = provider_of(resolve(model))
+    return model_registry.key_path(provider) if provider else None
+
+
+def home_key_file(model: str) -> str | None:
+    """The model's key file (key_file_of) as a path under the home, such as .config/spar-guardian-agents/anthropic_key;
+    None without one, and for one outside the home, which has no place on a box (key_problems refuses it)."""
+    path = key_file_of(model)
+    return path.relative_to(Path.home()).as_posix() if path and path.is_relative_to(Path.home()) else None
+
+
+def key_file_runs(box: BoxPlan) -> dict[str, list[str]]:
+    """{key file under the home (home_key_file): the names of the box's runs that call a model with that key file}."""
+    out: dict[str, list[str]] = {}
+    for run in box.runs:
+        needed = {home_key_file(model) for model in run_models(run, box.settings)} - {None}
+        for key_file in sorted(needed):
+            out.setdefault(key_file, []).append(run.name)
+    return out
+
+
+def key_files(box: BoxPlan) -> list[str]:
+    """The key files under the home the box's runs need, which box_run.sh sends to the same place under the box's
+    home."""
+    return sorted(key_file_runs(box))
+
+
 def key_problems(box: BoxPlan) -> list[str]:
-    """One line per model of the box's runs that needs a key other than BOX_KEY, the one key a box holds."""
-    models = sorted({model for run in box.runs for model in run_models(run, box.settings)})
-    return [f"{model} needs {' or '.join(key_env(resolve(model)))}, and a box holds only {BOX_KEY}"
-            for model in models if key_env(resolve(model)) not in ([], [BOX_KEY])]
+    """One line per model of the box's runs whose key a box cannot get: a key file outside the home or one this machine
+    lacks (a link counts as the file it names), or a key variable other than BOX_KEY, the one variable a box holds."""
+    problems = []
+    for model in sorted({model for run in box.runs for model in run_models(run, box.settings)}):
+        path, names = key_file_of(model), key_env(resolve(model))
+        if path is None:
+            if names not in ([], [BOX_KEY]):
+                problems.append(f"{model} needs {' or '.join(names)}, and a box holds only {BOX_KEY} and the key "
+                                "files this machine holds")
+        elif not path.is_relative_to(Path.home()):
+            problems.append(f"{model} takes its key from {path}, outside the home, which has no place on a box")
+        elif not path.is_file():
+            problems.append(f"{model} takes its key from ~/{home_key_file(model)}, which this machine lacks")
+    return problems
 
 
 def traces_here(study: str, name: str) -> list[str]:
@@ -257,6 +298,8 @@ def lines(assignment: Assignment) -> list[str]:
                        f"${sum(run.cap_usd(list(box.settings)) for run in group_runs):.2f})")
         if largest > box.max_agents:
             out.append(f"   !! a run of {largest} agents passes {box.max_agents}: it runs once no agent is live")
+        for key_file, names in key_file_runs(box).items():
+            out.append(f"   ~/{key_file} goes to the box for {runs_said(len(names))}")
         for problem in key_problems(box):
             out.append(f"   !! {problem}")
         for name, traces in held_here(assignment.study, box).items():

@@ -16,13 +16,15 @@
 
 plan prints a plan's assignment to boxes (fleet_plan.py): it needs no key and sends nothing. offers reads the
 on-demand offers that can hold a box. create is fleet_create.py, status fleet_status.py and destroy fleet_destroy.py.
-ids prints the registered boxes not yet destroyed. entry prints a box's fields for the shell scripts. repin moves boxes
-to a commit origin/main holds, when the launch's package list is still the .venv's, and sets each box's runs and caps to
+ids prints the registered boxes not yet destroyed. entry prints a box's fields for the shell scripts, a list joined by
+commas (key_files: the key files under the home its runs need, which box_run.sh sends). repin moves boxes to a commit
+origin/main holds, when the launch's package list is still the .venv's, and sets each box's runs, caps and key files to
 what that commit's plan gives its targets. run-args prints, one per line, what box_run.sh starts on a box after
 `.venv/bin/python -m`: the launcher on the box's plan, its targets and its agents at once, as its pinned commit holds
-them. It refuses a model that needs a key a box does not hold, a run of the box of which this checkout holds a trace
-the box did not make (the watch would mix the two), and a launcher of the study live on this machine. stop sends
-vast.ai's stop, which keeps the disk and bills storage alone, to a registered box of this repository.
+them. It refuses a model that needs a key a box does not hold, a key file the box's entry does not record, a run of
+the box of which this checkout holds a trace the box did not make (the watch would mix the two), and a launcher of the
+study live on this machine. stop sends vast.ai's stop, which keeps the disk and bills storage alone, to a registered box
+of this repository.
 """
 from __future__ import annotations
 
@@ -45,7 +47,7 @@ from src.measures.run_directory import RunDir
 
 ENTRY_FIELDS = ("study", "plan", "gates", "tasks", "box", "key", "label", "launch", "commit", "requirements",
                 "requirements_sha256", "python_version", "uv_version", "cores", "ram_gb", "dph", "min_cores",
-                "min_ram_gb", "min_disk_gb", "max_agents", "runs", "cap_usd")
+                "min_ram_gb", "min_disk_gb", "max_agents", "runs", "cap_usd", "key_files")
 
 
 def cmd_plan(args: argparse.Namespace) -> int:
@@ -117,7 +119,8 @@ def cmd_repin(args: argparse.Namespace) -> int:
         print(f"refused: {error}", file=sys.stderr)
         return 1
     for entry, box in moved:
-        update_box(entry["id"], commit=pin["commit"], runs=len(box.runs), cap_usd=round(box.cap_usd, 2))
+        update_box(entry["id"], commit=pin["commit"], runs=len(box.runs), cap_usd=round(box.cap_usd, 2),
+                   key_files=fleet_plan.key_files(box))
         print(f"{entry['id']}: {entry['commit']} to {pin['commit']}; runs {entry['runs']} to {len(box.runs)}, caps "
               f"${entry['cap_usd']:.2f} to ${box.cap_usd:.2f}; run box_setup.sh {entry['id']} before box_run.sh")
     return 0
@@ -148,11 +151,15 @@ def launcher_args(entry: dict, mock: bool) -> list[str]:
 
 
 def run_refusals(entry: dict, mock: bool) -> list[str]:
-    """Why the box may not start its launcher: a model that needs another key, a run of the box of which this checkout
-    holds a trace the box did not make, or a launcher of the study live on this machine. Its runs are those of its
-    pinned commit's plan; a mock launch's carry run_study.MOCK_SUFFIX in their study and names."""
+    """Why the box may not start its launcher: a model that needs another key, a key file its runs need that its entry
+    does not record (box_run.sh sends only those), a run of the box of which this checkout holds a trace the box did
+    not make, or a launcher of the study live on this machine. Its runs are those of its pinned commit's plan; a mock
+    launch's carry run_study.MOCK_SUFFIX in their study and names."""
     box = entry_box(entry)
     problems = [] if mock else fleet_plan.key_problems(box)
+    if not mock and (unrecorded := sorted(set(fleet_plan.key_files(box)) - set(entry["key_files"]))):
+        problems.append(f"the box's runs need {', '.join('~/' + name for name in unrecorded)}, which its entry does "
+                        f"not record: repin it to its commit to record it")
     suffix = run_study.MOCK_SUFFIX if mock else ""
     for name in (replace(run, suffix=suffix).name for run in box.runs):
         if traces := foreign_traces(entry["study"] + suffix, name):

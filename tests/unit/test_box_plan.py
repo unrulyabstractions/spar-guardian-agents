@@ -12,9 +12,10 @@ from pathlib import Path
 import pytest
 import yaml
 
-from scripts.box import fleet_layout, fleet_plan
+from scripts.box import box_sweep, fleet_layout, fleet_plan, fleet_registry
 from scripts.box.fleet_layout import ROOT
 from scripts.study import gated_study
+from src.models import model_registry
 
 BOX_FOLDER = ROOT / "scripts" / "box"
 PLANS, GATED = ROOT / "studies" / "plans", ROOT / "studies" / "gated"
@@ -118,7 +119,83 @@ def test_every_model_of_a_run_needs_the_box_s_key(here):
     plan = write_plan(here, {"a": {"settings": ["regulators=1", "regulator_model=gpt-6-luna"]}, "b": {}})
     [box] = fleet_plan.assign(plan).boxes
     assert fleet_plan.run_models(box.runs[0], box.settings) == {"deepseek-flash-openrouter", "gpt-6-luna"}
-    assert fleet_plan.key_problems(box) == ["gpt-6-luna needs OPENAI_API_KEY, and a box holds only OPENROUTER_API_KEY"]
+    assert fleet_plan.key_problems(box) == ["gpt-6-luna needs OPENAI_API_KEY, and a box holds only OPENROUTER_API_KEY "
+                                            "and the key files this machine holds"]
+
+
+ANTHROPIC_KEY = ".config/spar-guardian-agents/anthropic_key"
+FAKE_ANTHROPIC = "sk-ant-test-0000000000000000000000"
+
+
+@pytest.fixture
+def fake_home(tmp_path, monkeypatch):
+    """A home of this machine in tmp_path, without the Anthropic key file, where the registry's key files are looked
+    for (conftest's no_real_key_files puts them in a folder outside any home)."""
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(model_registry, "key_path", lambda provider: Path(name).expanduser() if (
+        name := model_registry.providers()[provider].get("key_file")) else None)
+    return home
+
+
+def test_a_regulator_straight_at_anthropic_needs_the_key_file_here(here, fake_home):
+    """The key file of a model whose provider names one goes to the box, so a plan with it passes once the file is
+    here, a link to the file included; a dangling link or no file is refused."""
+    plan = write_plan(here, {"a": {"settings": ["regulators=1", "regulator_model=claude-haiku-5-5"]}, "b": {}})
+    [box] = fleet_plan.assign(plan).boxes
+    assert fleet_plan.home_key_file("claude-haiku-5-5") == ANTHROPIC_KEY
+    assert fleet_plan.home_key_file("deepseek-flash-openrouter") is None
+    assert fleet_plan.key_file_runs(box) == {ANTHROPIC_KEY: [box.runs[0].name]} and len(box.runs) == 2
+    assert fleet_plan.key_files(box) == [ANTHROPIC_KEY]
+    lacking = [f"claude-haiku-5-5 takes its key from ~/{ANTHROPIC_KEY}, which this machine lacks"]
+    assert fleet_plan.key_problems(box) == lacking
+    real, key = fake_home / "keys" / "anthropic_key", fake_home / ANTHROPIC_KEY
+    key.parent.mkdir(parents=True)
+    key.symlink_to(real)
+    assert fleet_plan.key_problems(box) == lacking                           # a link to nothing
+    real.parent.mkdir()
+    real.write_text(FAKE_ANTHROPIC + "\n")
+    assert fleet_plan.key_problems(box) == []
+    assert f"   ~/{ANTHROPIC_KEY} goes to the box for 1 run" in fleet_plan.lines(fleet_plan.assign(plan))
+
+
+def test_a_key_file_outside_the_home_is_refused(here):
+    """conftest's no_real_key_files puts the key files in a folder outside the home, which has no place on a box."""
+    plan = write_plan(here, {"a": {"settings": ["regulators=1", "regulator_model=claude-haiku-5-5"]}})
+    [box] = fleet_plan.assign(plan).boxes
+    [problem] = fleet_plan.key_problems(box)
+    assert problem.startswith("claude-haiku-5-5 takes its key from ") and "outside the home" in problem
+    assert fleet_plan.key_files(box) == []
+
+
+def test_a_model_on_another_key_is_still_refused_beside_the_key_file(here, fake_home):
+    (fake_home / ANTHROPIC_KEY).parent.mkdir(parents=True)
+    (fake_home / ANTHROPIC_KEY).write_text(FAKE_ANTHROPIC + "\n")
+    plan = write_plan(here, {"a": {"settings": ["regulators=1", "regulator_model=claude-haiku-5-5"]},
+                             "b": {"settings": ["regulators=1", "regulator_model=gpt-6-luna"]}})
+    [box] = fleet_plan.assign(plan).boxes
+    assert fleet_plan.key_problems(box) == ["gpt-6-luna needs OPENAI_API_KEY, and a box holds only OPENROUTER_API_KEY "
+                                            "and the key files this machine holds"]
+
+
+def test_the_registry_entry_records_the_key_files_of_the_box_s_runs(here, fake_home):
+    plan = write_plan(here, {"a": {"settings": ["regulators=1", "regulator_model=claude-haiku-5-5"]}, "b": {}})
+    assignment = fleet_plan.assign(plan, boxes=2)
+    entries = [fleet_registry.box_entry(k, "spar-screen-x", assignment, box, None, "l0a1b2c", "c" * 40)
+               for k, box in enumerate(assignment.boxes, 1)]
+    held = {tuple(entry["targets"]): entry["key_files"] for entry in entries}
+    assert held == {("a",): [ANTHROPIC_KEY], ("b",): []}
+
+
+def test_every_key_file_of_the_registry_is_one_the_sweep_never_copies():
+    """box_sweep.py runs on the box with the standard library alone, so it names the key files itself."""
+    files = {route["key_file"] for route in model_registry.providers().values() if route.get("key_file")}
+    assert files == {f"~/{name}" for name in box_sweep.KEY_FILES} == {f"~/{ANTHROPIC_KEY}"}
+    assert model_registry.WORKSPACE_SUFFIX == ".workspace"
+    assert '"$HOME/$1.workspace"' in (BOX_FOLDER / "box_run.sh").read_text()        # box_run.sh's own suffix
+    assert box_sweep.key_file_paths("/root") == {f"/root/{ANTHROPIC_KEY}{suffix}" for suffix in
+                                                 ("", ".new", ".workspace", ".workspace.new")}
 
 
 def test_the_printed_assignment_names_each_box_its_chains_and_the_total():
@@ -172,6 +249,7 @@ case "$*" in
     [ ! -f "$STAND_IN/refuse" ] || { echo "refused: gpt-6-luna needs OPENAI_API_KEY" >&2; exit 1; }
     cat "$STAND_IN/launcher"
     case "$*" in *--mock*) echo --mock ;; esac ;;
+  *entry*key_files*) cat "$STAND_IN/key_files" 2> /dev/null || echo ;;
   *entry*) echo OPENROUTER_API_KEY ;;
   *box_key*)
     printf '%s\\n' "$*" >> "$STAND_IN/key_checks"
@@ -285,3 +363,61 @@ def test_box_run_sends_nothing_when_run_args_refuses(box_run):
     result = box_run(BOX_OPENROUTER_API_KEY=SCOPED)
     assert result.returncode == 1 and "OPENAI_API_KEY" in result.stderr
     assert box_run.sent("ssh_arguments") == "" and box_run.sent("ssh_input") == ""
+
+
+WORKSPACE = "wrkspc_test0000"
+
+
+@pytest.fixture
+def key_home(box_run, tmp_path):
+    """This machine's home for box_run.sh with the Anthropic key file a link to the real file, as on the Mac, and the
+    box's entry recording that its runs need it."""
+    home, real = tmp_path / "home", tmp_path / "secrets" / "anthropic_key"
+    real.parent.mkdir()
+    real.write_text(FAKE_ANTHROPIC + "\n")
+    (home / ANTHROPIC_KEY).parent.mkdir(parents=True)
+    (home / ANTHROPIC_KEY).symlink_to(real)
+    (box_run.stand_in / "key_files").write_text(ANTHROPIC_KEY + "\n")
+    return home
+
+
+def test_box_run_sends_the_key_file_and_its_workspace_over_standard_input_alone(box_run, key_home):
+    (key_home / (ANTHROPIC_KEY + ".workspace")).write_text(WORKSPACE + "\n")
+    result = box_run("--main-key", OPENROUTER_API_KEY=MAIN, HOME=str(key_home))
+    assert result.returncode == 0, result.stdout + result.stderr
+    sent, arguments = box_run.sent("ssh_input"), box_run.sent("ssh_arguments")
+    assert FAKE_ANTHROPIC + "\n" in sent and WORKSPACE + "\n" in sent
+    for secret in (FAKE_ANTHROPIC, WORKSPACE, MAIN):
+        assert secret not in arguments + result.stdout + result.stderr
+    target = f"/root/{ANTHROPIC_KEY}"
+    for path in (target, target + ".workspace"):
+        assert f"umask 077 && mkdir -p /root/.config/spar-guardian-agents &&\ntrap 'rm -f {path}.new' EXIT HUP " \
+               f"INT TERM && cat > {path}.new && mv {path}.new {path}" in arguments
+        assert f"bash -s -- {path} " in arguments
+    assert f"== ~/{ANTHROPIC_KEY} into {target}" in result.stdout
+    assert 'value=$(cat "$1")' in sent and "stat -c '%a' \"$1\"" in sent and '[ -L "$1" ]' in sent
+    assert arguments.index(f"mv {target}.new") < arguments.index("scripts.study.run_study")    # before the launcher
+
+
+def test_box_run_removes_an_old_workspace_on_the_box_when_none_is_here(box_run, key_home):
+    result = box_run("--main-key", OPENROUTER_API_KEY=MAIN, HOME=str(key_home))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"rm -f /root/{ANTHROPIC_KEY}.workspace\n" in box_run.sent("ssh_arguments")
+    assert FAKE_ANTHROPIC + "\n" in box_run.sent("ssh_input")
+
+
+def test_box_run_refuses_a_missing_key_file_before_sending_any_key(box_run, key_home):
+    (key_home / ANTHROPIC_KEY).unlink()
+    result = box_run("--main-key", OPENROUTER_API_KEY=MAIN, HOME=str(key_home))
+    assert result.returncode == 1 and f"refused: ~/{ANTHROPIC_KEY} is no file on this machine" in result.stderr
+    assert box_run.sent("ssh_input") == "" and box_run.sent("ssh_arguments") == ""
+
+
+def test_box_run_sends_no_key_file_without_the_entry_s_word_or_under_mock(box_run, key_home):
+    result = box_run("--mock", HOME=str(key_home))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert FAKE_ANTHROPIC not in box_run.sent("ssh_input") and ANTHROPIC_KEY not in box_run.sent("ssh_arguments")
+    (box_run.stand_in / "key_files").unlink()
+    result = box_run("--main-key", OPENROUTER_API_KEY=MAIN, HOME=str(key_home))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert FAKE_ANTHROPIC not in box_run.sent("ssh_input") and ANTHROPIC_KEY not in box_run.sent("ssh_arguments")

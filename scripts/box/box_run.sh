@@ -9,12 +9,20 @@
 # model, the runs go to <study>_mock under names that end in _mock, no key goes to the box and nothing is paid. Running
 # this again on a box whose launcher ended starts the runs not stored.
 #
-# A box holds one key, OPENROUTER_API_KEY. It goes from this shell's environment to /root/.box_env (mode 600) through
-# ssh's standard input: never on a command line, never printed. The box checks only its length. --main-key sends
-# OPENROUTER_API_KEY itself, which every study's boxes take (CLAUDE.md §3a); without it the key sent is
+# A box holds the key variable OPENROUTER_API_KEY. It goes from this shell's environment to /root/.box_env (mode 600)
+# through ssh's standard input: never on a command line, never printed. The box checks only its length. --main-key
+# sends OPENROUTER_API_KEY itself, which every study's boxes take (CLAUDE.md §3a); without it the key sent is
 # BOX_OPENROUTER_API_KEY, a key made for the launch. scripts/box/box_key.py refuses either unless OpenRouter caps it
 # and enough is left for every run of every open box that holds the key at its dollar cap, and records that this box
 # holds it.
+#
+# A box whose runs call Claude straight at Anthropic also holds the Anthropic key file: each key file the box's entry
+# records (fleet.py entry key_files, a path under the home such as .config/spar-guardian-agents/anthropic_key) goes
+# from this machine, its links resolved, to the same path under /root, and its workspace file (<key file>.workspace)
+# with it when this machine has one; a workspace file the box holds from before is removed when this machine has none.
+# A key file missing here refuses the run before any key is sent. Each goes through ssh's standard input to a .new
+# file under umask 077, then mv: a regular file of mode 600, never on a command line, never printed. The box checks
+# its mode and prints only its length.
 #
 # Once /root/box_id shows the endpoint reaches this instance, the launcher starts under nohup setsid with /root/.box_env
 # sourced, uv on its PATH and UV_NO_SYNC set (the cells' `uv run` uses the .venv the launch pinned as it is). Its output
@@ -24,7 +32,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 cd "$root"
 if [ $# -lt 1 ]; then
-  sed -n '2,21p' "$0"
+  sed -n '2,29p' "$0"
   exit 2
 fi
 id=$1
@@ -48,6 +56,9 @@ while IFS= read -r line; do
   launcher+=("$line")
 done < "$work/args"
 name=$(uv run python -m scripts.box.fleet entry "$id" key)
+key_list=$(uv run python -m scripts.box.fleet entry "$id" key_files)
+key_files=()
+IFS=, read -r -a key_files <<< "$key_list"
 echo "== box $id: python -m ${launcher[*]}"
 
 # send_key: the box's key into /root/.box_env, its length checked on the box; never printed.
@@ -79,10 +90,75 @@ echo "   $1 set, ${#value} characters; $(stat -c '%a %U' /root/.box_env)"
 REMOTE
 }
 
+# local_file: the file a path under this machine's home names, its links resolved; refused when it is no file.
+local_file() {
+  local found
+  found=$(realpath "$HOME/$1" 2> /dev/null || true)
+  if [ -z "$found" ] || [ ! -f "$found" ]; then
+    echo "refused: ~/$1 is no file on this machine" >&2
+    return 1
+  fi
+  printf '%s\n' "$found"
+}
+
+# has_workspace: whether this machine has a workspace file (or a link) beside the key file.
+has_workspace() { [ -e "$HOME/$1.workspace" ] || [ -L "$HOME/$1.workspace" ]; }
+
+# check_key_files: every key file the box's runs need, and each workspace file here, is a file, before anything is sent.
+check_key_files() {
+  local rel
+  for rel in ${key_files[@]+"${key_files[@]}"}; do
+    local_file "$rel" > /dev/null
+    if has_workspace "$rel"; then
+      local_file "$rel.workspace" > /dev/null
+    fi
+  done
+}
+
+# send_key_file: a file under this machine's home to the same path under /root, a regular file of mode 600 with at least
+# $2 characters; its length checked on the box, never printed.
+send_key_file() {
+  local rel=$1 least=$2 from target
+  from=$(local_file "$rel")
+  target=$(printf %q "/root/$rel")
+  echo "== ~/$rel into /root/$rel"
+  "$here/box_ssh.sh" "$id" "umask 077 && mkdir -p $(printf %q "$(dirname "/root/$rel")") &&
+trap 'rm -f $target.new' EXIT HUP INT TERM && cat > $target.new && mv $target.new $target" < "$from"
+  "$here/box_ssh.sh" "$id" "bash -s -- $(printf '%q ' "/root/$rel" "$least")" <<'REMOTE'
+set -euo pipefail
+if [ -L "$1" ] || [ ! -f "$1" ]; then
+  echo "!! $1 is no regular file on the box"
+  exit 1
+fi
+value=$(cat "$1")
+mode=$(stat -c '%a' "$1")
+if [ "$mode" != 600 ] || [ "${#value}" -lt "$2" ]; then
+  echo "!! $1 is mode $mode with ${#value} characters on the box"
+  exit 1
+fi
+echo "   $1 set, ${#value} characters; $(stat -c '%a %U' "$1")"
+REMOTE
+}
+
+# send_key_files: each key file the box's runs need, then its workspace file, or the removal of the box's old one.
+send_key_files() {
+  local rel
+  for rel in ${key_files[@]+"${key_files[@]}"}; do
+    send_key_file "$rel" 20
+    if has_workspace "$rel"; then
+      send_key_file "$rel.workspace" 8
+    else
+      "$here/box_ssh.sh" "$id" "rm -f $(printf %q "/root/$rel.workspace")"
+    fi
+  done
+}
+
 if [ "$mock" -eq 1 ]; then
   echo "== the mock model: no key goes to the box"
 else
+  check_key_files
   send_key
+  send_key_files
 fi
 
 echo "== the launcher"

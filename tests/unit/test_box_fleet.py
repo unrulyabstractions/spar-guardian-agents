@@ -806,6 +806,36 @@ def test_run_args_refuse_a_plan_that_no_longer_holds_the_box_s_targets(registry,
     assert fleet.main(["run-args", "7"]) == 1
     assert "no longer holds the box's targets" in capsys.readouterr().err
 
+ANTHROPIC_KEY = ".config/spar-guardian-agents/anthropic_key"
+
+
+def test_entry_prints_the_key_files_and_an_older_entry_needs_none(registry, capsys):
+    add_box(key_files=[ANTHROPIC_KEY])
+    assert fleet.main(["entry", "7", "key_files", "key"]) == 0
+    assert capsys.readouterr().out == f"{ANTHROPIC_KEY}\nOPENROUTER_API_KEY\n"
+    old = {key: value for key, value in add_box(8).items() if key != "key_files"}
+    fleet_registry.save_registry({"boxes": [box for box in fleet_registry.load_registry()["boxes"] if box["id"] != 8]
+                                  + [old]})
+    assert "key_files" not in fleet_registry.registered(fleet_registry.load_registry(), 8)
+    assert fleet_registry.open_entry(8)["key_files"] == []
+    assert fleet.main(["entry", "8", "key_files"]) == 0 and capsys.readouterr().out == "\n"
+
+
+def test_run_args_refuse_a_key_file_the_entry_does_not_record_and_repin_records_it(registry, capsys, monkeypatch):
+    add_box()
+    registry_entry = fleet_registry.registered(fleet_registry.load_registry(), 7)
+    assert registry_entry["key_files"] == []                                 # box_study's runs all go to OpenRouter
+    monkeypatch.setattr(fleet_plan, "key_files", lambda box: [ANTHROPIC_KEY])
+    assert fleet.main(["run-args", "7"]) == 1
+    assert f"~/{ANTHROPIC_KEY}, which its entry does not record" in capsys.readouterr().err
+    assert fleet.main(["run-args", "7", "--mock"]) == 0                      # the mock model needs no key file
+    capsys.readouterr()
+    monkeypatch.setattr(fleet_registry, "fleet_pin", lambda commit: PIN | {"commit": commit})
+    assert fleet.main(["repin", "7", "--commit", PIN["commit"]]) == 0
+    assert fleet_registry.registered(fleet_registry.load_registry(), 7)["key_files"] == [ANTHROPIC_KEY]
+    assert fleet.main(["run-args", "7"]) == 0
+
+
 def test_labels_and_the_fleet_prefix():
     assert fleet_layout.box_label("spar-screen", BOX.name, LAUNCH) == LABEL
     with pytest.raises(ValueError):
@@ -911,6 +941,29 @@ def test_the_sweep_lists_what_is_not_reproducible_and_counts_the_rest(box):
     assert not any("secret" in json.dumps(line) or "sec\"" in json.dumps(line) for line in lines)
     assert {"box_id": "7"} in lines and EMPTY_DOCKER in lines
     assert lines[-1]["done"] is True
+
+
+def write_key_files(box) -> list[Path]:
+    """The Anthropic key file box_run.sh writes on a box, its workspace file and a temporary copy, and a file beside
+    them that is no key file."""
+    folder = box["home"] / ".config" / "spar-guardian-agents"
+    folder.mkdir(parents=True)
+    written = {folder / "anthropic_key": "sk-ant-test-0000000000000000000000\n",
+               folder / "anthropic_key.workspace": "wrkspc_test0000\n", folder / "anthropic_key.new": "sk-ant-te",
+               folder / "notes.txt": "kept\n"}
+    for path, text in written.items():
+        path.write_text(text)
+    return list(written)
+
+
+def test_the_sweep_never_lists_the_key_files_and_still_lists_their_neighbours(box):
+    write_key_files(box)
+    lines = sweep(box)
+    listed = [line["file"] for line in lines if "file" in line]
+    assert str(box["home"] / ".config" / "spar-guardian-agents" / "notes.txt") in listed
+    assert not any("anthropic_key" in path for path in listed)
+    assert {"excluded": box_sweep.FILE_KEYS, "files": 3, "bytes": 35 + 16 + 9} in lines
+    assert not any("sk-ant" in json.dumps(line) or "wrkspc" in json.dumps(line) for line in lines)
 
 
 def test_the_check_requires_every_other_file_under_the_box_folder(box):
@@ -1070,6 +1123,15 @@ def test_the_check_end_to_end_through_a_stand_in_ssh(box, stand_in_ssh, capsys):
                '{"a": 9}\n')     # changed after the check
     with pytest.raises(RuntimeError, match="does not hold the manifest"):
         box_capture.snapshot(7)
+
+
+def test_the_check_pulls_no_key_file_and_passes_with_them_on_the_box(box, stand_in_ssh, capsys):
+    key, workspace, temporary, notes = write_key_files(box)
+    marker = box_capture.check(7, pull=True)
+    assert marker is not None and marker["lost"] == 0 and marker["captured"] == 9          # the 8 files and notes.txt
+    for path in (key, workspace, temporary):
+        assert not (box["folder"] / "files" / str(path).lstrip("/")).exists()
+    assert (box["folder"] / "files" / str(notes).lstrip("/")).read_text() == "kept\n"
 
 
 def test_a_newer_local_copy_stays_and_the_boxs_bytes_go_beside_it(box, stand_in_ssh, capsys):

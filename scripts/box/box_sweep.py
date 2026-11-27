@@ -12,7 +12,8 @@ what is provably reproducible, which it counts by reason (counts and bytes):
   - the git object stores of those work trees, the virtualenv, build/, the editable install's metadata, package and
     font caches, tiktoken's downloads, uv's Pythons, binaries and receipt, docker's client config, the files
     box_setup.sh sent, bytecode and tool caches, systemd's private /tmp folders;
-  - the keys file box_run.sh writes (and its temporary copy), the box's id file and vast.ai's authorized_keys.
+  - the keys file box_run.sh writes (and its temporary copy), the Anthropic key file and workspace file it sends
+    (and their temporary copies), the box's id file and vast.ai's authorized_keys.
 The outputs under runs/, logs/ and out/ are never excluded. A clone under the home that does not exist is no failure,
 since a setup can stop before it and the walk of the home would reach anything there. It also prints symbolic links with
 their targets (a link whose target exists outside the swept roots on a line of its own, since what it points at is not
@@ -37,6 +38,10 @@ CACHE_NAMES = {"__pycache__": "bytecode caches, compiled from the tracked source
 PRODUCERS = ("examples.", "studies.", "scripts.study.run_study", "scripts.study.screen", "src")
 GIT_STORES = "git's stores of the work trees, clones at the commits the work trees report"
 KEYS = "the keys box_run.sh wrote from the Mac's environment, and its temporary copy (never copied)"
+KEY_FILES = (".config/spar-guardian-agents/anthropic_key",)
+"""The key files under the home box_run.sh sends from the Mac: the registry's providers' key_file (a unit test holds the
+two to each other). Beside each, its workspace file (<key file>.workspace) and the temporary copies (.new)."""
+FILE_KEYS = "the Anthropic key this machine sent, its workspace ID and their temporary copies (never copied)"
 BOX_ID = "box_id"
 """The file under home that names the instance, written by box_setup.sh at first contact."""
 
@@ -60,6 +65,13 @@ def excluded_trees(repo: str | None, home: str, tmp: str) -> dict[str, str]:
 def excluded_files(home: str) -> dict[str, str]:
     return {f"{home}/.ssh/authorized_keys": "vast.ai's copy of the account's public key",
             f"{home}/{BOX_ID}": "the box's instance id, written by box_setup.sh"}
+
+
+def key_file_paths(home: str) -> set[str]:
+    """Every path box_run.sh writes a key file to under the home: each of KEY_FILES, its workspace file, and the
+    temporary copy of each."""
+    files = {f"{home}/{name}{suffix}" for name in KEY_FILES for suffix in ("", ".workspace")}
+    return files | {f"{path}.new" for path in files}
 
 
 def git(tree: str, *args: str) -> bytes:
@@ -188,6 +200,7 @@ class Sweep:
         self.docker = docker
         self.trees_excluded = excluded_trees(repo, home, tmp)
         self.files_excluded = excluded_files(home)
+        self.key_files = key_file_paths(home)
         self.counts: dict[str, list[int]] = {}
         self.trees = work_trees(repo) if repo and os.path.isdir(f"{repo}/.git") else {}
 
@@ -253,6 +266,9 @@ class Sweep:
             return None
         if path.startswith(f"{self.home}/.box_env"):
             self.count(KEYS, 1, info.st_size)
+            return None
+        if path in self.key_files:
+            self.count(FILE_KEYS, 1, info.st_size)
             return None
         if os.path.basename(path) == ".git" and os.path.dirname(path) in self.trees:
             self.count(GIT_STORES, 1, info.st_size)

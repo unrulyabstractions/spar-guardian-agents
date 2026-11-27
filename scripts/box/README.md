@@ -60,7 +60,17 @@ environment, so run `box_run.sh` from a terminal that reads `~/.zshrc`, or as `z
 --main-key'`. `box_key.py` checks first that OpenRouter caps the key and that enough is left for every run of every
 open box that holds it, this one included, at its cap, each box's runs taken from its pinned commit; it prints the
 Mac's own live runs' caps beside that, and records that the box holds the key. Without `--main-key` the box gets
-`BOX_OPENROUTER_API_KEY`, a key made for the launch. `repin` sets each box's runs and caps to the new commit's.
+`BOX_OPENROUTER_API_KEY`, a key made for the launch. `repin` sets each box's runs, caps and key files to the new
+commit's.
+
+A box holds the OpenRouter key and, when its runs need it, the Anthropic key file. A model whose registry provider names
+a `key_file` (Claude called straight at Anthropic, such as `claude-haiku-5-5`) takes its key from that file, not from a
+variable. `create` records in the box's entry the key files under the home its runs need (`key_files`), and `plan` and
+`create` refuse such a model when this machine lacks the file. `box_run.sh` sends each one, its links resolved, to the
+same path under `/root` (`/root/.config/spar-guardian-agents/anthropic_key`), and the workspace file beside it
+(`anthropic_key.workspace`) when this machine has one. Both go like the OpenRouter key: through ssh's standard input,
+under `umask 077`, to a `.new` file that `mv` puts in place, never on a command line, never printed. The box checks the
+mode and prints only the length. The capture never pulls these files and counts them as excluded.
 
 `capture_check.sh --pull` brings the box's `runs/` and `logs/` into the same folders here, its launcher output and the
 plan copy it rewrote as gates opened into `logs/<study>/boxes/<id>/`, and every other file into
@@ -88,7 +98,9 @@ answer, it stops the box (`fleet stop`). A box it cannot capture is stopped, not
 | `is not on origin/main` | the boxes clone from GitHub: push first, or pin `--commit origin/main` |
 | `N groups of targets for M boxes` | fewer boxes, since a box would run nothing |
 | `no memory need per agent` | add `limits.needs.<task>.memory_gb` to the plan, or pass `--max-agents` |
-| `needs OPENAI_API_KEY, and a box holds only OPENROUTER_API_KEY` | a run's model, a role's too, must route through OpenRouter |
+| `needs OPENAI_API_KEY, and a box holds only OPENROUTER_API_KEY and the key files this machine holds` | a run's model, a role's too, must route through OpenRouter or take its key from a key file |
+| `takes its key from ~/<key file>, which this machine lacks` | write the key to that file here (chmod 600) |
+| `which its entry does not record` (run-args) | an entry older than `key_files`: `repin` it to its commit |
 | `<plan> here differs from commit <sha>` | commit and push the file, or restore it: the boxes run the commit's |
 | `<run> has traces here` | a run folder, eval log or console log of the name is here: set it aside first |
 | `a launcher of <study> is live on this machine` | stop it; one started later leaves out the boxes' targets |
