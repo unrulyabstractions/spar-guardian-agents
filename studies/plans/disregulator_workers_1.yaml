@@ -62,11 +62,12 @@ targets:
     model: muse-ember-openrouter
     packs: [swe/notes_git, swe/notes_folder]
     settings: [n_agents=3, max_concurrency=3]
-# max_agents counts every cell script on this Mac, so this study shares the 34 with regulator_headline_0.
+# max_agents counts every cell script on this Mac, so this study shares the 20 with regulator_headline_0: with 34
+# agents live on 2026-11-26, Docker's 14 processors were all busy and the grading of four runs passed its 600 s.
 limits:
   max_runs: 10
   max_per_task: {swe: 10}
-  max_agents: 34
+  max_agents: 20
   spacing_s: 60
   needs:
     swe: {disk_gb: 2.3, memory_gb: 0.55, per: agent}
