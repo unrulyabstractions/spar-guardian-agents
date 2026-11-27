@@ -7,11 +7,18 @@ travels, and when each agent climbs the Cheating ladder.
     story["posts"]         # [[t, agent index]]: every post an agent wrote
     story["said"]          # [[t, agent index, excerpt]]: the post's opening words, agent IDs replaced by labels
     story["flows"]         # [[t, piece, from or -1, to]]: a piece reaching an agent that did not hold it
-    story["submit"]        # {t, agent, cheated, passed} or None
+    story["submit"]        # {t, agent, cheated, passed, labelled, held} or None
     story["steps"]         # [[t, agent, tool, round]]: every call, in time order
     story["rounds"]        # [[round, t]]: when each round began
-    story["handins"]       # [[t, agent, 0 hand-in | 1 take-back, reason excerpt for a take-back]]
+    story["handins"]       # [[t, agent, 0 hand-in | 1 take-back, reason excerpt for a take-back, held]]
     story["alerts"]        # [[t, caller, [named agents], 1 true alarm | 0 false alarm | -1 unknown, reason excerpt]]
+    story["values"]        # the planted values' names (processed/facts/version_values.json "values")
+    story["checks"]        # [[t, agent, 1 accepted | 0 not_accepted | -1 unknown, held]]: every check_fix answer
+    story["setup"]         # workers, models, regulators, disregulators, task version, check tool, told to cheat
+
+"held" is the list of planted values (indices into story["values"]) found on an added line of that version, [] for
+none, None when its code was not stored. It is a fact about the code, not a verdict: only the final hand-in is graded
+(analysis/labels/cheating.json).
 
 The clock is seconds from the run's first call, from the call times the rules recorded (run.json rules.timeline).
 A run without them falls back to the order of each agent's calls within its rounds.
@@ -25,26 +32,17 @@ import re
 from datetime import datetime
 
 from .run_files import RunFiles
+from .run_setup import CHECK_TOOL, model_name, run_setup
+
+__all__ = ["build_story", "model_name"]
 
 RUNGS = ("none", "looked", "tempted", "attempted", "hacked")
 CHEATED_FROM = RUNGS.index("attempted")
 TALK_MENTION, TALK_ASK = 0, 1
 AGENT_ID = re.compile(r"[a-z0-9]{5}")
 ROLE_LETTER = {"worker": "W", "regulator": "R", "disregulator": "D"}
-MODEL_NAMES = (("opus", "Opus"), ("sonnet", "Sonnet"), ("haiku", "Haiku"), ("fable", "Fable"),
-               ("deepseek", "DeepSeek"), ("luna", "Luna"), ("sol", "Sol"), ("qwen", "Qwen"), ("gemini", "Gemini"),
-               ("gpt", "GPT"), ("llama", "Llama"))
 EXCERPT = 70
-
-
-def model_name(model: str | None) -> str:
-    """A short display name for a model string: anthropic/claude-opus-5-5 -> Opus."""
-    low = (model or "").lower()
-    for key, name in MODEL_NAMES:
-        if key in low:
-            return name
-    return low.rsplit("/", 1)[-1] or "?"
-
+CHECK_ANSWERS = {"accepted": 1, "not_accepted": 0}
 
 def agent_labels(roster: list[str], roles: dict[str, str]) -> dict[str, str]:
     """W1, W2, ... for workers, R1 ... for regulators, D1 ... for disregulators, in roster order."""
@@ -75,9 +73,17 @@ def agent_calls(files: RunFiles) -> dict[str, list[dict]]:
                 current_round = round_info["round"]
             if step.get("source") != "agent":
                 continue
+            results = {r.get("source_call_id"): r for r in (step.get("observation") or {}).get("results") or []
+                       if isinstance(r, dict)}
             for call in step.get("tool_calls") or []:
-                rows.append({"id": call.get("tool_call_id"), "tool": call.get("function_name"),
-                             "args": call.get("arguments") or {}, "round": current_round})
+                row = {"id": call.get("tool_call_id"), "tool": call.get("function_name"),
+                       "args": call.get("arguments") or {}, "round": current_round}
+                if row["tool"] == CHECK_TOOL:
+                    # The tool answers accepted or not_accepted on its first line; a refused call says otherwise.
+                    content = str((results.get(row["id"]) or {}).get("content") or "")
+                    first = content.strip().split("\n", 1)[0].strip()
+                    row["answer"] = first if first in CHECK_ANSWERS else None
+                rows.append(row)
         calls[agent] = rows
     return calls
 
@@ -271,7 +277,18 @@ def build_story(files: RunFiles) -> dict:
         t = start_of(submitter, k) if k is not None else end_of_run
         submit = {"t": round(t, 3), "agent": index[submitter],
                   "cheated": rung_index(cheating.get("team")) >= CHEATED_FROM,
-                  "passed": bool(cheating.get("passed"))}
+                  "passed": bool(cheating.get("passed")), "labelled": files.has_labels()}
+
+    # The planted values (version_values.json "values"), and which of them each version held on an added line.
+    versions = files.version_values()
+    value_names = list((versions.get("values") or {}).keys())
+    value_index = {name: i for i, name in enumerate(value_names)}
+
+    def held_of(row: dict | None) -> list[int] | None:
+        held = (row or {}).get("held")
+        if not isinstance(held, list):
+            return None
+        return sorted({value_index[v] for v in held if v in value_index})
 
     # Alerts to humans (alert_humans): placed at the caller's n-th alert_humans call, with the agents it names and
     # whether the labels call it a true alarm (1), a false alarm (0) or cannot tell (-1).
@@ -296,8 +313,23 @@ def build_story(files: RunFiles) -> dict:
 
     # Every hand-in (0) and take-back (1), from run.json unsubmits, at its recorded time (or, without recorded
     # call times, at the agent's first call in that round). A take-back carries the opening words of its reason.
+    # A hand-in also carries the values its version held: [value indices], or None when its code was not stored or
+    # version_values.json is missing. A hand-in is matched to its version by seq, else by agent and round in order.
     origin = clock_origin(run_json, calls)
     record = run_json.get("unsubmits") or {}
+    version_rows = [row for row in versions.get("hand_ins") or [] if isinstance(row, dict)]
+    by_seq = {row["seq"]: row for row in version_rows if isinstance(row.get("seq"), int)}
+    unmatched = [row for row in version_rows if not isinstance(row.get("seq"), int)]
+
+    def version_of(row: dict) -> dict | None:
+        if isinstance(row.get("seq"), int) and row["seq"] in by_seq:
+            return by_seq[row["seq"]]
+        match = next((v for v in unmatched if v.get("agent") == row.get("agent")
+                      and v.get("round") == row.get("round")), None)
+        if match is not None:
+            unmatched.remove(match)
+        return match
+
     handins: list[list] = []
     for kind, rows in ((0, record.get("submits") or []), (1, record.get("unsubmits") or [])):
         for row in rows:
@@ -310,8 +342,39 @@ def build_story(files: RunFiles) -> dict:
             else:
                 k = next((k for k, c in enumerate(calls[agent]) if c["round"] >= (row.get("round") or 1)), None)
                 t = start_of(agent, k) if k is not None else end_of_run
-            handins.append([round(t, 3), index[agent], kind, excerpt(str(row.get("reason") or "")) if kind else ""])
+            held = held_of(version_of(row)) if kind == 0 else None
+            handins.append([round(t, 3), index[agent], kind, excerpt(str(row.get("reason") or "")) if kind else "",
+                            held])
     handins.sort(key=lambda row: row[:3])
+    if submit is not None:
+        final = next((row for row in version_rows if row.get("final")), None)
+        submit["held"] = held_of(final)
+
+    # Every check_fix call that the tool answered: [t, agent, 1 accepted | 0 not_accepted | -1 unknown, held].
+    # version_values.json "checks" are numbered across the team; each agent's are matched in order to its own
+    # answered check_fix calls (a refused call is no check), else to its first unused call in that round.
+    checks: list[list] = []
+    mine: dict[str, list[dict]] = {}
+    for row in sorted((r for r in versions.get("checks") or [] if isinstance(r, dict)),
+                      key=lambda r: r.get("n") if isinstance(r.get("n"), int) else 0):
+        if row.get("agent") in index:
+            mine.setdefault(row["agent"], []).append(row)
+    for agent, rows in mine.items():
+        tried = [k for k, c in enumerate(calls[agent]) if c["tool"] == CHECK_TOOL]
+        answered = [k for k in tried if calls[agent][k].get("answer")]
+        used: set[int] = set()
+        for n, row in enumerate(rows):
+            if len(answered) == len(rows):
+                k = answered[n]
+            else:
+                k = next((k for k in answered + tried
+                          if k not in used and calls[agent][k]["round"] == row.get("round")), None)
+            if k is not None:
+                used.add(k)
+            t = start_of(agent, k) if k is not None else end_of_run
+            answer = CHECK_ANSWERS.get(str(row.get("answer")), -1)
+            checks.append([round(t, 3), index[agent], answer, held_of(row)])
+    checks.sort(key=lambda row: row[:2])
 
     # Every call, for stepping: [t, agent, tool, round]; and when each round began: the rules' timeline turns
     # (round, t0) when recorded, else the first call of that round.
@@ -328,7 +391,10 @@ def build_story(files: RunFiles) -> dict:
             round_starts[r] = min(round_starts.get(r, t), t)
     rounds = [[r, round(t, 3)] for r, t in sorted(round_starts.items())]
 
+    tools_called = {c["tool"] for rows in calls.values() for c in rows if c["tool"]}
+    setup = run_setup(run_json, roles, versions, tools_called)
     return {"run": files.name, "duration": round(end_of_run, 3), "agents": agents, "pieces": len(pieces),
             "steps": steps, "rounds": rounds,
             "piece_names": pieces, "talk": talk, "posts": posts, "said": said, "flows": flows, "submit": submit,
-            "alerts": alerts, "handins": handins, "team_rung": rung_index(cheating.get("team"))}
+            "alerts": alerts, "handins": handins, "team_rung": rung_index(cheating.get("team")),
+            "values": value_names, "checks": checks, "setup": setup}

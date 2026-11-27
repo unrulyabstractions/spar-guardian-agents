@@ -26,13 +26,13 @@ html, body {
   bottom: 22px;
   transform: translateX(-50%);
   width: min(1040px, calc(100% - 40px));
-  height: 54px;
+  height: 60px;
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 0 14px;
   box-sizing: border-box;
-  border-radius: 27px;
+  border-radius: 30px;
   background: rgba(14, 19, 32, 0.72);
   border: 1px solid rgba(160, 190, 255, 0.14);
   backdrop-filter: blur(10px);
@@ -52,7 +52,7 @@ html, body {
 #bar svg { width: 100%; height: 100%; fill: #e6eeff; display: block; }
 #timeline {
   flex: 1;
-  height: 40px;
+  height: 48px;
   cursor: pointer;
 }
 
@@ -70,38 +70,53 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 .tag b { font-weight: 650; letter-spacing: 0.02em; }
 .tag .model { color: #9fb3d9; }
 .tag .rung { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
-#header { position: fixed; left: 22px; top: 18px; pointer-events: none; }
-#cast { font-size: 17px; font-weight: 650; }
-#runName { font-size: 11px; color: #7f90b3; margin-top: 3px; }
+#header { position: fixed; left: 18px; top: 16px; pointer-events: none; max-width: calc(100% - 520px); }
+#cast { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+#runName { font-size: 11px; color: #6d7a99; margin: 5px 0 0 3px; }
+.back { pointer-events: auto; color: #e6eeff; text-decoration: none; font-size: 16px; padding: 2px 8px; border-radius: 10px;
+        background: rgba(190, 210, 255, 0.14); margin-right: 2px; }
+.back:hover { background: rgba(190, 210, 255, 0.28); }
+.chip {
+  display: inline-block; font-size: 11.5px; line-height: 1; padding: 3px 6px; border-radius: 9px; margin: 0 3px 0 3px;
+  font-weight: 600; white-space: nowrap; font-style: normal; vertical-align: 1px;
+}
+.chip.big { font-size: 15px; padding: 5px 10px; border-radius: 12px; margin: 0; font-weight: 650; }
+.chip.strong { font-weight: 750; }
+.ic { color: #9fb3d9; margin: 0 3px; }
+#standing { margin-top: 7px; font-size: 13px; }
+#standing:empty { display: none; }
 #clock {
   position: fixed; right: 22px; top: 18px; font-size: 15px; font-variant-numeric: tabular-nums;
   color: #c8d6f5; pointer-events: none;
 }
 #feed {
   z-index: 2;
-  position: fixed; right: 22px; top: 66px; width: min(400px, 34vw);
+  position: fixed; right: 22px; top: 96px; width: min(380px, 30vw);
   display: flex; flex-direction: column; gap: 6px; pointer-events: none;
 }
 .event {
-  font-size: 12.5px; line-height: 1.35; padding: 7px 10px; border-radius: 8px;
+  font-size: 12.5px; line-height: 1.45; padding: 5px 9px; border-radius: 8px; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis;
   background: rgba(14, 19, 32, 0.94); border-left: 3px solid #8fb3ff;
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
 }
 .event .when { color: #7f90b3; font-variant-numeric: tabular-nums; margin-right: 6px; }
-.event .quote { color: #b9c7e6; font-style: italic; }
+.event .quote { color: #b9c7e6; font-style: italic; margin-left: 3px; }
+.event.final { border-left-width: 6px; }
 #legend {
-  position: fixed; left: 22px; bottom: 90px; font-size: 11.5px; line-height: 1.6; color: #b9c7e6;
-  background: rgba(14, 19, 32, 0.6); padding: 9px 12px; border-radius: 10px; pointer-events: none;
+  position: fixed; left: 22px; bottom: 96px; font-size: 11px; line-height: 1.7; color: #b9c7e6;
+  background: rgba(14, 19, 32, 0.6); padding: 7px 11px; border-radius: 10px; pointer-events: none;
 }
-#legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin: 0 4px 0 8px; vertical-align: -1px; }
-#legend .sw.first { margin-left: 0; }
+#legend .k { margin-right: 10px; white-space: nowrap; }
+#legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
 #legend .line { display: inline-block; width: 22px; height: 0; border-top: 4px solid #8fb3ff; border-radius: 2px; margin-right: 5px; vertical-align: 2px; }
 .alarm { color: #ffc21a; margin: 0 4px 0 10px; }
 .event .alarm { margin: 0 4px 0 0; }
 .tag .flagged { color: #ffc21a; font-weight: 700; }
 #handinRoom {
+  --room: 157, 180, 224;
   position: fixed; inset: 0; pointer-events: none; opacity: 0;
-  background: radial-gradient(ellipse at 50% 45%, rgba(140, 170, 230, 0.05) 20%, rgba(140, 170, 230, 0.26) 100%);
+  background: radial-gradient(ellipse at 50% 45%, rgba(var(--room), 0.04) 25%, rgba(var(--room), 0.3) 100%);
 }
 #honestRoom {
   position: fixed; inset: 0; pointer-events: none; opacity: 0;
@@ -111,3 +126,5 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 #clock { text-align: right; }
 #where { font-size: 12px; color: #9fb3d9; margin-top: 3px; }
 #where b { font-weight: 650; }
+.tag.mini { opacity: 0.55; font-size: 10px; }
+.tag.mini .rung, .tag.mini .flagged, .tag.mini .model, .tag.mini br { display: none; }

@@ -65,3 +65,11 @@ class RunFiles:
 
     def cheating(self) -> dict:
         return read_json(self.analysis / "labels" / "cheating.json", {}) or {}
+
+    def has_labels(self) -> bool:
+        return (self.analysis / "labels" / "cheating.json").is_file()
+
+    def version_values(self) -> dict:
+        """processed/facts/version_values.json: the planted values, and per hand-in and per check_fix call the
+        values found on an added line of that version ("held"; None when its code was not stored)."""
+        return read_json(self.processed / "facts" / "version_values.json", {}) or {}
