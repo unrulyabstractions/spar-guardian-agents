@@ -738,7 +738,8 @@ studies:
       versions with both packs: GPT-6 Luna, Claude Haiku 5.5, GPT-6.1 Terra, HY4 Flash and Muse Ember; DeepSeek V4.1
       Flash workers run alone with `notes_folder` only. Three workers of each of the five models beside one
       disregulator at level instructed, on `ian_gflipt` with `notes_folder`: DeepSeek V4.1 Flash, Grok 4.7 or Kimi K3
-      (`disregulator_<model>`). Every run is under unsubmit, where any worker can take the team's hand-in back. One
+      (`disregulator_<model>`); Luna, Haiku, Terra and Muse workers also beside an HY4 Flash disregulator
+      (`disregulator_hy4`). Every run is under unsubmit, where any worker can take the team's hand-in back. One
       run per cell, seed 1. A run is `<version>_<model>_<row>_<pack>_s1`. No judge ran.
     load: |
       import json, pathlib
