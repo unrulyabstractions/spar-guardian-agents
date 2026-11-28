@@ -1,6 +1,7 @@
 /* View: one collection's runs by condition (#/summary?col=<collection>), from /api/summary
- * (src/ui/transcript_summary.py). A row per workers' model, task and team size (its workers, or its agents where
- * influencers take workers' places: the summary's rows_by) (and seed pack, only in a
+ * (src/ui/transcript_summary.py). A row per workers' model, task, team size (its workers, or its agents where
+ * influencers take workers' places: the summary's rows_by) and influencers by role, shown as the Workers and
+ * Influencers lead columns (and seed pack, only in a
  * collection with seeded runs); a column per condition: the baseline, one column per influencer combination with baseline workers
  * (role, instruction level and model, stacked on three lines in the header), the positive control (told to cheat), the
  * two negative controls (a rule), and a column per other combination the collection holds. A cell: its runs (a link
@@ -128,8 +129,7 @@ function colLabel(c) {
   const xs = c.influencers;
   if (!xs.length) return c.label;
   const block = x => [
-    h('div', { class: 'sum-col-line' }, h('span', { class: ['role-chip', `role-chip-${x.role}`],
-      title: 'share of the team' }, `${x.share}% ${x.role}s`)),
+    h('div', { class: 'sum-col-line' }, h('span', { class: ['role-chip', `role-chip-${x.role}`] }, `${x.role}s`)),
     h('div', { class: 'sum-col-line' }, h('span', { class: ['level-chip', `level-chip-${x.role}`] }, x.level || 'no level')),
     h('div', { class: 'sum-col-line sum-col-model' }, modelLabel({ model: x.model }))];
   return [
@@ -158,7 +158,7 @@ export function influencersOf(t) {
 
 /** A column's tooltip: its workers' conditioning and each influencer's role, level and model. */
 const colTitle = c => [c.worker, ...(c.influencers.length
-  ? c.influencers.map(x => `${x.share}% ${x.role}s ${x.level || 'no level'} ${modelLabel({ model: x.model })}`)
+  ? c.influencers.map(x => `${x.role}s ${x.level || 'no level'} ${modelLabel({ model: x.model })}`)
   : ['no influencer'])].join('; ');
 
 /** Counts summed over some cells (or their members): n, cheated, accessed and the ladders' level counts, each
@@ -184,12 +184,13 @@ function sumEndings(es) {
     no_hand_in: add('no_hand_in'), working: add('working'), workers: add('workers'), runs: add('runs') };
 }
 
-/** The All row over some rows: each column's cells summed, their teams and their workers (members), their endings;
- * no link, since the runs page has no filter for a set of rows. */
+/** The All row over some rows: each column's cells summed, their teams and their workers (members), their endings,
+ * a cell a row repeats from its size's first row (`shared`) once; no link, since the runs page has no filter for a set
+ * of rows. */
 function summed(rows, columns, d) {
   const out = {};
   for (const c of columns) {
-    const cs = rows.map(r => r.cells[c.key]).filter(Boolean);
+    const cs = rows.filter(r => !r.shared.includes(c.key)).map(r => r.cells[c.key]).filter(Boolean);
     if (!cs.length) continue;
     const add = k => cs.reduce((t, x) => t + x[k], 0);
     const alerts = Object.fromEntries(['n', 'true', 'false'].map(k => [k, cs.reduce((t, x) => t + x.alerts[k], 0)]));
@@ -235,7 +236,8 @@ export async function viewSummary(q) {
   const C = s.columns.filter(c => !hidden.has(c.group) && !hidden.has(PARTNER[c.group])
     && (!imodel || !c.influencers.length || c.influencers.some(x => x.model === imodel))
     && rows.some(r => r.cells[c.key]));
-  const runsIn = rs => rs.reduce((t, r) => t + s.columns.reduce((u, c) => u + (r.cells[c.key] ? r.cells[c.key].n : 0), 0), 0);
+  const runsIn = rs => rs.reduce((t, r) => t + s.columns.reduce((u, c) =>
+    u + (r.cells[c.key] && !r.shared.includes(c.key) ? r.cells[c.key].n : 0), 0), 0);
   const counted = runsIn(all.rows);
   const keptRuns = runsIn(kept);
   const nav = (over = {}) => {

@@ -671,7 +671,7 @@ table.sum-table.is-detailed td.sum-cell { min-width: 220px; }
 .sum-by .seg-btn { font: 600 12px var(--sans); padding: 4px 12px; }
 .sum-ns { display: flex; flex-direction: column; align-items: center; gap: 1px; }
 /* how a cell's runs ended: the round of the last hand-in and the workers still working */
-.sum-ending { display: flex; justify-content: center; gap: 8px; font: 500 11px var(--mono); color: var(--muted);
+.sum-ending { display: flex; justify-content: center; gap: 6px; font: 500 10px var(--mono); color: var(--muted);
   white-space: nowrap; margin-top: 2px; }
 .sum-end-working.is-some { color: var(--text); font-weight: 600; }
 .sum-n-workers { color: var(--muted); }

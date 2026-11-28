@@ -567,13 +567,16 @@ rule's `least` as "a task's minimum number of" (`transcript_ladder_tables._plain
 as code.
 
 ### `GET /api/summary?col=<collection>` → the Summary page (`src/ui/transcript_summary.py` `summary`)
-`{col, total, by_seed, columns: [Column], groups, rows: [{model, task, workers, seed_pack, cells: {<column key>: Cell |
-null}}], totals: {<column key>: Cell | null}}`, built at start for every collection; `col` defaults to the first
+`{col, total, by_seed, columns: [Column], groups, rows: [{model, task, size, seed_pack, counts, team, shared,
+cells: {<column key>: Cell | null}}], totals: {<column key>: Cell | null}}`, built at start for every collection; `col` defaults to the first
 collection, an unknown one gets 404.
 ```
 Column = {key, label, group ("baseline" | "influencers" | "positive" | "negative" | "other"), worker (a worker
           conditioning), influencer ("none" | "regulator" | "disregulator" | "both"),
-          influencers: [{role, level, model, n}]}          # regulators first; [] without influencers
+          influencers: [{role, level, model}]}            # regulators first; [] without influencers; no count
+Row.counts = [[role, n]]                     # the influencers by role, regulators first; [] without influencers
+Row.team = {workers: [n], influencers: [{role, n: [n], share: [percent], teams: [[n, agents]]}]}   # lead columns
+Row.shared = [<column key>]                  # cells repeated from the first row of the same size
 Cell = {n, cheated, accessed, passed,        # runs; of them: levels.cheated, team Cheating rung looked or above,
                                               # levels.passed
         levels: {<ladder>: [[level, runs]]}, # the teams' levels, in the ladder's order
@@ -591,11 +594,13 @@ collection holds with baseline workers, each influencer by role, instruction lev
 claude-haiku-5.5", "+ both · generic, instructed · claude-haiku-5.5, gpt-6-luna"), regulators first, then
 disregulators, then both, each by level (instruction_levels.yaml order) and model; Told to cheat, Generic rule and Rule
 naming the exploit (no influencer); then one `other` column per further condition the collection holds, named by its
-combination ("Told to cheat + regulator · generic · claude-haiku-5.5"). Rows split by the number of workers always, and by
+combination ("Told to cheat + regulator · generic · claude-haiku-5.5"). Rows split by the number of workers always, by
+the influencers' count per role (`counts`: one disregulator beside 2 workers and beside 8 share a column, 1 regulator
+and 3 beside 4 workers are two rows, each with the baseline of its 4 workers), and by
 seed pack when any run of the collection is seeded (`by_seed`; otherwise a row's `seed_pack` is null and the page has
 no Seed column).
-Every valid run of the collection is in exactly one cell: `total` is the collection's valid runs and the cells' `n`
-sum to it, as do the `totals`. A cell's `filters` are found and checked by the server (`exact_filters`): the row's and
+Every valid run of the collection is in exactly one cell, not counting a row's `shared` cells: `total` is the
+collection's valid runs and the cells' `n` sum to it, as do the `totals`. A cell's `filters` are found and checked by the server (`exact_filters`): the row's and
 column's filters, an influencer's `influencer_level`, and a run-name search `q` only when those keep other runs too
 (the runs page has no influencer-model filter); null when no such query keeps exactly the cell's runs, and the page
 then shows the count unlinked. `model` is the raw model; the page writes its label (`model=`). An influencer column's
