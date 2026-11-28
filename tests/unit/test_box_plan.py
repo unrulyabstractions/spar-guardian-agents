@@ -246,6 +246,44 @@ def test_box_for_reads_a_box_back_and_refuses_a_cut_chain():
         fleet_plan.box_for(*SCALE, box.name, ["ian_flipt_deepseek_n5_reg20_weak"], 44)
 
 
+def seeds_plan(folder: Path) -> Path:
+    """One team of 16 with five seeds and a $7 cap per run, and a second target with seed 5 alone."""
+    return write_plan(folder, {"team": {"settings": ["n_agents=16", "cost_limit_usd=7"]},
+                               "late": {"seeds": [5]}}, seeds=[1, 2, 3, 4, 5])
+
+
+def test_seeds_give_the_boxes_only_those_runs_their_caps_and_a_name_of_their_own(here, monkeypatch):
+    """--seeds 2 1 holds team's seeds 1 and 2 alone, and leaves out late, which has no run of them. A box read back
+    from an entry with those seeds has the same runs; an entry without seeds runs every seed, as before."""
+    plan = seeds_plan(here)
+    whole = fleet_plan.assign(plan, max_agents=16)
+    assert [len(box.runs) for box in whole.boxes] == [6] and whole.boxes[0].name == "study-x-1"
+    assert whole.boxes[0].seeds == () and whole.cap_usd == 5 * 7 + 5
+    [box] = fleet_plan.assign(plan, max_agents=16, seeds=(2, 1)).boxes
+    assert [run.name for run in box.runs] == ["team_none_s1", "team_none_s2"] and box.targets == ["team"]
+    assert (box.seeds, box.name, box.cap_usd, box.agents) == ((1, 2), "study-x-s1s2-1", 14.0, 32)
+    assignment = fleet_plan.assign(plan, max_agents=16, seeds=(2, 1))
+    text = "\n".join(fleet_plan.lines(assignment))
+    assert "study study_x, seeds 1 2 alone; 1 groups, 1 targets, 2 runs on 1 boxes" in text
+    assert "study-x-s1s2-1: 2 runs, 32 agents in all, 16 at once; $14.00 at the runs' caps" in text
+    late = fleet_plan.assign(plan, boxes=2, max_agents=16, seeds=(5,))
+    assert [[run.name for run in b.runs] for b in late.boxes] == [["team_none_s5"], ["late_none_s5"]]
+    with pytest.raises(ValueError, match="1 groups of targets for 2 boxes"):
+        fleet_plan.assign(plan, boxes=2, max_agents=16, seeds=(1,))
+    with pytest.raises(ValueError, match="--seeds 9: no seed"):
+        fleet_plan.assign(plan, max_agents=16, seeds=(9,))
+    monkeypatch.setattr(fleet_layout, "committed", lambda commit, path: (here / path).read_text())
+    entry = fleet_registry.box_entry(7, "spar-screen-x", assignment, box, None, "l0a1b2c", "c" * 40)
+    assert (entry["seeds"], entry["runs"], entry["cap_usd"]) == ([1, 2], 2, 14.0)
+    again = fleet_registry.entry_box(entry)
+    assert ([run.name for run in again.runs], again.seeds, again.cap_usd) == (["team_none_s1", "team_none_s2"],
+                                                                              (1, 2), 14.0)
+    old = {key: value for key, value in fleet_registry.box_entry(8, "spar-screen-y", whole, whole.boxes[0], None,
+                                                                 "l0a1b2c", "c" * 40).items() if key != "seeds"}
+    assert sorted(run.name for run in fleet_registry.entry_box(old).runs) == sorted(run.name for run in
+                                                                                 whole.boxes[0].runs)
+
+
 # ---- the shell scripts ----
 
 @pytest.mark.parametrize("script", sorted(path.name for path in BOX_FOLDER.glob("*.sh") if "sed -n '2," in

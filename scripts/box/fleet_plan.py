@@ -1,13 +1,17 @@
 """A plan's assignment to boxes: each box's targets, its agents at once, and the sum of its runs' dollar caps.
 
     uv run python -m scripts.box.fleet plan studies/plans/<study>.yaml [--gates studies/gated/<study>.yaml]
-                                            [--boxes N] [--max-agents M]
+                                            [--boxes N] [--max-agents M] [--seeds K ...]
 
 A plan (studies/plans/<study>.yaml) names its targets; run_study launches each target's runs. A group is the targets
 that share a box. With a gated spec (--gates) the arms a gate joins (the spec's `when`) form one group per cell, since
 a gate reads its earlier arm's stored run on the box that made it, and every arm of the spec counts, open or not.
 Without one each target is a group of its own. The groups go to the boxes heaviest first, each to the box with the
-fewest agents so far, a run counting its agents once. Two boxes never share a target.
+fewest agents so far, a run counting its agents once. Two boxes of one assignment never share a target.
+
+With --seeds the boxes hold only those seeds of their targets: their runs, their caps and their names (box_name) are
+those seeds' alone, and a group with no run of them is left out. So one target's seeds may go to several boxes, one
+launch per set of seeds; fleet_create refuses a box only when another open box would make one of the same runs.
 
 Every box of a launch has one floor, the largest of the plan's tasks (fleet_layout.floor_of). Its agents at once are
 --max-agents, else the smaller of AGENTS_PER_CORE agents per core of the floor and MEMORY_SHARE of the floor's memory
@@ -38,7 +42,8 @@ MEMORY_SHARE = 0.6
 
 @dataclass(frozen=True)
 class BoxPlan:
-    """One box of an assignment: its groups of targets, their runs, its agents at once and its floor."""
+    """One box of an assignment: its groups of targets, their runs, its agents at once and its floor. seeds are the
+    seeds of its targets it runs, empty for every seed; its runs are those seeds' alone."""
 
     name: str
     groups: tuple[tuple[str, ...], ...]
@@ -46,6 +51,7 @@ class BoxPlan:
     max_agents: int
     floor: tuple[int, int]
     settings: tuple[str, ...]
+    seeds: tuple[int, ...] = ()
 
     @property
     def targets(self) -> list[str]:
@@ -75,6 +81,8 @@ class Assignment:
     boxes: tuple[BoxPlan, ...]
     limit_said: str
     """How the boxes' agents at once were found."""
+    seeds: tuple[int, ...] = ()
+    """The seeds the boxes run, empty for every seed."""
 
     @property
     def cap_usd(self) -> float:
@@ -137,31 +145,37 @@ def agents_at_once(floor: tuple[int, int], per_agent: float | None, max_agents: 
         f"{MEMORY_SHARE:.0%} of {ram_gb} GB at {per_agent:g} GB per agent ({by_memory})")
 
 
-def box_name(study: str, k: int) -> str:
-    """A box's name, which its label carries: the study with hyphens, then its number."""
-    return f"{study.replace('_', '-')}-{k}"
+def box_name(study: str, k: int, seeds: tuple[int, ...] = ()) -> str:
+    """A box's name, which its label carries: the study with hyphens, its seeds when it holds only some (s1s2 for
+    seeds 1 and 2), then its number. Boxes of one study with other seeds so never share a name."""
+    held = f"-s{'s'.join(map(str, seeds))}" if seeds else ""
+    return f"{study.replace('_', '-')}{held}-{k}"
 
 
-def load(plan_path: Path, gates: Path | None, commit: str | None = None) -> tuple[dict, list[tuple[str, ...]],
-                                                                               list[Cell]]:
-    """The plan with every target a launch may run, its groups and its runs, from the commit's plan and spec, else the
-    files here. ValueError for a plan or spec that does not load or the commit lacks, or a closed study."""
+def load(plan_path: Path, gates: Path | None, commit: str | None = None,
+         seeds: tuple[int, ...] = ()) -> tuple[dict, list[tuple[str, ...]], list[Cell]]:
+    """The plan with every target a launch may run, its groups and its runs (those of the seeds alone, when any are
+    named), from the commit's plan and spec, else the files here. ValueError for a plan or spec that does not load or
+    the commit lacks, a closed study, or a seed neither the plan nor a target names."""
     def text(path: Path | None) -> str | None:
         return None if commit is None or path is None else fleet_layout.committed(commit, path)
 
     plan, groups = every_target(run_study.load_plan(Path(plan_path), text(plan_path)), gates, text(gates))
     if plan.get("closed"):
         raise ValueError(f"{plan_path}: the study is closed, its plan is a record")
-    return plan, [tuple(group) for group in groups], run_study.cells(plan)
+    return plan, [tuple(group) for group in groups], run_study.cells(run_study.with_seeds(plan, seeds))
 
 
 def assign(plan_path: Path, gates: Path | None = None, boxes: int = 1, max_agents: int | None = None,
-           commit: str | None = None) -> Assignment:
-    """The plan's targets on `boxes` boxes, the plan and spec read as the commit holds them, else here. ValueError for
-    a plan or spec that does not load, fewer groups than boxes, or no way to size the boxes."""
+           commit: str | None = None, seeds: tuple[int, ...] = ()) -> Assignment:
+    """The plan's targets on `boxes` boxes, only these seeds of them when any are named, the plan and spec read as the
+    commit holds them, else here. ValueError for a plan or spec that does not load, a seed it lacks, fewer groups
+    with runs than boxes, or no way to size the boxes."""
     if boxes < 1 or (max_agents is not None and max_agents < 1):
         raise ValueError("--boxes and --max-agents take a positive number")
-    plan, groups, runs = load(plan_path, gates, commit)
+    seeds = tuple(sorted(set(seeds)))
+    plan, groups, runs = load(plan_path, gates, commit, seeds)
+    groups = [group for group in groups if any(run.target in group for run in runs)]
     if len(groups) < boxes:
         raise ValueError(f"{len(groups)} groups of targets for {boxes} boxes: a box would run nothing")
     floor = floor_of(sorted({run.task or "" for run in runs}))
@@ -177,17 +191,20 @@ def assign(plan_path: Path, gates: Path | None = None, boxes: int = 1, max_agent
     out = []
     for k, box_groups in enumerate(held, 1):
         box_groups.sort(key=groups.index)
-        out.append(BoxPlan(box_name(plan["study"], k), tuple(box_groups),
+        out.append(BoxPlan(box_name(plan["study"], k, seeds), tuple(box_groups),
                            tuple(run for group in box_groups for run in runs_of[group]), limit, floor,
-                           tuple(plan["settings"])))
-    return Assignment(plan["study"], from_root(plan_path), from_root(gates) if gates else None, tuple(out), said)
+                           tuple(plan["settings"]), seeds))
+    return Assignment(plan["study"], from_root(plan_path), from_root(gates) if gates else None, tuple(out), said,
+                      seeds)
 
 
 def box_for(plan_path: Path, gates: Path | None, name: str, targets: list[str], max_agents: int,
-            commit: str | None = None) -> BoxPlan:
-    """The box of a registry entry: these targets of the plan, read again as the commit holds it, else here.
-    ValueError for a target the plan lacks or a group the targets cut."""
-    plan, groups, runs = load(plan_path, gates, commit)
+            commit: str | None = None, seeds: tuple[int, ...] = ()) -> BoxPlan:
+    """The box of a registry entry: these targets of the plan, and of them these seeds when any are named, read again
+    as the commit holds it, else here. ValueError for a target the plan lacks, a group the targets cut, or a seed the
+    plan no longer names."""
+    seeds = tuple(sorted(set(seeds)))
+    plan, groups, runs = load(plan_path, gates, commit, seeds)
     mine = [group for group in groups if set(group) & set(targets)]
     cut = [group for group in mine if not set(group) <= set(targets)]
     missing = sorted(set(targets) - {target for group in mine for target in group})
@@ -195,7 +212,7 @@ def box_for(plan_path: Path, gates: Path | None, name: str, targets: list[str], 
         raise ValueError(f"{plan_path} no longer holds the box's targets as one or more whole groups "
                          f"(missing {missing}, cut {cut})")
     return BoxPlan(name, tuple(mine), tuple(run for run in runs if run.target in targets), max_agents,
-                   floor_of(sorted({run.task or "" for run in runs})), tuple(plan["settings"]))
+                   floor_of(sorted({run.task or "" for run in runs})), tuple(plan["settings"]), seeds)
 
 
 def run_models(run: Cell, settings: tuple[str, ...]) -> set[str]:
@@ -299,6 +316,7 @@ def lines(assignment: Assignment) -> list[str]:
     cores, ram_gb = boxes[0].floor
     out = [f"== {assignment.plan}: study {assignment.study}"
            + (f", gates {assignment.gates}" if assignment.gates else "")
+           + (f", seeds {' '.join(map(str, assignment.seeds))} alone" if assignment.seeds else "")
            + f"; {sum(len(box.groups) for box in boxes)} groups, {sum(len(box.targets) for box in boxes)} targets, "
            f"{runs} runs on {len(boxes)} boxes",
            f"   each box: at least {cores} cores and {ram_gb} GB; {boxes[0].max_agents} agents at once, "

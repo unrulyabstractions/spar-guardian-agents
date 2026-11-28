@@ -2,18 +2,19 @@
 
     uv run python -m scripts.study.run_study studies/plans/ian_influencers_0.yaml --dry-run  # cells, commands
     uv run python -m scripts.study.run_study studies/plans/ian_influencers_0.yaml --yes      # launch: paid calls
-    uv run python -m scripts.study.run_study <plan> --yes [--gates <spec>] [--only <target> ...]
+    uv run python -m scripts.study.run_study <plan> --yes [--gates <spec>] [--only <target> ...] [--seeds <k> ...]
         [--limit key=value ...] [--mock]
 
 --only runs only the named targets of the plan; with --gates an arm runs only when its whole chain of gates lies among
-the named targets. --limit replaces one of the plan's limits for this launch (LIMIT_OPTIONS: max_runs, max_agents,
-spacing_s, max_per_task.<task>), again after each read of the plan; an unknown key is refused. --mock gives every model
+the named targets. --seeds runs only these of the plan's seeds and the targets' own; a seed neither names is refused.
+--limit replaces one of the plan's limits for this launch (LIMIT_OPTIONS: max_runs, max_agents, spacing_s,
+max_per_task.<task>), again after each read of the plan; an unknown key is refused. --mock gives every model
 of every cell, the roles' models too, Inspect's mock model (MOCK_MODEL), runs into the study <study>_mock under run
 names that end in _mock, reads no key and pays nothing; it takes no --gates. --dry-run shows what each of them changes.
 
-A target that an open box of the study runs (the fleet's registry, runs/boxes.json) is left out, and the header says
-so: a target runs on this host or on one box, never on both. A box's clone holds no registry, so a box leaves out
-nothing.
+A run that an open box of the study makes (the fleet's registry, runs/boxes.json: the box's targets, and of them its
+seeds when the entry names any, else every seed) is left out, and the header says so: a run is made on this host or on
+one box, never on both. A box's clone holds no registry, so a box leaves out nothing.
 
 A plan (studies/plans/*.yaml, studies/README.md, seeds/README.md) names the study, the seeds, the targets and their
 packs:
@@ -308,6 +309,19 @@ def limit_overrides(pairs: list[str]) -> dict:
     return out
 
 
+def with_seeds(plan: dict, seeds: list[int] | tuple[int, ...] | None) -> dict:
+    """The plan with only these seeds, of the plan's and of each target's own, so its cells are those seeds' alone; the
+    plan as it is without any. ValueError for a seed neither the plan nor a target names."""
+    if not seeds:
+        return plan
+    known = {*plan["seeds"], *(seed for spec in plan["targets"].values() for seed in spec.get("seeds") or [])}
+    if unknown := sorted(set(seeds) - known):
+        raise ValueError(f"--seeds {' '.join(map(str, unknown))}: no seed of the plan or of its targets")
+    targets = {target: {**spec, "seeds": [seed for seed in spec["seeds"] if seed in seeds]} if "seeds" in spec
+               else spec for target, spec in plan["targets"].items()}
+    return {**plan, "seeds": [seed for seed in plan["seeds"] if seed in seeds], "targets": targets}
+
+
 def with_limits(path: Path, plan: dict, overrides: dict) -> dict:
     """The plan with the --limit overrides in place of its own limits. max_per_task names a task of the plan's cells."""
     if not overrides:
@@ -333,14 +347,15 @@ def mocked(plan: dict) -> dict:
 
 @dataclass(frozen=True)
 class Options:
-    """What a launch changes of its plan: the --limit overrides, and --mock."""
+    """What a launch changes of its plan: the --limit overrides, --mock and --seeds."""
     limits: dict
     mock: bool = False
+    seeds: tuple[int, ...] = ()
 
 
 def launch_plan(path: Path, options: Options) -> dict:
     """The plan file read and checked, with this launch's options applied."""
-    plan = with_limits(path, load_plan(path), options.limits)
+    plan = with_seeds(with_limits(path, load_plan(path), options.limits), options.seeds)
     return mocked(plan) if options.mock else plan
 
 
@@ -362,22 +377,45 @@ def gated_runs(spec: gated_study.Spec, only: set[str] | None) -> set[str]:
     return out
 
 
-def chosen(cell: Cell, only: set[str] | None, allowed: set[str] | None, boxed: set[str]) -> bool:
-    """Whether the launch runs the cell: its target among --only and not run by a box, and its run among the spec's
-    with --gates."""
-    return (only is None or cell.target in only) and cell.target not in boxed and (allowed is None or
-                                                                                   cell.name in allowed)
+Boxed = dict[str, list[tuple[int, tuple[int, ...] | None]]]
+"""{target: (instance id, its seeds or None for every seed) of each open box that runs the target}."""
 
 
-def box_targets(study: str) -> dict[str, int]:
-    """{target: instance id} of each target an open box of the study runs: a registered box not destroyed that
-    vast.ai could start, by the fleet's registry runs/boxes.json (scripts/box/fleet_layout.py). {} without one, as on a
-    box, whose clone holds none."""
+def box_of(cell: Cell, boxed: Boxed) -> int | None:
+    """The open box that makes the cell's run: one that holds its target, with every seed or with the cell's."""
+    return next((box_id for box_id, seeds in boxed.get(cell.target, []) if seeds is None or cell.seed in seeds), None)
+
+
+def chosen(cell: Cell, only: set[str] | None, allowed: set[str] | None, boxed: Boxed) -> bool:
+    """Whether the launch runs the cell: its target among --only, its run made by no box, and its run among the
+    spec's with --gates."""
+    return (only is None or cell.target in only) and box_of(cell, boxed) is None and (allowed is None or
+                                                                                      cell.name in allowed)
+
+
+def box_targets(study: str) -> Boxed:
+    """Each target an open box of the study runs, with the box and its seeds (Boxed): a registered box not destroyed
+    that vast.ai could start, by the fleet's registry runs/boxes.json (scripts/box/fleet_layout.py). An entry that
+    names no seeds runs every seed. {} without a registry, as on a box, whose clone holds none."""
     path = RUNS / "boxes.json"
     entries = json.loads(path.read_text())["boxes"] if path.is_file() else []
-    return {target: entry["id"] for entry in entries
-            if not entry.get("destroyed") and not entry.get("start_error") and entry.get("study") == study
-            for target in entry.get("targets") or []}
+    out: Boxed = {}
+    for entry in entries:
+        if not entry.get("destroyed") and not entry.get("start_error") and entry.get("study") == study:
+            seeds = tuple(entry["seeds"]) if entry.get("seeds") else None
+            for target in entry.get("targets") or []:
+                out.setdefault(target, []).append((entry["id"], seeds))
+    return out
+
+
+def boxed_lines(boxed: Boxed) -> list[str]:
+    """One header line per open box: the targets it runs, each with its seeds when it holds only some."""
+    held: dict[int, list[str]] = {}
+    for target, holders in boxed.items():
+        for box_id, seeds in holders:
+            said = f" (seeds {', '.join(map(str, seeds))})" if seeds else ""
+            held.setdefault(box_id, []).append(target + said)
+    return [f"  box    {box_id} runs {', '.join(held[box_id])}: left out here" for box_id in sorted(held)]
 
 
 def free_disk_gb() -> int | None:
@@ -588,7 +626,7 @@ def gate_step(spec_path: Path, plan_path: Path, study_dir: Path) -> tuple[dict[s
 
 
 def new_cells(plan: dict, known: set[str], study: str, replace: bool, only: set[str] | None,
-              allowed: set[str] | None, boxed: set[str]) -> list[Cell]:
+              allowed: set[str] | None, boxed: Boxed) -> list[Cell]:
     """The plan's cells the launch runs (chosen), not seen before and not done (or every one with replace). Each is
     added to known."""
     out = []
@@ -649,6 +687,8 @@ def parser() -> argparse.ArgumentParser:
     parser.add_argument("--only", action="extend", nargs="+", metavar="TARGET",
                         help="run only these targets of the plan; with --gates an arm runs only when its whole chain "
                              "of gates lies among them")
+    parser.add_argument("--seeds", action="extend", nargs="+", type=int, metavar="K",
+                        help="run only these seeds of the plan and its targets, as a box that holds only them does")
     parser.add_argument("--limit", action="extend", nargs="+", default=[], metavar="KEY=VALUE",
                         help=f"replace one of the plan's limits for this launch: {', '.join(LIMIT_OPTIONS)}")
     parser.add_argument("--mock", action="store_true", help=f"every model {MOCK_MODEL}, the runs into the study "
@@ -669,7 +709,7 @@ def parse_arguments(argv: list[str] | None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_arguments(argv)
     try:
-        options = Options(limit_overrides(args.limit), args.mock)
+        options = Options(limit_overrides(args.limit), args.mock, tuple(args.seeds or ()))
         plan = launch_plan(args.plan, options)
     except ValueError as error:
         print(error, file=sys.stderr)
@@ -679,11 +719,10 @@ def main(argv: list[str] | None = None) -> int:
     allowed = None                                              # with --gates: the spec's run names alone
     known_targets = set(plan["targets"])
     try:
-        on_boxes = box_targets(args.study or plan["study"])
+        boxed = box_targets(args.study or plan["study"])
     except (OSError, ValueError, KeyError) as error:
         print(f"the fleet's registry {RUNS / 'boxes.json'} cannot be read: {error}", file=sys.stderr)
         return 2
-    boxed = set(on_boxes)
     if args.gates:
         if args.mock:
             print("--mock decides no gates: rehearse a gated plan's targets with --mock --only", file=sys.stderr)
@@ -693,7 +732,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"--gates {args.gates} is of study {spec.study}, the launch of {study}", file=sys.stderr)
             return 2
         known_targets |= {spec.target(stem, worker, arm)[0] for stem, worker in spec.cells() for arm in spec.arms}
-        reach = only if not boxed else (known_targets if only is None else only) - boxed
+        whole = {target for target, holders in boxed.items() if any(not seeds or spec.seed in seeds
+                                                                     for _, seeds in holders)}
+        reach = only if not whole else (known_targets if only is None else only) - whole
         allowed = gated_runs(spec, reach)                       # whole chains of gates, none on a box
     if only is not None and (unknown := sorted(only - known_targets)):
         print(f"--only {' '.join(unknown)}: no target of {args.plan}" + (" or of its spec" if args.gates else ""),
@@ -712,8 +753,8 @@ def main(argv: list[str] | None = None) -> int:
         f"{' and '.join(f'${cap:.2f}' for cap in caps)}")
     print(f"plan {args.plan}: study {study}, {len(todo) + len(skipped)} cells, {len(skipped)} done already, "
           f"{len(todo)} to run; {spend}")
-    for box_id in sorted(set(on_boxes.values())):
-        print(f"  box    {box_id} runs {', '.join(t for t, i in on_boxes.items() if i == box_id)}: left out here")
+    for line in boxed_lines(boxed):
+        print(line)
     for cell in skipped:
         print(f"  skip   {cell.name} (runs/{study}/{cell.name} holds its run)")
     for cell in todo:

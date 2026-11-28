@@ -518,6 +518,22 @@ def test_a_target_may_state_its_own_seeds(tmp_path):
         seed_study.load_plan(plan_file)
 
 
+def test_seeds_leave_out_the_cells_of_other_seeds_and_their_caps(plan_file, tmp_path, monkeypatch, capsys):
+    """--seeds 2 runs seed 2 alone, its caps alone summed; a target's own seeds are cut the same way; a seed neither
+    the plan nor a target names is refused."""
+    code, out, _ = dry(plan_file, monkeypatch, capsys, "--seeds", "2")
+    names = re.findall(r"--name (\S+)", out)
+    assert code == 0 and len(names) == 4 and all(name.endswith("_s2") for name in names)
+    assert "4 cells, 0 done already, 4 to run; at most $20.00 at the runs' caps" in out
+    plan = seed_study.load_plan(plan_file)
+    plan["targets"]["swe_luna"]["seeds"] = [2, 3]
+    cut = seed_study.with_seeds(plan, [3])
+    assert [(c.target, c.seed) for c in seed_study.cells(cut)] == [("swe_luna", 3), ("swe_luna", 3)]
+    assert seed_study.with_seeds(plan, None) is plan
+    code, _, err = dry(plan_file, monkeypatch, capsys, "--seeds", "2", "3")
+    assert code == 2 and "--seeds 3: no seed of the plan or of its targets" in err
+
+
 def test_a_launch_may_name_the_openrouter_key_it_pays_with(tmp_path, capsys):
     """--openrouter-key-env: each cell's line sets OPENROUTER_API_KEY from the named variable of the login shell. The
     line holds the name, never a key, and a value that is no variable's name is refused."""
@@ -723,6 +739,26 @@ def test_the_launcher_leaves_out_every_target_an_open_box_of_the_study_runs(plan
     (tmp_path / "runs" / "boxes.json").write_text("{not json")
     assert seed_study.main([str(plan_file), "--dry-run"]) == 2
     assert "the fleet's registry" in capsys.readouterr().err
+
+
+def test_the_launcher_leaves_out_exactly_the_runs_of_a_box_that_holds_some_seeds(plan_file, tmp_path, monkeypatch,
+                                                                                capsys):
+    """Box 5 holds swe_luna's seed 1 and box 6 its seed 2: this host runs swe_deepseek's four cells alone. With box 6
+    gone, it runs swe_luna's seed 2 as well, and the header names each box with its seeds."""
+    monkeypatch.setattr(seed_study, "RUNS", tmp_path / "runs")
+    monkeypatch.setattr(seed_study.HOST, "free_memory_pct", lambda: 70)
+    monkeypatch.setattr(seed_study, "free_disk_gb", lambda: 20)
+    registry(tmp_path, {"id": 5, "study": "study_x", "targets": ["swe_luna"], "seeds": [1]},
+             {"id": 6, "study": "study_x", "targets": ["swe_luna"], "seeds": [2]})
+    assert seed_study.main([str(plan_file), "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "  box    5 runs swe_luna (seeds 1): left out here" in out and "  box    6 runs swe_luna (seeds 2)" in out
+    assert sorted(re.findall(r"--name (\S+)", out)) == sorted(f"swe_deepseek_{pack}_s{seed}" for seed in (1, 2)
+                                                               for pack in ("none", "revealing"))
+    registry(tmp_path, {"id": 5, "study": "study_x", "targets": ["swe_luna"], "seeds": [1]})
+    assert seed_study.main([str(plan_file), "--dry-run"]) == 0
+    names = re.findall(r"--name (\S+)", capsys.readouterr().out)
+    assert len(names) == 6 and "swe_luna_none_s2" in names and "swe_luna_none_s1" not in names
 
 
 def test_with_gates_a_box_s_target_leaves_out_every_arm_its_gate_reads(tmp_path, monkeypatch, capsys):

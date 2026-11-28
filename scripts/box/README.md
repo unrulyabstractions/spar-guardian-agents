@@ -36,13 +36,23 @@ run there. Groups go to the boxes heaviest first, each to the box with the fewes
 `--max-agents`, else the smaller of 1.4 per core (the Mac's figure; no box has measured it) and 60% of its memory over
 the plan's `limits.needs.<task>.memory_gb` per agent.
 
-`create` pins the commit first and reads the assignment, the caps and the keys from the plan and spec as that commit
-holds them, since that is what the boxes clone. It rents the assignment's boxes and records, per box, the study, the
-plan, the spec, its targets, its agents at once, its runs, their caps and the commit. `box_run.sh` reads them back and
-starts, under `nohup setsid` with `/root/.box_env` sourced:
+`--seeds <k> ...` (plan and create) gives the boxes of a launch only those seeds of their targets: their runs, caps and
+names are those seeds' alone (`study-s1s2-1` for seeds 1 and 2). One target's seeds go to several boxes by one launch
+per set of seeds:
 
 ```
-.venv/bin/python -m scripts.study.run_study <plan> --yes [--gates <spec>] --only <its targets> --limit max_agents=<N>
+uv run python -m scripts.box.fleet create --plan <plan> --boxes 1 --seeds 1 2
+uv run python -m scripts.box.fleet create --plan <plan> --boxes 1 --seeds 3 4 5
+```
+
+`create` pins the commit first and reads the assignment, the caps and the keys from the plan and spec as that commit
+holds them, since that is what the boxes clone. It rents the assignment's boxes and records, per box, the study, the
+plan, the spec, its targets, its seeds (none recorded: every seed), its agents at once, its runs, their caps and the
+commit. `box_run.sh` reads them back and starts, under `nohup setsid` with `/root/.box_env` sourced:
+
+```
+.venv/bin/python -m scripts.study.run_study <plan> --yes [--gates <spec>] --only <its targets> [--seeds <its seeds>]
+    --limit max_agents=<N>
 ```
 
 `--mock` adds `--mock`: every model is Inspect's mock model, the runs go to `<study>_mock` under names that end in
@@ -50,10 +60,13 @@ starts, under `nohup setsid` with `/root/.box_env` sourced:
 decides no gates under `--mock`, so a mock launch drops `--gates` and names only the box's targets the pinned plan
 holds. Running `box_run.sh` again after the launcher ended starts the runs the box does not store.
 
-A target runs on the Mac or on one box, never both. `create` and `box_run.sh` refuse while a launcher of the study
-lives on the Mac, and a launcher started on the Mac leaves out every target an open box of the study runs (its header
-names each box). A run name with any trace on the Mac (its run folder, an eval log, its console log) is refused by both
-before any rent or launch; set the old attempt aside first.
+A run is made on the Mac or on one box, never both. A run is a target, a pack and a seed; a box makes every pack of
+its targets, of every seed or of its own seeds. `create` refuses a box when another open box of the study would make
+one of its runs, and names those runs, so two boxes may hold one target with seeds apart. `create` and `box_run.sh`
+refuse while a launcher of the study lives on the Mac, and a launcher started on the Mac leaves out every run an open
+box of the study makes (its header names each box, its targets and their seeds). A run name with any trace on the Mac
+(its run folder, an eval log, its console log) is refused by both before any rent or launch; set the old attempt aside
+first.
 
 Every study's boxes take the main key (CLAUDE.md §3a): `--main-key` sends `OPENROUTER_API_KEY` from the shell's
 environment, so run `box_run.sh` from a terminal that reads `~/.zshrc`, or as `zsh -lic 'scripts/box/box_run.sh <id>
@@ -107,7 +120,7 @@ answer, it stops the box (`fleet stop`). A box it cannot capture is stopped, not
 | `<plan> here differs from commit <sha>` | commit and push the file, or restore it: the boxes run the commit's |
 | `<run> has traces here` | a run folder, eval log or console log of the name is here: set it aside first |
 | `a launcher of <study> is live on this machine` | stop it; one started later leaves out the boxes' targets |
-| `box <id> of <study> runs <targets> already` | two boxes of one study never run the same target |
+| `box <id> of <study> makes <runs> already` | two boxes of one study never make the same run: take other `--seeds` |
 | `the fleet would bill $X/h, past its cap` | `--max-fleet-dph` (15 $/h) holds the open boxes and this launch |
 | `the account holds these boxes already` | a box of this name is live: destroy it, or rent under another `--label-prefix` |
 | `vast.ai cannot start it` (status) | destroy it with `--accept-loss`, then `create --plan <plan> [--gates <spec>] --boxes N --only <box> --label-prefix spar-screen-retry` |
@@ -121,7 +134,7 @@ answer, it stops the box (`fleet stop`). A box it cannot capture is stopped, not
 | `Docker holds ... containers` (capture) | a stopped run's workspace: `box_teardown.sh` saves it under `/root/docker_saved` and passes `--accept-docker` |
 | `cannot tell what Docker holds` (capture) | the teardown restarts Docker once, then stops the box for a person |
 | `STUCK nothing runs and ...` (launcher) | it ended with 3: memory or disk unreadable, or a floor above the disk |
-| `box <id> runs <targets>: left out here` (launcher) | the Mac leaves those targets to their box |
+| `box <id> runs <targets> [(seeds ...)]: left out here` (launcher) | the Mac leaves those runs to their box |
 
 ## Checks on one box
 

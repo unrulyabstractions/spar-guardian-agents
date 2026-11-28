@@ -12,9 +12,9 @@ and asks OpenRouter's GET /api/v1/key, which costs nothing. It refuses:
 - a key with less left than the runs of every open box that holds it may spend at their caps: this box and each other
   registered box not destroyed whose entry records that it got the key of this variable (key_sent). A box's need is the
   sum of each run's cost_limit_usd (the plan's or the target's or the default in src/models/cost_cap.py) over every run
-  its targets may still make, the gated arms too, as its pinned commit's plan and spec give them
-  (fleet_registry.entry_box). A run whose result is stored on this machine has ended and spends nothing more, so it is
-  not counted (stored_here).
+  its targets may still make, the gated arms too, of its own seeds alone when its entry names some, as its pinned
+  commit's plan and spec give them (fleet_registry.entry_box). A run whose result is stored on this machine has ended
+  and spends nothing more, so it is not counted (stored_here).
 Beside the need it prints what this machine's own live runs may spend at their caps, which the key may share. A pass
 records key_sent in the box's entry, since box_run.sh sends the key next. Exit 0 when the key passes, 1 with every
 reason when it does not.

@@ -1,9 +1,10 @@
 """The vast.ai fleet's command line. scripts/box/README.md gives the order of the steps.
 
-    uv run python -m scripts.box.fleet plan <plan> [--gates <spec>] [--boxes N] [--max-agents M]
+    uv run python -m scripts.box.fleet plan <plan> [--gates <spec>] [--boxes N] [--max-agents M] [--seeds K ...]
     uv run python -m scripts.box.fleet offers [--top 20] [--max-dph 1.0]
     uv run python -m scripts.box.fleet create --plan <plan> [--gates <spec>] --boxes N [--max-agents M]
-                                              [--only <box> ...] [--label-prefix spar-screen] [--max-dph 1.0]
+                                              [--seeds K ...] [--only <box> ...] [--label-prefix spar-screen]
+                                              [--max-dph 1.0]
                                               [--skip-machine <machine> ...] [--max-fleet-dph 15] [--commit SHA]
                                               [--dry-run]
     uv run python -m scripts.box.fleet status
@@ -17,13 +18,14 @@
 plan prints a plan's assignment to boxes (fleet_plan.py): it needs no key and sends nothing. offers reads the
 on-demand offers that can hold a box. create is fleet_create.py, status fleet_status.py and destroy fleet_destroy.py.
 ids prints the registered boxes not yet destroyed. entry prints a box's fields for the shell scripts, a list joined by
-commas (key_files: the key files under the home its runs need, which box_run.sh sends). repin moves boxes to a commit
-origin/main holds, when the launch's package list is still the .venv's, and sets each box's runs, caps and key files to
-what that commit's plan gives its targets. run-args prints, one per line, what box_run.sh starts on a box after
-`.venv/bin/python -m`: the launcher on the box's plan, its targets and its agents at once, as its pinned commit holds
-them. It refuses a model that needs a key a box does not hold, a key file the box's entry does not record, a run of
-the box of which this checkout holds a trace the box did not make (the watch would mix the two), and a launcher of the
-study live on this machine. stop sends vast.ai's stop, which keeps the disk and bills storage alone, to a registered box
+commas (key_files: the key files under the home its runs need, which box_run.sh sends; seeds: the seeds it holds,
+empty for every seed). repin moves boxes to a commit origin/main holds, when the launch's package list is still the
+.venv's, and sets each box's runs, caps and key files to what that commit's plan gives its targets and seeds. run-args
+prints, one per line, what box_run.sh starts on a box after `.venv/bin/python -m`: the launcher on the box's plan, its
+targets, its seeds when it holds only some, and its agents at once, as its pinned commit holds them. It refuses a model
+that needs a key a box does not hold, a key file the box's entry does not record, a run of the box of which this
+checkout holds a trace the box did not make (the watch would mix the two), and a launcher of the study live on this
+machine. stop sends vast.ai's stop, which keeps the disk and bills storage alone, to a registered box
 of this repository.
 """
 from __future__ import annotations
@@ -48,12 +50,12 @@ from src.measures.run_directory import RunDir
 
 ENTRY_FIELDS = ("study", "plan", "gates", "tasks", "box", "key", "label", "launch", "commit", "requirements",
                 "requirements_sha256", "python_version", "uv_version", "cores", "ram_gb", "dph", "min_cores",
-                "min_ram_gb", "min_disk_gb", "max_agents", "runs", "cap_usd", "key_files")
+                "min_ram_gb", "min_disk_gb", "max_agents", "runs", "cap_usd", "key_files", "seeds")
 
 
 def cmd_plan(args: argparse.Namespace) -> int:
     try:
-        assignment = fleet_plan.assign(args.plan, args.gates, args.boxes, args.max_agents)
+        assignment = fleet_plan.assign(args.plan, args.gates, args.boxes, args.max_agents, seeds=args.seeds)
     except (OSError, ValueError) as error:
         print(f"refused: {error}", file=sys.stderr)
         return 2
@@ -98,7 +100,7 @@ def cmd_entry(args: argparse.Namespace) -> int:
         return 1
     for name in args.fields:
         value = values.get(name)
-        print("" if value is None else ",".join(value) if isinstance(value, list) else value)
+        print("" if value is None else ",".join(map(str, value)) if isinstance(value, list) else value)
     return 0
 
 
@@ -149,9 +151,10 @@ def foreign_traces(study: str, name: str, own: frozenset[str] | set[str] = froze
 
 
 def launcher_args(entry: dict, mock: bool) -> list[str]:
-    """What the box starts after `.venv/bin/python -m`: the launcher on the plan, the spec, the box's targets and its
-    agents at once, as the registry records them. The launcher decides no gates under --mock, so a mock launch drops
-    the spec and names only the box's targets the pinned commit's plan holds. ValueError when it holds none of them."""
+    """What the box starts after `.venv/bin/python -m`: the launcher on the plan, the spec, the box's targets, its seeds
+    when its entry names any (--seeds), and its agents at once, as the registry records them. The launcher decides no
+    gates under --mock, so a mock launch drops the spec and names only the box's targets the pinned commit's plan
+    holds. ValueError when it holds none of them."""
     gates, targets = ["--gates", entry["gates"]] if entry["gates"] else [], entry["targets"]
     if mock:
         pinned = fleet_layout.committed(entry["commit"], entry["plan"])
@@ -159,7 +162,8 @@ def launcher_args(entry: dict, mock: bool) -> list[str]:
         gates, targets = [], [target for target in targets if target in in_plan]
         if not targets:
             raise ValueError(f"{entry['plan']} holds none of the box's targets yet: --mock runs only open targets")
-    return ["scripts.study.run_study", entry["plan"], "--yes", *gates, "--only", *targets,
+    seeds = ["--seeds", *map(str, entry["seeds"])] if entry.get("seeds") else []
+    return ["scripts.study.run_study", entry["plan"], "--yes", *gates, "--only", *targets, *seeds,
             "--limit", f"max_agents={entry['max_agents']}", *(["--mock"] if mock else [])]
 
 
@@ -221,6 +225,8 @@ def add_assignment_arguments(parser: argparse.ArgumentParser, plan_flag: bool) -
     parser.add_argument("--gates", type=Path, help="the plan's gated spec, e.g. studies/gated/<study>.yaml")
     parser.add_argument("--boxes", type=int, required=plan_flag, default=1, help="the boxes the plan runs on")
     parser.add_argument("--max-agents", type=int, help="each box's agents at once, in place of its estimate")
+    parser.add_argument("--seeds", type=int, nargs="+", default=(), metavar="K",
+                        help="the boxes run only these seeds of their targets; another launch may take the others")
 
 
 def main(argv: list[str] | None = None) -> int:

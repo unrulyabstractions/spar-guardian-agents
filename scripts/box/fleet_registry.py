@@ -3,7 +3,8 @@
 A launch pins the commit, the package list and the Python and uv versions in logs/boxes/launch-<launch>/, so every box
 of the launch runs the same code and packages whatever this checkout does later. repin moves a box to another commit.
 A box's entry records what it runs (box_entry), so box_setup.sh, box_run.sh and box_key.py need only its id. What a box
-runs is its plan and spec as its commit holds them (entry_box).
+runs is its plan and spec as its commit holds them, its targets of them and, when its entry names seeds, only those
+seeds of its targets (entry_box). An entry without seeds runs every seed, as every entry before seeds did.
 """
 from __future__ import annotations
 
@@ -79,11 +80,12 @@ def registered(registry: dict, instance_id: int) -> dict | None:
 def box_entry(instance_id: int, label: str, assignment: Assignment, box: BoxPlan, offer: dict | None, launch: str,
               commit: str) -> dict:
     """The registry's record of one instance: what it runs (the study, the plan and spec as the clone holds them, the
-    box's targets, its agents at once, its runs and their caps, the key files under the home its runs need, the commit)
-    and what identifies and prices it. Never the reply's keys."""
+    box's targets, its seeds or None for every seed, its agents at once, its runs and their caps, the key files under
+    the home its runs need, the commit) and what identifies and prices it. Never the reply's keys."""
     offer = offer or {}
     return {"id": instance_id, "label": label, "box": box.name, "study": assignment.study, "plan": assignment.plan,
-            "gates": assignment.gates, "targets": box.targets, "max_agents": box.max_agents, "runs": len(box.runs),
+            "gates": assignment.gates, "targets": box.targets, "seeds": list(box.seeds) or None,
+            "max_agents": box.max_agents, "runs": len(box.runs),
             "cap_usd": round(box.cap_usd, 2), "key_files": fleet_plan.key_files(box), "tasks": box.tasks,
             "floor": list(box.floor), "commit": commit, "launch": launch, "offer": offer.get("id"),
             "machine_id": offer.get("machine_id"), "dph": offer.get("dph_total"),
@@ -95,9 +97,11 @@ def box_entry(instance_id: int, label: str, assignment: Assignment, box: BoxPlan
 
 def entry_box(entry: dict, commit: str | None = None) -> BoxPlan:
     """The box a registry entry runs: its targets of its plan and spec as the commit holds them (the entry's own pin
-    unless named). ValueError when that plan no longer holds them as whole groups, or the commit lacks a file."""
+    unless named), and of them its seeds when it names any. ValueError when that plan no longer holds them as whole
+    groups or names its seeds, or the commit lacks a file."""
     return fleet_plan.box_for(Path(entry["plan"]), Path(entry["gates"]) if entry["gates"] else None, entry["box"],
-                              entry["targets"], entry["max_agents"], commit or entry["commit"])
+                              entry["targets"], entry["max_agents"], commit or entry["commit"],
+                              tuple(entry.get("seeds") or ()))
 
 
 def open_dph(registry: dict) -> float:

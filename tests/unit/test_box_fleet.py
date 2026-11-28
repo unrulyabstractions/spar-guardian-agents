@@ -288,14 +288,70 @@ def test_a_mock_launch_reads_traces_under_its_own_names(registry, capsys):
     assert f"{name}_mock has traces here (logs/{STUDY}_mock/run_study/{name}_mock.log)" in capsys.readouterr().err
 
 
-def test_create_refuses_a_target_another_open_box_runs(registry, monkeypatch, capsys):
-    """Two boxes of one study never run the same target."""
+def test_create_refuses_a_run_another_open_box_makes(registry, monkeypatch, capsys):
+    """Two boxes of one study never make the same run: an entry without seeds makes every seed of its targets."""
     fake = FakeVast()
     monkeypatch.setattr(vast_api, "http", fake)
     add_box(5)
     assert fleet.main(["create", *TWO_BOXES]) == 1
-    assert f"box 5 of {STUDY} runs {', '.join(sorted(BOX.targets))} already" in capsys.readouterr().out
+    assert f"box 5 of {STUDY} makes {', '.join(run.name for run in BOX.runs)} already" in capsys.readouterr().out
     assert fake.calls == []
+
+
+SPLIT_PLAN = """study: seed_split
+seeds: [1, 2, 3, 4, 5]
+settings: [time_limit_s=18000, cost_limit_usd=7]
+targets:
+  team:
+    module: studies.cells.swe.ian_flipt_minimal
+    model: deepseek-flash-openrouter
+    packs: [none]
+    settings: [n_agents=16]
+limits:
+  needs:
+    swe: {memory_gb: 0.5, per: agent}
+"""
+"""One team of 16 with five seeds, each run capped at $7."""
+
+
+def test_one_target_s_seeds_go_to_two_boxes_and_a_run_two_boxes_would_share_is_refused(registry, tmp_path,
+                                                                                         monkeypatch, capsys):
+    """--seeds 1 2 and --seeds 3 4 5 each rent a box of the same target. --seeds 2 3, and a launch of every seed, are
+    refused with the runs the open boxes make already. Each box's entry, run-args and key need hold its seeds alone."""
+    monkeypatch.setattr(fleet_layout, "ROOT", tmp_path)
+    monkeypatch.chdir(tmp_path)                                  # the entry's plan path is from the checkout's root
+    plan = tmp_path / "studies" / "seed_split.yaml"
+    write_text(plan, SPLIT_PLAN)
+    fake = FakeVast()
+    monkeypatch.setattr(vast_api, "http", fake)
+    split = ("create", "--plan", str(plan), "--boxes", "1", "--max-agents", "16", "--seeds")
+    assert fleet.main([*split, "1", "2"]) == 0
+    assert fleet.main([*split, "3", "4", "5"]) == 0
+    out = capsys.readouterr().out
+    assert "seed-split-s1s2-1: 2 runs, 32 agents in all, 16 at once; $14.00 at the runs' caps" in out
+    assert "seed-split-s3s4s5-1: 3 runs, 48 agents in all, 16 at once; $21.00 at the runs' caps" in out
+    first, second = fleet_registry.load_registry()["boxes"]
+    assert [(b["box"], b["targets"], b["seeds"], b["runs"], b["cap_usd"]) for b in (first, second)] == [
+        ("seed-split-s1s2-1", ["team"], [1, 2], 2, 14.0), ("seed-split-s3s4s5-1", ["team"], [3, 4, 5], 3, 21.0)]
+    sent = len(fake.calls)
+    assert fleet.main([*split, "2", "3"]) == 1
+    out = capsys.readouterr().out
+    assert f"box {first['id']} of seed_split makes team_none_s2 already" in out
+    assert f"box {second['id']} of seed_split makes team_none_s3 already" in out
+    assert fleet.main(["create", "--plan", str(plan), "--boxes", "1", "--max-agents", "16"]) == 1
+    out = capsys.readouterr().out
+    assert f"box {first['id']} of seed_split makes team_none_s1, team_none_s2 already" in out
+    assert f"box {second['id']} of seed_split makes team_none_s3, team_none_s4, team_none_s5 already" in out
+    assert len(fake.calls) == sent                                       # a refused launch asks vast.ai nothing
+    assert fleet.main(["run-args", str(first["id"])]) == 0
+    args = capsys.readouterr().out.split("\n")[:-1]
+    assert args[3:] == ["--only", "team", "--seeds", "1", "2", "--limit", "max_agents=16"]
+    assert run_study.parse_arguments(args[1:]).seeds == [1, 2]
+    assert fleet.main(["entry", str(first["id"]), "seeds"]) == 0 and capsys.readouterr().out == "1,2\n"
+    assert box_key.holders_need(first["id"], "OPENROUTER_API_KEY") == [(first["id"], 2, 14.0)]
+    fleet_registry.update_box(second["id"], key_sent="OPENROUTER_API_KEY")
+    assert box_key.holders_need(first["id"], "OPENROUTER_API_KEY") == [(first["id"], 2, 14.0),
+                                                                       (second["id"], 3, 21.0)]
 
 
 MAC_LAUNCHER = ("/Users/me/work/.venv/bin/python3 -m scripts.study.run_study "
@@ -763,6 +819,7 @@ def test_run_args_start_the_launcher_on_the_box_s_targets_from_the_registry(regi
     assert fleet.main(["run-args", "7", "--mock"]) == 0
     assert run_study.parse_arguments(capsys.readouterr().out.split("\n")[1:-1]).mock
     assert fleet.main(["run-args", "8"]) == 1
+    assert fleet.main(["entry", "7", "seeds"]) == 0 and capsys.readouterr().out == "\n"    # no seeds: every seed
 
 
 def test_run_args_pass_the_gates_and_every_target_of_the_box_s_chains(registry, capsys):

@@ -5,8 +5,9 @@ of them --only names. It pins the launch first, and reads the assignment, the ca
 as the pinned commit holds them, which is what the boxes clone. It refuses a plan or spec whose file here differs from
 that commit's, a box whose runs call a model that needs a key a box does not hold, a run of which this checkout holds a
 trace (fleet_plan.traces_here: the box would make it again beside it, and its capture would refuse it), a launcher of
-the study live on this machine (it would run the boxes' targets too), a target another open box of the study runs, and
-a box the account holds already.
+the study live on this machine (it would run the boxes' targets too), a run another open box of the study makes, and
+a box the account holds already. With --seeds the boxes hold only those seeds of their targets, so a target's other
+seeds may go to the boxes of another launch.
 
 It rents one offer per box in the same step as the search, since offer ids expire within minutes. It takes no offer
 above --max-dph and stops before the fleet's $/h (the registered boxes not destroyed, and this launch) would pass
@@ -190,18 +191,22 @@ def launcher_problems(study: str) -> list[str]:
 
 def box_problems(assignment: Assignment, boxes: list[BoxPlan]) -> list[str]:
     """Why these boxes could not run their plan's runs: a model's key, a run this checkout holds a trace of, a launcher
-    of the study here, a target another open box of the study runs (a box vast.ai cannot start runs nothing, so its
-    replacement may take its targets)."""
+    of the study here, a run another open box of the study makes (a box vast.ai cannot start runs nothing, so its
+    replacement may take its runs). An open box makes a run when it holds the run's target with every seed (an entry
+    without seeds) or with the run's seed, so two boxes may hold one target with seeds apart."""
     problems = [problem for box in boxes for problem in fleet_plan.key_problems(box)]
     problems += [fleet_plan.trace_problem(name, traces) for box in boxes
                  for name, traces in fleet_plan.held_here(assignment.study, box).items()]
     problems += launcher_problems(assignment.study)
-    targets = {target for box in boxes for target in box.targets}
+    runs = [run for box in boxes for run in box.runs]
     for entry in load_registry()["boxes"]:
-        shared = sorted(targets & set(entry.get("targets") or []))
-        if not entry["destroyed"] and not entry.get("start_error") and entry.get("study") == assignment.study \
-                and shared:
-            problems.append(f"box {entry['id']} of {assignment.study} runs {', '.join(shared)} already")
+        if entry["destroyed"] or entry.get("start_error") or entry.get("study") != assignment.study:
+            continue
+        seeds = set(entry.get("seeds") or [])
+        shared = [run.name for run in runs
+                  if run.target in (entry.get("targets") or []) and (not seeds or run.seed in seeds)]
+        if shared:
+            problems.append(f"box {entry['id']} of {assignment.study} makes {', '.join(shared)} already")
     return problems
 
 
@@ -215,7 +220,7 @@ def cmd_create(args: argparse.Namespace) -> int:
         print(f"refused: {error}")
         return 1
     try:
-        assignment = fleet_plan.assign(args.plan, args.gates, args.boxes, args.max_agents, pin["commit"])
+        assignment = fleet_plan.assign(args.plan, args.gates, args.boxes, args.max_agents, pin["commit"], args.seeds)
         boxes = chosen_boxes(assignment, args.only)
     except (OSError, ValueError) as error:
         print(f"refused: {error}")

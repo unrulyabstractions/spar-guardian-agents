@@ -2,9 +2,10 @@
 # Start a box's launcher: scripts/box/box_run.sh <instance-id> [--mock] [--main-key]
 #
 # The launcher is the Mac's own, scripts/study/run_study.py, on the box's plan: `run_study <plan> --yes [--gates
-# <spec>] --only <the box's targets> --limit max_agents=<its agents at once>`, all from the box's registry entry and its
-# pinned commit's plan through fleet.py run-args. That refuses a model that needs a key a box does not hold, a run of
-# the box of which this machine holds a trace the box did not make, and a launcher of the study live on this machine.
+# <spec>] --only <the box's targets> [--seeds <its seeds>] --limit max_agents=<its agents at once>`, all from the box's
+# registry entry and its pinned commit's plan through fleet.py run-args (--seeds only for an entry that holds some seeds
+# of its targets; one without seeds runs every seed). run-args refuses a model that needs a key a box does not hold, a
+# run of the box of which this machine holds a trace the box did not make, and a launcher of the study live here.
 # --mock passes --mock without --gates and with only the targets the pinned plan holds: every model is Inspect's mock
 # model, the runs go to <study>_mock under names that end in _mock, no key goes to the box and nothing is paid. Running
 # this again on a box whose launcher ended starts the runs not stored.
@@ -34,7 +35,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 cd "$root"
 if [ $# -lt 1 ]; then
-  sed -n '2,31p' "$0"
+  sed -n '2,32p' "$0"
   exit 2
 fi
 id=$1
