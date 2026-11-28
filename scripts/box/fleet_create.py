@@ -26,7 +26,7 @@ import argparse
 import subprocess
 import sys
 import urllib.error
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from scripts.box import fleet_layout, fleet_plan, fleet_registry
@@ -222,6 +222,8 @@ def cmd_create(args: argparse.Namespace) -> int:
     try:
         assignment = fleet_plan.assign(args.plan, args.gates, args.boxes, args.max_agents, pin["commit"], args.seeds)
         boxes = chosen_boxes(assignment, args.only)
+        if args.min_ram_gb:    # a run whose recorder outgrows the task's floor: one Luna team of 16 held 80 GB
+            boxes = [replace(box, floor=(box.floor[0], max(box.floor[1], args.min_ram_gb))) for box in boxes]
     except (OSError, ValueError) as error:
         print(f"refused: {error}")
         return 2

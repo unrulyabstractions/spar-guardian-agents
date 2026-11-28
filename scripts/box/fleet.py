@@ -268,6 +268,8 @@ def main(argv: list[str] | None = None) -> int:
     create.add_argument("--label-prefix", default=LABEL_PREFIX)
     create.add_argument("--skip-machine", nargs="+", type=int, default=[], metavar="MACHINE",
                         help="machines to take no offer from: a VM there came up smaller than its offer")
+    create.add_argument("--min-ram-gb", type=int, default=0, metavar="GB",
+                        help="the least RAM in an offer's share, when the runs need more than their task's floor")
     create.add_argument("--max-dph", type=float, default=MAX_DPH, help="the dearest offer, $/h with the disk")
     create.add_argument("--max-fleet-dph", type=float, default=MAX_FLEET_DPH,
                         help="what the fleet may bill per hour in all, its registered boxes included")

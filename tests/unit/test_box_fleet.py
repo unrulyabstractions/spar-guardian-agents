@@ -221,6 +221,23 @@ def test_create_takes_no_offer_from_a_skipped_machine(registry, monkeypatch, cap
     assert f"/asks/{first}/" not in capsys.readouterr().out
 
 
+def test_create_takes_no_offer_under_min_ram_gb(registry, monkeypatch, capsys):
+    """--min-ram-gb raises the floor of the launch's boxes: an offer with less RAM in its share goes untaken, however
+    cheap, and a floor no offer meets leaves the box without one."""
+    monkeypatch.setattr(vast_api, "http", FakeVast())
+    assert fleet.main(["create", *ONE_BOX, "--dry-run"]) == 0
+    first = re.search(r"/asks/(\d+)/", capsys.readouterr().out).group(1)
+    share = vast_offers.ram_share_gb(next(o for o in SAVED_SEARCH if str(o["id"]) == first))
+    bigger = sorted(vast_offers.ram_share_gb(o) for o in SAVED_SEARCH if vast_offers.ram_share_gb(o) > share)
+    if bigger:
+        assert fleet.main(["create", *ONE_BOX, "--min-ram-gb", str(int(share) + 1), "--dry-run"]) == 0
+        taken = re.search(r"/asks/(\d+)/", capsys.readouterr().out).group(1)
+        assert vast_offers.ram_share_gb(next(o for o in SAVED_SEARCH if str(o["id"]) == taken)) > share
+    assert fleet.main(["create", *ONE_BOX, "--min-ram-gb", "100000", "--dry-run"]) == 1
+    out = capsys.readouterr().out
+    assert "would send" not in out and "no offer left for" in out
+
+
 def test_the_dry_run_names_the_boxes_no_offer_is_left_for(registry, monkeypatch, capsys):
     """Six SWE boxes and four offers that hold one."""
     monkeypatch.setattr(vast_api, "http", FakeVast())
