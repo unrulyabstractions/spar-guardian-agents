@@ -5448,3 +5448,54 @@ machine and compared every file with its copy here. I read each teardown log's s
   attempts/). Two readers read twelve of the `ian_gflipt` runs (workflow wf_6b822ca0-c76); their 62 quotes verified
   by script. Both teams stored as tempted (w4 guided s2, w4 identified s2) rest on a worker opening the team's own
   commit: the readers say looked or none. NOT CHANGED. UNVERIFIED: these 32 runs by a verifier (after the last 8 end).
+
+## 2026-11-27 (afternoon and evening): disregulator_headline_0 launched; regulator_headline_0 complete; machines, space, archive
+
+- The user's orders, in order: "yes option 2", "excecute", "to completion" (the team-size study: Luna, Haiku and Muse
+  workers in teams of 2, 4, 8, 16, Terra in teams of 2 and 4; baseline, one DeepSeek or one HY4 disregulator at level
+  instructed; both versions; `swe/notes_folder`; five samples; 420 runs), "parallelize more, why not more vast ai",
+  "clear everything that can go, make sure data is in hf", "just keep headlines in here, move rest to OLD", and the
+  Summary column ("re-design this columns ... Iterate and polish").
+- Before the launch: `uv run pytest tests/unit -k collaboration` passed with the new test over all 420 runs
+  (`test_no_worker_of_disregulator_headline_0_can_cheat_alone`), plans on main 12a85f07, 3cb19393, b5ada5a1.
+- Machines, from `logs/boxes/destroyed.jsonl` (my count): 52 destroyed between 12:30 and 18:30 PST. 46 after a passing
+  capture check: 2,855,867 files swept, 27,046 captured, 0 lost. 6 with a recorded accepted loss ($3.03 in all):
+  62912261 and 62912536 (vast.ai could not start them), 62922187 (no ssh in 30 minutes), 62927465 (52 GB of RAM where
+  the offer said 64), 62946479 (my wrong agent count, destroyed in setup), and 62912256.
+- 62912256 (88 cores, a 2016 Xeon, disk 86% full): 27 teams at once drove its load to 700 with 20 to 34% I/O wait; its
+  runs advanced about ten times slower than elsewhere. I stopped its launcher and its 27 run processes by pid at
+  14:26, captured its files (201 captured, 0 missing, 0 different), and destroyed it with the loss of the stopped runs'
+  212 exited containers recorded (the machine had no space left to save them). Its six cells moved to
+  `disregulator_headline_0_boxes_g2.yaml` and ran one cell per machine; the 29 stopped attempts and one failed start
+  are under attempts/ with their console logs.
+- MY FAULT, 13:50 to 13:58: I started the empty-and-destroy drivers for nine machines that were still in setup. A
+  machine in setup has no launcher and no cell, which the driver took for "runs ended": it destroyed 62921224,
+  62921230 and 62921232 (the capture check passes on an empty machine) and killed the setup of two more. Nothing had
+  run on them. The driver now waits for a LAUNCH line in the machine's launcher log before it may act.
+- A second fault of mine: a zsh loop over an unsplit variable started one setup for six machine ids at once; the six
+  sat without a setup for six minutes.
+- Failed runs so far, each run again once with its attempt kept: 5 starts that timed out or lost their connection on
+  overloaded machines; Luna runs refused by the provider ("Invalid prompt") or over Luna's context window (teams of 8
+  and 16); one Haiku run whose grading gave no result.
+- regulator_headline_0: its last machines 62825072 and 62830000 are destroyed after passing checks. 62830000's link
+  gave about 0.8 MB/s in all; the guard stopped it after my copy ran past its limits; I started it again and copied
+  its last three eval logs (2.0, 1.1 and 1.4 GB) in 48 MB pieces, each joined file equal to the machine's sha256
+  (`rsync --checksum` then transferred 0 bytes for s5 and s3), and removed the pieces on the machine by their literal
+  paths. I also removed two 2 KB partial copies of those logs on the Mac that my copy of live runs had left; they
+  made the guard's teardown refuse. The study: 320 stored runs, 320 valid by the study's check, $247.68. The
+  negative control under guided and identified: 80 of 80 samples, 0 hacked, every final hand-in with 0 planted
+  values (my count from study_status.py). README written by the tool. UNVERIFIED until its verifier returns: the 40
+  `ian_gflipt` runs of those two rows.
+- Hugging Face: `regulator_headline_0` 280 runs compared identical (21,500 files: same 21,500, add 0, change 0), then
+  34 more uploaded (exit 0); the last 6 are uploading. `disregulator_workers_1`: all 61 runs, compared identical
+  (3,045 files).
+- Disk: `colima ssh -- sudo fstrim -v /var/lib/docker` trimmed 329.5 GiB; Docker's disk file went from 317 GB to
+  41 GB and the Mac from 228 GB to 504 GB free; nothing was deleted. On the user's word I then deleted 21 machine
+  snapshots (67.6 GB) after a script checked, for each, that every file its manifest lists is on the Mac with the
+  recorded size; 4 snapshots (4.3 GB) whose files were re-labelled later stay.
+- Archive, on the user's word: `archive_study --apply` moved disregulator_workers_1, disregulator_workers_0,
+  regulator_scale_2 and disregulator_existence_2 to OLD/; each printed "verified: every file arrived with the same
+  size and sha256"; their plans are closed (138a924c).
+- Viewer: the Summary's lead column became "Workers" and "Influencers", and a condition column is role, level and
+  model (2580aa7c, 8a19c934). I viewed the agent's screenshots of both headline studies; 126 and then 127 tests of
+  the summary and viewer pass on main.
