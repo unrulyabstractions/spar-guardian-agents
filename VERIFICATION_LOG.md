@@ -5531,3 +5531,30 @@ machine and compared every file with its copy here. I read each teardown log's s
 - Luna teams of 16 on `ian_gflipt`: the run process grew to 60 to 80 GB resident and the kernel killed nine of them
   (exit 137; `dmesg` on 62929919 names python3 with 62 and 80 GB); one more was refused by the provider ("Invalid
   prompt"). Their second attempts wait for their first machines to be captured. UNVERIFIED: the 45 runs not stored.
+
+## 2026-11-27 (22:00): disregulator_headline_0, the evening's machines, copies and tool changes
+
+- Destroyed after a passing capture check (I read each `logs/boxes/<id>/capture.json`; swept / captured / lost):
+  62946771 66,315 / 572 / 0; 62913571 67,406 / 1,581 / 0; 62934758 66,511 / 768 / 0; 62934754 67,622 / 585 / 0;
+  62946574 66,313 / 571 / 0; 62946579 66,278 / 535 / 0; 62926172 66,221 / 475 / 0. 62929919 passed its check
+  (65,823 / 86 / 0) and its destroy was still packing its snapshot when this was written.
+- Stored on the Mac at 21:45 (my `study_status.py`): 409 run folders, 407 valid, 2 not valid
+  (`ian_gflipt_luna_w16_disregulator_hy4_notes_folder_s1`, refused by the provider; `ian_gflipt_luna_w4_baseline_notes_folder_s5`,
+  failed twice and not run a third time). `ian_flipt`: 210 of 210 valid. UNVERIFIED by a verifier agent: the 32 runs
+  stored since 19:45.
+- `ian_gflipt_luna_w16_disregulator_deepseek_notes_folder_s2` (the one good run of its cell, on 62929915): eval log
+  fetched in 33 pieces, joined, sha256 equal to the machine's (1,616,025,187 bytes), run folder 125 files. VERIFIED.
+- `attempts/ian_gflipt_luna_w8_baseline_notes_folder_s5.1` eval log of 62926172: fetched by byte ranges
+  (`range_pull.py`, scratch), sha256 equal (3,156,937,838 bytes); the machine's capture check then passed. VERIFIED.
+- MY FAULT, 21:31: I ran about 120 ssh streams against 62922176 (Sweden). The guard's capture could not connect, its
+  second try failed, and the guard stopped the machine. A first restart (21:33) was stopped again by the guard; since
+  21:41 vast.ai answers "Required resources are currently unavailable, state change queued". The machine holds the
+  run folders and eval logs of `ian_gflipt_luna_w8_disregulator_deepseek_notes_folder_s1`, `_s4`, `_s5` (finished,
+  exit 0). On the Mac: 4.3 GB of their 8.7 GB of logs as pieces, no run folder. NOT CAPTURED; nothing destroyed.
+- Why copies were slow: the Mac receives about 29 MB/s in all (measured on en0), and my drivers, my finish scripts
+  and the guard's teardown each copied the same file, up to five streams per file. I stopped the duplicates by pid
+  and fetch big files once, by ranges, placed only on an equal sha256.
+- Landed on main: 6668a538 (a box may hold some seeds of its targets; 397 tests of fleet, box, launcher and
+  collaboration pass on main) and a1064a03 (the destroy's snapshot packs at gzip level 1; 54 capture tests pass).
+  UNVERIFIED on a real machine until the second attempts of the Luna teams of 16 run: `--seeds` on create and on
+  the box's launcher.
