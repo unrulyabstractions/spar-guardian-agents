@@ -5582,3 +5582,25 @@ machine and compared every file with its copy here. I read each teardown log's s
   it was deleted; its killed attempts' logs and recorder file (35.5 GB) are still being copied by ranges.
 - 62976111, rented at 22:06 for one sample, came up with 64 GB of RAM share: destroyed unused with a recorded reason
   ($0.00). `fleet create --min-ram-gb` (commit 90c2a2a8) now enforces the floor.
+
+## 2026-11-27 (23:10): disregulator_headline_0, the Swedish machine's three runs rescued; nine second attempts placed
+
+- 62922176 (Sweden) came back at 22:10. `ian_gflipt_luna_w8_disregulator_deepseek_notes_folder_s1`, `_s4`, `_s5`: run
+  folders copied (97, 106, 94 files) and eval logs fetched by byte ranges, each placed on an equal sha256
+  (s1 2,513 MiB; s5 2,893 MiB; s4 3,411,069,044 bytes). The guard's teardown then passed its capture check
+  (66,279 swept, 534 captured, 0 lost) and destroyed the machine. `study_status.py` at 22:32: 411 stored runs,
+  410 valid, 1 not valid (`ian_gflipt_luna_w4_baseline_notes_folder_s5`). UNVERIFIED by a verifier agent: these three runs.
+- 62929919 (first machine of the HY4 row): destroyed at 22:18 after its check (65,823 swept, 86 captured, 0 lost) and
+  a 45 GB snapshot read back against its manifest. Its five failed attempts were then set aside on the Mac.
+- 62929915: stopped by the guard at 22:12 after two teardown tries ran out. NOT CAPTURED: about 28 GB of the killed
+  attempts' logs and recorder file are only on its disk (7.7 GB of ranges are in scratch). Nothing destroyed.
+- Second attempts, one run per machine, `--seeds k --max-agents 17 --min-ram-gb 190` (170 for 62978491), a 64 GB
+  swap file each: DeepSeek row s1 62976008, s3 62976583, s4 62979614, s5 62978491; HY4 row s1 62983036 (booting at
+  23:10), s2 62980204, s3 62977907, s4 62978037, s5 62978137. Eight launched between 22:18 and 23:06 (their
+  launcher logs hold the LAUNCH line; `live_cost` at 23:11: six runs priced, $2.05 in all). `--seeds`, `keep-seeds`
+  and `--min-ram-gb` are thereby exercised on real machines.
+- Destroyed unused with a recorded reason ($1.74 in all, from the tool's estimates): 62976111 (64 GB of RAM share),
+  62976809 (VM of 158 GB under my 190 GB floor), 62978038 (same ssh address as 62978037), 62976666, 62977794 and
+  62980090 (one UK site, ssh never answered), 62981328 (still loading after 17 minutes).
+- My scratch folder: I removed 15 named piece folders and one clone (15 GB) whose files were placed with an equal
+  sha256 and whose machines had passed their checks. Nothing under runs/, logs/ or OLD/ was deleted.
