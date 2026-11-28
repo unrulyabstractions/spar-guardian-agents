@@ -496,7 +496,8 @@ def snapshot(instance_id: int) -> dict:
                            f"{SNAPSHOT_MARGIN_BYTES / 1e9:.0f} GB")
     target, temporary = folder / "snapshot.tar.gz", folder / "snapshot.tar.gz.tmp"
     temporary.unlink(missing_ok=True)
-    with tarfile.open(temporary, "w:gz") as tar:
+    # level 1: logs are compressed already, and at gzip's default level a 70 GB box took half an hour to pack
+    with tarfile.open(temporary, "w:gz", compresslevel=1) as tar:
         for entry in kept:
             tar.add(entry["local"], arcname=entry["box"].lstrip("/"), recursive=False)
     held = {}
