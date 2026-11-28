@@ -314,6 +314,39 @@ limits:
 """One team of 16 with five seeds, each run capped at $7."""
 
 
+def test_keep_seeds_narrows_a_box_whose_launcher_ended_so_another_launch_may_make_the_rest(registry, tmp_path,
+                                                                                            monkeypatch, capsys):
+    """A box that holds seeds 1 and 2 keeps seed 2 alone once its launcher has ended: a launch of seed 1 then rents,
+    a launch of seed 2 is still refused. Without --launcher-ended, for a seed the box does not hold, and for a box
+    outside the registry nothing changes."""
+    monkeypatch.setattr(fleet_layout, "ROOT", tmp_path)
+    monkeypatch.chdir(tmp_path)
+    plan = tmp_path / "studies" / "seed_split.yaml"
+    write_text(plan, SPLIT_PLAN)
+    monkeypatch.setattr(vast_api, "http", FakeVast())
+    split = ("create", "--plan", str(plan), "--boxes", "1", "--max-agents", "16", "--seeds")
+    assert fleet.main([*split, "1", "2"]) == 0
+    box = fleet_registry.load_registry()["boxes"][0]["id"]
+    capsys.readouterr()
+    assert fleet.main(["keep-seeds", "999", "--seeds", "2", "--launcher-ended"]) == 1
+    assert "999 is not an open box of the registry" in capsys.readouterr().out
+    assert fleet.main(["keep-seeds", str(box), "--seeds", "2"]) == 1
+    assert "say --launcher-ended" in capsys.readouterr().out
+    assert fleet.main(["keep-seeds", str(box), "--seeds", "2", "3", "--launcher-ended"]) == 1
+    assert f"box {box} holds seeds [1, 2], not [3]" in capsys.readouterr().out
+    assert fleet_registry.registered(fleet_registry.load_registry(), box)["seeds"] == [1, 2]
+    assert fleet.main([*split, "1"]) == 1
+    assert f"box {box} of seed_split makes team_none_s1 already" in capsys.readouterr().out
+    assert fleet.main(["keep-seeds", str(box), "--seeds", "2", "--launcher-ended"]) == 0
+    assert f"== box {box} " in capsys.readouterr().out
+    entry = fleet_registry.registered(fleet_registry.load_registry(), box)
+    assert (entry["seeds"], entry["released_seeds"]) == ([2], [1]) and entry["narrowed"]
+    assert fleet.main([*split, "2"]) == 1
+    assert f"box {box} of seed_split makes team_none_s2 already" in capsys.readouterr().out
+    assert fleet.main([*split, "1"]) == 0
+    assert [b["seeds"] for b in fleet_registry.load_registry()["boxes"]] == [[2], [1]]
+
+
 def test_one_target_s_seeds_go_to_two_boxes_and_a_run_two_boxes_would_share_is_refused(registry, tmp_path,
                                                                                          monkeypatch, capsys):
     """--seeds 1 2 and --seeds 3 4 5 each rent a box of the same target. --seeds 2 3, and a launch of every seed, are

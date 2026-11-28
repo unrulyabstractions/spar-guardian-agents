@@ -45,6 +45,11 @@ uv run python -m scripts.box.fleet create --plan <plan> --boxes 1 --seeds 1 2
 uv run python -m scripts.box.fleet create --plan <plan> --boxes 1 --seeds 3 4 5
 ```
 
+`keep-seeds <id> --seeds <k> ... --launcher-ended` narrows an open box to some of the seeds it holds, in the registry
+alone. It serves a box whose launcher has ended with failed runs: set those attempts aside on the box (the runs' and
+logs' `attempts/` group), narrow the box to the seeds it stored, and another launch may make the failed seeds again
+while the first box is still captured.
+
 `create` pins the commit first and reads the assignment, the caps and the keys from the plan and spec as that commit
 holds them, since that is what the boxes clone. It rents the assignment's boxes and records, per box, the study, the
 plan, the spec, its targets, its seeds (none recorded: every seed), its agents at once, its runs, their caps and the

@@ -216,6 +216,30 @@ def cmd_stop(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_keep_seeds(args: argparse.Namespace) -> int:
+    """Narrow an open box to some of the seeds it holds, once its launcher has ended. The runs of its other seeds
+    failed there and were set aside on the box, so the boxes of another launch may make them again while this box is
+    still captured. Only the registry changes. Refused for a box that is not registered or is destroyed, for a seed
+    the box does not hold, and without --launcher-ended: the caller's word that the box's launcher log ends every
+    run of the box and no run is live there."""
+    entry = registered(load_registry(), args.id)
+    if entry is None or entry["destroyed"]:
+        print(f"refused: {args.id} is not an open box of the registry")
+        return 1
+    held = sorted({run.seed for run in entry_box(entry).runs})
+    keep = sorted(set(args.seeds))
+    if not set(keep) <= set(held):
+        print(f"refused: box {args.id} holds seeds {held}, not {sorted(set(keep) - set(held))}")
+        return 1
+    if not args.launcher_ended:
+        print(f"refused: say --launcher-ended once the launcher log of box {args.id} ends every run of the box")
+        return 1
+    update_box(args.id, seeds=keep, released_seeds=sorted(set(held) - set(keep)), narrowed=now_iso())
+    print(f"== box {args.id} {entry['label']} keeps seeds {keep}; another launch may make seeds "
+          f"{sorted(set(held) - set(keep))} of {', '.join(entry['targets'])}")
+    return 0
+
+
 def add_assignment_arguments(parser: argparse.ArgumentParser, plan_flag: bool) -> None:
     """The plan, its spec, the boxes and their agents at once, as plan and create take them."""
     if plan_flag:
@@ -264,6 +288,11 @@ def main(argv: list[str] | None = None) -> int:
     run_args.add_argument("--mock", action="store_true", help="every model of the box's runs is Inspect's mock model")
     stop = commands.add_parser("stop", help="stop one registered box: its disk stays, it bills storage alone")
     stop.add_argument("id", type=int)
+    keep = commands.add_parser("keep-seeds", help="narrow an open box whose launcher ended to some of its seeds")
+    keep.add_argument("id", type=int)
+    keep.add_argument("--seeds", type=int, nargs="+", required=True, metavar="K", help="the seeds the box keeps")
+    keep.add_argument("--launcher-ended", action="store_true",
+                      help="the box's launcher log ends every run of the box and no run is live there")
     destroy = commands.add_parser("destroy", help="destroy one box once its capture holds")
     destroy.add_argument("id", type=int)
     destroy.add_argument("--dry-run", action="store_true", help="every gate, the capture check and the snapshot; no "
@@ -273,7 +302,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     command = {"plan": cmd_plan, "offers": cmd_offers, "create": cmd_create, "status": cmd_status, "ids": cmd_ids,
                "entry": cmd_entry, "repin": cmd_repin, "run-args": cmd_run_args, "stop": cmd_stop,
-               "destroy": cmd_destroy}[args.command]
+               "keep-seeds": cmd_keep_seeds, "destroy": cmd_destroy}[args.command]
     return command(args)
 
 
