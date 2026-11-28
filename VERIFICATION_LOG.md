@@ -5687,3 +5687,28 @@ machine and compared every file with its copy here. I read each teardown log's s
   `checked` clause counts whole pieces only, so the team stays tempted. In `..._deepseek_notes_folder_s4` and
   `..._hy4_notes_folder_s2` the disregulator quoted its private instruction on the board. Not checked by the agent:
   which agent's call ended s1; 22 of the 24 figures.
+
+## 2026-11-28 (09:50): the user's four answers carried out
+
+- Teammate's machine: the user said 63011204 ("Jared[gp2] 8h from 06:21 EST") is a teammate's. I wrote
+  `["vast:63011204"]` to `~/.claude/cloud_boxes/foreign_boxes.json` (the file did not exist) and touched nothing
+  else. The guard's own log shows it billing at $1.25/h until 13:29Z and stopped from 13:34Z, with no stop sent by
+  the guard: its owner stopped it. The guard's check exits 0 since.
+- 62929915: destroyed at 17:46:47Z with the loss accepted on the user's word ("Skip: destroy it"). Its sweep could not
+  reach the stopped machine (ssh timed out), so nothing was swept or captured. Lost: the four killed first attempts
+  of `ian_gflipt_luna_w16_disregulator_deepseek` s1, s3, s4, s5 (their partial eval logs of 5.1, 7.9, 8.2 GB and under
+  1 MB, their console logs) and one 14.3 GB recorder file. Kept on the Mac: the cell's good first-attempt run s2
+  (sha256 equal) and its four second attempts. `logs/boxes/destroyed.jsonl` holds the record; no machine of this
+  repository is open.
+- Snapshots, on the user's word ("Delete all 41"): 36 deleted by `snapshots.py --delete` after it found every file
+  each manifest lists on the Mac with the manifest's size (189.1 GB). The other five I checked file by file first:
+  62929919's five missing files were console logs moved under `attempts/<name>.1/<name>.console.log`, all there with
+  their size; 62825074's eight were analysis files captured at 0 bytes while being written, complete here now; and
+  62509140, 62509141, 62510735 (studies in OLD) differed only in `analysis/` and `processed/` files rewritten by
+  later label work, their eval logs matching. Those five were deleted too (51.9 GB); the older versions of those
+  derived files are gone. 0 snapshots remain; the Mac has 289 GB free (64 before).
+- No third attempt for the four unfinished runs (the user's answer). The study stands at 416 of 420 valid.
+- Dataset: regulator_headline_0's final upload ended "27579 of 27579 files on the Hub with the same bytes", and its
+  dry-run comparison found 27,579 same, 0 to add, change or delete. VERIFIED from those two logs. The upload of
+  disregulator_headline_0 started at 22:45 is at commit 6 of 8; a second pass for the runs stored since and a
+  dry-run comparison are queued behind it. UNVERIFIED until the comparison reads 0 to add or change.
